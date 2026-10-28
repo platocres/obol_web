@@ -1,5 +1,5 @@
 /*!
- * obol data — pivot-troubleshooter.js — OBOL.PIVOT_SYMPTOMS + OBOL.PIVOT_CHECKLIST
+ * obol data - pivot-troubleshooter.js - OBOL.PIVOT_SYMPTOMS + OBOL.PIVOT_CHECKLIST
  *
  * The symptom set for the pivot troubleshooter (the calm guided diagnostic that lives off the
  * connectivity panel). Pivoting is where learners lose whole evenings, so this is the README's

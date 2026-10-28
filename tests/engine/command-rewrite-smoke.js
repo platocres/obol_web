@@ -60,6 +60,14 @@ const prof = {
       scripts: { 'poc.py': '/home/kali/tools/keepass-dump-masterkey/poc.py', 'keepass_dump_masterkey.py': '/home/kali/tools/keepass-dump-masterkey/poc.py' },
       via: 'cloned'
     },
+    'smbghost-rce': {
+      present: true,
+      invocation: 'python3 /home/kali/tools/SMBGhost_RCE_PoC/exploit.py',
+      path: '/home/kali/tools/SMBGhost_RCE_PoC/exploit.py',
+      dir: '/home/kali/tools/SMBGhost_RCE_PoC',
+      scripts: { 'exploit.py': '/home/kali/tools/SMBGhost_RCE_PoC/exploit.py', 'smbghost_rce.py': '/home/kali/tools/SMBGhost_RCE_PoC/exploit.py' },
+      via: 'cloned'
+    },
   },
   wordlists: { rockyou: '/opt/lists/rockyou.txt', seclists: '/opt/SecLists' },
   lhost: '10.10.14.55',
@@ -100,6 +108,8 @@ ok(C.applyArsenal('python3 eternalblue_exploit8.py 10.10.10.40 shellcode/sc_all.
   'multi-script repo (autoblue) rewrites eternalblue_exploit8.py to eternalblue_exploit8.py (never clobbered by eternalblue_exploit7.py)');
 ok(C.applyArsenal('python3 keepass_dump_masterkey.py -d KeePass.DMP', { tool: 'keepass_dump_masterkey.py' }, prof) === 'python3 /home/kali/tools/keepass-dump-masterkey/poc.py -d KeePass.DMP',
   'renamed upstream repo script (keepass-dump-masterkey poc.py) rewrites keepass_dump_masterkey.py cleanly');
+ok(C.applyArsenal('python3 SMBGhost_RCE.py -ip 10.10.10.10', { tool: 'smbghost-rce' }, prof) === 'python3 /home/kali/tools/SMBGhost_RCE_PoC/exploit.py -ip 10.10.10.10',
+  'renamed upstream repo script (SMBGhost_RCE_PoC exploit.py) rewrites SMBGhost_RCE.py cleanly');
 
 console.log('# wordlist paths');
 ok(C.applyArsenal('hashcat -m 1000 hash.txt /usr/share/wordlists/rockyou.txt', { tool: 'hashcat' }, prof).indexOf('/opt/lists/rockyou.txt') >= 0,

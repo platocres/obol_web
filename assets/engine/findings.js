@@ -1,5 +1,5 @@
 /*!
- * obol engine — findings.js
+ * obol engine - findings.js
  * Findings catalog match engine. A faithful JS port of 
  * a fact-driven projection that matches the shipped findings catalog
  * (data/findings-catalog.js → OBOL.findingsCatalog) against a target's proven facts.
@@ -13,7 +13,7 @@
  *   {header_absent:"..."}                we saw response headers and this one was missing
  *   {tech:"..",version_lt:".."}          a detected tech below the fixed version (candidate)
  *
- * KEV/CVE overlay is stubbed here (kev is always false) — the web edition does not ship
+ * KEV/CVE overlay is stubbed here (kev is always false) - the web edition does not ship
  * the CISA KEV pack. Environment-agnostic: attaches to the global so it works in the
  * window and inside a Web Worker.
  */
@@ -226,7 +226,7 @@
       for (i = 0; i < factsAny.length; i++) {
         if (fs.has(factsAny[i])) return 'proven: ' + factsAny[i];
       }
-      if (!m.fact_value) return null;
+      if (!m.fact_value && !m.flag) return null;
     }
     var factsAll = m.facts_all || [];
     if (factsAll.length) {
@@ -337,7 +337,7 @@
   }
 
   function assess(fs) {
-    // Every catalog finding whose rule matches these facts, severity-sorted. A projection —
+    // Every catalog finding whose rule matches these facts, severity-sorted. A projection -
     // safe to call on read. KEV overlay is stubbed (kev:false). `fs` is an OBOL.facts.FactSet.
     // CISA KEV overlay, from the bundled lookup (data/kev-catalog.js) when it is loaded; empty otherwise.
     var kev = (OBOL.KEV && OBOL.KEV.map) || {};

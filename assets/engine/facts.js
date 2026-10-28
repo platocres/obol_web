@@ -160,6 +160,11 @@
           ex.value.path = fact.value.path;
           if (fact.value.name) ex.value.name = fact.value.name;
         }
+        if (fact.value.on_host === true) {
+          ex.value.on_host = true;
+        } else if (ex.value.on_host === undefined && fact.value.on_host !== undefined) {
+          ex.value.on_host = fact.value.on_host;
+        }
         if (fact.value.block && (!ex.value.block || String(fact.value.block).length > String(ex.value.block).length)) {
           ex.value.block = fact.value.block;
         }

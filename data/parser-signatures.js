@@ -47,7 +47,7 @@
     'web-content': {
       looksFor: "a content-discovery tool's status/path lines (feroxbuster/gobuster/ffuf) - the 200s and 301s, and whether a page carries a form, a parameter, or an exposed file.",
       regex: '200 GET /path, 301 GET /dir',
-      emits: ['web.content_map', 'web.exposed_artifact', 'web.upload_form', 'web.users', 'web.source'],
+      emits: ['web.content_map', 'web.paths', 'web.exposed_artifact', 'web.upload_form', 'web.login_form', 'web.users', 'web.source'],
     },
     'web-params': {
       looksFor: "arjun's '[+] Parameter detected: id (GET)' lines, and reflected/dynamic parameters.",
@@ -59,7 +59,7 @@
       regex: 'SQL syntax; root:x:0:0; uid=…; {{7*7}}=49',
       emits: ['web.sqli_confirmed', 'web.lfi_confirmed', 'web.cmdi_confirmed', 'web.ssti_confirmed', 'web.ssrf_confirmed',
         'web.xxe_confirmed', 'web.xss_confirmed', 'web.nosqli_confirmed', 'web.deserial_confirmed', 'web.authz_bypass',
-        'web.idor_candidate', 'web.jwt_secret', 'web.upload_confirmed', 'foothold.webshell', 'cloud.credential'],
+        'web.idor_candidate', 'web.jwt_secret', 'web.upload_confirmed', 'web.rce', 'foothold.webshell', 'cloud.credential'],
     },
     'smb-shares': {
       looksFor: 'smbclient / smbmap / nxc share listings and the null-/guest-session banner that lets you read them.',
@@ -69,7 +69,7 @@
     'ad-ldap': {
       looksFor: 'ldapsearch / nxc --users / rid-brute output - the user and computer accounts, the named domain, the domain SID, and whether the bind was anonymous.',
       regex: 'sAMAccountName: ..., DC=corp,DC=local',
-      emits: ['ad.user_list', 'ad.domain_known', 'ad.domain_sid', 'ad.base_dn', 'ad.anonymous_bind', 'ad.computer_list', 'ad.group_list'],
+      emits: ['ad.user_list', 'ad.domain_known', 'ad.domain_sid', 'ad.base_dn', 'ad.anonymous_bind', 'ad.computer_list', 'ad.group_list', 'rpc.endpoints'],
     },
     'kerberos-roast': {
       looksFor: 'GetNPUsers / GetUserSPNs output - the $krb5asrep$ and $krb5tgs$ hashes (also recognized by shape when pasted alone).',
@@ -79,12 +79,12 @@
     'secretsdump': {
       looksFor: 'secretsdump / mimikatz / pypykatz dumps - NTLM hashes, the full NTDS, the krbtgt key, cached (DCC2) hashes, Linux /etc/shadow, and any cleartext.',
       regex: 'user:rid:lm:nt:::, $DCC2$, krbtgt:502',
-      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'credential.plaintext', 'loot.shadow', 'loot.sam'],
+      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'hash.mscache2', 'credential.plaintext', 'loot.shadow', 'loot.sam'],
     },
     'cracked': {
       looksFor: "john/hashcat cracked lines - a recovered 'hash:password' pair, plus hash identifier output (hashid/nth) and IKE PSK / IPMI RAKP hash captures.",
       regex: '<hash>:<password> (Cracked)',
-      emits: ['credential.available', 'credential.plaintext', 'credential.candidate', 'hash.type', 'hash.ike_psk', 'hash.candidate'],
+      emits: ['credential.available', 'credential.plaintext', 'credential.password', 'credential.candidate', 'hash.type', 'hash.ike_psk', 'hash.candidate', 'hash.crackable'],
     },
     'auth-validation': {
       looksFor: "nxc / evil-winrm auth results - the '[+] domain\\\\user:secret (Pwn3d!)' success and the failure lines, over SMB, WinRM, and RDP.",
@@ -153,7 +153,7 @@
     'database': {
       looksFor: "a database session's output - a version/current-user banner or engine prompt that proves the login (db.session), listed databases and tables, and dumped credential rows.",
       regex: 'mysql>, SQL>, List of databases, Server version:',
-      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'foothold.windows'],
+      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.authenticated', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'foothold.windows'],
     },
     'snmp': {
       looksFor: 'snmpwalk / snmp-check output - the community string that worked, running processes and users, and any credentials in the MIB.',
@@ -166,24 +166,24 @@
       emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write'],
     },
     'websource': {
-      looksFor: 'secrets inside a response or source - a config/.env value, a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
-      regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, ghp_…',
+      looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
+      regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, password = "…", DBPassword=…, [... account] + user + pass, ghp_…',
       emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'web.exposed_artifact'],
     },
     'shell-exec': {
       looksFor: "a caught shell or a command's result - an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",
       regex: 'uid=0(root), nt authority\\system',
-      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'host.os_family', 'host.kernel', 'pivot.active'],
+      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'access.root', 'host.os_family', 'host.kernel', 'host.rdp_enabled', 'host.winrm_enabled', 'pivot.active'],
     },
     'auth-blocker': {
       looksFor: "a credential that is valid but refused for a fixable reason - a forced password change (STATUS_PASSWORD_MUST_CHANGE / expired), Kerberos clock skew (KRB_AP_ERR_SKEW), NTLM disabled (STATUS_NOT_SUPPORTED → use -k), account lockout (STATUS_ACCOUNT_LOCKED_OUT) or a disabled/restricted account.",
       regex: 'STATUS_PASSWORD_MUST_CHANGE | password has expired | KRB_AP_ERR_SKEW | clock skew too great | STATUS_NOT_SUPPORTED | STATUS_ACCOUNT_LOCKED_OUT | STATUS_ACCOUNT_DISABLED | STATUS_LOGON_TYPE_NOT_GRANTED | insufficientAccessRights',
-      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted', 'blocker.acl_reauth', 'blocker.access_denied', 'blocker.account_not_delegated', 'blocker.ldap_anonymous_disabled', 'blocker.logon_failure', 'blocker.nxc_c_share_denied', 'blocker.nxc_spider_usage', 'blocker.protected_users', 'blocker.winrm_closed'],
+      emits: ['blocker.password_change', 'blocker.clock_skew', 'blocker.ntlm_disabled', 'blocker.lockout', 'blocker.account_restricted', 'blocker.acl_reauth', 'blocker.access_denied', 'blocker.account_not_delegated', 'blocker.ldap_anonymous_disabled', 'blocker.logon_failure', 'blocker.nxc_c_share_denied', 'blocker.nxc_spider_usage', 'blocker.protected_users', 'blocker.samr_null_denied', 'blocker.winrm_closed'],
     },
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error - nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",
       regex: 'Host seems down | Could not resolve host | bad interpreter | no tty present | contains malicious content | the handle is invalid | 429 Too Many Requests | WRONG_VERSION_NUMBER',
-      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config', 'blocker.maq_zero'],
+      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config', 'blocker.maq_zero', 'blocker.certutil_usage', 'blocker.password_restriction'],
     },
     'ssh-key-rejected': {
       looksFor: "an SSH key login that failed, and why - unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",
@@ -191,9 +191,9 @@
       emits: ['ssh.key_rejected'],
     },
     'files': {
-      looksFor: 'a file or directory listing - an FTP/rsync/SMB-spider listing or a loot hunt, naming files worth taking (configs, backups, keys), including a KeePass database or dump (.kdbx / $keepass$ hash).',
-      regex: '-rw-r--r-- … file, drwxr-xr-x … dir, *.kdbx, $keepass$*',
-      emits: ['loot.files', 'loot.material', 'loot.keepass_dump'],
+      looksFor: 'a file or directory listing - an FTP/rsync/SMB-spider listing, a native on-host cmd "dir" or PowerShell Get-ChildItem/Invoke-Command listing, or a loot hunt, naming files worth taking (configs, backups, keys), including a KeePass database or dump (.kdbx / $keepass$ hash); also a confirmed file transfer that staged a tool onto the host (certutil URLCache completed, wget "... saved [n/n]", scp "name  100% ...", bitsadmin "Transfer complete", or a Windows "N file(s) copied").',
+      regex: '-rw-r--r-- … file, drwxr-xr-x … dir, "Directory of C:\\…", "Mode  LastWriteTime  Length Name" + "-a---  … name", *.kdbx, $keepass$*, "CertUtil: -URLCache command completed successfully", "\'x.sh\' saved [n/n]", "x.sh  100%  1.8MB/s"',
+      emits: ['loot.files', 'loot.material', 'loot.keepass_dump', 'host.tool_staged'],
     },
     'klist': {
       looksFor: 'klist ticket-cache output - the Kerberos tickets currently held, for pass-the-ticket / reuse.',
@@ -213,12 +213,12 @@
     'internal-dns': {
       looksFor: "a dig / nslookup / host query or an AXFR zone transfer aimed at the foothold's internal resolver - the domain it serves (SOA/NS), the DCs it advertises (_ldap._tcp / _kerberos._tcp SRV, or the NS/SOA host resolved to an address), and the A records a successful transfer dumped.",
       regex: 'IN SOA|IN NS|_ldap._tcp…SRV … <dc>|service = 0 100 389 <dc>|<name> IN A <ip>|<name> has address <ip>',
-      emits: ['ad.domain_known', 'ad.dc_candidate', 'dns.zone'],
+      emits: ['ad.domain_known', 'ad.dc_candidate', 'dns.zone', 'dns.a_record'],
     },
     'connectivity': {
       looksFor: "a foothold's own interface / route dump (ip a, ifconfig, ipconfig, ip route, route print) - the subnets it sits on, and whether it is a dual-homed pivot; its ARP/neighbour cache (ip neigh, arp -a) for adjacent hosts, its listening services (netstat -ano, ss -tlnp) and its internal resolvers (resolv.conf, DNS Servers); and a pivot tool's setup or status output that confirms a live tunnel (chisel R:socks, ssh -D, ligolo agent-joined, sshuttle connected, dnscat2 session).",
       regex: 'inet <ip>/<pfx> | Subnet Mask | <net>/<pfx> dev|via | <ip> ... lladdr|dynamic | LISTENING | nameserver <ip> | Agent joined | R:socks | Connected to server',
-      emits: ['scan.local.interfaces', 'scan.local.routes', 'scan.local.neighbors', 'scan.local.listeners', 'scan.local.dns', 'host.multihomed', 'pivot.candidate', 'pivot.ports', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
+      emits: ['scan.local.interfaces', 'scan.local.routes', 'scan.local.neighbors', 'scan.local.listeners', 'scan.local.dns', 'host.multihomed', 'host.arp_neighbor', 'listener.open', 'network.subnet_candidate', 'pivot.candidate', 'pivot.ports', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
     },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

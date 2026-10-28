@@ -104,11 +104,12 @@ function nxcTokens(run) {
   var m = String(run).match(/\bn(?:xc|etexec)\s+(smb|ldap|winrm|mssql|rdp|ftp|ssh|wmi|vnc|nfs)\b/i);
   if (!m) return null;
   var proto = m[1].toLowerCase(), toks = [];
-  (run.match(/-M\s+([a-z0-9_-]+)/gi) || []).forEach(function (x) { toks.push('-M ' + x.replace(/-M\s+/i, '')); });
-  (run.match(/(^|\s)(--[a-z][a-z0-9-]+)/gi) || []).forEach(function (x) { var f = x.trim(); if (!NXC_OPTION_FLAGS[f]) toks.push(f); });
-  if (/(^|\s)-x(\s|$)/.test(run)) toks.push('-x');
-  if (/(^|\s)-X(\s|$)/.test(run)) toks.push('-X');
-  if (/(^|\s)-q(\s|$)/.test(run)) toks.push('-q');
+  var stripped = String(run).replace(/(\s-[xXq])\s+(?:'[^']*'|"[^"]*"|\S+)/g, '$1 ');
+  (stripped.match(/-M\s+([a-z0-9_-]+)/gi) || []).forEach(function (x) { toks.push('-M ' + x.replace(/-M\s+/i, '')); });
+  (stripped.match(/(^|\s)(--[a-z][a-z0-9-]+)/gi) || []).forEach(function (x) { var f = x.trim(); if (!NXC_OPTION_FLAGS[f]) toks.push(f); });
+  if (/(^|\s)-x(\s|$)/.test(stripped)) toks.push('-x');
+  if (/(^|\s)-X(\s|$)/.test(stripped)) toks.push('-X');
+  if (/(^|\s)-q(\s|$)/.test(stripped)) toks.push('-q');
   if (!toks.length) toks.push('@validate'); // bare auth
   return { proto: proto, toks: toks };
 }
@@ -145,14 +146,24 @@ A.forEach(function (a) {
     if (!hasEvidenceGate) warn.bareFoothold.push(a.id + '  (produces ' + produces.filter(function (k) { return /^(foothold\.|access\.)/.test(k) || k === 'credential.available' || k === 'credential.plaintext'; }).join(', ') + '; gates: ' + (gates.join(', ') || 'none') + ')');
   }
 
-  // NXC-FIRST — nxc is the preferred tool; when a move offers an nxc command variant it must lead (index 0).
+  // NXC-FIRST — nxc is the preferred remote tool; when a move offers a remote nxc command variant it must lead.
   // Commands are interchangeable alternatives here; sequence:true moves (ordered pipeline steps) are exempt.
   if (!a.sequence) {
     var cmds = a.commands || [];
-    var nxcIdx = -1;
-    for (var ci = 0; ci < cmds.length; ci++) { if (isNxcTool(cmdTool(cmds[ci]))) { nxcIdx = ci; break; } }
-    if (nxcIdx > 0) {
-      fail.nxcFirst.push(a.id + '  nxc command at index ' + nxcIdx + ' of ' + cmds.length + ' (pos0=' + (cmdTool(cmds[0]) || '?') + ') — lead with the nxc variant, or tag sequence:true if these are ordered steps');
+    var nxcIdx = -1, firstSameLocusIdx = -1;
+    for (var ci = 0; ci < cmds.length; ci++) {
+      var ciLoc = PK.commandLocus ? PK.commandLocus(cmds[ci]) : 'remote';
+      if (isNxcTool(cmdTool(cmds[ci])) && ciLoc === 'remote') {
+        nxcIdx = ci;
+        for (var cj = 0; cj <= ci; cj++) {
+          var cjLoc = PK.commandLocus ? PK.commandLocus(cmds[cj]) : 'remote';
+          if (cjLoc === ciLoc) { firstSameLocusIdx = cj; break; }
+        }
+        break;
+      }
+    }
+    if (nxcIdx > 0 && firstSameLocusIdx >= 0 && nxcIdx > firstSameLocusIdx) {
+      fail.nxcFirst.push(a.id + '  nxc command at index ' + nxcIdx + ' of ' + cmds.length + ' (pos' + firstSameLocusIdx + '=' + (cmdTool(cmds[firstSameLocusIdx]) || '?') + ') — lead with the nxc variant, or tag sequence:true if these are ordered steps');
     }
   }
 

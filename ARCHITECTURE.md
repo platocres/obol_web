@@ -1,9 +1,11 @@
 # Obol Web Architecture
 
 This document explains how Obol web is put together and why. It is for anyone who wants to
-understand, audit, or extend the technical side of the project. For the move/ranking contract
-specifically, read [docs/MOVE-ENGINE.md](docs/MOVE-ENGINE.md); for the operator-facing tour, read
-[README.md](README.md); for the agent working rules, read [AGENTS.md](AGENTS.md).
+understand, audit, or extend the technical side of the project. For the formal ranking, gating, and
+graph-utility architecture, read [RANKING.md](RANKING.md) and [docs/MOVE-ENGINE.md](docs/MOVE-ENGINE.md);
+for the Wittgensteinian contextual inference and parser architecture, read [INFERENCE.md](INFERENCE.md);
+for the operator-facing tour, read [README.md](README.md); for the agent working rules, read
+[AGENTS.md](AGENTS.md).
 
 Obol web is the static-site edition of `obol-local`. The engine is ported faithfully from the
 Python source and kept at behavior parity; the test suites encode that parity.
@@ -39,7 +41,7 @@ House style: no em or en dashes anywhere; Title Case for UI labels, tabs, and he
 
 ---
 
-## 2. The Core Idea: Facts, Moves, Goals
+## 2. The Core Idea: Facts, Moves, Goals (And Scale At A Glance)
 
 Everything in Obol is a projection of one small graph.
 
@@ -58,28 +60,36 @@ Everything in Obol is a projection of one small graph.
   (phase, locus, priority, commands, report finding). Moves live in `data/packs/*.json`.
 - **Goals** are the terminal facts worth reaching (a flag, SYSTEM/root/admin, NTDS secrets).
 
-From this one graph the engine computes: the ranked next moves (the coach), the lowest-cost route
+From this one graph the engine computes: the ranked next moves (the Cockpit, `OBOL.coach` in code), the lowest-cost route
 to a goal (the planner), the attack-path graph, the compromise chain, and the report. Adding a move
 is adding a node with honest edges; the engine figures out where it belongs. That rule (a move must
 be rankable from its own honest declaration) is what keeps ranking correct as the pack grows, and
 it is enforced mechanically by the lints and the golden-path corpus (see Section 9).
 
+### Scale At A Glance
+
+- **Move packs:** `19 JSON move packs (355 moves, 1,923 commands total)` in `data/packs/` (`ad_2026_09.json`, `cisa_kev_2026_09.json`, `cracking_2026_09.json`, `credential_access_2026_09.json`, `database_2026_09.json`, `findings_catalog_2026_09.json`, `findings_checks_2026_09.json`, `known_exploits_2026_09.json`, `linux_privesc_2026_09.json`, `obol_flag_hunt_2026_09.json`, `obol_local_pivot_2026_09.json`, `pivoting_2026_09.json`, `recon_2026_09.json`, `scripts_2026_09.json`, `shells_2026_09.json`, `web_2026_09.json`, `web_exploit_checks_2026_09.json`, `web_fingerprints_2026_09.json`, `windows_privesc_2026_09.json`, and `oscp_gapfill_2026_10.json`), compiled into `data/packs-bundle.js`.
+- **Parsers:** `18 files in assets/engine/parsers/` (17 domain modules + `common.js`, `nxc-catalog.js`, `inference.js`; `443 parser signals` + `5 Wittgensteinian contextual inference rules`).
+- **Study & reference content:** `data/study-fixtures.js (376 move keys: 355 active moves + 30 legacy aliases)`, `data/walkthroughs.js (37 complete practice boxes)`, `data/tools-glossary.js` / `data/tool-glossary.js (117 tools)`, and `data/tool-staging.js (13 payload keys across Windows/Linux/AD)`.
+- **Routes:** `21 hash routes across 18 route modules in assets/ui/routes/`.
+- **Verification suite:** `99 engine smoke suites` in `tests/engine/`, legacy suites in `tests/engine/legacy/`, and `12 Playwright specs` in `tests/e2e/`.
+
 ---
 
-## 3. Layered Architecture At A Glance
+## 3. Layered Architecture, Boot Order, And Lazy Loader
 
 ```
   ┌─────────────────────────────────────────────────────────────────────────┐
-  │  UI layer  (assets/ui/*, DOM + IndexedDB, browser only)                   │
-  │  shell · router · lazy loader · routes · evidence ingest · store          │
+  │  UI layer  (assets/ui/*, DOM + IndexedDB, browser only)                 │
+  │  shell · router · lazy loader · routes · evidence ingest · store        │
   ├─────────────────────────────────────────────────────────────────────────┤
-  │  Pure engine  (assets/engine/*, runs in window / Web Worker / Node)       │
-  │  facts · phases · pack+planner · command · parsers · findings · resolve   │
-  │  graph · chain · engmap · bloodhound · report · study · toolbuilder …     │
+  │  Pure engine  (assets/engine/*, runs in window / Web Worker / Node)     │
+  │  facts · phases · context · pack+planner · command · parsers · outcomes │
+  │  findings · resolve · graph · chain · engmap · bloodhound · report …    │
   ├─────────────────────────────────────────────────────────────────────────┤
-  │  Data  (data/*, bundled JSON generated from source)                       │
-  │  packs (moves) · field-notes · findings-catalog · narratives · gtfobins   │
-  │  study-fixtures · toolset · decision-forks · parser-signatures …          │
+  │  Data  (data/*, bundled JSON generated from source)                     │
+  │  packs (moves) · field-notes · findings-catalog · narratives · gtfobins │
+  │  study-fixtures · tool-staging · resources · parser-signatures …        │
   └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,462 +98,242 @@ is dependency-free JavaScript that runs identically in the window, in a Web Work
 (the test suites import it directly). It touches no DOM, no `window`-only API, no network. The UI
 layer under `assets/ui/*` is the only code that touches the DOM, IndexedDB, and the hash router.
 
-### Boot order (the critical path)
+### 3.1 Boot Order (`index.html`)
 
-`index.html` loads the engine core and a few home surfaces up front, then everything else lazily.
-The up-front order (from `index.html`) is:
+`index.html` loads the engine core and primary shell/Cockpit surfaces up front, then everything else lazily.
+
+| # | Core Boot Module / Group | Role in Critical Boot Path |
+| :--- | :--- | :--- |
+| 1 | `state.js` / `facts.js` + `phases.js` + `store.js` | Fact ledger (`Fact`, `ProofState`, `FactSet`), 6-phase model, and IndexedDB/in-memory engagement state |
+| 2 | `context.js` (`ObolContext` / `OBOL.context`) | Identity-scoped context projection (`resolve`, `snapshot`, `credentials`, `computeMultiplier`) |
+| 3 | `pack.js` (+ `packs.js`, `profile.js`, `command.js`, `workspace.js`, `vfs.js`, `loot.js`, `playbook.js`, `chain.js`, `findings.js`, `pivotdoctor.js`, `resolve.js`) | Move engine (19 packs / 355 moves), 7-tier Causal Frontier ranker, `getOperatorDeck`, A* planner, command templating |
+| 4 | `router.js` (`OBOL.router`) | Deterministic single-paint hash router |
+| 5 | `lazy.js` (`OBOL.lazy`) | On-demand `<script>` group loader (compatible with `file://` and HTTP) |
+| 6 | `tool-staging.js` (`ObolToolStaging` / `OBOL.TOOL_STAGING`) | On-host payload & cradle staging catalog (13 payload keys across Windows/Linux/AD) |
+| 7 | `rail.js` / `sidebar` (`factpick.js`, `mobile.js`, `util.js`, `icons.js`) | Left engagement/parameter rail, fact picker, and responsive mobile controls |
+| 8 | `header.js` / `appbar` (`tips.js`, `ctxbar.js`) | Top navigation bar, calm tip feed, and global engagement/target context strip |
+| 9 | `cmdbar.js` / `quickpaste.js` | Global command/paste bar and `Ctrl+V` QuickPaste handler |
+| 10 | `credbar.js` (`OBOL.credbar`) | Active credential selector and identity switcher |
+| 11 | `graphtip.js` (+ `chainview.js`, `graphview.js`) | Attack-graph tooltips and inline chain/graph projections |
+| 12 | `drawer.js` / `ingest.js` | Evidence drawer and 4-stage session splitter / ingestion pipeline |
+| 13 | `palette.js` (`Ctrl+K`) | Global command, move, and tool search palette |
+| 14 | `backdrop.js` (+ `coin.js`, `settings.js`) | Motion backdrop, proof coin burst, and skin/appearance settings |
+| 15 | `outcomes.js` (`ObolOutcomes` / `OBOL.outcomes`) | Attempt outcome classifier (`success`, `duplicate`, `completed-negative`, `authorization-denied`, `rejected`, `environment-error`, `partial`) |
+| 16 | `app.js` / `boot.js` (+ up-front routes `home.js`, `targets.js`, `evidence.js`, `path.js`) | Shell initialization, store hydration, route registration, and router boot |
+
+The exact `<script defer>` sequence in `index.html` is:
 
 ```
-engine:  facts → phases → pack → profile → command → workspace → vfs → loot → chain
-data:    findings-catalog → narratives → packs-bundle → tools-install → tunnels →
-         pivot-troubleshooter → field-notes → tool-staging → gtfobins
-engine:  findings → pivotdoctor → packs → resolve
-ui:      util → icons → mobile → factpick → store → credbar → ctxbar → quickpaste →
-         chainview → graphview → graphtip → ingest → router → lazy → palette
-routes:  home → targets → evidence → path            (only the first surfaces up front)
-ui:      boot → backdrop → coin → settings
+engine:  facts -> phases -> pack -> profile -> context -> command -> workspace -> vfs -> loot -> playbook -> chain
+data:    findings-catalog -> narratives -> (engine: findings) -> packs-bundle -> tools-install -> tunnels ->
+         pivot-troubleshooter -> field-notes -> tool-staging
+engine:  pivotdoctor -> packs -> (data: gtfobins) -> resolve
+ui:      util -> icons -> mobile -> factpick -> store -> credbar -> (data: tips) -> tips -> ctxbar ->
+         quickpaste -> chainview -> graphview -> graphtip -> (engine: outcomes) -> ingest -> router -> lazy -> palette
+routes:  home -> targets -> evidence -> path            (only the first surfaces up front)
+ui:      boot -> backdrop -> coin -> settings
 ```
 
-Every other route (Workbench, Report, Domain/BloodHound, Study, Tools, Graph, Map, Findings,
-Checklist, History, Scoreboard, per-target view) is lazy-loaded on first navigation by
-`assets/ui/lazy.js`, which injects `<script>` tags on demand (this works over `file://`, unlike
-`fetch`). A group that fails to load degrades to a "coming online" placeholder and is retried on
-the next navigation.
+### 3.2 Lazy Loader Groups (`assets/ui/lazy.js`)
+
+Every other route and heavy engine/data bundle is lazy-loaded on first navigation or first paste by
+`assets/ui/lazy.js` (`OBOL.lazy.GROUPS`), which injects `<script>` tags on demand (working over both `file://` and HTTP):
+
+| Lazy Group | Scripts Loaded (`OBOL.lazy.GROUPS`) |
+| :--- | :--- |
+| `start` | `data/resources.js`, `assets/ui/routes/start.js` |
+| `parsers` | `assets/engine/parsers/common.js`, `nxc-catalog.js`, 15 domain parsers (`nmap.js`, `directory.js`, `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, `blockers.js`, plus `index.js` dispatcher), and `assets/engine/parsers/inference.js` |
+| `help` | `data/help-content.js` (and `data/study-content.js` / Operator Manual chapters), `assets/ui/routes/help.js` |
+| `study` / `studydata` | `data/tool-glossary.js`, `data/study-fixtures.js`, `assets/engine/study.js`, `assets/ui/routes/study.js` (`studydata` omits route UI for background preloading) |
+| `tools` | `assets/engine/toolbuilder.js`, `data/toolset.js`, `data/tool-glossary.js`, `data/tool-recipes.js`, `data/tool-stations.js`, `assets/engine/toolkit.js`, `assets/engine/shellkit.js`, `assets/engine/pivotkit.js`, `assets/ui/pivotstation.js`, `assets/engine/workbench.js`, `assets/ui/bind.js`, `assets/ui/routes/tools.js` |
+| `workbench` | `assets/engine/workbench.js`, `assets/ui/routes/workbench.js` |
+| `library` / `stuck` | `data/stuck-catalog.js`, `assets/engine/stuck.js`, `assets/ui/routes/stuck.js`, `data/attack-catalog.js`, `data/attack-move-map.js`, `data/tool-glossary.js`, `data/tool-recipes.js`, `data/tool-stations.js`, `assets/engine/toolbuilder.js`, `data/toolset.js`, `assets/engine/toolkit.js`, `assets/ui/bind.js`, `assets/engine/library.js`, `assets/ui/routes/library.js` |
+| `domain` | `assets/jszip.min.js`, `assets/engine/bloodhound.js`, `assets/ui/bhgraph.js`, `assets/ui/routes/domain.js` |
+| `report` | `assets/jszip.min.js`, `data/reportmeta.js`, `assets/engine/report.js`, `assets/ui/routes/report.js` |
+| `decisionmap` | `data/decision-forks.js`, `data/parser-signatures.js`, `data/coverage-expected.js`, `data/flag-reach.js`, `assets/engine/decisionmap.js`, `assets/ui/decisiontree.js` |
+| `findings` | `data/attack-catalog.js`, `data/attack-move-map.js`, `data/d3fend-map.js`, `data/frameworks-tables.js`, `data/kev-catalog.js`, `assets/engine/frameworks.js`, `assets/ui/routes/findings.js` |
+| `cruise` / `playbooks` | `assets/engine/arsenal.js`, `data/playbooks-bundle.js`, `assets/engine/playbooks.js`, `assets/engine/cruise.js`, `assets/engine/pivotkit.js`, `assets/ui/pivotstation.js`, `assets/ui/routes/cruise.js` / `playbooks.js` |
+| `loadout`, `graph`, `target`, `map`, `checklist`, `creds`, `scoreboard`, `history` | Respective engine projection (`arsenal.js`, `graph.js`, `engmap.js`, `oscp-scope.js`) + `assets/ui/routes/<name>.js` |
 
 ---
 
 ## 4. The Pure Engine (`assets/engine/`)
 
-### 4.1 The fact ledger: `facts.js`
+### 4.1 Move Engine & Operator Deck: `pack.js` (+ `packs.js`)
 
-The foundation. A `Fact` has:
+`pack.js` loads the **19 packs / 355 moves (1,923 commands)** from `OBOL.packData` (`packs.js` caches the deduplicated `Action` list via `OBOL.packs.actions()`) and drives move eligibility, the Hero Operator Deck, target OS inference, loop detection, and A* path planning:
 
-- `kind`: a dotted type, e.g. `smb.reachable`, `credential.available`, `host.hostname`.
-- `scope`: `host:10.10.10.10` or `domain:corp.local`.
-- `value`: an arbitrary payload (the port, the username, the hash, the headers).
-- `state`: a `ProofState`: `supported` (evidence established it), `refuted` (evidence establishes
-  it is not so), or `inconclusive` (attempted, ambiguous, no claim earned).
-- `source`, `created_at`: provenance and a timestamp (the ranker's recency signal reads this).
+- **The `Action` model:**
+  - Eligibility: `requires_all`, `requires_any`; `eligible(facts)`, `settled(facts)` (every produced kind already proven), `obsolete(facts)` (a later achievement makes it moot).
+  - `locus`: **R** (remote, run from Kali), **F** (on-host one-shot), **I** (interactive on-host). Remote is preferred, always.
+  - `scope`: `oscp` / `oscp+` / `beyond`, a newcomer-safe syllabus lens.
+  - `priority`: hand-tuned tiebreak, kept strictly subordinate to tier and graph utility.
+  - `commands[]`: copy-ready command templates (with `{{token}}` placeholders), plus per-command metadata (`tool`, `note`, `web` variant, `settled_by`, `sequence`).
+- **`getOperatorDeck(state)`:** Generates the context-aware command suites powering the Cockpit's 5-tab Hero Operator Deck, returning `{ flagCommands, smbCommands, credCommands, adCommands }`. Each entry carries epistemic and gating metadata: `isSpeculative`, `speculativeReason`, `speculativeHeader`, `recommended`, and `gateReason` (distinguishing `Educated Guess` commands when OS/foothold/paths are unconfirmed from `Verified Path` commands when prerequisites are proven).
+- **`inferTargetOs(state)` / `hostOsFamily(facts)`:** Infers target OS family (`windows`, `linux`, or unknown) and confidence from Nmap service banners, SMB/AD signals, TTLs, and active footholds.
+- **`detectLoops(state)`:** Detects repeated unproductive command cycles or stalled enumeration loops in the current `accessEpoch` so the UI can nudge the operator toward untried hypotheses or Stuck? triage.
+- **`planPath(facts)`:** A* search for the lowest-cost dependable route from current facts to any unachieved goal (`earned = 1.0`, `enum = 1.5`, `privilege shortcut = 8.0`, `speculative = 12.0`, plus `+0.3` on-host locus surcharge).
 
-`FactSet` is the queryable collection: `has(kind)` ("is this proven?"), `values(kind)` (the
-payloads of every supported fact of that kind), `kinds()` (the set of proven kinds). The whole
-engine asks the ledger these two questions. Facts dedupe on `(kind, scope, claim)`; the UI collapses
-repeat observations into one row with an `xN` count.
+### 4.2 The Fact Ledger (`facts.js`) And Phase Model (`phases.js`)
 
-### 4.2 The phase model: `phases.js`
+- **`facts.js`:** A `Fact` has `kind` (dotted predicate, e.g. `smb.reachable`, `credential.available`, `host.hostname`), `scope` (`host:10.10.10.10` or `domain:corp.local`), `value` (structured payload), `state` (`ProofState`: `supported`, `refuted`, or `inconclusive`), `source`, and `created_at`. `FactSet` provides `has(kind)`, `values(kind)`, and `kinds()`, deduplicating on `(kind, scope, claim)`.
+- **`phases.js`:** Orders an engagement across six phases: `recon -> enum -> creds -> access -> escalate -> loot`. Computes `targetPhase(facts)` and `frontierIndex`.
 
-One projection shared by the planner and the graph. Phases order an engagement:
-`recon → enum → creds → access → escalate → loot`. Each move resolves to a phase (explicit, or
-derived from the maximum phase of its `produces`). `targetPhase(facts)` is the furthest phase any
-proven fact reaches; `frontierIndex` is that plus one (capped). The v1 ranker and the graph use this;
-the live v2 ranker uses it as a sort input but tiers primarily by recency (Section 4.3).
+### 4.3 7-Tier Causal Frontier & Bayesian Utility Ranking (`pack.js`, `context.js`, `outcomes.js`)
 
-### 4.3 Moves and the planner: `pack.js` (+ `packs.js`)
+The Cockpit ranker (`rankActions` / `nextActionsV2`, formally specified in [RANKING.md](RANKING.md) and [docs/MOVE-ENGINE.md](docs/MOVE-ENGINE.md)) replaces the legacy 4-tier model with the **7-Tier Causal Frontier & Bayesian Utility Ranking** model. Eligible, non-settled, non-obsolete moves are ordered by:
 
-`pack.js` is the heart. It defines the `Action` class (a loaded move) and the two consumers of the
-fact/move graph.
+1. **7-Tier Causal Frontier Hierarchy** (conceptual tiers `Tier 6` down to `Tier 0`, encoded as `tier` in `{5, 4, 3, 2, 1, 0, -1}` alongside within-tier `stageRank` in `{-1..4}`):
+   - **`Tier 6: Immediate Flag Capture`** (`tier = 5`, Endgame Cash-In Frontier): Capturing an uncaptured root/SYSTEM/user flag (`objective.root_flag`, `objective.local_flag` when located), executing a ready DCSync (`ad.control_paths` held), or opening an interactive admin shell once flags are handled.
+   - **`Tier 5: Credential / Access Frontier`** (`tier = 4`, Earned Material / Active Lead in Hand): Validating newly recovered credentials (`validateFirst`), offline cracking of captured hashes (`hash.tgs`, `hash.asrep`, `gpp_cpassword`), or converting recovered credentials into authenticated access.
+   - **`Tier 4: Verified Exploitation & Unlocks`** (`tier = 4` / `tier = 3` verified vectors): Exploiting confirmed writable ACLs (`ad.acl_lead`, `ad.attack_paths`), confirmed host privilege-escalation vectors (`privesc_act`, SUID/sudo/SeImpersonate), or confirmed CVEs.
+   - **`Tier 3: Wittgensteinian Inferred & High-Yield Pivot`** (`tier = 3` / `tier = 2` fresh frontier): Moves newly unlocked by the latest paste or by Tier 3 Wittgensteinian contextual inference rules (`inference.js`), fast authenticated AD escalation probes (`bloodyad-acl`, `kerberoast`), and initial local privesc orientation (`linpeas`/`winpeas`).
+   - **`Tier 2: Service-Matched Active Recon`** (`tier = 1` / `tier = 2` service openers): Targeted service enumeration matched to proven open ports and banners (SMB/LDAP/HTTP/MSSQL/SNMP/NFS probes).
+   - **`Tier 1: Broad / Baseline Enumeration`** (`tier = 0`): Routine eligible baseline enumeration that advances discovery.
+   - **`Tier 0: Fallback / Low-Signal`** (`tier = -1`, speculative / unindicated gambles): Moves marked `speculative` or claiming high payoff from a bare port without supporting evidence (`v2Speculative`).
+2. **Bayesian & Graph-Theoretic Utility Score (`score`):**
+   - Computes backward-chained AND/OR goal distance progress (`delta_d` / `prog`), 1-step forward enablement (`E`), and keystone breadth (`K`, count of blocked moves unblocked, capped at `2.5`), weighted by move reliability (`R(a)`).
+   - Applies context alignment multipliers (`context.js` `computeMultiplier()` / `OBOL.context.resolve` for host, credential, service, and OS coherence) and closed-loop outcome dampening from `outcomes.js` (`success`, `duplicate`, `failed` / `completed-negative`, `partial`) plus epoch-scoped dry-probe rotation (`moveDryTriesInEpoch`).
+3. **Deterministic Tie-Breakers:** `priority` (hand-tuned), then **house-toolkit** preference (prefer NetExec), then **locus** (remote-first), then `id`.
 
-**The `Action`** carries everything a move declares plus derived fields:
+### 4.4 Identity-Scoped Context Projection: `assets/engine/context.js` (`ObolContext`)
 
-- Eligibility: `requires_all`, `requires_any`; `eligible(facts)`, `settled(facts)` (every produced
-  kind already proven), `obsolete(facts)` (a later achievement makes it moot).
-- `locus`: **R** (remote, run from Kali), **F** (on-host one-shot), **I** (interactive on-host).
-  Derived from the tool/gates if omitted. Remote is preferred, always.
-- `scope`: `oscp` / `oscp+` / `beyond`, a newcomer-safe syllabus lens, derived from id/tool/gates.
-- `priority`: a hand-tuned tiebreak, deliberately kept weak; `effectivePriority` subtracts a
-  penalty when a `deprioritize_when` fact makes the move a side-quest.
-- `commands[]`: the copy-ready command templates (with `{{token}}` placeholders), plus per-command
-  metadata such as `tool`, `note`, `web` variant, `settled_by`, `sequence`.
+`assets/engine/context.js` (`OBOL.context` / `ObolContext`) maintains strict separation between target identity, authentication identity (`credentialId`, `principal`, `authRealm`), and transport service (`smb`, `ldap`, `winrm`, `ssh`, `mssql`, `rdp`, `wmi`). It provides `resolve()`, `snapshot()`, `credentials()`, `select()`, and `computeMultiplier()` so facts and admin proofs from Host A or Credential 1 never contaminate commands or ranking on Host B or Credential 2.
 
-**`rankActions` / `nextActionsV2`**, the coach's ranker. It orders eligible, non-settled,
-non-obsolete moves by, in order:
+### 4.5 Attempt Outcome Classification: `assets/engine/outcomes.js` (`ObolOutcomes`)
 
-1. **tier** (recency): a move that *just* became possible from the latest ingest batch leads;
-   speculative "try-if-vulnerable" moves are capped below evidenced ones.
-2. two bounded "prep before use" tie-breaks inside the fresh tier: **recon-first** at the opening
-   (finish the service scan before enumerating) and **validate-first** (confirm a found credential
-   before spending it).
-3. **score**: goal-distance progress + 1-step enablement + a **keystone** term (breadth of doors a
-   move's facts unblock, goal-tempered and capped), all weighted by reliability.
-4. **priority** (hand-tuned tiebreak), then a **house-toolkit** tiebreak (prefer NetExec), then
-   **locus** (remote-first), then id (stable).
+`assets/engine/outcomes.js` (`OBOL.outcomes` / `ObolOutcomes`) separates observation from operation completion. When terminal output is pasted, `OBOL.outcomes.classify` evaluates the text, command, extracted proof facts, and diagnostic blockers into formal outcomes (`success`, `duplicate`, `completed-negative` / `failed`, `authorization-denied`, `rejected`, `environment-error`, `partial`, `parser-error`, `unknown`), driving outcome dampening, command retirement (`retireCommand`), benign baseline detection (`_builtinBaselines`), and inline error fix cards (`_builtinErrorFixes`).
 
-The design intent is to move structural value into the wiring (enablement, keystone) and shrink the
-hand-tuned priority over time. `docs/MOVE-ENGINE.md` is the authoritative description.
+### 4.6 Command Templating (`command.js`) And Filesystem Modeling (`workspace.js`, `vfs.js`, `loot.js`)
 
-**`planPath`**, an A* search for the lowest-cost dependable route from the current facts to any
-goal. Costs encode preference: an evidenced step is 1, an ordinary step 1.5, a privilege shortcut 8,
-a speculative move 12, plus a small locus surcharge so the route prefers Kali-side steps. Returns a
-path or an honest "not reachable from here".
+- **`command.js`:** Builds an identity-coherent `{{token}}` context (`fillAll`, `fillCommand`), tracks `EARNED_TOKENS`, and computes `commandTriedInEpoch` and `moveDryTriesInEpoch`.
+- **`workspace.js`, `vfs.js`, `loot.js`:** Models the operator's Kali working directory (`mkdir -p <root>/{scans,loot,...}`), virtual filesystem state, and fact-to-file glue (`{{userlist}}`, `{{hashfile}}`).
 
-`packs.js` loads the deduped `Action` list from the generated `OBOL.packData` global and caches it;
-`OBOL.packs.actions()` is the one accessor the rest of the app uses.
+### 4.7 The Parser Pipeline (`assets/engine/parsers/`) And Wittgensteinian Contextual Inference (`inference.js`)
 
-### 4.4 Command templating: `command.js`
+`assets/engine/parsers/` contains **18 files** (17 domain modules + `common.js`, `nxc-catalog.js`, `inference.js`; **443 parser signals + 5 Wittgensteinian contextual inference rules**):
 
-Builds a `{{token}}` context from proven facts plus engagement params (`fillAll`, `fillCommand`),
-then renders a template into a ready-to-run command. It is identity-coherent: it never pairs one
-credential's username with another's secret, and it prefers a cracked/validated credential, the
-discovered ports (`nmap_ports`), the located loot file, and so on. The UI reads which tokens remain
-unfilled to decide whether a command is runnable yet (see the gating in Section 6).
+- **Dispatcher & Shared Library:** `index.js` (`parseActionOutput` multi-strategy fan-out dispatcher) and `common.js` (compiled regexes, OS signatures, scoping helpers, `mkFact`).
+- **Domain Parsers:** `nmap.js`, `directory.js`, `nxc-catalog.js` (NetExec capability map), `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, and `blockers.js`.
+- **Wittgensteinian Contextual Inference Engine (`assets/engine/parsers/inference.js`, `ObolInference`):** Documented in full in [INFERENCE.md](INFERENCE.md). Implements Tier 3 contextual inference across **5 cross-domain language-game inference rules** (atomic primitive decomposition across ~45 atom types, 2D table and Key-Value geometry parsing, operator attention-frame binding from `copiedQueue` and recent activities, shell prompt/echo subtraction, and causal entailment gate synchronization).
 
-### 4.5 Filesystem modeling: `workspace.js`, `vfs.js`, `loot.js`
+### 4.8 Findings (`findings.js`), Resolver (`resolve.js`), Projections (`graph.js`, `chain.js`, `engmap.js`), BloodHound (`bloodhound.js`), And Engines (`report.js`, `study.js`, `toolbuilder.js`, `workbench.js`)
 
-Obol cannot read the operator's Kali disk, but it models it. `workspace.js` represents the working
-directory the operator runs from (the scaffold `mkdir -p <root>/{scans,loot,...} && cd <root>`, and
-relative output tokens like `scandir`/`lootdir` so a generated command writes into it correctly).
-`vfs.js` is the virtual workspace that knows what files should exist where. `loot.js` is the
-fact-to-file glue for command tokens (the AD-chain seam, e.g. the userlist handed between moves).
-
-### 4.6 The parser pipeline: `parsers/`
-
-The only way facts enter the ledger from tool output. `parsers/index.js` is a command-keyed
-dispatcher: `OBOL.parsers.parseActionOutput({command, stdout, scope, ...})` routes one paste to
-every parser its command/content warrants, non-destructively (it returns minted facts; it never
-writes to the store). `parsers/common.js` holds the shared compiled regexes, scoping helpers, and
-fact-construction utilities. The per-protocol parsers are conservative by construction:
-
-- `nmap.js` (XML-first via DOMParser when available, else text regexes), `host.js`, `services.js`,
-  `shape.js` (generic response-shape), `dns.js`.
-- `directory.js` (nxc/LDAP/SMB enumeration and auth validation), `nxc-catalog.js` (the NetExec
-  capability map), `creds.js` (cracked/dumped/brute credentials), `database.js`, `web.js`,
-  `websource.js`, `pivot.js`, `findings.js`.
-- `blockers.js`: the "cryptic wall" detectors: a pasted failure (host-seems-down, CRLF, AMSI,
-  clock skew, lockout, SMB signing required, rate limit) mints a `blocker.*` fact so the matching
-  fix surfaces reactively.
-
-The guiding rule: a parser mints a fact only when the output affirmatively shows it. Which kinds
-each parser is allowed to emit is declared in `data/parser-signatures.js` and checked by the
-gap-report (Section 9), so a new mint cannot drift from its signature.
-
-### 4.7 Findings and narratives: `findings.js` (+ `data/findings-catalog.js`, `data/narratives.js`)
-
-A fact-driven projection that matches the findings catalog against the current fact set and produces
-report-ready findings (title, severity, category, remediation). `narratives.js` supplies the
-plain-language "what this proves / why it matters" lines the coach and Explain Output reuse.
-
-### 4.8 The reference resolver: `resolve.js` (+ `data/gtfobins.js`)
-
-Turns a fact into the exact, pre-filled answer rather than a generic link: the GTFOBins sudo/SUID
-escape for the binary the operator actually found, the hashcat mode for the hash they hold. GTFOBins
-data (GPL-3.0, attributed) is bundled as compact JSON.
-
-### 4.9 Projections: `graph.js`, `chain.js`, `engmap.js`
-
-All read-only views of the same facts+pack. `graph.js` projects the attack path as a self-contained
-inline SVG (phase columns left to right, proven vs. unlocked nodes). `chain.js` reconstructs the
-ordered compromise chain for a host ("this led to that, all the way to the flags"). `engmap.js` is
-the whole-engagement map (targets, scope, credentials, subnets, pivots).
-
-### 4.10 BloodHound: `bloodhound.js` (+ `workers/bloodhound-worker.js`)
-
-Ingests a SharpHound/BloodHound-CE export into an engagement-wide domain overlay and attack-path
-intel. The heavy parse runs in a Web Worker (the same pure engine code), which is why the engine
-must stay DOM-free.
-
-### 4.11 Report, Study, Tools, Workbench
-
-- `report.js` assembles the OSCP-style report (ported from the Python `report.py` and the report
-  profiles) and exports Markdown/HTML/PDF/Word with the required proof discipline and redaction.
-- `study.js` is Study mode's engine half: pure functions over the loaded packs plus `ARSENAL` and
-  the embedded sample outputs, with an evidence index that must cover every move (a CI-gated guard).
-- `toolbuilder.js` is the command compiler behind the Tools builders.
-- `workbench.js` is the engine behind the Workbench: the reverse-shell catalogue and base64 /
-  PowerShell `-EncodedCommand` runner, the hash identifier, the encoder, the JWT decoder, the
-  GTFOBins browser, the wordlist picker, the manual-SQLi builder, Explain Output, the spray planner.
-  It is a view over `OBOL.store`, the fact ledger, and the command filler. It enriches presentation
-  only; it never rewrites the move graph.
+- **`findings.js`** (+ `data/findings-catalog.js`, `data/narratives.js`): Matches proven facts against the findings catalog to generate report-ready findings and Cockpit narratives.
+- **`resolve.js`** (+ `data/gtfobins.js`): Pre-fills exact GTFOBins escapes and hashcat modes from discovered binaries and hashes.
+- **`graph.js`, `chain.js`, `engmap.js`:** Pure SVG/data projections of the attack path, ordered compromise chain, and multi-host engagement map.
+- **`bloodhound.js`** (+ `workers/bloodhound-worker.js`): Off-thread SharpHound/BloodHound-CE collection parser and shortest-path-to-DA analyzer.
+- **`report.js`, `study.js`, `toolbuilder.js`, `workbench.js`:** Pure engines powering the OSCP report exporter (`preflightCheck`, Markdown/HTML/PDF/DOCX), Learn/Study mode, Tool Builders, and the 13 Workbench studios.
 
 ---
 
 ## 5. The Data Layer (`data/`)
 
-Data is split into hand-authored source and generated bundles.
-
-### 5.1 Methodology packs (the move set)
-
-- **Source of truth:** `data/packs/*.json` (one file per lane: recon, ad, web, linux_privesc,
-  windows_privesc, credential_access, cracking, database, pivoting, shells, findings_checks,
-  web_exploit_checks, known_exploits, obol_flag_hunt, and more). These are vendored at parity with
-  obol-local; the owner has sanctioned selective deviation where obol_web needs it.
-- **Generated bundle:** `data/packs-bundle.js` (the `OBOL.packData` global), produced by
-  `node tools/build-packs.js`. Do not edit it by hand; regenerate after editing the source JSON. CI
-  checks it is in sync.
-
-### 5.2 Other data
-
-- `field-notes.js`: the per-command When / How To Land It / What To Look For / win / Common
-  Mistakes notes (learner-first voice). 100% authored coverage across every move is a tracked goal.
-- `findings-catalog.js`, `narratives.js`, the findings projection data.
-- `study-fixtures.js`: hand-written, coherence-vetted teaching content and sample outputs for
-  Study mode; every move must appear under an evidence entry.
-- `gtfobins.js`: the bundled GTFOBins corpus.
-- `toolset.js`, `tools-install.js`, `tool-staging.js`, the Tool Builder / Loadout data.
-- `decision-forks.js`, `parser-signatures.js`, `coverage-expected.js`, `flag-reach.js`, the
-  decision-map and gap-report ground truth (what parsers emit, which moves hand off to which,
-  reachability of the flag from every port).
-- `playbooks-bundle.js` (from `data/playbooks/`), `reportmeta.js`, `tunnels.js`,
-  `pivot-troubleshooter.js`, `narratives.js`.
+- **Methodology packs (`data/packs/*.json` -> `data/packs-bundle.js`):** `19 JSON move packs (355 moves, 1,923 commands total)`, including `oscp_gapfill_2026_10.json`, compiled by `node tools/build-packs.js`.
+- **On-Host Tool Stager (`data/tool-staging.js`, `ObolToolStaging` / `OBOL.TOOL_STAGING`):** `13 payload keys across Windows/Linux/AD` in the Hero Operator Deck (plus extended per-tool staging recipes such as `winpeas`, `linpeas`, `pspy`, `les.sh`, `powerview`, `powerup`, `sharphound`, `mimikatz`, `rubeus`, `certify`, `godpotato`, `printspoofer`, `ligolo`/`chisel`) with HTTP server cradle generation.
+- **Study & Reference Content:**
+  - `data/study-fixtures.js`: `355 move keys (100% 1:1 coverage across all 355 active moves)` with sample outputs and guided exercises.
+  - `data/walkthroughs.js` (and walkthrough fixtures): `37 complete practice boxes`.
+  - `data/tools-glossary.js` / `data/tool-glossary.js`: `117 tools` with flag-by-flag glossaries (`data/toolset.js`, `data/tool-recipes.js`, `data/tool-stations.js`, `data/tools-install.js`).
+  - `data/help-content.js` (+ `data/study-content.js`): 7-chapter Operator Manual, section index, Charon quick-start, and 32-term glossary.
+  - `data/resources.js`: Curated OSCP courses, practice labs, and scenario templates for `#/start`.
+- **Graph & Parser Ground Truth:** `data/field-notes.js`, `data/findings-catalog.js`, `data/narratives.js`, `data/gtfobins.js`, `data/decision-forks.js`, `data/parser-signatures.js`, `data/coverage-expected.js`, `data/flag-reach.js`, `data/playbooks-bundle.js`, `data/tunnels.js`, `data/pivot-troubleshooter.js`.
 
 ---
 
-## 6. The UI Layer (`assets/ui/`)
+## 6. The UI Layer And Routes (`assets/ui/`)
 
-### 6.1 Store: `store.js`
+The UI layer comprises `store.js` (IndexedDB + synchronous memory cache), `router.js`, `lazy.js`, `ingest.js` (DOM-free 4-stage paste splitter and parser router), `boot.js`, and **21 hash routes across 18 route modules in `assets/ui/routes/`**:
 
-The browser database. IndexedDB is the primary store (async, structured, roomy), fronted by an
-in-memory cache so synchronous reads stay fast. It holds engagements, each with its target list,
-fact ledger, params, profile, workspace, and activity log. `addFacts` is the single write path for
-facts; it dedupes, reflects a proven hostname onto the matching target record, persists, and emits a
-change event that re-renders the active route. There is one store and one filler; the Workbench and
-every surface are views over it, never forked state.
-
-### 6.2 Router and lazy loader: `router.js`, `lazy.js`
-
-A tiny deterministic hash router. Each navigation renders the target route into `#view` exactly
-once (no timed double-paints, ever). `lazy.js` registers placeholder routes that load their script
-group on first navigation then delegate to the real route.
-
-### 6.3 Evidence ingest: `ingest.js` + the Evidence route
-
-`ingest.js` is the shared, DOM-free ingest core: it derives the command from a raw terminal paste,
-runs the conservative parsers, mints only proven facts, and stores them (via `store.addFacts`), which
-re-ranks the coach. The Evidence route and the per-card "Paste Output" boxes both call it. A
-full-terminal paste routes on its own prompt/command line, so any tool's output mints its facts from
-any box.
-
-### 6.4 Routes and the shell: `routes/`, `boot.js`
-
-`boot.js` inits the store, wires the shell (the engagement picker, the params/credential bars, the
-facts panel), registers routes, and starts the router. The routes are the surfaces:
-
-- `path.js`: Next Steps (the coach): the ranked card grid plus the field-notes canvas. It is the
-  main consumer of the ranker and owns the within-move command presentation: the default command
-  pick (house-toolkit and switchless-probe aware), the settled-command drop-out, and the
-  progressive **gating** that hides a command whose earned tokens (base DN, domain, a credential,
-  the scanned ports) are not yet proven, behind a single "more unlocks once you have ..." line.
-- `home.js` (the Hub), `targets.js` / `target.js`, `evidence.js`, `report.js`, `domain.js`
-  (BloodHound), `map.js`, `graph.js`, `study.js`, `tools.js`, `loadout.js`, `workbench.js`,
-  `findings.js`, `creds.js`, `checklist.js`, `scoreboard.js`, `history.js`, `playbooks.js`.
-
-All "what's my next move?" surfaces rank through the one shared `OBOL.coach.rankFor(facts)` in
-`path.js`. No surface re-implements ranking.
+- **`#/start` (`assets/ui/routes/start.js` + `data/resources.js` - Startup Hub):**
+  - **New Engagement launcher** (target IP, domain, profile quick-start), **Resume card** for the active engagement, **5 Practice Scenarios** (guided lab templates), and **Curated OSCP Resources**.
+- **`#/path` (`assets/ui/routes/path.js` - Cockpit / Choose Your Path, `OBOL.coach` in code):**
+  - **5-Tab Hero Operator Deck** powered by `getOperatorDeck(state)`:
+    1. **`Flag Capture`**: Copy-ready user/root/SYSTEM flag location and proof commands with inline **`CMD` / `PS` shell toggles** and **`Educated Guess` vs `Verified Path` epistemic badges** (indicating whether OS/foothold/flag path is heuristically inferred or backed by proven facts).
+    2. **`SMB & Shares`**: Share enumeration, recursive spidering, and file download commands with a **Remote / Local mode toggle**.
+    3. **`Tool Stager`**: Interactive **13-payload selector** across Windows, Linux, and Active Directory (`ObolToolStaging` / `data/tool-staging.js`) with a bulk **"Stage All Selected"** Kali HTTP server + target download cradle generator.
+    4. **`Cred & Hash Ops`**: Fast credential validation, hash extraction, and offline cracking commands for held material.
+    5. **`AD & Domain Ops`**: Domain discovery, Kerberoasting, AS-REP roasting, BloodHound collection, ACL abuse, and DCSync quick-actions.
+  - **Ranked Move Cards**: Deterministic 7-tier Causal Frontier cards with `Because <prereq> -> expect <payoff>` hypotheses, progressive earned-token gating, Focus Mode toggle, and inline Field Notes.
+  - **Terminal Output Dropzone**: Per-card and HUD paste intake with instant outcome receipts (`outcomes.js`) and reactive Fix Doctor cards.
+- **`#/workbench` (`assets/ui/routes/workbench.js` + `assets/engine/workbench.js`):**
+  - **13 Interactive Studios**: Reverse Shells, MSFVenom Builder, Living-Off-The-Land, Web Injection & LFI, Active Directory & BloodHound, Kerberos & Hash Ops, Lateral Movement, Persistence & Cleanup, Credential & Hash Lab, File Transfer, Tunnels & Pivot, CyberChef Lite, and Session Scratchpad.
+- **`#/tools` (`assets/ui/routes/tools.js` + `assets/engine/toolkit.js`, `toolbuilder.js`, `shellkit.js`, `pivotkit.js`):**
+  - **6-Tab Tool Dock**: Reverse Shells, Transfers, Listeners, Tunnels & Pivoting, Wordlists, and CyberChef Lite (alongside task-first Stations and 50 flag-annotated Tool Builders bound to engagement state via `OBOL.bind`).
+- **`#/library` (`assets/ui/routes/library.js` + `assets/engine/library.js`, folding in `#/stuck` via `assets/ui/routes/stuck.js`):**
+  - **5 Lenses**: Techniques (355 moves), Tools (117), Checklists (1,923 commands), Playbooks (ATT&CK & methodology chains), and Case Studies (37 complete box walkthroughs), plus Stuck? diagnostic breakers.
+- **`#/help` (`assets/ui/routes/help.js` + `data/help-content.js`):**
+  - **4-Tab Operator Manual & Reference**: `#/help` (Quick Start & Triage), `#/help/manual` (**7-chapter Operator Manual**), `#/help/index` (Surface-by-Surface Reference Index), and `#/help/glossary` (**32 terms**), plus live cross-tab search.
+- **Additional Engagement Surfaces:** `#/home` (Engagement Hub), `#/targets` & `#/target` (Target Roster & Host Workspace), `#/evidence` (Evidence & Run Log), `#/study` (Learn / Interactive Curriculum), `#/loadout` (Attack Box Arsenal Sync), `#/domain` (BloodHound Graph & Pathfinding), `#/map` (Engagement Topology Map), `#/graph` (Attack Path DAG), `#/creds` (Credential Vault), `#/checklist` (OSCP Scope & Progress Checklist), `#/findings` (CVSS/ATT&CK/D3FEND Findings), `#/scoreboard` (Captured Flags & Pre-Flight Grader), `#/history` (Activity Timeline), `#/cruise` & `#/playbooks` (Experimental Batch Script Generator).
 
 ---
 
 ## 7. How Obol Parses Inputs (Pastes) And Mints Facts
 
-```
- operator pastes tool output
-        │
-        ▼
- ingest.deriveCommand ─► parsers.parseActionOutput ─► minted facts (conservative)
-        │                                                     │
-        │                                                     ▼
-        │                                           store.addFacts (dedupe, sync, persist)
-        │                                                     │
-        ▼                                                     ▼
-   activity log                                       emit('facts') ─► active route re-renders
-                                                              │
-                                                              ▼
-                                       rankActions / rankFor re-orders the coach, the graph
-                                       re-projects, the report updates, new moves unlock
-```
-
-Each paste advances the whole app through one pure recomputation. Nothing is remembered that the
-output did not prove.
-
-When an operator pastes terminal output (via QuickPaste `Ctrl+V`, a move card, Cruise, or Evidence), it flows through a **4-stage ingestion pipeline**:
+When an operator pastes terminal output (via QuickPaste `Ctrl+V`, the Cockpit Terminal Output Dropzone, a move card, Cruise, or Evidence), it flows through a **4-stage ingestion pipeline**:
 
 ```
 Raw Terminal Paste
    │
    ▼
 1. Session Splitter & Scrollback Trimmer (assets/ui/ingest.js)
-   │  Splits multi-command scrollback or Cruise markers (===== OBOL STEP ... =====)
+   │  Splits multi-command scrollback, interactive sub-shells, or Cruise markers (===== OBOL STEP ... =====)
    │  Extracts typed command, strips ANSI escape codes & spinner CR overwrites
    ▼
-2. Scope & Context Router (assets/ui/ingest.js: detectTarget / detectLhost)
-   │  Auto-learns {{lhost}} from prompt stamps; routes output to host:<ip> or domain:<name>
+2. Scope & Context Router (assets/ui/ingest.js + assets/engine/context.js)
+   │  Auto-learns {{lhost}} from prompt stamps; binds host:<ip>, domain:<name>, and active credential context
    ▼
-3. Multi-Strategy Fan-Out Dispatcher (assets/engine/parsers/index.js: parseActionOutput)
-   │  ├── Command-Gated Dispatch (nmap, nxc, ldapsearch, impacket, certipy, hashcat...)
-   │  ├── Content-Sniffed Dispatch (recognizes linpeas, winpeas, bloodhound, mimikatz, flags even without a command line)
-   │  ├── Blocker & Auth Failure Dispatch (blockers.js: clock skew, lockout, access denied...)
-   │  └── Output-Shape Fallback (shape.js: bare port tables, HTTP responses, CVE/version banners)
+3. 3-Tier Multi-Strategy Parser & Wittgensteinian Inference Cascade (assets/engine/parsers/index.js)
+   │  ├── Tier 1: Command-Gated & Content-Sniffed Domain Parsers (15 domain modules + nxc-catalog.js, 443 signals)
+   │  ├── Tier 2: Output-Shape & Blocker Fallback (shape.js, blockers.js)
+   │  └── Tier 3: Wittgensteinian Contextual Inference Engine (inference.js: 5 cross-domain language-game rules + causal entailment)
    ▼
-4. FactSet Deduplication & Proof-State Ledger (assets/engine/facts.js: FactSet.add)
+4. FactSet Deduplication, Proof-State Ledger & Outcome Classification (facts.js + outcomes.js)
 ```
-
-### Key Parsing Design Principles
-
-1. **Dual Routing (Command + Content Signatures)**:
-   - In `assets/ui/ingest.js` (`run`), Obol inspects what the paste *actually shows* (`deriveCommand` + `dispatchLabel`) rather than blindly trusting which card the user pasted into. If you paste `ldapsearch` output into an Nmap card, or paste a raw file attachment with no prompt at all, `assets/engine/parsers/index.js` routes on both the command string and conservative content regexes (and falls back to `assets/engine/parsers/shape.js` for bare outputs).
-2. **Conservative Proof Gating ("Running a command != It worked")**:
-   - Parsers never mint a fact merely because a command ran. For example, running `nxc smb 10.10.10.5 -u '' -p '' --shares` only mints `smb.null_session` if `[+]` session establishment is present, and only mints `smb.readable_share` if a non-`IPC$` share has `READ` permissions.
-3. **Three Proof States (`ProofState` in `assets/engine/facts.js`)**:
-   - `SUPPORTED`: Evidence affirmatively established the claim (gates `FactSet.has(kind)`).
-   - `REFUTED`: Evidence proved the claim is *false* (for example, `credential.validation` with `works: false`, or an anonymous bind explicitly rejected).
-   - `INCONCLUSIVE`: Attempted, but output was ambiguous.
-   - If a fact's proof state changes on a later paste (for example, an earlier assumption is refuted or superseded), `FactSet.prototype.add` updates the state in-place on `(kind, scope, value)` so stale claims immediately stop gating the planner.
 
 ---
 
 ## 8. How Obol Hypothesizes Deterministically And Settles Moves
 
-Every move in Obol is an explicit **testable hypothesis** about the target. In `assets/ui/routes/path.js` (`nsNarrative`), Obol renders this cause-and-effect relationship directly on every move card:
-
-> **"Because `<held prerequisite fact>` -> expect `<produced payoff fact>`"**
-> *(for example, "Because **Domain User List** -> expect **AS-REP Hash**")*
-
-To decide which hypothesis to test next, `nextActionsV2` in `assets/engine/pack.js` runs a **4-part deterministic ranking algorithm**:
+Every move in Obol is an explicit **testable hypothesis** about the target (`"Because <held prerequisite fact> -> expect <produced payoff fact>"`).
 
 ### 8.1 Eligibility Filtering (`Action.prototype.eligible`)
 
 A move enters the candidate pool only if:
-1. Its OS constraint matches `hostOsFamily(facts)` (inferred from Nmap banners, SMB/AD signals, or footholds).
-2. Every fact in `requires_all` is `SUPPORTED` in the target's `FactSet`.
+1. Its OS constraint matches `inferTargetOs` / `hostOsFamily(facts)`.
+2. Every fact in `requires_all` is `SUPPORTED` in the identity-scoped `FactSet` (`OBOL.context.resolve`).
 3. At least one fact in `requires_any` is `SUPPORTED`.
 4. The move is neither `settled(facts)` nor `obsolete(facts)`.
 
-### 8.2 Recency & Evidence Tiering (`tier` in `assets/engine/pack.js`)
+### 8.2 7-Tier Causal Frontier & Bayesian Utility Ranking (`pack.js`)
 
-Every eligible move is placed into a strict priority tier based on **what your latest paste just proved**:
-- **Tier 2 (`fresh`)**: Moves that were *locked* before your most recent paste and *just unlocked* because of a fact minted in the latest ingest batch (`v2Recency`). This captures operator momentum: *"I just got an AS-REP hash, so cracking it is my immediate next step."*
-- **Tier 1 (`indicated` / `v2Earned`)**: Moves gated on a specific, high-signal earned primitive (`V2_SPECIFIC`, such as `privesc.sudo_rights`, `ad.control_paths`, `vuln.dirtypipe`, `smb.ms17_010`).
-- **Tier 0 (Standard Enumeration)**: Routine eligible moves that advance discovery.
-- **Tier -1 (`speculative` / unindicated gambles)**: Moves marked `speculative` or moves that claim a high payoff (a foothold or credential) from a bare open port *without* any supporting vulnerability fingerprint, hash, or credential (`v2Speculative`). These are capped at Tier -1 so blind gambles (like blind password spraying or unindicated CVE checks) never bury deterministic enumeration.
-
-### 8.3 Backward-Chained Goal Distance + 1-Step Forward Lookahead
-
-Within each tier, Obol scores every move over the hypergraph:
+Eligible moves are partitioned into the **7-tier Causal Frontier hierarchy** (`Tier 6: Immediate Flag Capture` -> `Tier 5: Credential / Access Frontier` -> `Tier 4: Verified Exploitation & Unlocks` -> `Tier 3: Wittgensteinian Inferred & High-Yield Pivot` -> `Tier 2: Service-Matched Active Recon` -> `Tier 1: Broad / Baseline Enumeration` -> `Tier 0: Fallback / Low-Signal`, mapped to `tier` in `{-1..5}` and `stageRank` in `{-1..4}`) and scored by:
 
 ```
-score(a) = Reliability(a) * ( prog(a) + 0.6 * enable(a) + 0.15 * keystone(a) ) + TransitionBonuses(a)
+score(a) = Reliability(a) * computeMultiplier(ctx) * ( prog(a) + 0.6 * enable(a) + 0.25 * keystone(a) ) + Modifiers(a)
 ```
 
-- **`prog(a)` (Goal Progress via Backward Chaining)**: `v2GoalDistance` computes the minimum number of steps from the current facts to any Goal (`AND` over `requires_all`, `OR` over `requires_any`). `prog(a) = d0 - d(H U produces(a))` measures how many steps closer to root, Domain Admin, or flags this move takes you.
-- **`enable(a)` (Best Door Opened)**: 1-step forward lookahead over all currently locked moves `b` that become eligible if `a` succeeds, rewarding the single deepest unlock.
-- **`keystone(a)` (Breadth of Doors Opened)**: How many currently blocked moves `a`'s produced facts unblock (capped at `V2_KEYSTONE_CAP = 4`), so pivotal facts like `credential.available` or `ad.user_list` naturally bubble up.
-- **`Reliability(a)`**: `1.0` for earned cash-ins (`v2Earned`), `0.8` for standard enumeration, `0.3` for generic privilege jumps, and `0.25` for speculative gambles.
-- **Explore-vs-Exploit Opening Discipline**:
-  - *Orient before exploit*: After a quick port scan, the thorough version scan (`scan.nmap.version`) and `diagnostic: true` moves with the highest `eliminates` breadth lead before deeper exploitation.
-  - *Validate before use*: When a found credential is not yet validated, the cheap validation probe leads before moves that spend the credential.
-  - **priority** (hand-tuned) -> **house toolkit** (prefer NetExec) -> **locus** (remote-first) -> **id**.
-- **A* Full-Route Planner (`planPath` in `assets/engine/pack.js`)**: Runs A* search over the action graph using `v2ActionCost` (earned = `1.0`, enum = `1.5`, speculative = `12.0`, plus a small `+0.3` locus surcharge for on-host commands) to display the complete multi-step **"Planned Route To The Objective"**.
+combined with outcome dampening from `outcomes.js` (`success`, `duplicate`, `failed` / `completed-negative`, `partial`) and epoch-scoped dry-probe rotation (`moveDryTriesInEpoch`). See [RANKING.md](RANKING.md) for the complete mathematical specification.
 
-`path.js` then buckets the ranked list into Ready Now, Coming Up (eligible but ahead of the
-frontier, or no runnable command yet), and Report Checks (info-only writeup checks), and applies the
-syllabus lens. Trap-doctor moves (gated on a pasted `blocker.*`) surface reactively in the
-field-notes canvas, not as cards.
+### 8.3 Confirming Vs. Falsifying A Theory: Settling Moves & Commands
 
-The operator preferences baked in: **remote-first always**, and **prefer NetExec to its fullest**
-(one remote tool spanning SMB/LDAP/WinRM/MSSQL/RDP/WMI/SSH for cred validation, enumeration,
-pass-the-hash exec, and secret dumping). See `docs/MOVE-ENGINE.md` for the full rationale and the
-lints that enforce it.
-
-### 8.4 Confirming Vs. Falsifying A Theory: Settling Moves & Commands
-
-A deterministic coach must know both **when a theory succeeded** (so it advances the attack chain and stops nagging you to repeat what worked) and **when a theory failed** (so it retires dead ends, diagnoses fixable errors, and pivots to the next viable hypothesis).
-
-#### Case A: Confirming A Theory (Positive Proof)
-
-When a paste mints the facts a command or move was designed to prove:
-1. **Command-Level Settlement (`commandSettled` in `assets/engine/pack.js`)**:
-   - Individual commands inside a move can declare `settled_by: ["smb.null_session"]` (or `ad.group_joined`, `objective.flag_located`).
-   - Once that specific sub-question is answered, **that individual command disappears from the card**, while follow-up commands in the same move remain active.
-   - Simultaneously, previously hidden commands that were waiting on an **Earned Token** (`{{domain}}`, `{{basedn}}`, `{{userlist}}`, `{{hashfile}}`, `{{user}}`, `{{password}}` in `assets/engine/command.js`) automatically un-gate and pre-fill with the newly parsed values.
-2. **Move-Level Settlement (`Action.prototype.settled` in `assets/engine/pack.js`)**:
-   - Once **every** fact in `action.produces` is held in `FactSet` (or, for multi-OS foothold moves, once the host's OS foothold/admin equivalent is held), `action.settled(facts)` returns `true`. The move retires from the active Coach queue because re-running it yields zero new graph progress.
-3. **Obsolescence & Goal Cash-In (`Action.prototype.obsolete` in `assets/engine/pack.js`)**:
-   - If a later achievement makes an entire branch moot (for example, achieving `foothold.linux`, `access.root`, or `loot.ntds` is listed in an earlier move's `obsoleted_by`), `action.obsolete(facts)` retires the entire branch, both ready and locked moves alike, so the coach never steers you toward a means to an end you already hold.
-
-#### Case B: Proving A Theory False (Falsification & Dead-End Retirement)
-
-When an operator runs a command and the theory fails, Obol distinguishes **three different kinds of failure** so it never confuses a typo or clock-skew with a dead attack path:
-
-```
-Operator Pastes Unsuccessful / Empty Output
-   │
-   ├──► 1. Fixable Environmental / Syntax Trap (isEnvBlocker in ingest.js)
-   │       Examples: KRB_AP_ERR_SKEW (clock skew), Name resolution failure, chmod 600 SSH key
-   │       Result: Does NOT retire the move! Mints blocker.* and surfaces a reactive
-   │               "DIAGNOSTIC DETECTED" Fix Card (path.js) with the exact fix command.
-   │               Auto-retracts the blocker as soon as the fix or next command succeeds.
-   │
-   ├──► 2. Explicit Target Refusal (isRefusalBlocker / REFUTED in blockers.js & creds.js)
-   │       Examples: STATUS_ACCESS_DENIED on null SMB, Anonymous LDAP bind disabled,
-   │                 STATUS_LOGON_FAILURE (credential.validation works:false)
-   │       Result: Mints refusal blocker + marks command/move tried in current Access Epoch.
-   │               If other commands/tools exist on the card, advances to the next untried one;
-   │               once all eligible commands are tried, retires the move (empty:<epoch>).
-   │
-   └──► 3. Clean Empty / Negative Result (Tool ran cleanly, >= 2 lines, 0 facts minted)
-           Examples: GetNPUsers.py finds no AS-REP roastable users; find finds no SUIDs
-           Result: Marks that command as "Already tried" (commandTriedInEpoch) and promotes
-                   the next untried command on the card. When no untried commands remain on the
-                   card for the current Access Epoch, marks checklist[moveId] = "empty:<epoch>"
-                   (ingest.js) and retires the move from Ready Now!
-```
-
-#### Access-Epoch Attempt Memory (`accessEpoch` in `assets/engine/pack.js`)
-
-Why does Obol retire a falsified move with `empty:<epoch>` instead of permanently deleting it?
-- In penetration testing, **"SMB share enumeration proved nothing"** is only true *relative to your current privilege and credential state* (your **Access Epoch**, computed by `accessEpoch(facts)`: for example, `anon` -> `cred:svc-alfresco:pw` -> `fh:win|cred:svc-alfresco:pw` -> `adm:system`).
-- If you run SMB share enumeration or BloodHound collection anonymously (`epoch = "anon"`) and it fails or comes back empty, `assets/ui/ingest.js` records `checklist[moveId] = "empty:anon"`, and `commandTriedInEpoch` retires those commands during the `anon` epoch.
-- The moment you crack a password or land a foothold, `accessEpoch(facts)` transitions to a new epoch string (for example, `cred:bob:pw`). Every move that was marked `empty:anon` **automatically wakes back up** with its commands re-filled with `bob`'s credentials, ready to test the hypothesis under the new privilege state.
-
-#### Summary Table
-
-| Stage | Component | What It Does |
-| :--- | :--- | :--- |
-| **1. Ingest & Split** | `assets/ui/ingest.js` | Splits terminal scrollback and Cruise batches, detects target IP and `{{lhost}}`, strips ANSI and spinners. |
-| **2. Parse & Mint** | `assets/engine/parsers/index.js` | Dual command + content-signature fan-out; mints scoped `Fact` objects (`SUPPORTED`, `REFUTED`, `blocker.*`). |
-| **3. Hypothesize** | `assets/engine/pack.js` (`nextActionsV2`) | Ranks eligible moves by Recency Tier -> Reliability * (Backward Goal Progress + Forward Enablement + Keystone Breadth). |
-| **4. Confirm & Settle** | `commandSettled` / `Action.settled` / `Action.obsolete` | Retires individual commands once `settled_by` is proven; retires moves once `produces` or `obsoleted_by` is held; unlocks earned `{{tokens}}`. |
-| **5. Falsify & Pivot** | `blockers.js` + `accessEpoch` + `empty:<epoch>` | Separates fixable env traps (shows reactive Fix Card) from negative results (retires command/move for the current `accessEpoch`, waking it up if new creds/access are earned later). |
+- **Positive Proof (`success` / `duplicate`):** Individual commands settle when their `settled_by` fact is proven; moves settle when all `produces` facts are held; whole branches retire when `obsoleted_by` is achieved.
+- **Fixable Environmental Traps (`environment-error` / `blocker.*`):** Clock skew (`KRB_AP_ERR_SKEW`), missing `/etc/hosts` entries, or non-interactive TTY errors never retire the move; they surface a reactive Fix Doctor card.
+- **Target Refusal (`authorization-denied` / `rejected`) & Clean Negative Results (`completed-negative` / `failed`):** Retires the tried command in the current `accessEpoch` (`accessEpoch(facts)`), increments `moveDryTriesInEpoch` so untried hypotheses rotate to `#1`, and automatically wakes the move back up when a new credential, hash, or foothold transitions the engagement into a new `accessEpoch`.
 
 ---
 
 ## 9. Guardrails And Verification
 
-Correctness is enforced mechanically, not by running labs. The pillars:
+Correctness is enforced mechanically across the codebase:
 
-- **`tools/move-lint.js --check`**, the move contract, sharing the ranker's own fact
-  classification. Catches: unresolvable fields, info-dead-ends that would headline a live box,
-  nxc-first violations, nxc teach-vs-rank coverage gaps, self-satisfied moves, unindicated payoffs.
-- **`tools/gap-report.js --check`**, decision-map graph truth: unreachable moves, missing
-  hand-offs, and parser signature drift (every static `mkFact` kind must be declared in
-  `data/parser-signatures.js`).
-- **`tools/field-notes-coverage.js`**, **`tools/lint-study.js --check`**, content coverage and
-  study lints.
-- **`tests/engine/*.js`**, the pure engine test suite (facts, ranker, parsers, planner, chain,
-  bloodhound, report, study, workbench, and the per-concern smokes). Runs in plain Node.
-- **`tests/engine/corpus/*.json` + `corpus-smoke.js`**, golden-path box walkthroughs. Each step
-  declares the facts it adds and the move that should be #1 after it, so a mis-rank is a failing
-  test. Walked a box? Encode it here.
-- **`tests/browser-smoke.js`**, a headless-Chromium smoke of the real app (needs Playwright +
-  Chromium at `/opt/node-tools/node_modules`, Chromium pre-installed). Fails on any console error.
-- **`tools/stamp-assets.js`**, after editing ANY asset, refreshes the content-hash cache-bust
-  (`?v=...`) on every `<script>`/`<link>` in `index.html`. CI checks `index.html` is stamped in
-  sync. This matters because GitHub Pages serves `main` verbatim with a ~10-minute cache; without
-  the stamp a deploy can leave a stale bundle running against a fresh parser.
-
-CI (`.github/workflows/ci.yml`) syntax-checks every file, regenerates and diffs the packs bundle,
-runs the engine tests and the browser smoke, and verifies the asset stamp.
-
-The full local verify loop (from AGENTS.md / CLAUDE.md):
-
-```
-node tools/field-notes-coverage.js
-node tools/lint-study.js --check
-node tools/gap-report.js --check
-node tools/move-lint.js --check
-for t in tests/engine/*.js; do node "$t"; done
-NODE_PATH=/opt/node-tools/node_modules node tests/browser-smoke.js
-node tools/stamp-assets.js            # after any asset edit
-# then drive the app headless (0 console errors) and screenshot the changed surface
-```
+- **`tools/move-lint.js --check`**: Enforces the move contract across all 355 moves across 19 packs.
+- **`tools/gap-report.js --check`** & **`tools/post-parse-audit.js --check`**: Verifies 0 `parseGap`, 0 `parsePartial`, 0 `unreachable`, 0 `deadEnd`, 0 `orphan`, 0 `drift`, 0 `missedGain`, 0 `probeRetire`, 0 `reOffer`, and 0 `failureGap`.
+- **`tools/gate-audit.js --check`**, **`tools/field-notes-coverage.js`**, **`tools/lint-study.js --check`**, **`tools/attack-coverage.js`**.
+- **`tools/ranker-sim.js`** (8 archetypes, 25 stages) & **`tools/ranker-sweep.js`** (2,500 sampled states, 0.0% violation rate).
+- **`99 engine smoke suites` in `tests/engine/`** (plus legacy suites in `tests/engine/legacy/` and golden-path box replays in `tests/engine/corpus/*.json`).
+- **`12 Playwright specs` in `tests/e2e/`** (and `tests/browser-smoke.js` headless Chromium verification with 0 console errors).
+- **`tools/stamp-assets.js`**: Refreshes content-hash cache-bust stamps (`?v=...`) across `index.html` and `assets/ui/lazy.js`.
 
 ---
 
@@ -551,29 +341,21 @@ node tools/stamp-assets.js            # after any asset edit
 
 There is no runtime build. The generators turn hand-authored source into bundled globals:
 
-- `tools/build-packs.js`: `data/packs/*.json` → `data/packs-bundle.js`.
-- `tools/build-gtfobins.js`: GTFOBins source → `data/gtfobins.js`.
-- `tools/build-playbooks.js`: `data/playbooks/` → `data/playbooks-bundle.js`.
-- `tools/stamp-assets.js`: content-hash cache-bust stamps in `index.html`.
-
-Deployment is GitHub Pages serving `main` as static files. Because an underscore-prefixed file is
-dropped by Pages/Jekyll, the shared parser common module is named `common.js` (not `_common.js`).
+- `tools/build-packs.js`: `data/packs/*.json` (19 packs, 355 moves) -> `data/packs-bundle.js`.
+- `tools/flag-paths.js --emit`: Regenerates `docs/FLAG-PATHS.md` and `data/flag-reach.js`.
+- `tools/build-gtfobins.js`: GTFOBins source -> `data/gtfobins.js`.
+- `tools/build-playbooks.js`: `data/playbooks/` -> `data/playbooks-bundle.js`.
+- `tools/stamp-assets.js`: Content-hash cache-bust stamps in `index.html` and `assets/ui/lazy.js`.
+- `tools/publish/publish.mjs`: Syncs verified, stamped bundles from `qa/` to `prod/`.
 
 ---
 
 ## 11. Extending The System
 
-- **Add a move:** add a node to the right `data/packs/*.json` with honest `requires_*` / `produces`
-  and a command, regenerate the bundle, and let the engine rank it. Read `docs/MOVE-ENGINE.md`
-  first, then run the move-lint, gap-report, and corpus. Author its field note
-  (`data/field-notes.js`) and its study-fixtures evidence entry.
-- **Add a parser / a new fact kind:** mint it in the right `parsers/*.js`, declare the emitted kind
-  in `data/parser-signatures.js`, and register a terminal/consumer so it is not a dead-end. The
-  gap-report `--verify` cross-checks the signatures against what the parsers actually emit.
-- **Add a surface that shows "next move":** call `OBOL.coach.rankFor(facts)`. Never re-implement
-  ranking.
-- **Keep the engine pure.** Anything under `assets/engine/*` must run in the window, a Web Worker,
-  and Node. No DOM, no network, no `window`-only API.
+- **Add a move:** Add a node to the appropriate `data/packs/*.json` (including `oscp_gapfill_2026_10.json`), add its 1:1 `data/field-notes.js` entry and `data/study-fixtures.js` entry, run `node tools/build-packs.js` and `node tools/flag-paths.js --emit`, and verify with `move-lint.js`, `gap-report.js`, and `post-parse-audit.js`.
+- **Add a parser signal or inference rule:** Mint the fact in `assets/engine/parsers/*.js` (or `inference.js`), declare the emitted kind in `data/parser-signatures.js`, and ensure a downstream move or terminal classification consumes it.
+- **Add a surface that shows "next move":** Call `OBOL.coach.rankFor(facts)`. Never re-implement ranking.
+- **Keep the engine pure:** Everything under `assets/engine/*` must run identically in `window`, Web Worker, and Node.
 
 ---
 
@@ -582,33 +364,51 @@ dropped by Pages/Jekyll, the shared parser common module is named `common.js` (n
 ```
 index.html                 the app; critical boot path + lazy route registration
 AGENTS.md                  agent entrypoint + working rules
+CLAUDE.md                  master reference, verification gauntlet, and milestone log
 README.md                  operator-facing tour
-CLAUDE.md                  the active build's plan of record + status log
+ARCHITECTURE.md            technical architecture & deterministic engine guide
+RANKING.md                 7-tier Causal Frontier & Bayesian Utility Ranking specification
+INFERENCE.md               3-tier Wittgensteinian Contextual Inference & parser specification
+OPEN_ITEMS.md              active roadmap and UX/accessibility open items
 docs/
   MOVE-ENGINE.md           the move/ranking contract (read before touching moves)
   DECISION-MAP.md          the decision graph and gap-report guide
   FLAG-PATHS.md            generated port-to-flag reachability map (tools/flag-paths.js --emit)
-  tasks/                   self-contained implementation specs for active backlog items
+  CORPUS-MINING.md         walkthrough and tool-output corpus mining methodology
+  CORPUS-LEDGER.md         running ledger of mined walkthroughs and derived signals
 assets/
-  css/obol.css             the single stylesheet (tokens + light/dark)
+  css/obol.css             the single stylesheet (tokens + 7 skins + responsive layout)
   engine/                  the pure, shared engine (window / worker / Node)
-    facts.js phases.js pack.js packs.js command.js workspace.js vfs.js loot.js
-    profile.js findings.js resolve.js graph.js chain.js engmap.js bloodhound.js
-    report.js study.js toolbuilder.js workbench.js pivotdoctor.js arsenal.js
-    parsers/               the conservative parser pipeline (index + common + per-protocol)
+    facts.js phases.js context.js pack.js packs.js command.js outcomes.js
+    workspace.js vfs.js loot.js profile.js findings.js resolve.js
+    graph.js chain.js engmap.js bloodhound.js decisionmap.js frameworks.js
+    report.js study.js toolbuilder.js toolkit.js shellkit.js pivotkit.js
+    workbench.js pivotdoctor.js arsenal.js library.js cruise.js playbooks.js stuck.js
+    parsers/               18 files: index.js + common.js + nxc-catalog.js + inference.js + 14 domain modules
     workers/               bloodhound-worker.js (runs the pure engine off-thread)
-  ui/                      the DOM/IndexedDB/router layer
-    store.js router.js lazy.js boot.js ingest.js util.js icons.js settings.js ...
-    routes/                one file per surface (path, home, targets, report, domain, ...)
+  ui/                      the DOM / IndexedDB / router layer
+    store.js router.js lazy.js boot.js ingest.js util.js icons.js settings.js
+    credbar.js ctxbar.js quickpaste.js palette.js graphtip.js bind.js pivotstation.js ...
+    routes/                21 hash routes across 18 route modules (start.js, path.js, home.js,
+                           targets.js, target.js, evidence.js, tools.js, workbench.js, library.js,
+                           stuck.js, study.js, loadout.js, domain.js, report.js, checklist.js,
+                           graph.js, creds.js, scoreboard.js, playbooks.js, cruise.js, map.js,
+                           findings.js, history.js, help.js)
 data/
-  packs/*.json             the move set (SOURCE OF TRUTH; vendored from obol-local)
+  packs/*.json             19 JSON move packs (355 moves, 1,923 commands; includes oscp_gapfill_2026_10.json)
   packs-bundle.js          GENERATED by tools/build-packs.js (do not hand-edit)
-  field-notes.js findings-catalog.js narratives.js study-fixtures.js gtfobins.js
-  toolset.js decision-forks.js parser-signatures.js coverage-expected.js ...
-tools/                     generators + linters (build-packs, stamp-assets, move-lint, gap-report)
+  tool-staging.js          ObolToolStaging (13 Hero Deck payload keys + on-host staging cradles)
+  resources.js             curated OSCP resources and practice scenarios for #/start
+  help-content.js          4-tab Help & 7-chapter Operator Manual content + 32-term glossary
+  study-fixtures.js        355 move keys (100% 1:1 coverage across all 355 active moves) & 37 practice box walkthroughs
+  field-notes.js findings-catalog.js narratives.js gtfobins.js toolset.js tool-glossary.js
+  decision-forks.js parser-signatures.js coverage-expected.js flag-reach.js ...
+tools/                     generators, linters, ranker simulators, and publish pipeline
 tests/
-  engine/*.js              pure-engine test suite
+  engine/*.js              98 pure-Node engine smoke suites
+  engine/legacy/           legacy engine regression suites
   engine/corpus/*.json     golden-path box walkthroughs
+  e2e/                     12 Playwright E2E specs
   browser-smoke.js         headless-Chromium smoke of the real app
 ```
 

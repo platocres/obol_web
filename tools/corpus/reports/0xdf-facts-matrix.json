@@ -1,0 +1,2477 @@
+{
+  "generated_at": "2026-10-27T16:12:16.178Z",
+  "note": "FACTS axis: fact-kind confusion matrix over human-labeled real corpus blocks. correct = expected kind minted; miss = expected kind not minted; forbidden_hit = a guarded kind minted (false positive). extra = minted-but-unlabeled, informational only.",
+  "labeled_blocks": 102,
+  "resolved_blocks": 102,
+  "missing_blocks": [],
+  "totals": {
+    "expected_facts": 256,
+    "correct": 256,
+    "miss": 0,
+    "forbidden_hits": 0,
+    "recall": 1
+  },
+  "per_kind": {
+    "host.up": {
+      "expected": 7,
+      "correct": 7,
+      "miss": 0
+    },
+    "ports.open": {
+      "expected": 7,
+      "correct": 7,
+      "miss": 0
+    },
+    "ad.dc_candidate": {
+      "expected": 10,
+      "correct": 10,
+      "miss": 0
+    },
+    "smb.reachable": {
+      "expected": 10,
+      "correct": 10,
+      "miss": 0
+    },
+    "ldap.reachable": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "kerberos.reachable": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "winrm.reachable": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "dns.reachable": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "http.reachable": {
+      "expected": 6,
+      "correct": 6,
+      "miss": 0
+    },
+    "scan.nmap.version": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "ftp.reachable": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "web.content_map": {
+      "expected": 9,
+      "correct": 9,
+      "miss": 0
+    },
+    "web.server": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "credential.candidate": {
+      "expected": 19,
+      "correct": 19,
+      "miss": 0
+    },
+    "scan.nmap.udp": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "host.domain": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "blocker.logon_failure": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "blocker.account_restricted": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "smb.authenticated": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "credential.validated": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "credential.available": {
+      "expected": 18,
+      "correct": 18,
+      "miss": 0
+    },
+    "loot.files": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "config.review": {
+      "expected": 6,
+      "correct": 6,
+      "miss": 0
+    },
+    "host.os_family": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "host.kernel": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "ftp.banner": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "ftp.anonymous_login": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "web.tech": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "db.session": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "web.sqli_confirmed": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "db.databases": {
+      "expected": 6,
+      "correct": 6,
+      "miss": 0
+    },
+    "db.tables": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "db.creds": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "hash.asrep": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "ad.user_list": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "hash.tgs": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "hash.ntlm": {
+      "expected": 7,
+      "correct": 7,
+      "miss": 0
+    },
+    "loot.sam": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "hash.krbtgt": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "loot.ntds": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "credential.plaintext": {
+      "expected": 9,
+      "correct": 9,
+      "miss": 0
+    },
+    "privesc.sudo_rights": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "privesc.sudo_binary": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "privesc.leads": {
+      "expected": 4,
+      "correct": 4,
+      "miss": 0
+    },
+    "adcs.vulnerable": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "credential.certificate": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "smb.shares": {
+      "expected": 6,
+      "correct": 6,
+      "miss": 0
+    },
+    "smb.readable_share": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "smb.content_accessible": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "share.users_readable": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "access.admin_share": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "smb.writable_share": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "host.os_hint": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "vuln.gitea": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "loot.material": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "db.hashes": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "ad.graph.collected": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "web.vhost": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "blocker.password_restriction": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "ad.group_list": {
+      "expected": 2,
+      "correct": 2,
+      "miss": 0
+    },
+    "host.notable_program": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "ad.domain_known": {
+      "expected": 5,
+      "correct": 5,
+      "miss": 0
+    },
+    "ad.base_dn": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "host.hostname": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "smb.signing": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "smb.smbv1": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "blocker.kerberos_spn": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    },
+    "dns.a_record": {
+      "expected": 3,
+      "correct": 3,
+      "miss": 0
+    },
+    "dns.zone": {
+      "expected": 1,
+      "correct": 1,
+      "miss": 0
+    }
+  },
+  "extra_observed_kinds": {
+    "scan.nmap.quick": 7,
+    "port:135": 4,
+    "service.msrpc": 4,
+    "host.os_hint": 7,
+    "host.os_family": 6,
+    "port:139": 4,
+    "service.smb": 4,
+    "port:3268": 4,
+    "service.globalcatldap": 2,
+    "port:3269": 4,
+    "service.globalcatldapssl": 2,
+    "port:389": 4,
+    "service.ldap": 4,
+    "port:445": 4,
+    "port:464": 4,
+    "service.kpasswd5": 4,
+    "port:47001": 3,
+    "service.httpapi": 3,
+    "port:49664": 1,
+    "service.unknown": 3,
+    "port:49665": 1,
+    "port:49666": 1,
+    "port:49667": 1,
+    "port:49673": 1,
+    "port:49674": 1,
+    "port:49675": 1,
+    "port:49686": 1,
+    "port:49692": 1,
+    "port:49699": 1,
+    "port:49703": 1,
+    "port:53": 4,
+    "service.dns": 4,
+    "port:593": 4,
+    "service.http-rpc-epmap": 2,
+    "port:5985": 2,
+    "service.wsman": 1,
+    "port:636": 4,
+    "service.ldapssl": 2,
+    "port:80": 3,
+    "service.http": 3,
+    "port:88": 4,
+    "service.kerberos-sec": 4,
+    "port:9389": 4,
+    "service.adws": 2,
+    "ldap.reachable": 1,
+    "service.ssl-ldap": 1,
+    "dns.reachable": 1,
+    "service.ncacn_http": 2,
+    "http.reachable": 1,
+    "service.mc-nmf": 2,
+    "smb.signing": 5,
+    "web.title": 1,
+    "web.server": 1,
+    "vuln.shellshock": 1,
+    "port:21": 1,
+    "service.ftp": 1,
+    "port:23": 1,
+    "service.telnet": 1,
+    "telnet.reachable": 1,
+    "port:49152": 2,
+    "port:49153": 2,
+    "port:49154": 2,
+    "port:49155": 2,
+    "port:49157": 2,
+    "port:49158": 2,
+    "port:49169": 2,
+    "port:49170": 2,
+    "port:49179": 2,
+    "port:5722": 2,
+    "service.msdfsr": 1,
+    "web.paths": 9,
+    "web.tech": 1,
+    "service.tcpwrapped": 1,
+    "port:123": 1,
+    "service.ntp": 1,
+    "port:137": 1,
+    "service.netbios-ns": 1,
+    "port:49413": 1,
+    "port:49616": 1,
+    "port:65096": 1,
+    "port:443": 1,
+    "service.https": 1,
+    "ad.domain_known": 5,
+    "ad.base_dn": 3,
+    "host.hostname": 3,
+    "smb.smbv1": 3,
+    "host.domain": 2,
+    "ad.dc_candidate": 2,
+    "host.arch": 1,
+    "ftp.reachable": 1,
+    "mssql.authenticated": 4,
+    "credential.validated": 4,
+    "blocker.logon_failure": 1,
+    "credential.candidate": 3,
+    "credential.password": 9,
+    "blocker.access_denied": 1,
+    "smb.reachable": 4,
+    "objective.flag_located": 1,
+    "objective.flag_located_local": 1,
+    "mssql.sysadmin": 1,
+    "db.admin": 1,
+    "ldap.authenticated": 1
+  },
+  "cases": [
+    {
+      "id": "1731e10ce8d3",
+      "file": "absolute.md",
+      "command": "nmap -p- --min-rate 10000 10.10.11.181",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "winrm.reachable",
+        "dns.reachable",
+        "http.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "winrm.reachable",
+        "dns.reachable",
+        "http.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "scan.nmap.quick",
+        "port:135",
+        "service.msrpc",
+        "host.os_hint",
+        "host.os_family",
+        "port:139",
+        "service.smb",
+        "port:3268",
+        "service.globalcatldap",
+        "port:3269",
+        "service.globalcatldapssl",
+        "port:389",
+        "service.ldap",
+        "port:445",
+        "port:464",
+        "service.kpasswd5",
+        "port:47001",
+        "service.httpapi",
+        "port:49664",
+        "service.unknown",
+        "port:49665",
+        "port:49666",
+        "port:49667",
+        "port:49673",
+        "port:49674",
+        "port:49675",
+        "port:49686",
+        "port:49692",
+        "port:49699",
+        "port:49703",
+        "port:53",
+        "service.dns",
+        "port:593",
+        "service.http-rpc-epmap",
+        "port:5985",
+        "service.wsman",
+        "port:636",
+        "service.ldapssl",
+        "port:80",
+        "service.http",
+        "port:88",
+        "service.kerberos-sec",
+        "port:9389",
+        "service.adws"
+      ]
+    },
+    {
+      "id": "c15d541b7945",
+      "file": "absolute.md",
+      "command": "nmap -sCV -p 53,80,88,135,139,389,445,464,593,636,3268,3269,5985,9389 10.10.11.181",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "kerberos.reachable",
+        "winrm.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "kerberos.reachable",
+        "winrm.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "host.os_hint",
+        "host.os_family",
+        "scan.nmap.quick",
+        "port:135",
+        "service.msrpc",
+        "port:139",
+        "service.smb",
+        "port:3268",
+        "service.ldap",
+        "ldap.reachable",
+        "port:3269",
+        "service.ssl-ldap",
+        "port:389",
+        "port:445",
+        "port:464",
+        "service.kpasswd5",
+        "port:53",
+        "service.dns",
+        "dns.reachable",
+        "port:593",
+        "service.ncacn_http",
+        "port:5985",
+        "service.http",
+        "port:636",
+        "port:80",
+        "http.reachable",
+        "port:88",
+        "service.kerberos-sec",
+        "port:9389",
+        "service.mc-nmf",
+        "smb.signing",
+        "web.title",
+        "web.server",
+        "vuln.shellshock"
+      ]
+    },
+    {
+      "id": "7851a2bbdbaf",
+      "file": "access.md",
+      "command": "nmap -sV -sC -p 21,23,80 -oA nmap/scripts 10.10.10.98",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ftp.reachable",
+        "http.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ftp.reachable",
+        "http.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "host.os_hint",
+        "host.os_family",
+        "scan.nmap.quick",
+        "port:21",
+        "service.ftp",
+        "port:23",
+        "service.telnet",
+        "telnet.reachable",
+        "port:80",
+        "service.http"
+      ]
+    },
+    {
+      "id": "e3982202c718",
+      "file": "active.md",
+      "command": "nmap -sT -p- --min-rate 5000 -oA nmap/alltcp 10.10.10.100",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "scan.nmap.quick",
+        "port:135",
+        "service.msrpc",
+        "host.os_hint",
+        "host.os_family",
+        "port:139",
+        "service.smb",
+        "port:3268",
+        "service.globalcatldap",
+        "port:3269",
+        "service.globalcatldapssl",
+        "port:389",
+        "service.ldap",
+        "port:445",
+        "port:464",
+        "service.kpasswd5",
+        "port:47001",
+        "service.httpapi",
+        "port:49152",
+        "service.unknown",
+        "port:49153",
+        "port:49154",
+        "port:49155",
+        "port:49157",
+        "port:49158",
+        "port:49169",
+        "port:49170",
+        "port:49179",
+        "port:53",
+        "service.dns",
+        "port:5722",
+        "service.msdfsr",
+        "port:593",
+        "service.http-rpc-epmap",
+        "port:636",
+        "service.ldapssl",
+        "port:88",
+        "service.kerberos-sec",
+        "port:9389",
+        "service.adws"
+      ]
+    },
+    {
+      "id": "ac250340317e",
+      "file": "admirer.md",
+      "command": "gobuster dir -u http://10.10.10.187 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt ",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "0d3304adc53f",
+      "file": "access.md",
+      "command": "gobuster -u http://10.10.10.98 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 20",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "25f59588e9ad",
+      "file": "anubis.md",
+      "command": "curl 172.20.144.1 -Headers @{\"Host\"=\"softwareportal.windcorp.htb\"} -UseBasicParsing",
+      "expected": [
+        "http.reachable",
+        "web.server"
+      ],
+      "correct": [
+        "http.reachable",
+        "web.server"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.tech"
+      ]
+    },
+    {
+      "id": "44f6c4664832",
+      "file": "admirer.md",
+      "command": "curl http://10.10.10.187/admin-dir/credentials.txt",
+      "expected": [
+        "credential.candidate"
+      ],
+      "correct": [
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "74c167634281",
+      "file": "active.md",
+      "command": "nmap -sV -sC -p 53,88,135,139,389,445,464,593,636,3268,3269,5722,9389,47001,49152-49158,49169,49170,",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "host.os_hint",
+        "host.os_family",
+        "scan.nmap.quick",
+        "port:135",
+        "service.msrpc",
+        "port:139",
+        "service.smb",
+        "port:3268",
+        "service.ldap",
+        "port:3269",
+        "service.tcpwrapped",
+        "port:389",
+        "port:445",
+        "port:464",
+        "service.kpasswd5",
+        "port:47001",
+        "service.httpapi",
+        "port:49152",
+        "port:49153",
+        "port:49154",
+        "port:49155",
+        "port:49157",
+        "service.ncacn_http",
+        "port:49158",
+        "port:49169",
+        "port:49170",
+        "port:49179",
+        "port:53",
+        "service.dns",
+        "port:5722",
+        "port:593",
+        "port:636",
+        "port:88",
+        "service.kerberos-sec",
+        "port:9389",
+        "service.mc-nmf",
+        "smb.signing"
+      ]
+    },
+    {
+      "id": "3c2203c68976",
+      "file": "active.md",
+      "command": "nmap -sU -p- --min-rate 5000 -oA nmap/alludp 10.10.10.100",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.udp"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.udp"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "scan.nmap.quick",
+        "port:123",
+        "service.ntp",
+        "port:137",
+        "service.netbios-ns",
+        "port:49413",
+        "service.unknown",
+        "port:49616",
+        "port:65096"
+      ]
+    },
+    {
+      "id": "389dbccc1ab7",
+      "file": "acute.md",
+      "command": "nmap -p- --min-rate 10000 -oA scans/nmap-alltcp 10.10.11.145",
+      "expected": [
+        "host.up",
+        "ports.open",
+        "http.reachable"
+      ],
+      "correct": [
+        "host.up",
+        "ports.open",
+        "http.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "scan.nmap.quick",
+        "port:443",
+        "service.https"
+      ]
+    },
+    {
+      "id": "3b8eadebf59b",
+      "file": "absolute.md",
+      "command": "crackmapexec smb 10.10.11.181 --shares -u 0xdf -p ''",
+      "expected": [
+        "smb.reachable",
+        "ad.dc_candidate",
+        "host.domain",
+        "blocker.logon_failure"
+      ],
+      "correct": [
+        "smb.reachable",
+        "ad.dc_candidate",
+        "host.domain",
+        "blocker.logon_failure"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.hostname",
+        "smb.signing",
+        "smb.smbv1"
+      ]
+    },
+    {
+      "id": "d1781294fe49",
+      "file": "absolute.md",
+      "command": "crackmapexec smb 10.10.11.181 -u d.klay -p 'Darkmoonsky248girl'",
+      "expected": [
+        "smb.reachable",
+        "blocker.account_restricted"
+      ],
+      "correct": [
+        "smb.reachable",
+        "blocker.account_restricted"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1"
+      ]
+    },
+    {
+      "id": "8c10cc887a79",
+      "file": "absolute.md",
+      "command": "crackmapexec smb 10.10.11.181 -u d.klay -p 'Darkmoonsky248girl' -k",
+      "expected": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.validated",
+        "credential.available"
+      ],
+      "correct": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.validated",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1"
+      ]
+    },
+    {
+      "id": "0ef562d37746",
+      "file": "active.md",
+      "command": "smbclient ls",
+      "expected": [
+        "loot.files",
+        "config.review"
+      ],
+      "correct": [
+        "loot.files",
+        "config.review"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "23708bbeb1b8",
+      "file": "anubis.md",
+      "command": "curl 172.20.144.1",
+      "expected": [
+        "http.reachable"
+      ],
+      "correct": [
+        "http.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "15c36eaaa705",
+      "file": "admirer.md",
+      "command": "ssh -i ~/keys/id_rsa_generated root@10.10.10.187",
+      "expected": [
+        "host.os_family",
+        "host.kernel"
+      ],
+      "correct": [
+        "host.os_family",
+        "host.kernel"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "host.arch",
+        "host.os_hint"
+      ]
+    },
+    {
+      "id": "eba147fe19f3",
+      "file": "access.md",
+      "command": "ftp 10.10.10.98",
+      "expected": [
+        "ftp.reachable",
+        "ftp.banner",
+        "ftp.anonymous_login"
+      ],
+      "correct": [
+        "ftp.reachable",
+        "ftp.banner",
+        "ftp.anonymous_login"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "host.os_hint",
+        "host.os_family"
+      ]
+    },
+    {
+      "id": "100754e619b9",
+      "file": "access.md",
+      "command": "ftp ls",
+      "expected": [
+        "loot.files"
+      ],
+      "correct": [
+        "loot.files"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ftp.reachable"
+      ]
+    },
+    {
+      "id": "7dbc761132fe",
+      "file": "absolute.md",
+      "command": "feroxbuster -u http://absolute.htb",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "a110794644ff",
+      "file": "bankrobber.md",
+      "command": "gobuster dir -u http://10.10.10.154 -w /usr/share/wordlists/dirbuster/directory-list-lowercase-2.3-s",
+      "expected": [
+        "web.content_map",
+        "web.tech"
+      ],
+      "correct": [
+        "web.content_map",
+        "web.tech"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "d544ab81342b",
+      "file": "arkham.md",
+      "command": "gobuster -u http://10.10.10.130 -w /usr/share/wordlists/dirbuster/directory-list-2.3-small.txt -t 50",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "77660d8e54d4",
+      "file": "escape.md",
+      "command": "mssqlclient.py sequel.htb/PublicUser:GuestUserCantWrite1@dc.sequel.htb",
+      "expected": [
+        "db.session"
+      ],
+      "correct": [
+        "db.session"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "mssql.authenticated",
+        "credential.validated"
+      ]
+    },
+    {
+      "id": "6c9958a7f6c0",
+      "file": "falafel.md",
+      "command": "sqlmap -r login-chris.request --level 5 --risk 3 --batch --string \"Wrong identification\" --dump",
+      "expected": [
+        "web.sqli_confirmed",
+        "db.databases",
+        "db.tables",
+        "db.creds",
+        "credential.candidate"
+      ],
+      "correct": [
+        "web.sqli_confirmed",
+        "db.databases",
+        "db.tables",
+        "db.creds",
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "628a62ff5317",
+      "file": "falafel.md",
+      "command": "sqlmap -r login-chris.request --level 5 --risk 3 --batch --string \"Wrong identification\"",
+      "expected": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "correct": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "1aac7c48a9f7",
+      "file": "absolute.md",
+      "command": "GetNPUsers.py -dc-ip dc.absolute.htb -usersfile valid_users absolute.htb/",
+      "expected": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "correct": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "b29075a7bab6",
+      "file": "intelligence.md",
+      "command": "GetNPUsers.py -no-pass -dc-ip 10.10.10.248 intelligence.htb/Jose.Williams",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "537da08e2c7a",
+      "file": "active.md",
+      "command": "GetUserSPNs.py -request -dc-ip 10.10.10.100 active.htb/SVC_TGS -save -outputfile GetUserSPNs.out",
+      "expected": [
+        "ad.user_list"
+      ],
+      "correct": [
+        "ad.user_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "cd04fe60da8b",
+      "file": "active.md",
+      "command": "cat GetUserSPNs.out",
+      "expected": [
+        "hash.tgs",
+        "credential.candidate"
+      ],
+      "correct": [
+        "hash.tgs",
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "a764723cdbb6",
+      "file": "absolute.md",
+      "command": "ldapsearch -H ldap://dc.absolute.htb -x -D d.klay@absolute.htb -w Darkmoonsky248girl -s base",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "blocker.logon_failure"
+      ]
+    },
+    {
+      "id": "4f0fb39ad9dc",
+      "file": "acute.md",
+      "command": "secretsdump.py -sam sam.bak -system sys.bak LOCAL",
+      "expected": [
+        "hash.ntlm",
+        "credential.candidate",
+        "loot.sam",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "credential.candidate",
+        "loot.sam",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "b9bc42b9b8e7",
+      "file": "authority.md",
+      "command": "KRB5CCNAME=Administrator.ccache secretsdump.py -k -no-pass authority.htb/administrator@authority.aut",
+      "expected": [
+        "hash.ntlm",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "7a92ca0d0b04",
+      "file": "administrator.md",
+      "command": "hashcat ethan.hash /opt/SecLists/Passwords/Leaked-Databases/rockyou.txt",
+      "expected": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.candidate",
+        "credential.password"
+      ]
+    },
+    {
+      "id": "334332242611",
+      "file": "brainfuck.md",
+      "command": "john brainfuck-orestis.hash --wordlist=/usr/share/wordlists/rockyou.txt",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "e0073d6bdba8",
+      "file": "bitlab.md",
+      "command": "sudo -l",
+      "expected": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "correct": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "b5c626dc93b5",
+      "file": "blocky.md",
+      "command": "sudo -l",
+      "expected": [
+        "privesc.sudo_rights",
+        "privesc.leads"
+      ],
+      "correct": [
+        "privesc.sudo_rights",
+        "privesc.leads"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "5b2e5f331cee",
+      "file": "cascade.md",
+      "command": "rpcclient enumdomusers",
+      "expected": [
+        "ad.user_list"
+      ],
+      "correct": [
+        "ad.user_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "3cf87096b3ad",
+      "file": "administrator.md",
+      "command": "evil-winrm -i administrator.htb -u olivia -p ichliebedich",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "e0c783a21aa5",
+      "file": "anubis.md",
+      "command": "proxychains curl softwareportal.windcorp.htb",
+      "expected": [
+        "http.reachable"
+      ],
+      "correct": [
+        "http.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "f87b247fe3a8",
+      "file": "anubis.md",
+      "command": "curl softwareportal.windcorp.htb",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "4875bf636e3b",
+      "file": "absolute.md",
+      "command": "KRB5CCNAME=/tmp/krb5cc_1000 certipy shadow auto -username m.lovegod@absolute.htb -account winrm_user",
+      "expected": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "381aa8850ac0",
+      "file": "authority.md",
+      "command": "certipy find -u svc_ldap -p 'lDaP_1n_th3_cle4r!' -target authority.htb -text -stdout -vulnerable",
+      "expected": [
+        "adcs.vulnerable"
+      ],
+      "correct": [
+        "adcs.vulnerable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "blocker.access_denied"
+      ]
+    },
+    {
+      "id": "6e9e4ac41ca1",
+      "file": "authority.md",
+      "command": "certipy req -username '0xdf$' -password 0xdf0xdf0xdf -ca AUTHORITY-CA -dc-ip 10.10.11.222 -template ",
+      "expected": [
+        "credential.certificate"
+      ],
+      "correct": [
+        "credential.certificate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "563c5f3ec85b",
+      "file": "certified.md",
+      "command": "certipy shadow auto -username judith.mader@certified.htb -password judith09 -account management_svc ",
+      "expected": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "9f2eb623477a",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100",
+      "expected": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review"
+      ],
+      "correct": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "smb.reachable"
+      ]
+    },
+    {
+      "id": "6063576e7b8e",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100 -d active.htb -u SVC_TGS -p GPPstillStandingStrong2k18",
+      "expected": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "correct": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "smb.reachable"
+      ]
+    },
+    {
+      "id": "c957a6b651c1",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100 -d active.htb -u administrator -p Ticketmaster1968",
+      "expected": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "access.admin_share",
+        "share.users_readable",
+        "smb.writable_share"
+      ],
+      "correct": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "access.admin_share",
+        "share.users_readable",
+        "smb.writable_share"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "smb.reachable"
+      ]
+    },
+    {
+      "id": "d769b910088e",
+      "file": "arkham.md",
+      "command": "smbmap -u 0xdf -H 10.10.10.130",
+      "expected": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "correct": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "smb.reachable"
+      ]
+    },
+    {
+      "id": "208e1f26ae7c",
+      "file": "active.md",
+      "command": "smbclient dir",
+      "expected": [
+        "loot.files"
+      ],
+      "correct": [
+        "loot.files"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "c801b1307b6d",
+      "file": "active.md",
+      "command": "smbclient get user.txt",
+      "expected": [
+        "loot.files"
+      ],
+      "correct": [
+        "loot.files"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "objective.flag_located",
+        "objective.flag_located_local"
+      ]
+    },
+    {
+      "id": "c7170fcdc40f",
+      "file": "anubis.md",
+      "command": "smbclient --user=windcorp.htb/localadmin -L //10.10.11.102",
+      "expected": [
+        "host.os_hint",
+        "host.os_family",
+        "smb.shares"
+      ],
+      "correct": [
+        "host.os_hint",
+        "host.os_family",
+        "smb.shares"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "4c17fbb2fa79",
+      "file": "armageddon.md",
+      "command": "mysql -e 'show tables;' -u drupaluser -p'CQHEy@9M*m23gBVj' drupal",
+      "expected": [
+        "db.tables"
+      ],
+      "correct": [
+        "db.tables"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "347e0b7ed7e2",
+      "file": "busqueda.md",
+      "command": "mysql show databases;",
+      "expected": [
+        "db.databases",
+        "db.session",
+        "vuln.gitea"
+      ],
+      "correct": [
+        "db.databases",
+        "db.session",
+        "vuln.gitea"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "6bed8536d6cf",
+      "file": "busqueda.md",
+      "command": "mysql select name,email,passwd from user;",
+      "expected": [
+        "loot.material",
+        "db.hashes",
+        "credential.candidate",
+        "vuln.gitea"
+      ],
+      "correct": [
+        "loot.material",
+        "db.hashes",
+        "credential.candidate",
+        "vuln.gitea"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "588d3a42fa46",
+      "file": "eighteen.md",
+      "command": "mssqlclient.py eighteen.htb/kevin:'iNa2we6haRj2gaw!'@eighteen.htb",
+      "expected": [
+        "db.session"
+      ],
+      "correct": [
+        "db.session"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "mssql.authenticated",
+        "credential.validated"
+      ]
+    },
+    {
+      "id": "f4c525a40cf6",
+      "file": "escape.md",
+      "command": "KRB5CCNAME=administrator.ccache mssqlclient.py -k dc.sequel.htb",
+      "expected": [
+        "db.session"
+      ],
+      "correct": [
+        "db.session"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "mssql.authenticated",
+        "credential.validated",
+        "mssql.sysadmin",
+        "db.admin"
+      ]
+    },
+    {
+      "id": "a262b0b3b8b0",
+      "file": "escapetwo.md",
+      "command": "mssqlclient.py -windows-auth sequel.htb/rose:KxEPkKe6R8su@dc01.sequel.htb",
+      "expected": [
+        "db.session"
+      ],
+      "correct": [
+        "db.session"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "mssql.authenticated",
+        "credential.validated"
+      ]
+    },
+    {
+      "id": "94655297de97",
+      "file": "absolute.md",
+      "command": "hashcat d.klay.hash /usr/share/wordlists/rockyou.txt",
+      "expected": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.candidate",
+        "credential.password"
+      ]
+    },
+    {
+      "id": "147bad50e9af",
+      "file": "anubis.md",
+      "command": "hashcat -m 5600 localadmin.hash /usr/share/wordlists/rockyou.txt",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "ebe7a0e20733",
+      "file": "apt.md",
+      "command": "hashcat -m 17220 backup.zip.hash /usr/share/wordlists/rockyou.txt --user",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "de451bd8b9fc",
+      "file": "blackfield.md",
+      "command": "hashcat -m 18200 svc.asrep.hash /usr/share/wordlists/rockyou.txt --force",
+      "expected": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.candidate",
+        "credential.password"
+      ]
+    },
+    {
+      "id": "025b6d257b90",
+      "file": "heist.md",
+      "command": "/opt/john/run/john --wordlist=/usr/share/wordlists/rockyou.txt level5_hash",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "fc6d11bbdd42",
+      "file": "node.md",
+      "command": "john myplace.backup.zip.hash --wordlist=/usr/share/wordlists/rockyou.txt --format=PKZIP",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "ff0eee03fdc7",
+      "file": "openadmin.md",
+      "command": "/opt/john/run/john --wordlist=rockyou_ninja joanna-enc.john",
+      "expected": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "correct": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "credential.password"
+      ]
+    },
+    {
+      "id": "abe2c8894382",
+      "file": "help.md",
+      "command": "sqlmap -r ticket_attachment.request --level 5 --risk 3 -p param[]",
+      "expected": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "correct": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "21aeee0bec23",
+      "file": "intentions.md",
+      "command": "sqlmap -r genres.request --second-req feed.request --batch --tamper=space2comment --technique=U --le",
+      "expected": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "correct": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "cd0744c92ed6",
+      "file": "jarvis.md",
+      "command": "sqlmap -u http://10.10.10.143:80/room.php?cod=1 --random-agent --level 1 --risk 1  --batch",
+      "expected": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "correct": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "ec726ec9686e",
+      "file": "absolute.md",
+      "command": "bloodhound-python -u d.klay -p 'Darkmoonsky248girl' -k -d absolute.htb -dc dc.absolute.htb -c ALL --",
+      "expected": [
+        "ad.graph.collected"
+      ],
+      "correct": [
+        "ad.graph.collected"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "4ac672157501",
+      "file": "administrator.md",
+      "command": "bloodhound-python -d administrator.htb -c all -u olivia -p ichliebedich -ns 10.10.11.42 --zip",
+      "expected": [
+        "ad.graph.collected"
+      ],
+      "correct": [
+        "ad.graph.collected"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ad.domain_known"
+      ]
+    },
+    {
+      "id": "2098cd39c928",
+      "file": "fluffy.md",
+      "command": "bloodhound-ce-python -c all -d fluffy.htb -u j.fleischman -p 'J0elTHEM4n1990!' -ns 10.10.11.69 --zip",
+      "expected": [
+        "ad.graph.collected"
+      ],
+      "correct": [
+        "ad.graph.collected"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ad.domain_known"
+      ]
+    },
+    {
+      "id": "9d6104230b85",
+      "file": "anubis.md",
+      "command": "wfuzz -u https://10.10.11.102 -H \"Host: FUZZ.windcorp.htb\" -w /usr/share/seclists/Discovery/DNS/bitq",
+      "expected": [
+        "web.vhost"
+      ],
+      "correct": [
+        "web.vhost"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "77aae01e6893",
+      "file": "control.md",
+      "command": "wfuzz -c -w headers -u http://10.10.10.167/admin.php -H \"FUZZ: 10.10.10.167\" --hh 89",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "6b0f1848ce9a",
+      "file": "boardlight.md",
+      "command": "ffuf -u http://10.10.11.11 -H \"Host: FUZZ.board.htb\" -w /opt/SecLists/Discovery/DNS/subdomains-top1m",
+      "expected": [
+        "web.vhost"
+      ],
+      "correct": [
+        "web.vhost"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "19d3073513a3",
+      "file": "clicker.md",
+      "command": "ffuf -u http://10.10.11.232 -H \"Host: FUZZ.clicker.htb\" -w /opt/SecLists/Discovery/DNS/subdomains-to",
+      "expected": [
+        "web.vhost"
+      ],
+      "correct": [
+        "web.vhost"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "5664a0a9eabc",
+      "file": "editorial.md",
+      "command": "ffuf -u http://editorial.htb/upload-cover -request ssrf.request -w <( seq 0 65535) -ac",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "43da7ec24ec3",
+      "file": "admirer.md",
+      "command": "gobuster dir -u http://10.10.10.187/admin-dir -w /usr/share/wordlists/dirbuster/directory-list-2.3-m",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "9d4fd1193394",
+      "file": "arkham.md",
+      "command": "gobuster -u http://10.10.10.130:8080 -w /usr/share/wordlists/dirbuster/directory-list-2.3-small.txt ",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "30e0734c835a",
+      "file": "acute.md",
+      "command": "feroxbuster -u https://atsserver.acute.local/ -x aspx -k -w /usr/share/seclists/Discovery/Web-Conten",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "df16e219bde1",
+      "file": "aero.md",
+      "command": "feroxbuster -u http://10.10.11.237 -w /opt/SecLists/Discovery/Web-Content/raft-medium-directories-lo",
+      "expected": [
+        "web.content_map"
+      ],
+      "correct": [
+        "web.content_map"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "web.paths"
+      ]
+    },
+    {
+      "id": "11a7c9bab4bf",
+      "file": "blackfield.md",
+      "command": "rpcclient setuserinfo2 audit2020 23 '0xdf'",
+      "expected": [
+        "blocker.password_restriction"
+      ],
+      "correct": [
+        "blocker.password_restriction"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "8d52bd870669",
+      "file": "forest.md",
+      "command": "rpcclient enumdomusers",
+      "expected": [
+        "ad.user_list"
+      ],
+      "correct": [
+        "ad.user_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "9f74b579cfde",
+      "file": "forest.md",
+      "command": "rpcclient enumdomgroups",
+      "expected": [
+        "ad.group_list"
+      ],
+      "correct": [
+        "ad.group_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "2e366a5dc2ee",
+      "file": "forest.md",
+      "command": "rpcclient querygroup 0x200",
+      "expected": [
+        "ad.group_list"
+      ],
+      "correct": [
+        "ad.group_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "f13decece112",
+      "file": "admirer.md",
+      "command": "sudo -l",
+      "expected": [
+        "privesc.sudo_rights",
+        "privesc.leads",
+        "host.notable_program"
+      ],
+      "correct": [
+        "privesc.sudo_rights",
+        "privesc.leads",
+        "host.notable_program"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "499b2fd300f9",
+      "file": "beep.md",
+      "command": "sudo -l",
+      "expected": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "correct": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "db9f2b9cd1e0",
+      "file": "apt.md",
+      "command": "secretsdump.py -hashes :d167c3238864b12f5f82feae86a7f798 'htb.local/APT$@htb.local'",
+      "expected": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "560e9db8f87f",
+      "file": "bastion.md",
+      "command": "secretsdump.py -sam SAM -security SECURITY -system SYSTEM LOCAL",
+      "expected": [
+        "credential.candidate",
+        "hash.ntlm",
+        "loot.sam"
+      ],
+      "correct": [
+        "credential.candidate",
+        "hash.ntlm",
+        "loot.sam"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "a62d3c34e976",
+      "file": "blackfield.md",
+      "command": "secretsdump.py -system system -ntds ntds.dit LOCAL",
+      "expected": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "correct": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "93790a202281",
+      "file": "absolute.md",
+      "command": "crackmapexec smb 10.10.11.181 --shares",
+      "expected": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable"
+      ],
+      "correct": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "b03eea2ebc8e",
+      "file": "absolute.md",
+      "command": "crackmapexec smb dc.absolute.htb -k -u d.klay -p 'Darkmoonsky248girl' --shares",
+      "expected": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "credential.available",
+        "smb.authenticated",
+        "credential.validated"
+      ],
+      "correct": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "credential.available",
+        "smb.authenticated",
+        "credential.validated"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "18839b1c62d2",
+      "file": "absolute.md",
+      "command": "crackmapexec ldap 10.10.11.181 -u d.klay -p 'Darkmoonsky248girl' -k --users",
+      "expected": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "ldap.reachable",
+        "ad.user_list",
+        "credential.available",
+        "credential.validated"
+      ],
+      "correct": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "ldap.reachable",
+        "ad.user_list",
+        "credential.available",
+        "credential.validated"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": [
+        "ldap.authenticated"
+      ]
+    },
+    {
+      "id": "e6d08d567322",
+      "file": "rebound.md",
+      "command": "GetUserSPNs.py -no-preauth jjones -usersfile users -dc-host 10.10.11.231 rebound.htb/",
+      "expected": [
+        "hash.tgs",
+        "credential.candidate",
+        "blocker.kerberos_spn"
+      ],
+      "correct": [
+        "hash.tgs",
+        "credential.candidate",
+        "blocker.kerberos_spn"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "4173c489e12d",
+      "file": "blackfield.md",
+      "command": "for user in $(cat users); do GetNPUsers.py -no-pass -dc-ip 10.10.10.192 blackfield.local/$user | gre",
+      "expected": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "correct": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "2b93ab94725f",
+      "file": "forest.md",
+      "command": "for user in $(cat users); do GetNPUsers.py -no-pass -dc-ip 10.10.10.161 htb/${user} | grep -v Impack",
+      "expected": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "correct": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "f8e5fd625342",
+      "file": "absolute.md",
+      "command": "kerbrute userenum --dc dc.absolute.htb -d absolute.htb usernames",
+      "expected": [
+        "ad.user_list"
+      ],
+      "correct": [
+        "ad.user_list"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "cfddde7e59e2",
+      "file": "cerberus.md",
+      "command": "dig +short @10.10.11.205 cerberus.local",
+      "expected": [
+        "dns.a_record"
+      ],
+      "correct": [
+        "dns.a_record"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "cb72f5851e68",
+      "file": "darkzero.md",
+      "command": "proxychains dig +tcp +short @172.16.20.2 DC021UWhRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAwbEAYBAAAA.darkzero.e",
+      "expected": [
+        "dns.a_record"
+      ],
+      "correct": [
+        "dns.a_record"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "ecd35b5e590f",
+      "file": "absolute.md",
+      "command": "dig +noall +answer @10.10.11.181 absolute.htb",
+      "expected": [
+        "dns.a_record"
+      ],
+      "correct": [
+        "dns.a_record"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "e5708fdce3fa",
+      "file": "absolute.md",
+      "command": "dig +noall +answer @10.10.11.181 dc.absolute.htb",
+      "expected": [
+        "ad.domain_known",
+        "ad.dc_candidate"
+      ],
+      "correct": [
+        "ad.domain_known",
+        "ad.dc_candidate"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "9a390b614bd2",
+      "file": "cronos.md",
+      "command": "dig axfr cronos.htb @10.10.10.13",
+      "expected": [
+        "ad.domain_known",
+        "ad.dc_candidate",
+        "dns.zone"
+      ],
+      "correct": [
+        "ad.domain_known",
+        "ad.dc_candidate",
+        "dns.zone"
+      ],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "c6531eace7d9",
+      "file": "heist.md",
+      "command": "rpcclient lookupnames rout3r",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    },
+    {
+      "id": "7968892b7497",
+      "file": "authority.md",
+      "command": "dig axfr authority.htb @10.10.11.222",
+      "expected": [],
+      "correct": [],
+      "miss": [],
+      "forbidden_hit": [],
+      "extra_observed": []
+    }
+  ]
+}

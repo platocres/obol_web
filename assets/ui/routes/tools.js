@@ -721,7 +721,7 @@
     (builder.fields || []).forEach(function (f) {
       var el = (form && form.elements) ? form.elements.namedItem(f.id) : null;
       if (!el) return;
-      out[f.id] = f.type === 'checkbox' ? !!el.checked : el.value;
+      out[f.id] = f.type === 'checkbox' ? !!el.checked : ((f.id === 'target' || f.id === 'rhost' || f.id === 'host' || f.id === 'dcIp') ? String(el.value || '').trim().replace(/^https?:\/\//i, '').replace(/(?::\d+)?(?:\/.*)?$/, '').trim() : (f.id === 'lhost' ? String(el.value || '').trim().replace(/\/\d{1,2}$/, '').trim() : el.value));
       if (form && form._panelState) form._panelState[f.id] = out[f.id];
     });
     return out;

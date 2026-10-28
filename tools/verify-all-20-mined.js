@@ -16,7 +16,7 @@ console.log('Total packs loaded:', Object.keys(packData).length);
 // Check key moves updated across the 4 batches:
 const checks = [
   // Batch 1:
-  { pack: 'ad_2026_09', action: 'laps-read', mustHave: ['nxc smb', '--laps'], produces: 'credential.admin' },
+  { pack: 'ad_2026_09', action: 'laps-read', mustHave: ['nxc smb', '--laps'], produces: 'credential.available' },
   { pack: 'ad_2026_09', action: 'bloodyad-acl', mustHave: ['ACCOUNTDISABLE', 'includeDeletedObjects'] },
   // Batch 2:
   { pack: 'ad_2026_09', action: 'adcs-esc', mustHave: ['-add-officer', 'SubCA', '-issue-request'] },
@@ -46,7 +46,7 @@ const checks = [
   // Batch 2 (Ranks 26-45 additions):
   { pack: 'ad_2026_09', action: 'timeroasting', mustHave: ['-M timeroast', '31300'], produces: 'hash.sntp' },
   { pack: 'ad_2026_09', action: 'ad-recycle-bin-enum', mustHave: ['isDeleted', '1.2.840.113556.1.4.417'], produces: 'credential.candidate' },
-  { pack: 'ad_2026_09', action: 'azuread-connect-dump', mustHave: ['Get-MSOLCredentials.ps1'], produces: 'credential.admin' },
+  { pack: 'ad_2026_09', action: 'azuread-connect-dump', mustHave: ['Get-MSOLCredentials.ps1'], produces: 'credential.available' },
   { pack: 'cracking_2026_09', action: 'vnc-decrypt', mustHave: ['vncpwd'], produces: 'credential.available' },
   { pack: 'linux_privesc_2026_09', action: 'wildcard-symlink-privesc', mustHave: ['ln -s /root/root.txt', 'unzip -p'], produces: 'objective.root_flag' },
   // Batch 3 (Ranks 48-67 additions):

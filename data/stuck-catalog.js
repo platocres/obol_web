@@ -82,7 +82,7 @@
     'web.idor_candidate': { group: 'Web', label: 'I Found An IDOR Candidate', help: 'An object id in a request looks like you can swap it for another user.' },
 
     // ── Windows And Active Directory ─────────────────────────────────────────────────────────────
-    'ad.domain_known': { group: 'Windows And AD', label: 'I Know The Domain Name', help: 'You have the AD domain (for example htb.local), so the LDAP base DN follows.' },
+    'ad.domain_known': { group: 'Windows And AD', label: 'I Know The Domain Name', help: 'You have the AD domain (for example corp.local), so the LDAP base DN follows.' },
     'ad.dc_candidate': { group: 'Windows And AD', label: 'I Found The Domain Controller', help: 'You identified a DC to aim enumeration, roasting, and attacks at.' },
     'ad.user_list': { group: 'Windows And AD', label: 'I Have A List Of Domain Users', help: 'You enumerated usernames, the handoff for password spraying and roasting.' },
     'smb.null_session': { group: 'Windows And AD', label: 'Anonymous SMB Works (Null Session)', help: 'You can list shares or users with no login at all.' },

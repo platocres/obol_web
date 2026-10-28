@@ -187,7 +187,7 @@
     var activeTarget = (eng.params && eng.params.target) || '';
     var isFocused = ip === activeTarget;
     var focusBtn = isFocused
-      ? '<span class="hb-focus-chip is-on" title="Active target for Coach &amp; Cruise">● Active Target</span>'
+      ? '<span class="hb-focus-chip is-on" title="Active target for Cockpit &amp; Cruise">● Active Target</span>'
       : '<button type="button" class="cr-btn-neon neon-cyan small" id="td-focus-btn" data-focus-ip="' + U.attr(ip) + '">Set As Active Target</button>';
 
     function identRow(label, val, cls, title) {
@@ -206,10 +206,12 @@
       + '  <span class="acc-pill ' + acc.cls + '">' + acc.label + '</span>'
       +    (flags.length ? '<span class="pill flag-pill">' + OBOL.ic('flag') + ' ' + flags.map(esc).join(', ') + '</span>' : '')
       + '  <span class="target-head-spacer"></span>'
+      + '  <button type="button" class="cr-btn-glass small" data-edit-target="' + U.attr(ip) + '">&#9998; Edit / Re-IP Target</button>'
       +    focusBtn
       + '</div>'
+      + ((OBOL.targets && OBOL.targets.renderEditDrawer) ? OBOL.targets.renderEditDrawer(ip) : '')
       + '<dl class="ident target-ident">'
-      + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1></dd></div>'
+      + '<div class="ident-row"><dt>IP</dt><dd class="ident-ip"><h1 class="route-h1 inline">' + esc(idn.ip) + '</h1>' + ((t && Array.isArray(t.previousIps) && t.previousIps.length) ? ' <span class="hb-prev-ip" title="Previous IP(s): ' + U.attr(t.previousIps.join(', ')) + '">was ' + esc(t.previousIps[t.previousIps.length - 1]) + '</span>' : '') + '</dd></div>'
       + identRow('Hostname', idn.hostname, 'ident-host', idn.hostname && idn.fqdn !== idn.hostname ? idn.fqdn : '')
       + identRow('Domain', idn.domain, 'ident-dom', '')
       + identRow('OS', idn.os, 'ident-os', '')
@@ -219,9 +221,9 @@
 
       // the spine: the working loop for this box, Next Steps beside Evidence
       + '<div class="tw-spine">'
-      + '<section class="tw-panel tw-next station-card neon-lane-emerald"><div class="tw-panel-h"><span class="tw-panel-l">Next Steps for this box</span><span class="tw-panel-tag">ranked by the coach</span></div>'
+      + '<section class="tw-panel tw-next station-card neon-lane-emerald"><div class="tw-panel-h"><span class="tw-panel-l">Cockpit for this box</span><span class="tw-panel-tag">ranked by the Cockpit</span></div>'
       + '<div class="tw-panel-b ws-clear-box">' + (moveHtml || '<div class="coach-empty">No moves yet, paste evidence to unlock.</div>')
-      + '<a class="btn-ghost tw-fullcoach" href="#/path">Full coach &rarr;</a></div></section>'
+      + '<a class="btn-ghost tw-fullcoach" href="#/path">Full Cockpit &rarr;</a></div></section>'
       + '<section class="tw-panel tw-ev station-card neon-lane-violet"><div class="tw-panel-h"><span class="tw-panel-l">Evidence &amp; proven facts</span><span class="tw-panel-tag">this box, feeds the report</span></div>'
       + '<div class="tw-panel-b ws-clear-box">' + evidencePanel(ip, facts) + '</div></section>'
       + '</div>'
@@ -257,6 +259,17 @@
         target: b.getAttribute('data-copy-target'), executionLocus: b.getAttribute('data-copy-locus') || 'remote' });
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
+    if (OBOL.targets && OBOL.targets.bindEditDrawer) {
+      OBOL.targets.bindEditDrawer(mount, {
+        onSaved: function (res) {
+          if (res && res.reIp && res.newIp) {
+            location.hash = '#/target/' + encodeURIComponent(res.newIp);
+          } else {
+            OBOL.router.render();
+          }
+        }
+      });
+    }
     U.on(mount, 'click', '#td-focus-btn', function (e, b) {
       var ip = b.getAttribute('data-focus-ip');
       if (!ip) return;

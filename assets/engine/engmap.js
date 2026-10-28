@@ -38,10 +38,16 @@
     'kerberos-sec': 'Kerberos', 'domain': 'DNS', 'http': 'HTTP',
     'https': 'HTTPS', 'ssl-http': 'HTTPS', 'ms-wbt-server': 'RDP',
     'wsman': 'WinRM', 'winrm': 'WinRM',
+    'ssh': 'SSH', 'msrpc': 'RPC', 'ftp': 'FTP', 'smtp': 'SMTP',
+    'snmp': 'SNMP', 'vnc': 'VNC', 'nfs': 'NFS',
+    'mysql': 'MySQL', 'postgresql': 'Postgres', 'postgres': 'Postgres', 'redis': 'Redis',
   };
   var REACHABLE_LABELS = {
     'ldap.reachable': 'LDAP', 'smb.reachable': 'SMB', 'kerberos.reachable': 'Kerberos',
     'winrm.reachable': 'WinRM', 'http.reachable': 'HTTP',
+    'ssh.reachable': 'SSH', 'ftp.reachable': 'FTP', 'rdp.reachable': 'RDP',
+    'mssql.reachable': 'MSSQL', 'mysql.reachable': 'MySQL', 'postgres.reachable': 'Postgres',
+    'redis.reachable': 'Redis', 'dns.reachable': 'DNS',
   };
 
   function titleCase(s) {
@@ -59,9 +65,10 @@
 
   function serviceLabel(kind, value) {
     if (REACHABLE_LABELS[kind]) return REACHABLE_LABELS[kind];
+    var port = portOf(kind, value);
+    if (port === 3268 || port === 3269) return PORT_LABELS[port];
     var service = String((value && value.service) || '').toLowerCase();
     if (service) return SERVICE_ALIASES[service] || titleCase(service);
-    var port = portOf(kind, value);
     if (port) return PORT_LABELS[port] || ('Port ' + port);
     if (kind && kind.indexOf('service.') === 0) {
       var raw = kind.split('.').slice(1).join('.');
@@ -124,7 +131,7 @@
     if (factset.has('foothold.windows') || factset.has('foothold.linux')
         || factset.has('access.shell') || factset.has('winrm.authenticated')
         || factset.has('foothold.webshell')) return 'foothold';
-    if (factset.has('credential.available') || factset.has('credential.candidate')) return 'credentialed';
+    if (factset.has('credential.available') || factset.has('credential.plaintext') || factset.has('credential.candidate')) return 'credentialed';
     for (var i = 0; i < factset.facts.length; i++) {
       var f = factset.facts[i];
       if (f.state === 'supported' && f.kind.indexOf('target.') !== 0 && f.kind.indexOf('host.') !== 0) return 'enumerated';
@@ -152,7 +159,8 @@
     var domain = target.domain
       || firstValue(factset, 'host.domain', 'domain', 'name')
       || firstValue(factset, 'host.fqdn', 'domain')
-      || firstValue(factset, 'ad.dc_candidate', 'domain') || '';
+      || firstValue(factset, 'ad.dc_candidate', 'domain')
+      || firstValue(factset, 'ad.domain_known', 'name', 'domain') || '';
     return { hostname: hostname, fqdn: fqdn, domain: domain ? String(domain).toLowerCase() : '' };
   }
 
@@ -229,13 +237,47 @@
     var scopeIds = {};
     var targetHosts = {};
     targets.forEach(function (t) { if (t.ip) targetHosts[t.ip] = true; });
-    scope.forEach(function (entry) {
+    function addScopeEntry(entry) {
       entry = String(entry || '').trim();
-      if (!entry || targetHosts[entry]) return;
-      if (scopeIds[entry]) return;
-      var sid = nid('scope_' + entry);
-      scopeIds[entry] = sid;
-      nodes.push({ id: sid, type: 'scope', tier: 0, label: entry, meta: { scope: entry } });
+      if (!entry || targetHosts[entry]) return '';
+      if (!scopeIds[entry]) {
+        var sid = nid('scope_' + entry);
+        scopeIds[entry] = sid;
+        nodes.push({ id: sid, type: 'scope', tier: 0, label: entry, meta: { scope: entry } });
+      }
+      return scopeIds[entry];
+    }
+    scope.forEach(addScopeEntry);
+
+    // Discovered internal subnets & pivot relationships from host-scoped pivot/route facts
+    var SUBNET_FACT_KINDS = {
+      'network.subnet_candidate': 1,
+      'pivot.subnet_known': 1,
+      'scan.local.routes': 1,
+      'scan.local.interfaces': 1,
+      'tunnel.route': 1
+    };
+    var pivotHostSubnets = {}; // host -> { subnet: true }
+    var discoveredSubnets = [];
+    allFacts.facts.forEach(function (f) {
+      if (f.state !== 'supported' || !SUBNET_FACT_KINDS[f.kind]) return;
+      var v = f.value || {};
+      var list = [];
+      if (Array.isArray(v.subnets)) list = list.concat(v.subnets);
+      if (v.subnet) list.push(v.subnet);
+      if (v.cidr) list.push(v.cidr);
+      if (v.network) list.push(v.network);
+      var fHost = (f.scope && f.scope.indexOf('host:') === 0 && f.scope !== 'host:target') ? f.scope.slice(5) : '';
+      list.forEach(function (rawSub) {
+        var sub = String(rawSub || '').trim();
+        if (!sub || targetHosts[sub]) return;
+        addScopeEntry(sub);
+        if (discoveredSubnets.indexOf(sub) === -1) discoveredSubnets.push(sub);
+        if (fHost) {
+          pivotHostSubnets[fHost] = pivotHostSubnets[fHost] || {};
+          pivotHostSubnets[fHost][sub] = true;
+        }
+      });
     });
 
     // ── tier 2: credentials, one node per distinct (user, domain) ──
@@ -279,6 +321,7 @@
       var services = hostServices(tf).slice(0, 8);
       var level = accessLevel(tf);
       var dc = isDomainController(tf);
+      var isPivot = tf.has('host.multihomed') || tf.has('tunnel.socks') || tf.has('tunnel.route') || tf.has('tunnel.dns') || !!pivotHostSubnets[host];
       var tid = nid('tgt_' + host);
       var phase = (OBOL.phases && OBOL.phases.targetPhase) ? OBOL.phases.targetPhase(tf) : '';
       nodes.push({
@@ -286,6 +329,7 @@
         label: t.hostname || t.label || host,
         meta: {
           host: host, ip: host, access: level, phase: phase, os: t.os || '', dc: dc,
+          pivot: isPivot,
           hostname: identity.hostname, fqdn: identity.fqdn, domain: identity.domain,
           services: services, service_count: services.length,
         },
@@ -297,6 +341,20 @@
       Object.keys(scopeIds).forEach(function (entry) {
         if (targetInScope(host, entry)) addEdge(scopeIds[entry], tid, 'in-scope');
       });
+
+      // Pivot edges from multihomed/tunnel host to discovered internal subnets
+      if (isPivot) {
+        var hostSubs = pivotHostSubnets[host] ? Object.keys(pivotHostSubnets[host]) : discoveredSubnets;
+        hostSubs.forEach(function (sub) {
+          if (scopeIds[sub] && !targetInScope(host, sub)) {
+            addEdge(tid, scopeIds[sub], 'pivots-to');
+          }
+        });
+      }
+      var pivotFrom = t.pivot_from || t.pivotFrom || '';
+      if (pivotFrom && targetHosts[pivotFrom] && pivotFrom !== host) {
+        addEdge(nid('tgt_' + pivotFrom), tid, 'pivots-to');
+      }
 
       services.forEach(function (svc) {
         var port = svc.port || 0;
@@ -360,7 +418,7 @@
   }
 
   // ── SVG renderer ─────────────────────────────────────────────────────────────────────────
-  var NW = 156, NH = 44, COLW = 182, ROWH = 116, PADX = 26, PADY = 34, LEFT = 96;
+  var NW = 156, NH = 44, COLW = 182, ROWH = 116, ROW_SUB_H = 76, MAX_COLS = 8, PADX = 26, PADY = 34, LEFT = 136;
   var TIER_LABELS = { 0: 'SCOPE / DOMAINS', 1: 'TARGETS', 2: 'SERVICES / CREDS', 3: 'FINDINGS' };
 
   function trunc(label, limit) {
@@ -378,25 +436,37 @@
     var byTier = {};
     model.nodes.forEach(function (n) { (byTier[n.tier] = byTier[n.tier] || []).push(n); });
     var tiers = Object.keys(byTier).map(Number).sort(function (a, b) { return a - b; });
-    var maxCount = Math.max.apply(null, tiers.map(function (t) { return byTier[t].length; }));
+    var maxCount = Math.max.apply(null, tiers.map(function (t) {
+      var len = byTier[t].length;
+      return (t === 2 || t === 3) ? Math.min(MAX_COLS, len) : len;
+    }));
     var contentW = maxCount * COLW;
     var width = LEFT + contentW + PADX;
-    var height = PADY + tiers.length * ROWH + PADY;
 
     var pos = {};
-    tiers.forEach(function (t, ti) {
+    var tierBaseY = {};
+    var curY = PADY;
+    tiers.forEach(function (t) {
       var rowNodes = byTier[t];
-      var y = PADY + ti * ROWH;
-      var offset = (contentW - rowNodes.length * COLW) / 2;
-      rowNodes.forEach(function (n, ci) {
-        var x = LEFT + offset + ci * COLW + (COLW - NW) / 2;
-        pos[n.id] = { x: x, y: y, cx: x + NW / 2, cy: y + NH / 2, node: n };
-      });
+      tierBaseY[t] = curY;
+      var wrapCols = (t === 2 || t === 3) ? MAX_COLS : rowNodes.length;
+      var numSubRows = Math.max(1, Math.ceil(rowNodes.length / Math.max(1, wrapCols)));
+      for (var sr = 0; sr < numSubRows; sr++) {
+        var subNodes = rowNodes.slice(sr * wrapCols, (sr + 1) * wrapCols);
+        var y = curY + sr * ROW_SUB_H;
+        var offset = (contentW - subNodes.length * COLW) / 2;
+        subNodes.forEach(function (n, ci) {
+          var x = LEFT + offset + ci * COLW + (COLW - NW) / 2;
+          pos[n.id] = { x: x, y: y, cx: x + NW / 2, cy: y + NH / 2, node: n };
+        });
+      }
+      curY += ROWH + (numSubRows - 1) * ROW_SUB_H;
     });
+    var height = curY + PADY;
 
     // tier row labels
-    var rowLabels = tiers.map(function (t, ti) {
-      var y = PADY + ti * ROWH + NH / 2 + 4;
+    var rowLabels = tiers.map(function (t) {
+      var y = tierBaseY[t] + NH / 2 + 4;
       return '<text x="8" y="' + y + '" class="em-tier-label" font-size="10" font-weight="700" letter-spacing="1">'
         + esc(TIER_LABELS[t] || ('TIER ' + t)) + '</text>';
     }).join('');

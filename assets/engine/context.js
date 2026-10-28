@@ -52,6 +52,7 @@
     return found;
   }
   function shape(eng) {
+    if (!eng) return { version: 1, byTarget: {}, targetDomains: {}, anonymousByTarget: {} };
     if (!eng.contextSelections || eng.contextSelections.version !== 1) eng.contextSelections = { version: 1, byTarget: {}, targetDomains: {} };
     var s = eng.contextSelections; s.byTarget = s.byTarget || {}; s.targetDomains = s.targetDomains || {};
     return s;
@@ -89,10 +90,15 @@
   }
   function pin(eng) { return eng && owns(pins, eng.id) ? pins[eng.id] : undefined; }
   function selectedId(eng, target) {
-    normalize(eng); var pinned = pin(eng);
+    if (!eng) return undefined;
+    normalize(eng);
+    target = clean(target || eng.activeTarget || (eng.params || {}).target);
+    var pinned = pin(eng);
     return pinned !== undefined ? pinned : shape(eng).byTarget[target];
   }
   function applySelection(eng, target) {
+    if (!eng) return;
+    target = clean(target || eng.activeTarget || (eng.params || {}).target);
     var p = eng.params = eng.params || {}, id = selectedId(eng, target), c = credentials(eng).find(function (x) { return x.id === id; });
     p.username = c ? c.user : ''; p.user = c ? c.user : ''; p.password = c ? c.password : ''; p.nthash = c ? c.nthash : ''; p.authRealm = c ? c.domain : '';
     var td = shape(eng).targetDomains[target];
@@ -221,7 +227,7 @@
         if (!v.credentialId && !v.credentialFingerprint) {
           if ((!v.password && !v.nthash && !v.hash) || factMaterial(f).credentialFingerprint !== c.credentialFingerprint) return false;
         }
-        if (svc && v.service && lower(v.service) !== svc) return false;
+        if (svc && v.service && lower(v.service) !== svc && !((svc === 'smb' && lower(v.service) === 'wmi') || (svc === 'wmi' && lower(v.service) === 'smb'))) return false;
       }
       if (/^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)) return !!c && factMaterial(f).id === c.id;
       if (/^credential\.(validated|validation|authorization|admin)$/.test(f.kind) || /^(smb|ldap|winrm|ssh|rdp|mssql)\.authenticated$/.test(f.kind) || (/^blocker\./.test(f.kind) && (v.credentialId || v.user || v.principal))) {
@@ -251,7 +257,7 @@
     // and array without rebuilding the ledger with quadratic FactSet.add calls.
     var view = Object.create(projection); view.facts = projection.facts.slice(); view.state_changed = [];
     var result = { target:target,targetDomain:domain,authRealm:realm,principal:principal,credentialId:c ? c.id : null,credentialFingerprint:c ? c.credentialFingerprint : '',credential:c,
-      service:svc,locus:locus,facts:view,params:p,
+      service:svc,locus:locus,facts:view,allScopedFacts:frame.scoped,params:p,engagement:eng,
       selectionSource:source,conflicts:conflicts,unresolved:unresolved,actionId:opts.actionId || '' };
     result.attemptKey = JSON.stringify([target,result.credentialId,svc,result.locus,result.actionId]);
     Object.defineProperty(result.facts, '_resolvedContext', {value:result});
@@ -274,12 +280,26 @@
       });
       return candidates;
     };
+    result.facts.applicableCommands = function (action) {
+      var applicable = [];
+      ((action && action.commands) || []).forEach(function (cmd, index) {
+        var commandFacts = result.facts.forAction(action, cmd);
+        var isElig = (!action.eligible || action.eligible(commandFacts))
+          && (!O.pack || !O.pack.commandIsEligible || O.pack.commandIsEligible(cmd, commandFacts, action));
+        if (isElig) applicable.push({ cmd: cmd, index: index });
+      });
+      return applicable;
+    };
     result.facts.commandCompleted = function (action, cmd, index) {
       if (!eng || !O.command || !O.command.commandTriedInEpoch || !O.command.fillCommand) return false;
-      var attempts = frame.attempts[action.id];
-      if (!attempts) attempts = frame.attempts[action.id] = (eng.activities || []).filter(function (activity) {
-        return activity && (activity.action_id || activity.actionId) === action.id
-          && activity.outcome && activity.outcome.conclusive && activity.outcome.retireCommand;
+      var attempts = frame.attempts.__all;
+      if (!attempts) attempts = frame.attempts.__all = (eng.activities || []).filter(function (activity) {
+        var o = activity && activity.outcome;
+        if (activity && o && !o.retireCommand && o.kind === 'success' && /(?:^|\s)--host\b/i.test(activity.command || '') && O.outcomes && O.outcomes.completion) {
+          var comp = O.outcomes.completion(activity.stdout || '', activity.command);
+          if (comp && comp.complete) { o.conclusive = true; o.retireCommand = true; }
+        }
+        return activity && o && o.conclusive && o.retireCommand && o.kind !== 'rejected' && o.kind !== 'authorization-denied';
       });
       if (!attempts.length) return false;
       var commandFacts = result.facts.forAction(action, cmd);

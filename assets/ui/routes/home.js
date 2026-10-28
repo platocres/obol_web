@@ -51,6 +51,7 @@
     return false;
   }
   function extractScope(text, lhost) {
+    text = String(text || '').replace(/\bhttps?:\/\/([^\s\/:]+)(?::\d+)?(?:\/[^\s]*)?/gi, '$1').replace(/\b((?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/[^\s]*)?/g, '$1');
     var out = [], m, seen = {};
     IP_RE.lastIndex = 0;
     while ((m = IP_RE.exec(text || '')) !== null) {
@@ -95,6 +96,7 @@
   };
   function cleanHostToken(tok) {
     tok = String(tok || '').trim().replace(/^[(\["']+|[)\]"',;:]+$/g, '');
+    tok = tok.replace(/^https?:\/\//i, '').replace(/(?::\d+)?(?:\/.*)?$/, '');
     if (!tok || tok.length < 2 || tok.length > 90) return '';
     if (/^\d+$/.test(tok) || isValidIp(tok) || /[\/\\:]/.test(tok)) return '';
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*[a-zA-Z0-9]$/.test(tok)) return '';
@@ -385,14 +387,11 @@
     }).join('');
   }
 
-  function isConfigured(eng, factCount) {
+  function isConfigured(eng) {
+    if (OBOL.store && typeof OBOL.store.isConfigured === 'function') return OBOL.store.isConfigured(eng);
     if (!eng) return false;
-    var prof = eng.profile || {};
-    var realPlatform = prof.platform && prof.platform !== 'custom';
-    var targets = (eng.targets || []).length > 0;
-    var scoped = !!(eng.params && (eng.params.scope_defined || eng.params.target));
-    var named = !!eng.name && !/^(untitled run|new engagement)$/i.test(String(eng.name).trim());
-    return realPlatform || targets || scoped || (factCount || 0) > 0 || named;
+    var n = eng.name != null ? String(eng.name).trim() : '';
+    return !!n && !/^(untitled run|new engagement|no run yet|set up engagement\.{0,3})$/i.test(n);
   }
 
   function ago(at) {
@@ -556,7 +555,7 @@
         + '</div>'
         + '<div class="hb-anchor-actions">'
         + '  <button type="button" class="cr-btn-neon neon-cyan small btn-copy hb-copy" data-copy="' + U.attr(v.filled) + '">Copy Cmd</button>'
-        + '  <a class="cr-btn-neon neon-emerald small" href="#/path">Open Coach &rarr;</a>'
+        + '  <a class="cr-btn-neon neon-emerald small" href="#/path">Open Cockpit &rarr;</a>'
         + '  <a class="cr-btn-neon neon-amber small" href="#/cruise">Cruise &rarr;</a>'
         + '</div>'
         + '</div>';
@@ -630,10 +629,10 @@
         + factLine(f.facts)
         + '<div class="ws-file-links"><a class="ws-file-link" href="#/history">Review in the Run Log &rarr;</a>' + credsLink + '</div>';
     } else if (suggested) {
-      body = '<div class="ws-file-note">The coach is suggesting a move that creates this file'
+      body = '<div class="ws-file-note">The Cockpit is suggesting a move that creates this file'
         + (f.title ? ' (<strong>' + esc(f.title) + '</strong>)' : '') + '. Pencilled in, run it, then paste the output to capture it.</div>'
         + cmdBlock
-        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Next Steps &rarr;</a>'
+        + '<div class="ws-file-links"><a class="ws-file-link" href="#/path">Open the move in Cockpit &rarr;</a>'
         + '<a class="ws-file-link" href="' + captureHref(f) + '">Capture its output &rarr;</a></div>';
     } else if (f.unknown) {
       body = '<div class="ws-file-note">Found on your disk by a workspace sync. OBOL doesn\'t know this one yet'
@@ -725,7 +724,7 @@
     }).join('');
 
     var emptyNotice = !populatedFolders.length
-      ? '<div class="ws-zero-note">No files captured yet. Run your first move in Coach or Cruise and paste output back to populate <code>scans/</code>, <code>loot/</code>, and <code>proof/</code> automatically.</div>'
+      ? '<div class="ws-zero-note">No files captured yet. Run your first move in Cockpit or Cruise and paste output back to populate <code>scans/</code>, <code>loot/</code>, and <code>proof/</code> automatically.</div>'
       : '';
 
     var emptyStrip = emptyFolders.length
@@ -900,10 +899,10 @@
 
       var showFlags = !OBOL.profile || !OBOL.profile.hasFlags || OBOL.profile.hasFlags((eng || {}).profile) || info.flags > 0;
       var flags = showFlags ? ('<span class="apath-row-flags' + (info.flags ? '' : ' none') + '">' + OBOL.ic('flag') + ' ' + (info.flags || 0) + '</span>') : '';
-      var next = info.next ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
+      var next = (!isFocused && info.next) ? '<span class="apath-row-next" title="' + U.attr(info.next) + '">&rarr; ' + esc(info.next) + '</span>'
         : (info.lvl === 'privileged' ? '<span class="apath-row-next done">Owned</span>' : '');
       var focusCtrl = isFocused
-        ? '<span class="hb-focus-chip is-on" title="Active target for Coach &amp; Cruise">● Active</span>'
+        ? '<span class="hb-focus-chip is-on" title="Active target for Cockpit &amp; Cruise">● Active</span>'
         : '<button type="button" class="hb-focus-btn" data-focus-ip="' + U.attr(ip) + '" title="Set ' + U.attr(ip) + ' as active target">Focus</button>';
       var dossierLink = '<a class="hb-dossier-btn" href="#/target/' + U.attr(ip) + '" title="Open full Target Dossier for ' + U.attr(ip) + '">Target Dossier &rarr;</a>';
 
@@ -916,22 +915,28 @@
             + info.ports.map(function (p) { return '<span class="apath-port">' + esc(p) + '</span>'; }).join('') + '</span>'
         : '<span class="apath-id-pair"><span class="apath-id-k">Open Ports</span><span class="muted small">None recorded yet</span></span>';
       var la = lastActivityAt(ip, acts);
+      var prevIps = (info.t && Array.isArray(info.t.previousIps) && info.t.previousIps.length) ? info.t.previousIps : [];
       var detailStrip = '<div class="apath-detail-strip">'
         + (host ? idPair('Hostname', host) : '')
         + idPair('IP', ip)
+        + (prevIps.length ? idPair('Was', prevIps[prevIps.length - 1]) : '')
         + (dom ? idPair('Domain', dom) : '')
         + (info.os ? idPair('OS', info.os) : '')
         + portsHtml
         + (la ? idPair('Last Activity', ago(la)) : '')
+        + '<button type="button" class="cr-btn-glass small apath-edit-btn" data-edit-target="' + U.attr(ip) + '" title="Edit target identity or Re-IP after a lab respawn">&#9998; Edit / Re-IP</button>'
         + '</div>';
 
+      var editDrawer = (OBOL.targets && OBOL.targets.renderEditDrawer) ? OBOL.targets.renderEditDrawer(ip) : '';
       var flow = OBOL.chainview ? OBOL.chainview.hostFlow(ip, acts) : '';
       var body = detailStrip
+        + editDrawer
         + (flow
             ? '<h3 class="apath-body-h">Attack Path: What Led to What</h3>' + flow
-            : '<div class="apath-empty">No moves recorded on this box yet. Run a move from Coach or Cruise and paste output back to build its Attack Path.</div>')
+            : '<div class="apath-empty">No moves recorded on this box yet. Run a move from Cockpit or Cruise and paste output back to build its Attack Path.</div>')
         + '<div class="apath-body-foot">'
         + (!isFocused ? '<button type="button" class="cr-btn-glass small" data-focus-ip="' + U.attr(ip) + '">Set As Active Target</button>' : '')
+        + '  <button type="button" class="cr-btn-glass small" data-edit-target="' + U.attr(ip) + '">&#9998; Edit / Re-IP Target</button>'
         + '  <a class="cr-btn-neon neon-cyan small" href="#/target/' + U.attr(ip) + '">Open Target Dossier &amp; Path Graph &rarr;</a>'
         + '</div>';
 
@@ -1069,7 +1074,7 @@
     if (!eng) return [];
     var pack = OBOL.packs.actions();
     var pins = pinnedSet(eng);
-    var tSig = (eng.targets || []).map(function (t) { return (t.ip || t.id || '') + ':' + (t.hostname || '') + ':' + (t.os || ''); }).join('|');
+    var tSig = (eng.targets || []).map(function (t) { return (t.ip || t.id || '') + ':' + (t.hostname || '') + ':' + (t.domain || '') + ':' + (t.os || '') + ':' + ((t.previousIps || []).join(',')); }).join('|');
     var supCount = 0;
     (eng.facts || []).forEach(function (f) { if (f && f.state === 'supported') supCount++; });
     var cacheKey = [
@@ -1108,6 +1113,145 @@
     _targetInfosCache = { key: cacheKey, list: list };
     return list;
   }
+  function hostsFixCmd(oldIp, newIp, host, dom) {
+    if (!oldIp || !newIp || oldIp === newIp) return '';
+    return "sudo sed -i 's/" + oldIp.replace(/\./g, '\\.') + "/" + newIp + "/g' /etc/hosts";
+  }
+
+  function renderEditDrawer(ip) {
+    var eng = (OBOL.store && OBOL.store.active && OBOL.store.active()) || {};
+    var t = ((eng.targets || []).find(function (x) { return x && (x.ip === ip || x.id === ip); })) || {};
+    var idn = (OBOL.store && OBOL.store.targetIdentity) ? OBOL.store.targetIdentity(ip) : { ip: ip, hostname: t.hostname || '', domain: t.domain || '', os: t.os || '' };
+    var curLhost = (eng.params && eng.params.lhost) || '';
+    var prevIps = Array.isArray(t.previousIps) ? t.previousIps : [];
+    var lastOldIp = prevIps.length ? prevIps[prevIps.length - 1] : '';
+    var sedCmd = lastOldIp ? hostsFixCmd(lastOldIp, idn.ip || ip, idn.hostname, idn.domain) : '';
+
+    return '<div class="tgt-edit-drawer ws-clear-box" data-te-drawer="' + U.attr(ip) + '" hidden>'
+      + '<div class="tgt-edit-head">'
+      + '  <div>'
+      + '    <span class="tgt-edit-kicker">TARGET IDENTITY &amp; RESPAWN RE-IP</span>'
+      + '    <div class="tgt-edit-title">Edit Target or Migrate to Respawned Lab IP</div>'
+      + '  </div>'
+      + '  <button type="button" class="cr-btn-glass small" data-te-cancel="' + U.attr(ip) + '">Close ✕</button>'
+      + '</div>'
+      + '<p class="tgt-edit-sub">Lab timed out and assigned a new IP? Enter the new IP below. OBOL migrates all proven facts, credentials, checklist states, and rewrites your Run Log commands to the new address so you can pick right back up.</p>'
+      + '<div class="tgt-edit-grid">'
+      + '  <label class="tgt-edit-field"><span>Target IP Address</span><input type="text" class="ev-cmd" data-te-field="ip" value="' + U.attr(idn.ip || ip) + '" placeholder="e.g. 10.129.204.88" autocomplete="off" spellcheck="false" inputmode="decimal"></label>'
+      + '  <label class="tgt-edit-field"><span>Hostname <span class="targets-add-opt">(Optional)</span></span><input type="text" class="ev-cmd" data-te-field="hostname" value="' + U.attr(idn.hostname || '') + '" placeholder="e.g. dc01 or forest" autocomplete="off" spellcheck="false"></label>'
+      + '  <label class="tgt-edit-field"><span>Domain <span class="targets-add-opt">(Optional)</span></span><input type="text" class="ev-cmd" data-te-field="domain" value="' + U.attr(idn.domain || '') + '" placeholder="e.g. htb.local" autocomplete="off" spellcheck="false"></label>'
+      + '  <label class="tgt-edit-field"><span>OS <span class="targets-add-opt">(Optional)</span></span><input type="text" class="ev-cmd" data-te-field="os" value="' + U.attr(idn.os || '') + '" placeholder="e.g. Windows Server 2019 or Ubuntu 22.04" autocomplete="off" spellcheck="false"></label>'
+      + '  <label class="tgt-edit-field"><span>Your VPN IP / LHOST <span class="targets-add-opt">(If VPN Changed)</span></span><input type="text" class="ev-cmd" data-te-field="lhost" value="' + U.attr(curLhost) + '" placeholder="e.g. 10.10.14.9" autocomplete="off" spellcheck="false" inputmode="decimal"></label>'
+      + '</div>'
+      + (sedCmd
+          ? '<div class="tgt-edit-hosts-tip">'
+            + '<span class="tgt-edit-hosts-l">Previous IP: <code>' + esc(lastOldIp) + '</code> &rarr; <code>' + esc(idn.ip || ip) + '</code> · Update <code>/etc/hosts</code> on Kali:</span>'
+            + '<div class="tgt-edit-hosts-cmd"><code>' + esc(sedCmd) + '</code><button type="button" class="btn-copy small" data-copy="' + U.attr(sedCmd) + '">Copy</button></div>'
+            + '</div>'
+          : '')
+      + '<div class="tgt-edit-foot">'
+      + '  <button type="button" class="cr-btn-glass small" data-te-cancel="' + U.attr(ip) + '">Cancel</button>'
+      + '  <button type="button" class="cr-btn-neon neon-cyan small" data-te-save="' + U.attr(ip) + '" data-te-mode="stay">Save Target</button>'
+      + '  <button type="button" class="cr-btn-neon neon-emerald small" data-te-save="' + U.attr(ip) + '" data-te-mode="replay">Save &amp; Replay in Run Log &rarr;</button>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function bindEditDrawer(mount, opts) {
+    if (!mount || mount._obolTargetEditBound) return;
+    mount._obolTargetEditBound = true;
+    opts = opts || {};
+
+    U.on(mount, 'click', '[data-edit-target]', function (e, btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var ip = btn.getAttribute('data-edit-target');
+      if (!ip) return;
+      var detailsParent = btn.closest('details.apath-row');
+      if (detailsParent && !detailsParent.open) detailsParent.open = true;
+      var drawer = mount.querySelector('[data-te-drawer="' + CSS.escape(ip) + '"]')
+        || Array.prototype.find.call(mount.querySelectorAll('[data-te-drawer]'), function (el) { return el.getAttribute('data-te-drawer') === ip; });
+      if (!drawer) return;
+      var isHidden = drawer.hasAttribute('hidden');
+      if (isHidden) {
+        drawer.removeAttribute('hidden');
+        var ipInput = drawer.querySelector('[data-te-field="ip"]');
+        if (ipInput) {
+          setTimeout(function () {
+            try { ipInput.focus(); ipInput.select(); } catch (err) {}
+          }, 20);
+        }
+      } else {
+        drawer.setAttribute('hidden', '');
+      }
+    });
+
+    U.on(mount, 'click', '[data-te-cancel]', function (e, btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var drawer = btn.closest('[data-te-drawer]');
+      if (drawer) drawer.setAttribute('hidden', '');
+    });
+
+    U.on(mount, 'click', '[data-te-save]', function (e, btn) {
+      e.preventDefault();
+      e.stopPropagation();
+      var oldIp = btn.getAttribute('data-te-save');
+      var mode = btn.getAttribute('data-te-mode') || 'stay';
+      var drawer = btn.closest('[data-te-drawer]');
+      if (!drawer || !oldIp || !OBOL.store || !OBOL.store.editTarget) return;
+
+      function val(name) {
+        var el = drawer.querySelector('[data-te-field="' + name + '"]');
+        return el ? String(el.value || '').trim() : '';
+      }
+      var newIp = val('ip');
+      if (!newIp) {
+        U.toast('Target IP cannot be empty', 'err');
+        return;
+      }
+      var res = OBOL.store.editTarget(oldIp, {
+        ip: newIp,
+        hostname: val('hostname'),
+        domain: val('domain'),
+        os: val('os'),
+        lhost: val('lhost'),
+      });
+      if (!res || !res.ok) {
+        U.toast((res && res.error) || 'Failed to update target', 'err');
+        return;
+      }
+      if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
+
+      var msgParts = [];
+      if (res.reIp) {
+        msgParts.push('Re-IP ' + res.oldIp + ' -> ' + res.newIp);
+        if (res.rewrittenCommands) msgParts.push(res.rewrittenCommands + ' Run Log cmd' + (res.rewrittenCommands === 1 ? '' : 's') + ' updated');
+      } else {
+        msgParts.push('Target ' + res.newIp + ' updated');
+      }
+      if (res.lhostChanged) {
+        msgParts.push('LHOST -> ' + res.newLhost);
+      }
+      U.toast(msgParts.join(' · '));
+
+      if (mode === 'replay') {
+        try {
+          sessionStorage.setItem('obol.history.mode', 'replay');
+          sessionStorage.setItem('obol.history.target', res.newIp);
+        } catch (err) {}
+        location.hash = '#/history';
+        return;
+      }
+      if (typeof opts.onSaved === 'function') {
+        opts.onSaved(res);
+        return;
+      }
+      OBOL.router.render();
+    });
+  }
+
   OBOL.targets = OBOL.targets || {};
   OBOL.targets.all = function (eng) { return targetInfos(eng || OBOL.store.active() || { targets: [] }); };
   OBOL.targets.hostOs = hostOs;
@@ -1115,6 +1259,9 @@
   OBOL.targets.ACC_BADGE = ACC_BADGE;
   OBOL.targets.parseBulkInput = parseBulkInput;
   OBOL.targets.importBulk = importBulkTargets;
+  OBOL.targets.renderEditDrawer = renderEditDrawer;
+  OBOL.targets.bindEditDrawer = bindEditDrawer;
+  OBOL.targets.hostsFixCmd = hostsFixCmd;
 
   // ── Connectivity: pivots + tunnel-setup chooser + symptom-first troubleshooter ──
   function connData(eng) {
@@ -1260,12 +1407,46 @@
   // New Engagement / Pre-Engagement Launchpad Form
   function setupDrawerHtml(configured, sel, prof) {
     var hiddenAttr = (configured && !_showNewSetup) ? ' hidden' : '';
+    var active = OBOL.store.active() || {};
+    var actP = active.params || {};
+    var preOsid = !configured ? (prof.osid || '') : '';
+    var preCand = !configured ? (prof.candidate || '') : '';
+    var preClient = !configured ? (prof.client || '') : '';
+    var preWorkdir = !configured ? ((active.workspace && active.workspace.root) || '') : '';
+    var preScopeLines = [];
+    if (!configured) {
+      var seenScope = {};
+      (active.targets || []).forEach(function (t) {
+        var ip = (t && (t.ip || t.id)) || '';
+        if (!ip || seenScope[ip]) return;
+        seenScope[ip] = 1;
+        preScopeLines.push(t.hostname && t.hostname !== ip ? (ip + ' ' + t.hostname) : ip);
+      });
+      if (actP.target && !seenScope[actP.target]) {
+        seenScope[actP.target] = 1;
+        preScopeLines.push(actP.target + (actP.domain && actP.target.indexOf(actP.domain) < 0 ? (' ' + actP.domain) : ''));
+      }
+      ((prof && prof.scope) || []).forEach(function (s) {
+        if (s && !seenScope[s]) { seenScope[s] = 1; preScopeLines.push(s); }
+      });
+    }
+    var preScope = preScopeLines.join('\n');
+    var stagedFactCount = !configured ? Object.keys(OBOL.store.factSet().kinds()).length : 0;
+    var stagedBanner = (!configured && (preScopeLines.length > 0 || stagedFactCount > 0))
+      ? '<div class="eng-staged-notice ws-clear-box"><strong>Staged data ready:</strong> '
+        + (preScopeLines.length ? (preScopeLines.length + ' target' + (preScopeLines.length === 1 ? '' : 's')) : '')
+        + (preScopeLines.length && stagedFactCount ? ' and ' : '')
+        + (stagedFactCount ? (stagedFactCount + ' fact' + (stagedFactCount === 1 ? '' : 's')) : '')
+        + ' pre-filled below. Choose your Platform Profile and click <em>Create &amp; Launch Engagement</em> to begin.</div>'
+      : '';
+
     var welcomeBanner = !configured
       ? '<div class="eng-welcome">'
         + '<div class="eng-welcome-main">'
         + '  <span class="hb-drawer-kicker">PRE-ENGAGEMENT LAUNCHPAD</span>'
         + '  <div class="eng-welcome-h">Set Up Your Engagement</div>'
         + '  <p class="eng-welcome-sub">Pick a platform profile, paste your target IPs or Nmap scan, and launch. OBOL configures your working folder, seeds recon moves, and tracks every host from scan to report.</p>'
+        +    stagedBanner
         + '</div>'
         + '</div>'
       : '<div class="hb-drawer-head">'
@@ -1278,26 +1459,25 @@
       + welcomeBanner
       + loadoutSetupCard()
       + '<div class="eng-row2">'
-      + '  <label class="eng-field"><span>1. Engagement Name</span><input id="eng-name" placeholder="e.g. OSCP Prep Set A or Forest" autocomplete="off"></label>'
+      + '  <label class="eng-field"><span>1. Engagement Name</span><input id="eng-name" placeholder="e.g. OSCP Prep Set A or Lab Run 01" autocomplete="off"></label>'
       + '  <label class="eng-field"><span>Machine Focus <span class="eng-field-opt">(Optional)</span></span><select id="eng-mt">' + machineOptions(prof.machine_type || '') + '</select></label>'
       + '</div>'
       + '<div class="eng-field"><span>2. Platform Profile <span class="eng-field-opt">(decides flag objectives, exam constraints &amp; report template)</span></span><div class="pf-grid" id="pf-grid">' + platformCards(sel) + '</div></div>'
       + '<div class="eng-row2">'
-      + '  <label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" placeholder="OS-XXXXX"></label>'
-      + '  <label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate / Assessor</span><input id="eng-cand" placeholder="Your name"></label>'
-      + '  <label class="eng-field pf-osid" id="pf-client-wrap" style="display:none"><span>Client / Organization</span><input id="eng-client" placeholder="e.g. Acme Corp"></label>'
+      + '  <label class="eng-field pf-osid" id="pf-osid-wrap" style="display:none"><span>OSID (OffSec Exam)</span><input id="eng-osid" value="' + U.attr(preOsid) + '" placeholder="OS-XXXXX"></label>'
+      + '  <label class="eng-field pf-osid" id="pf-cand-wrap" style="display:none"><span>Candidate / Assessor</span><input id="eng-cand" value="' + U.attr(preCand) + '" placeholder="Your name"></label>'
+      + '  <label class="eng-field pf-osid" id="pf-client-wrap" style="display:none"><span>Client / Organization</span><input id="eng-client" value="' + U.attr(preClient) + '" placeholder="e.g. Acme Corp"></label>'
       + '</div>'
       + '<label class="eng-field"><span>3. Scope / Targets <span class="eng-field-opt">(paste IPs, CIDRs, /etc/hosts, or raw Nmap output - junk is filtered)</span></span>'
-      + '<textarea id="eng-scope" class="ev-textarea ws-clear-box" style="min-height:84px" placeholder="10.10.10.10 dc01.corp.local&#10;10.10.10.20 sql01.corp.local&#10;10.10.10.0/24"></textarea></label>'
+      + '<textarea id="eng-scope" class="ev-textarea ws-clear-box" style="min-height:84px" placeholder="10.10.10.10 dc01.corp.local&#10;10.10.10.20 sql01.corp.local&#10;10.10.10.0/24">' + esc(preScope) + '</textarea></label>'
       + '<div class="eng-box-settings ws-clear-box">'
       + '  <div class="eng-box-settings-h"><span>4. Box &amp; Workspace Context</span><span class="muted small">Optional - defaults to ~/engagements/&lt;name&gt; and auto-learns tun0 from prompts</span></div>'
       + (function () {
           var arP = null; try { arP = JSON.parse(localStorage.getItem('obol.arsenal-profile') || 'null'); } catch (e) {}
-          var actP = ((OBOL.store.active() || {}).params) || {};
           var defLh = actP.lhost || (arP && arP.lhost) || '';
           var defIf = actP.lhost_iface || (arP && arP.lhost_iface) || 'tun0';
           return '  <div class="eng-row3">'
-            + '    <label class="eng-field"><span>Working Directory (Kali)</span><input id="eng-workdir" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
+            + '    <label class="eng-field"><span>Working Directory (Kali)</span><input id="eng-workdir" value="' + U.attr(preWorkdir) + '" autocomplete="off" spellcheck="false" placeholder="' + esc(workdirHint()) + '"></label>'
             + '    <label class="eng-field"><span>Your VM IP (LHOST)</span><input id="eng-lhost" value="' + U.attr(defLh) + '" autocomplete="off" spellcheck="false" inputmode="decimal" placeholder="e.g. 10.10.14.9"></label>'
             + '    <label class="eng-field"><span>Interface</span><select id="eng-iface">'
             +      ['tun0', 'tun1', 'tap0', 'eth0', 'wlan0', 'vpn0', 'wg0'].map(function (i) { return '<option value="' + i + '"' + (i === defIf ? ' selected' : '') + '>' + i + '</option>'; }).join('')
@@ -1363,10 +1543,13 @@
   function syncOsidVisibility() {
     var sel = (document.querySelector('input[name="pf-platform"]:checked') || {}).value || 'custom';
     var preset = OBOL.profile.listPresets().find(function (p) { return p.id === sel; }) || {};
-    var showOsid = preset.osid ? '' : 'none';
-    var showCand = (preset.osid || preset.client_field || sel === 'cpts' || sel === 'pnpt') ? '' : 'none';
-    var showClient = (preset.client_field || sel === 'pnpt') ? '' : 'none';
     var o = document.getElementById('pf-osid-wrap'), c = document.getElementById('pf-cand-wrap'), cl = document.getElementById('pf-client-wrap');
+    var oVal = ((document.getElementById('eng-osid') || {}).value || '').trim();
+    var cVal = ((document.getElementById('eng-cand') || {}).value || '').trim();
+    var clVal = ((document.getElementById('eng-client') || {}).value || '').trim();
+    var showOsid = (preset.osid || oVal) ? '' : 'none';
+    var showCand = (preset.osid || preset.client_field || sel === 'cpts' || sel === 'pnpt' || cVal) ? '' : 'none';
+    var showClient = (preset.client_field || sel === 'pnpt' || clVal) ? '' : 'none';
     if (o) o.style.display = showOsid;
     if (c) c.style.display = showCand;
     if (cl) cl.style.display = showClient;
@@ -1409,11 +1592,24 @@
       OBOL.router.render();
     });
 
+    // Sanitize LHOST (strip CIDR suffix) and Scope (strip URL scheme/port/path) on change
+    U.on(mount, 'change', '#hb-edit-lhost, #eng-lhost', function (e, t) {
+      var v = String(t.value || '').trim().replace(/\/\d{1,2}$/, '').trim();
+      if (v !== t.value) t.value = v;
+    });
+    U.on(mount, 'change', '#eng-scope, #hb-bulk-input', function (e, t) {
+      var v = String(t.value || '');
+      var cleaned = v.replace(/\bhttps?:\/\/([^\s\/:]+)(?::\d+)?(?:\/[^\s]*)?/gi, '$1').replace(/\b((?:\d{1,3}\.){3}\d{1,3}):\d+(?:\/[^\s]*)?/g, '$1');
+      if (cleaned !== v) t.value = cleaned;
+    });
+
     // Save In-Place Edit Run changes
     U.on(mount, 'click', '#hb-edit-save', function () {
       var name = ((document.getElementById('hb-edit-name') || {}).value || '').trim();
       var wd = OBOL.workspace.sanitizeRoot(((document.getElementById('hb-edit-workdir') || {}).value || '').trim());
-      var lhostRaw = ((document.getElementById('hb-edit-lhost') || {}).value || '').trim();
+      var lhostEl = document.getElementById('hb-edit-lhost');
+      var lhostRaw = ((lhostEl || {}).value || '').trim().replace(/\/\d{1,2}$/, '').trim();
+      if (lhostEl && lhostRaw) lhostEl.value = lhostRaw;
       var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
       var iface = ((document.getElementById('hb-edit-iface') || {}).value || '').trim();
       var wf = ((document.getElementById('hb-edit-wf') || {}).value || '').trim();
@@ -1562,6 +1758,10 @@
       U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
     });
 
+    if (OBOL.targets && OBOL.targets.bindEditDrawer) {
+      OBOL.targets.bindEditDrawer(mount);
+    }
+
     // Remember each per-target Attack Path row's open/closed state per browser
     Array.prototype.forEach.call(mount.querySelectorAll('details[data-apath-key]'), function (d) {
       if (d._apathBound) return; d._apathBound = true;
@@ -1695,7 +1895,7 @@
           body = '<pre class="ws-pv-term">' + esc(shown) + '</pre>';
         } else if (f.status === 'captured') {
           body = '<div class="ws-pv-note">Captured evidence file' + (f.size ? ' (' + esc(fsize(f.size)) + ')' : '') + (f.tool ? ' via ' + esc(f.tool) : '') + '. Saved to your Kali working directory.</div>';
-        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the coach, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
+        } else if (f.origin === 'suggested') body = '<div class="ws-pv-note">Pencilled in by the Cockpit, run the move, then paste its output to capture it.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
         else if (f.unknown) body = '<div class="ws-pv-note">Found on your disk by a sync. OBOL knows it exists but not what\'s inside.</div>' + cta;
         else if (f.manual) body = '<div class="ws-pv-note">Added by hand. Syncing only confirms it exists, to mint facts, paste what\'s inside.</div>' + cta;
         else body = '<div class="ws-pv-note">OBOL expects this file but hasn\'t received its output yet.</div>' + (f.command ? '<code class="ws-pv-cmd">' + esc(f.command) + '</code>' : '') + cta;
@@ -1776,7 +1976,9 @@
       var cand = (document.getElementById('eng-cand') || {}).value || '';
       var client = (document.getElementById('eng-client') || {}).value || '';
       var scopeText = (document.getElementById('eng-scope').value || '');
-      var lhostRaw = ((document.getElementById('eng-lhost') || {}).value || '').trim();
+      var lhostEl = document.getElementById('eng-lhost');
+      var lhostRaw = ((lhostEl || {}).value || '').trim().replace(/\/\d{1,2}$/, '').trim();
+      if (lhostEl && lhostRaw) lhostEl.value = lhostRaw;
       var lhost = /^(\d{1,3}\.){3}\d{1,3}$/.test(lhostRaw) ? lhostRaw : '';
       var iface = ((document.getElementById('eng-iface') || {}).value || '').trim();
       if (lhostRaw && !lhost) { U.toast('That VM IP doesn\'t look like an IPv4 address, ignoring it', 'err'); }
@@ -1813,10 +2015,15 @@
             e.ui = e.ui || {};
             e.ui.reportProfile = OBOL.profile.reportProfileFor(e.profile);
           }
+          var prevTargetsByIp = {};
+          if (reuse && Array.isArray(e.targets)) {
+            e.targets.forEach(function (t) { if (t && t.ip) prevTargetsByIp[t.ip] = t; });
+          }
           e.workspace = { root: root };
           e.targets = [];
           hosts.forEach(function (h, i) {
-            e.targets.push({ id: 't' + i + '-' + Date.now().toString(36), ip: h.ip, hostname: h.hostname || '', os: '' });
+            var prev = prevTargetsByIp[h.ip] || {};
+            e.targets.push({ id: prev.id || ('t' + i + '-' + Date.now().toString(36)), ip: h.ip, hostname: h.hostname || prev.hostname || '', os: prev.os || '' });
             var sc = 'host:' + h.ip;
             facts.push(OBOL.facts.makeFact({ kind: 'target.configured', scope: sc, source: 'engagement' }));
             if (h.hostname) {
@@ -1836,9 +2043,15 @@
         if (facts.length) OBOL.store.addFacts(facts, 'launch');
         _showNewSetup = false;
         var finishLaunch = function () {
-          OBOL.app.renderSidebar();
+          if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+          if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
           U.toast(hosts.length ? ('Launched ' + hosts.length + ' target(s) scoped') : 'Engagement created, add targets to begin');
-          OBOL.router.go('path');
+          if (OBOL.router.current && OBOL.router.current().name === 'home') {
+            OBOL.router.render();
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+          } else {
+            OBOL.router.go('home');
+          }
         };
         if (parsedScope.hasScanOutput && OBOL.ingest && OBOL.ingest.ensureParsers) {
           ingestScanBlocks(scopeText, hosts[0] && hosts[0].ip, finishLaunch);

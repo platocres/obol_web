@@ -12,7 +12,10 @@
 
   function _parse_http_metadata(text, ws, source, facts) {
     var h = 'host:' + ws.target;
-    C._add_os_from_text(text, ws, source, facts, 'http', 'medium', true);
+    var headerOnlyText = String(text || '');
+    var bodySplit = /\r?\n\r?\n|<\s*(?:!doctype|html|head|body)\b/i.exec(headerOnlyText);
+    if (bodySplit && bodySplit.index > 0) headerOnlyText = headerOnlyText.slice(0, bodySplit.index);
+    C._add_os_from_text(headerOnlyText, ws, source, facts, 'http', 'medium', true);
     var statusValues = [];
     reAll(C._HTTP_STATUS_RE, text).forEach(function (m) {
       var value = { status: parseInt(m.groups.status, 10) };
@@ -57,6 +60,20 @@
       _add(facts, mkFact('http.reachable', h, { tool: 'http-client' }, S, source));
       _add(facts, mkFact('web.server', h, { headers: svHeaders.slice(0, 10) }, S, source));
     }
+    // Reachability from a returned response body, even when the fetch printed no status line and no
+    // Server header: a curl/wget fetch that renders an HTML document, a proxychains-tunneled fetch
+    // whose chain reports OK and returns a page, or a PowerShell Invoke-WebRequest wrapper that
+    // reports "HTTP Error <code>", all prove the host answered over HTTP. A name resolution or
+    // connection failure returns no body and is deliberately excluded (the response-body evidence is
+    // absent), so an unreachable name never mints this.
+    if (!facts.some(function (f) { return f.kind === 'http.reachable'; })) {
+      var sawResponseBody = /<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<title[\s>]/i.test(text)
+        || /\bHTTP Error\s+\d{3}\b/i.test(text);
+      var sawConnFailure = /could not be resolved|could not resolve host|name or service not known|connection refused|failed to connect|connection timed out|connection reset|no route to host|network is unreachable/i.test(text);
+      if (sawResponseBody && !sawConnFailure) {
+        _add(facts, mkFact('http.reachable', h, { tool: 'http-client' }, S, source));
+      }
+    }
     if (Object.keys(redirects).length) _add(facts, mkFact('http.redirect', h, { locations: C.uniqueSortedCI(Object.keys(redirects)).slice(0, 10) }, S, source));
     if (Object.keys(contentTypes).length) C.uniqueSortedCI(Object.keys(contentTypes)).forEach(function (item) { tech.push({ name: 'content-type', value: item }); });
     if (tech.length) {
@@ -89,6 +106,13 @@
   // wants instead of a bare "port 21 is open" gate.
   var _FTP_UPLOAD_INIT_RE = /(?:^|\s)STOR\b|\bftp>\s*(?:m?put)\b|^\s*(?:m?put)\s+\S|150\s+Ok to send data/im;
   var _FTP_UPLOAD_OK_RE = /226[\s-](?:Transfer complete|Transfer okay)|\bbytes sent in\b|\bUpload(?:ed|\s+complete)\b/i;
+  // A directory listing returned over the FTP data channel (interactive `ftp> ls` / `dir`). Two row
+  // shapes appear: the Windows IIS line "MM-DD-YY  HH:MMAM/PM  <size|<DIR>>  name" and the Unix long
+  // listing "drwxr-xr-x  N owner group  size  Mon DD  (year|HH:MM)  name". Rows are only read inside an
+  // FTP transfer context (the dispatcher gates this parser), so a stray date or permission line never
+  // mints on its own.
+  var _FTP_IIS_ROW_RE = /^\s*(?<date>\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}(?:AM|PM)\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
+  var _FTP_UNIX_ROW_RE = /^\s*(?<perm>[-dlbcps](?:[-rwxsStT]{9}))\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+(?<name>\S.*?)\s*$/;
 
   function _parse_ftp_output(text, ws, command, source, facts) {
     var banners = [], loginSuccess = false;
@@ -98,7 +122,23 @@
       if (m.groups.login) loginSuccess = true;
     });
     var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
-    if (!banners.length && !loginSuccess && !writeOk) return;
+    var hasFtpSession = !!(banners.length || loginSuccess || writeOk || /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|20|26|27|29|30)[ -]|331[ -]|Connected to\b)/im.test(text));
+    var ftpFiles = [];
+    text.split(/\r?\n/).forEach(function (line) {
+      if (!hasFtpSession) return;
+      var im = _FTP_IIS_ROW_RE.exec(line);
+      if (im) {
+        var inm = im.groups.name.trim();
+        if (inm && inm !== '.' && inm !== '..') ftpFiles.push({ share: '', path: inm, size: im.groups.size === '<DIR>' ? '' : im.groups.size.replace(/,/g, '') });
+        return;
+      }
+      var um = _FTP_UNIX_ROW_RE.exec(line);
+      if (um) {
+        var unm = um.groups.name.trim().replace(/[ \t]+->[ \t]+[^\r\n]*$/, '');
+        if (unm && unm !== '.' && unm !== '..') ftpFiles.push({ share: '', path: unm, size: um.groups.size });
+      }
+    });
+    if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length) return;
     var h = 'host:' + ws.target;
     C._add_os_from_text(text, ws, source, facts, 'ftp', 'medium', true);
     _add(facts, mkFact('ftp.reachable', h, { tool: 'ftp-client' }, S, source));
@@ -107,6 +147,7 @@
     var isAnon = /\banonymous\b/i.test(command) || anonInText;
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
+    if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', 'ftp-listing', text, ws, source);
   }
   C._parse_ftp_output = _parse_ftp_output;
 
@@ -240,5 +281,20 @@
     });
   }
   C._parse_sqlite_dump = _parse_sqlite_dump;
+
+  function _parse_rsync_nfs(text, ws, command, source, facts) {
+    if (!text) return;
+    var h = 'host:' + ws.target;
+    var lc = String(command || '').toLowerCase();
+    if (/\brsync\b/.test(lc) && !/connection refused|failed to connect|timed out|@ERROR:/i.test(text)) {
+      if (/^[drwxlst-]{10}\s+[\d,]+\s+\d{4}\/\d{2}\/\d{2}|^\s*[A-Za-z0-9_.-]+\s{2,}\S/m.test(text)) {
+        _add(facts, mkFact('rsync.reachable', h, { port: 873, tool: 'rsync' }, S, source));
+      }
+    }
+    if ((/\bshowmount\b/.test(lc) || /^Export list for\s+\S+:/im.test(text) || /^NFS\s+\d{1,3}(?:\.\d{1,3}){3}\s+2049\b/im.test(text)) && !/clnt_create:\s*RPC|connection refused|timed out/i.test(text)) {
+      _add(facts, mkFact('nfs.reachable', h, { port: 2049, tool: 'showmount' }, S, source));
+    }
+  }
+  C._parse_rsync_nfs = _parse_rsync_nfs;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

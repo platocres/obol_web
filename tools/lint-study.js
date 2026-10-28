@@ -60,6 +60,9 @@ function backslashDropped(s) {
   return /\b[A-Za-z]:(?:Windows|Users|Program|Temp|Inetpub|ProgramData|Windws)/.test(s)   // C:Windows (no slash)
     || /\bHK(?:LM|CU|CR|U|EY_LOCAL_MACHINE|EY_CURRENT_USER)(?:SYSTEM|SOFTWARE|SAM|SECURITY|Services|Microsoft)/.test(s); // HKLMSYSTEM
 }
+function shortPwDrift(s) {
+  return /-p\s+['"]?(?:pw|pass)['"]?(?:\s|$)/.test(String(s || ''));
+}
 function cmdStrings(fx, leadFn, id) {   // every COMMAND/OUTPUT string for a move (not prose fields)
   const out = [];
   const how = fx.how;
@@ -125,8 +128,13 @@ lanes.forEach((L) => {
     if (hyg) { stat.hygiene++; issues.push('em-dash x' + hyg); }
 
     // backslash-drop guard: Windows paths / registry keys in commands that lost a backslash
-    const bsBad = cmdStrings(fx, S.leadupFor, id).filter(backslashDropped);
+    const allCmds = cmdStrings(fx, S.leadupFor, id);
+    const bsBad = allCmds.filter(backslashDropped);
     if (bsBad.length) issues.push('backslash-dropped: ' + JSON.stringify(bsBad[0]).slice(0, 48));
+
+    // credential-drift guard: -p pw / -p pass instead of consistent sample password
+    const pwBad = allCmds.filter(shortPwDrift);
+    if (pwBad.length) { stat.hygiene++; issues.push('cred-drift: ' + JSON.stringify(pwBad[0]).slice(0, 48)); }
 
     if (issues.length) flagged.push({ lane: L.key, id, title: cell.title || id, issues });
   });
@@ -151,21 +159,21 @@ console.log('\nLegend: why=has why · ovlp=why duplicates description · lead=ha
 console.log('        how=has field notes · demo=field notes are playable · turn=bespoke your-turn · watch=has replay output\n');
 
 if (process.argv.includes('--flagged') || process.argv.includes('--lane')) {
-  const laneArg = (process.argv[process.argv.indexOf('--lane') + 1]) || null;
+  const laneIdx = process.argv.indexOf('--lane');
+  const laneArg = laneIdx >= 0 ? (process.argv[laneIdx + 1] || null) : null;
   const list = laneArg ? flagged.filter((f) => f.lane === laneArg) : flagged;
   console.log('FLAGGED MOVES (' + list.length + (laneArg ? ' in ' + laneArg : '') + '):\n');
   list.forEach((f) => console.log('  [' + pad(f.lane, 8) + '] ' + pad(f.id, 28) + ' ' + f.issues.join(' · ')));
   console.log('');
 }
 
-// --check: fail (exit 1) on HARD content errors only (bad demo signals, em-dashes), for CI gating.
+// --check: fail (exit 1) on HARD content errors only (bad demo signals, em-dashes, backslash-dropped, cred-drift), for CI gating.
 if (process.argv.includes('--check')) {
-  const hard = flagged.filter((f) => f.issues.some((s) => /sig-not-in-out|em-dash|backslash-dropped/.test(s)));
+  const hard = flagged.filter((f) => f.issues.some((s) => /sig-not-in-out|em-dash|backslash-dropped|cred-drift/.test(s)));
   if (hard.length) {
     console.error('LINT FAIL: ' + hard.length + ' move(s) with hard content errors:');
-    hard.forEach((f) => console.error('  ' + f.id + ': ' + f.issues.filter((s) => /sig-not-in-out|em-dash|backslash-dropped/.test(s)).join(' · ')));
+    hard.forEach((f) => console.error('  ' + f.id + ': ' + f.issues.filter((s) => /sig-not-in-out|em-dash|backslash-dropped|cred-drift/.test(s)).join(' · ')));
     process.exit(1);
   }
   console.log('LINT OK: no hard content errors.');
 }
-

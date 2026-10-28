@@ -40,8 +40,9 @@ function serve() {
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
   // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
-  // lands on Learn — the teaching front door — not on the empty engagement.
-  ok(page.url().indexOf('#/study') >= 0, 'first-run lands on Learn (got ' + page.url().split('#')[1] + ')');
+  // lands on Start Here, the onramp front door, not on the empty engagement.
+  ok(page.url().indexOf('#/start') >= 0, 'first-run lands on Start Here (got ' + page.url().split('#')[1] + ')');
+  ok(await page.locator('.start-wrap .start-doors .start-door').count() === 4, 'Start Here renders its four self-placement doors');
   // a first-time visitor lands on the plain Obol skin, in a clean untitled run — never an
   // "Imported engagement" with a stale seed target. (Neon and the rest stay selectable in settings.)
   ok(await page.getAttribute('html', 'data-skin') === 'obol', 'default skin is obol for a fresh visitor');
@@ -63,9 +64,16 @@ function serve() {
   await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(200);
   ok(await page.locator('.pf-card').count() >= 6, 'engagement screen shows platform profiles (' + (await page.locator('.pf-card').count()) + ')');
-  // A fresh visitor gets the getting-started guide, not a confusing "Untitled Run" phase bar.
+  // A fresh visitor gets the getting-started guide ("Set Up Engagement..."), not a confusing "Untitled Run" phase bar.
   ok(await page.locator('.eng-welcome').count() === 1 && await page.locator('.home-spine').count() === 0,
     'fresh engagement shows the getting-started guide, no phase bar');
+  const unconfigLabel = await page.evaluate(() => window.OBOL.store.runLabel(window.OBOL.store.active()));
+  ok(unconfigLabel === 'Set Up Engagement...', 'unnamed draft uses intuitive "Set Up Engagement..." label (' + unconfigLabel + ')');
+  ok((await page.getAttribute('html', 'data-eng-configured')) === '0', 'unconfigured state sets data-eng-configured=0 on html');
+  // Navigating to a gated sub-tab (e.g. #/targets or #/path) while unconfigured redirects back to #/home Setup
+  await page.evaluate(() => { location.hash = '#/targets'; });
+  await page.waitForTimeout(120);
+  ok(page.url().indexOf('#/home') >= 0 && await page.locator('.eng-welcome').count() === 1, 'visiting #/targets while unconfigured redirects to #/home Setup screen');
   ok(await page.locator('#eng-workdir').count() === 1, 'setup form has a working-directory field');
   // The working-dir placeholder is a GENERIC example — a remembered machine-specific base must not leak in.
   await page.evaluate(() => { try { window.OBOL.store.setPref('workspaceBase', '~/CTF/HTB/boxes/Windows/forest'); } catch (e) {} window.OBOL.router.render(); });
@@ -82,14 +90,19 @@ function serve() {
   await page.selectOption('#eng-iface', 'tun0');
   await page.click('#eng-launch');
   await page.waitForTimeout(500);
-  ok(page.url().indexOf('#/path') >= 0, 'launch lands on the coach');
+  ok(page.url().indexOf('#/home') >= 0, 'launch lands on the active Engagement Hub (#/home)');
+  ok((await page.getAttribute('html', 'data-eng-configured')) === '1', 'configured state sets data-eng-configured=1 on html');
+  ok(await page.locator('.eng-active').count() === 1 && await page.locator('.home-spine').count() === 1 && await page.locator('.eng-welcome').count() === 0,
+    'a configured engagement shows the active panel with the phase bar (not the getting-started guide)');
   const savedLhost = await page.evaluate(() => (window.OBOL.store.active().params || {}).lhost);
   ok(savedLhost === '10.10.14.9', 'launch saved the attacker VM IP as {{lhost}} (' + savedLhost + ')');
   const launchedPlatform = await page.evaluate(() => window.OBOL.store.active().profile.platform);
   ok(launchedPlatform === 'oscp', 'launched engagement carries the OSCP profile (' + launchedPlatform + ')');
-  // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner
+  // workspace: saved on the engagement, drives command output paths, and shows the scaffold banner on the coach
   const wsRoot = await page.evaluate(() => (window.OBOL.store.active().workspace || {}).root);
   ok(wsRoot === '/home/kali/lab/box', 'launch saved the working directory (' + wsRoot + ')');
+  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(200);
   ok(await page.locator('.ws-banner').count() === 1 && (await page.locator('.ws-banner .cmd-run code').first().textContent() || '').indexOf('mkdir -p /home/kali/lab/box/{') === 0,
     'coach shows the one-time workspace scaffold command');
   // Output paths are RELATIVE to root (the scaffold cds into it), so a coach command writes `scans/…`,
@@ -111,13 +124,6 @@ function serve() {
   ok(await page.locator('.ns-card.selected').count() === 1, 'exactly one card is selected (the #1 move, auto-opened)');
   ok(await page.locator('.ns-card .ns-suggested').count() === 1, 'the #1 card carries a single Suggested Start tag');
   ok(await page.locator('.ns-card select').count() === 0, 'no command-builder dropdowns on the coach (building lives in Tools)');
-  // now that the run is configured, the home panel shows the active run + phase bar (not the guide)
-  await page.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(200);
-  ok(await page.locator('.eng-active').count() === 1 && await page.locator('.home-spine').count() === 1 && await page.locator('.eng-welcome').count() === 0,
-    'a configured engagement shows the active panel with the phase bar (not the getting-started guide)');
-  await page.goto(`http://localhost:${PORT}/index.html#/path`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(200);
 
   // "Opens Up Next" — the aspirational roadmap of capability-unlocks replaces the old blocked wall.
   ok(await page.locator('.ns-opens').count() >= 1, 'the Opens Up Next roadmap is present');
@@ -126,8 +132,8 @@ function serve() {
   // The field-notes canvas is the coach's right column (the old context rail moved to the per-target view).
   ok(await page.locator('#ns-canvas .ns-canvas-kick').count() === 1, 'the field-notes canvas renders for the selected move');
 
-  // Scope lens: the newcomer-safe syllabus filter renders with its three levels and a default selection.
-  ok(await page.locator('.coach-hero-lens .lens-opt').count() === 3, 'scope lens renders OSCP / OSCP+ / All');
+  // Scope lens: the newcomer-safe syllabus filter renders with its two levels (OSCP / All) and a default selection.
+  ok(await page.locator('.coach-hero-lens .lens-opt').count() === 2, 'scope lens renders OSCP / All');
   // NOTE: local's weekend coach refactor moved the header to hero-components; the Loadout set-up CTA
   // strip (arsenalStrip) is currently defined-but-unwired in path.js, so the coach no longer renders it.
   // Assertion removed to match the adopted standard; flagged to owner in case the unwiring was unintended.
@@ -513,19 +519,19 @@ function serve() {
   // so the coach re-renders from the live store (no full reload, so nothing else is disturbed).
   await page.evaluate(() => {
     const S = window.OBOL.store, F = window.OBOL.facts, scope = 'host:' + S.active().params.target;
+    S.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params');
     S.addFacts([
       F.makeFact({ kind: 'credential.available', scope, value: { user: 'alice', password: 'S3cret!' }, source: 'test' }),
-      F.makeFact({ kind: 'credential.validated', scope, value: { user: 'alice', service: 'smb' }, source: 'test' }),
-      F.makeFact({ kind: 'smb.authenticated', scope, value: { user: 'alice' }, source: 'test' })
+      F.makeFact({ kind: 'credential.validated', scope, value: { user: 'alice', password: 'S3cret!', service: 'smb' }, source: 'test' }),
+      F.makeFact({ kind: 'smb.authenticated', scope, value: { user: 'alice', password: 'S3cret!' }, source: 'test' })
     ]);
-    S.update(function (eng) { eng.params = eng.params || {}; delete eng.params.username; delete eng.params.nthash; delete eng.params.user; delete eng.params.password; }, 'params');
   });
   await page.evaluate(() => window.OBOL.router.go('home'));
   await page.waitForTimeout(80);
   await page.evaluate(() => window.OBOL.router.go('path'));
   await page.waitForTimeout(250);
   // the fill box lives in a card body, so open the card holding it first, then type into it.
-  const fillCard = page.locator('.ns-card:has(.cmd-fill[data-tok="command"])').first();
+  const fillCard = page.locator('.ns-card[data-action="lateral-exec"], .ns-card:has(.cmd-fill[data-tok="command"])').first();
   ok(await fillCard.count() >= 1, 'an exec move with a {{command}} placeholder exists on the coach');
   // The card may sit inside a collapsed section (Coming Up, or the lower-priority "more ready" fold), so
   // open any ancestor <details> before clicking its title.
@@ -730,7 +736,7 @@ function serve() {
   const bootMs = Date.now() - t0;
   ok(bootMs < 4000, 'boot-to-interactive under budget (' + bootMs + 'ms < 4000)');
   const t1 = Date.now();
-  await perfPage.evaluate(() => { location.hash = '#/path'; });
+  await perfPage.evaluate(() => { window.OBOL.store.update((e) => { e.name = 'perf'; e.targets = [{ ip: '10.10.10.10' }]; e.params = { target: '10.10.10.10' }; }); location.hash = '#/path'; });
   await perfPage.waitForSelector('.coach', { timeout: 5000 });
   const routeMs = Date.now() - t1;
   ok(routeMs < 2500, 'coach route render under budget (' + routeMs + 'ms < 2500)');
@@ -840,13 +846,12 @@ function serve() {
   ok(bootedBlocked, 'boot completes via fallback when IndexedDB.open is blocked (no infinite hang)');
   await blocked.close();
 
-  // Nav order: Learn (the teaching front door) is leftmost, Loadout (box setup) second. Both are
-  // primary nav items ahead of the engagement surfaces.
-  ok((await page.locator('header.appbar .mainnav a[href="#/loadout"]').count()) === 1, 'Loadout is a primary nav item');
+  // Nav order: Start Here (the onramp front door) is leftmost, Learn second, Engagements third (covering Loadout).
+  ok((await page.locator('header.appbar .mainnav a[href="#/start"]').count()) === 1, 'Start Here is a primary nav item');
   ok(await page.evaluate(() => {
     var links = Array.from(document.querySelectorAll('header.appbar .mainnav a[data-nav]')).map(function (a) { return a.getAttribute('href'); });
-    return links.length >= 2 && links[0] === '#/study' && links[1] === '#/loadout';
-  }), 'Learn is the LEFTMOST nav item, Loadout second');
+    return links.length >= 3 && links[0] === '#/start' && links[1] === '#/study' && links[2] === '#/home';
+  }), 'Start Here is the LEFTMOST nav item, Learn second, Engagements third');
   await page.goto(`http://localhost:${PORT}/index.html#/loadout`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.lo-route', { timeout: 6000 }).catch(() => {});
   ok((await page.locator('.lo-route .lo-steps .lo-download').count()) === 1, 'Loadout empty-state shows the guided quickstart with a download button');
@@ -988,13 +993,9 @@ function serve() {
   ok((await page.locator('#dt-view .dt-node.dt-port').count()) === 1, 'a port filter chip re-roots the forest to that one port (' + chipLabel.trim() + ')');
   await chip.click(); // clear the filter
   await page.waitForTimeout(120);
-  // parser-coverage lens: flip to the parser lens → the stage recolors by what obol can read
-  await page.locator('[data-dt-lens="parser"]').click();
-  await page.waitForTimeout(120);
-  ok((await page.getAttribute('#dt-stage', 'data-lens')) === 'parser', 'the lens toggle switches the map to parser coverage');
-  ok((await page.locator('#dt-stage[data-lens="parser"] .dt-node.parse-gap, #dt-stage[data-lens="parser"] .dt-node.parse-verified').count()) >= 1, 'the parser lens classifies moves by readability (verified / gap)');
-  await page.locator('[data-dt-lens="methodology"]').click();
-  await page.waitForTimeout(100);
+  // parser-coverage lens removed from user UI; port chips include service names
+  ok((await page.locator('[data-dt-lens]').count()) === 0, 'developer parser-cover lens toggle is removed from the user UI');
+  ok(/FTP/i.test(chipLabel), 'port filter chip includes both port and service name (' + chipLabel.trim() + ')');
   // back to the cards so the following move-pill assertions run against the card view
   await page.locator('[data-dt="cards"]').click();
   await page.waitForTimeout(150);

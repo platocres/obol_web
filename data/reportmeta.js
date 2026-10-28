@@ -1,4 +1,4 @@
-// Obol report metadata — MITRE ATT&CK techniques, CVE references, and remediations
+// Obol report metadata - MITRE ATT&CK techniques, CVE references, and remediations
 // keyed by card id. Consumed by assets/report.js. Lane defaults cover anything unlisted.
 window.OBOL_REPORTMETA = {
   cards: {

@@ -1,8 +1,8 @@
 /* Report narrative + catalog integration: the findings catalog matches proven facts to report-worthy
  * weaknesses, and the per-machine walkthrough renders each ACTUALLY-PERFORMED technique with its narrative,
- * the real ledger commands (in run order), severity, and remediation — while capability-only findings
+ * the real ledger commands (in run order), severity, and remediation - while capability-only findings
  * (golden ticket, spraying) stay in Findings, not the walkthrough. Huge command output is capped. Generic
- * data (corp.local, synthetic hashes) — validates the PIPELINE, not any one lab. */
+ * data (corp.local, synthetic hashes) - validates the PIPELINE, not any one lab. */
 'use strict';
 var fs = require('fs'), path = require('path');
 var ROOT = path.join(__dirname, '..', '..'), ENG = path.join(ROOT, 'assets', 'engine');
@@ -71,6 +71,101 @@ ok(iAsrep < iAcl && iAcl < iDc, 'techniques read in chronological run order (AS-
 // 3) The 9k-line dump is capped, not dumped verbatim.
 ok(md.indexOf('lines omitted') >= 0, 'a huge command output is capped with an omission marker');
 ok((md.match(/row of bloodhound json/g) || []).length < 60, 'the 9,000-line dump is not rendered in full (< 60 lines survive)');
+
+// 4) Expanded parser-minted facts match catalog entries and narratives.
+var expandedFacts = new F.FactSet([
+  fact('host.up'),
+  fact('ad.adcs.vulnerable_template', { template: 'ESC1-Template' }),
+  fact('smb.vuln.ms17_010', { cve: 'CVE-2017-0143' }),
+  fact('ad.nopac', { vulnerable: true }),
+  fact('ad.maq', { count: 10 }),
+  fact('ftp.anonymous', { allowed: true }),
+  fact('smb.writable_share', { share: 'Backups' }),
+  fact('hash.dcc2', { user: 'administrator' }),
+  fact('dns.zone_transfer', { domain: 'corp.local' }),
+  fact('web.SensitiveFile', { path: '/.env' }),
+  fact('privesc.token_priv', { privilege: 'SeImpersonatePrivilege' }),
+]);
+var expandedMatched = OBOL.findings.assess(expandedFacts).map(function (m) { return m.key; });
+[
+  'adcs-template-abuse',
+  'smb-ms17-010-smbghost',
+  'ad-printnightmare-nopac-coercion',
+  'ad-machine-account-quota-sid-history',
+  'ftp-anonymous-access',
+  'smb-writable-or-sensitive-share',
+  'domain-cached-credentials-mscache',
+  'dns-zone-transfer-smtp-relay',
+  'exposed-sensitive-file',
+  'seimpersonate-potato',
+].forEach(function (expectedKey) {
+  ok(expandedMatched.indexOf(expectedKey) >= 0, 'expanded parser fact matched catalog key: ' + expectedKey);
+});
+
+// 5) Command-less paste (Tier 2/3 shape/inference) and causal_entailment gate-backfill handling.
+var H2 = '10.0.0.9';
+function fact2(kind, value, src, at) {
+  return F.makeFact({ kind: kind, scope: 'host:' + H2, value: value || {}, state: F.ProofState.SUPPORTED, source: src || 'paste', created_at: at || 1 });
+}
+var cmdlessFacts = new F.FactSet([
+  fact2('host.up', {}, 'paste', 1),
+  fact2('ad.adcs.vulnerable_template', { template: 'CorpUserESC1', via: 'shape', confidence: 'high' }, 'paste', 2),
+  fact2('foothold.shell', { via: 'causal_entailment', inferred: true }, 'sudo -l', 3),
+  fact2('privesc.sudo_nopasswd', { entry: '(ALL) NOPASSWD: /usr/bin/find', via: 'shape' }, 'paste', 3),
+  fact2('access.system', { user: 'root' }, 'paste', 4),
+]);
+var cmdlessActs = [
+  { command: '', dispatch: 'adcs_', stdout: 'Certificate Authorities\n  Template Name: CorpUserESC1\n  [!] Vulnerabilities\n    ESC1: Enrollee supplies subject', produced: ['ad.adcs.vulnerable_template'], target: H2, scope: 'host:' + H2, at: 2 },
+  { command: '', dispatch: 'lin_', stdout: 'Matching Defaults entries for svc on host:\nUser svc may run the following commands on host:\n    (ALL) NOPASSWD: /usr/bin/find', produced: ['privesc.sudo_nopasswd'], target: H2, scope: 'host:' + H2, at: 3 },
+  { command: '', dispatch: 'lin_', stdout: 'uid=0(root) gid=0(root) groups=0(root)', produced: ['access.system'], target: H2, scope: 'host:' + H2, at: 4 },
+];
+var cmdlessCtx = OBOL.report.buildContext({
+  facts: cmdlessFacts,
+  activities: cmdlessActs,
+  targets: [{ ip: H2, host: H2, hostname: 'APP01', os: 'linux' }],
+  params: { target: H2 },
+  includeSecrets: true,
+  platform: 'oscp',
+});
+var cmdlessMd = OBOL.report.toMarkdown(OBOL.report.document('oscp', cmdlessCtx));
+ok(cmdlessMd.indexOf('certipy (pasted output)') >= 0, 'command-less ADCS paste recovers "certipy (pasted output)" command label');
+ok(cmdlessMd.indexOf('ESC1: Enrollee supplies subject') >= 0, 'command-less paste terminal output is preserved in techniqueWriteup');
+ok(cmdlessMd.indexOf('by running `paste`') === -1, '"paste" source is never rendered as a literal CLI command');
+ok(cmdlessMd.indexOf('causal_entailment') === -1 && cmdlessMd.indexOf('inferred: yes') === -1, 'internal engine metadata (via: causal_entailment, inferred) never leaks into report prose');
+
+// 6) Progressive / Evidence-Gated Report Preview (hideUnreached: true)
+var emptyCtx = OBOL.report.buildContext({
+  facts: new F.FactSet([]),
+  activities: [],
+  targets: [{ ip: '10.10.10.99', host: '10.10.10.99' }],
+  params: { name: 'empty-lab', target: '10.10.10.99' },
+  includeSecrets: true,
+  hideUnreached: true,
+  platform: 'oscp',
+});
+var emptyBlocks = OBOL.report.document('oscp', emptyCtx);
+var emptyMd = OBOL.report.toMarkdown(emptyBlocks);
+ok(emptyMd.indexOf('No engagement evidence recorded yet.') >= 0, 'empty engagement with hideUnreached=true shows clean empty-state callout');
+ok(emptyMd.indexOf('## Recommendations') === -1 && emptyMd.indexOf('## Per-Machine Walkthrough') === -1, 'empty engagement with hideUnreached=true omits unreached sections');
+
+var reconFacts = new F.FactSet([
+  F.makeFact({ kind: 'host.up', scope: 'host:10.10.10.50', value: {}, state: F.ProofState.SUPPORTED, source: 'nmap -sC -sV 10.10.10.50', created_at: 1 }),
+  F.makeFact({ kind: 'port:80', scope: 'host:10.10.10.50', value: { protocol: 'tcp', service: 'http' }, state: F.ProofState.SUPPORTED, source: 'nmap -sC -sV 10.10.10.50', created_at: 1 }),
+]);
+var reconCtx = OBOL.report.buildContext({
+  facts: reconFacts,
+  activities: [{ tool: 'nmap', command: 'nmap -sC -sV 10.10.10.50', stdout: '80/tcp open http', produced: ['host.up', 'port:80'], target: '10.10.10.50', scope: 'host:10.10.10.50', at: 1 }],
+  targets: [{ ip: '10.10.10.50', host: '10.10.10.50', os: 'Linux' }],
+  params: { name: 'recon-only', target: '10.10.10.50' },
+  includeSecrets: true,
+  hideUnreached: true,
+  platform: 'oscp',
+});
+var reconMd = OBOL.report.toMarkdown(OBOL.report.document('oscp', reconCtx));
+ok(reconMd.indexOf('#### Service Enumeration') >= 0, 'recon-only engagement with hideUnreached=true shows Service Enumeration');
+ok(reconMd.indexOf('#### Initial Access') === -1 && reconMd.indexOf('#### Privilege Escalation') === -1 && reconMd.indexOf('#### Post-Exploitation / Proof') === -1, 'recon-only engagement with hideUnreached=true omits unreached Initial Access, Privilege Escalation, and Post-Exploitation subsections');
+ok(reconMd.indexOf('### Maintaining Access') === -1 && reconMd.indexOf('### House Cleaning') === -1, 'recon-only engagement with hideUnreached=true omits unreached Maintaining Access and House Cleaning methodology claims');
+ok(reconMd.indexOf('## Recommendations') === -1, 'recon-only engagement with zero findings and hideUnreached=true omits canned boilerplate Recommendations');
 
 console.log(fail ? ('\nREPORT NARRATIVE: ' + fail + ' FAILURES') : '\nREPORT NARRATIVE: all passed');
 process.exit(fail ? 1 : 0);

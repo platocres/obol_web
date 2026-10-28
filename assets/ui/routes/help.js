@@ -126,7 +126,23 @@
       + '<div class="help-glossary">' + terms + '</div>';
   }
 
-  var TABS = [['start', 'Quick Start', '#/help/start'], ['index', 'Index', '#/help/index'], ['glossary', 'Glossary', '#/help/glossary']];
+  function renderManual(H) {
+    var chapters = (H.manual || []).map(function (ch) {
+      var itemsHtml = (ch.items || []).map(subRow).join('');
+      return '<details class="help-sec" id="help-' + U.attr(ch.id) + '" open>'
+        + '<summary class="help-sec-sum"><span class="help-sec-t">' + esc(ch.title) + '</span>'
+        + '<span class="help-sec-what">' + esc(ch.summary || ch.what || '') + '</span></summary>'
+        + '<div class="help-sec-body">'
+        + '<div class="help-goable">' + gotoBtn(ch.goto || ch.href, ch.cta || ('Go To ' + ch.title)) + '</div>'
+        + (itemsHtml ? '<div class="help-subs">' + itemsHtml + '</div>' : '')
+        + '</div></details>';
+    }).join('');
+    return '<h2 class="help-h2">OBOL Operator Manual</h2>'
+      + '<p class="help-note">Complete workflow guide for the Cockpit, Hero Operator Deck, epistemic path badges, sequence pastes, multi-target engagements, and standalone stations.</p>'
+      + '<div class="help-index help-manual">' + chapters + '</div>';
+  }
+
+  var TABS = [['start', 'Quick Start', '#/help/start'], ['manual', 'Operator Manual', '#/help/manual'], ['index', 'Index', '#/help/index'], ['glossary', 'Glossary', '#/help/glossary']];
   function tabBar(active) {
     return '<div class="help-tabs" role="tablist">' + TABS.map(function (t) {
       return '<a class="help-tab' + (t[0] === active ? ' active' : '') + '" href="' + t[2] + '" role="tab" aria-selected="' + (t[0] === active) + '">' + esc(t[1]) + '</a>';
@@ -140,16 +156,19 @@
     var sub = subOf(ctx);
     // Quick Start leads: a bare #/help opens it. The Index tab is #/help/index; a section id
     // (#/help/engagements, from the "?" on-ramp) opens the Index focused on that section.
-    var tab = sub === 'glossary' ? 'glossary' : (sub === '' || sub === 'start') ? 'start' : 'index';
+    var tab = sub === 'glossary' ? 'glossary' : sub === 'manual' ? 'manual' : (sub === '' || sub === 'start') ? 'start' : 'index';
     var focus = (tab === 'index' && sub && sub !== 'index') ? sub : '';
     var head = '<section class="help-route"><div class="help-head"><h1 class="route-h1">Help</h1>'
       + '<p class="route-sub">What each part of OBOL is for, and when to reach for it. This is the map. For how to pentest, see Learn and the field notes.</p></div>'
       + tabBar(tab)
-      + '<div class="help-search-bar"><input type="search" id="help-search" class="help-search-input" placeholder="Search Help sections, tools, and glossary..." autocomplete="off" spellcheck="false" aria-label="Search Help"></div>';
+      + '<div class="help-search-bar"><input type="search" id="help-search" class="help-search-input" placeholder="Search Help sections, tools, and glossary..." autocomplete="off" spellcheck="false" aria-label="Search Help"></div>'
+      + '<div id="help-search-empty" class="coach-empty" hidden>No manual topics match your search.</div>';
     if (!H.sections) {
       return head + '<p class="route-sub">Help is coming online. If you just opened it, give the bundle a moment and try again.</p></section>';
     }
-    var body = tab === 'start' ? renderStart(H) : tab === 'glossary' ? renderGlossary(H) : renderIndex(H, focus);
+    var body = tab === 'start'
+      ? (renderStart(H) + '<div class="help-cross-search" style="display:none">' + renderManual(H) + renderIndex(H, '') + renderGlossary(H) + '</div>')
+      : tab === 'manual' ? renderManual(H) : tab === 'glossary' ? renderGlossary(H) : renderIndex(H, focus);
     return head + body + '</section>';
   }
 
@@ -168,8 +187,23 @@
     });
 
     // H4: Live search input filtering sections, subs, glossary terms, and quick-start cards
-    U.on(mount, 'input', '#help-search', function (e, inp) {
+    U.on(mount, 'input', '#help-search, #help-q', function (e, inp) {
       var q = (inp.value || '').trim().toLowerCase();
+      var crossSearch = mount.querySelector('.help-cross-search');
+      if (crossSearch) crossSearch.style.display = q ? '' : 'none';
+      var charonEl = mount.querySelector('.help-charon');
+      if (charonEl) charonEl.style.display = q ? 'none' : '';
+      var progEl = mount.querySelector('.help-qs-progress');
+      if (progEl) progEl.style.display = q ? 'none' : '';
+      setTimeout(function () {
+        var emptyEl = mount.querySelector('#help-search-empty');
+        if (emptyEl) {
+          var anyHit = !q || Array.prototype.some.call(mount.querySelectorAll('.help-sec, .help-term, .help-qs'), function (el) {
+            return el.style.display !== 'none' && (!el.closest('.help-cross-search') || (crossSearch && crossSearch.style.display !== 'none'));
+          });
+          emptyEl.hidden = anyHit;
+        }
+      }, 0);
 
       // Filter Index sections and sub-rows
       var secs = mount.querySelectorAll('.help-sec');
@@ -228,6 +262,13 @@
         }
         var cardText = card.textContent.toLowerCase();
         card.style.display = cardText.indexOf(q) >= 0 ? '' : 'none';
+        var emptyEl = mount.querySelector('#help-search-empty');
+        if (emptyEl) {
+          var anyHit = !q || Array.prototype.some.call(mount.querySelectorAll('.help-sec, .help-term, .help-qs'), function (el) {
+            return el.style.display !== 'none' && (!el.closest('.help-cross-search') || (crossSearch && crossSearch.style.display !== 'none'));
+          });
+          emptyEl.hidden = anyHit;
+        }
       });
     });
 
@@ -262,7 +303,7 @@
 
     // a deep link to a section opens it (the <details open> above) and scrolls it into view
     var s = subOf(ctx);
-    var focus = (s && s !== 'start' && s !== 'glossary' && s !== 'index') ? s : '';
+    var focus = (s && s !== 'start' && s !== 'manual' && s !== 'glossary' && s !== 'index') ? s : '';
     if (focus) {
       var el = mount.querySelector('#help-' + (window.CSS && CSS.escape ? CSS.escape(focus) : focus));
       if (el) { try { el.open = true; el.scrollIntoView({ block: 'start' }); } catch (x) {} }

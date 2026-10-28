@@ -25,9 +25,24 @@
     'credential.available': 'a usable credential',
     'ad.user_list': 'a domain user list',
     'ad.acl_lead': 'writable Active Directory objects',
+    'ad.acl_paths': 'outbound AD ACL attack paths',
+    'ad.attack_paths': 'Active Directory attack paths',
     'ad.group_joined': 'privileged AD group membership',
     'ad.control_paths': 'an AD object control path',
     'ad.dcsync_granted': 'DCSync replication rights',
+    'ad.cert_templates': 'a vulnerable ADCS certificate template',
+    'ad.rbcd': 'Resource-Based Constrained Delegation',
+    'ad.shadow_credentials': 'Shadow Credentials (msDS-KeyCredentialLink)',
+    'ad.laps_readable': 'a readable LAPS local administrator password',
+    'ad.gmsa_readable': 'a readable gMSA service account password',
+    'privesc.sudo_rights': 'a sudo privilege escalation vector',
+    'privesc.suid_candidate': 'a privilege-escalating SUID binary',
+    'privesc.capability': 'a dangerous Linux file capability',
+    'privesc.windows_privilege': 'an abusable Windows token privilege',
+    'privesc.stored_credentials': 'stored local credentials',
+    'db.creds': 'extracted database credentials',
+    'loot.sam': 'dumped local SAM password hashes',
+    'loot.shadow': 'extracted /etc/shadow password hashes',
     'loot.ntds': 'dumped NTDS.dit domain secrets',
     'hash.krbtgt': 'the krbtgt Kerberos hash',
     'hash.ntlm': 'dumped NTLM password hashes',
@@ -76,7 +91,8 @@
     if (kind === 'objective.flag_located') return v.path || v.name || 'located remotely, read on-host';
     if (/^objective\./.test(kind)) return v.flag || v.value || 'captured';
     if (kind === 'access.admin' || kind === 'access.system' || kind === 'access.root' || kind === 'foothold.windows' || kind === 'foothold.linux') {
-      return v.user || v.via || v.method || '';
+      var via = (v.via && v.via !== 'causal_entailment') ? v.via : '';
+      return v.user || via || v.method || '';
     }
     var keys = ['template', 'service', 'method', 'name', 'target'];
     for (var i = 0; i < keys.length; i++) { if (v[keys[i]]) return String(v[keys[i]]); }
@@ -95,10 +111,12 @@
     [['ntds', 'dcsync', 'krbtgt'], 'DCSync / NTDS Dump'],
     [['kerberoast', 'tgs'], 'Kerberoasting'],
     [['asrep', 'asreproast'], 'AS-REP Roasting'],
-    [['ad.control_paths', 'ad.acl_lead', 'ad.group_joined', 'rbcd', 'shadow'], 'AD Attack Path'],
+    [['adcs', 'cert_templates', 'esc_templates'], 'ADCS Escalation'],
+    [['ad.control_paths', 'ad.acl_lead', 'ad.acl_paths', 'ad.attack_paths', 'ad.group_joined', 'rbcd', 'shadow'], 'AD Attack Path'],
     [['access.system', 'access.admin', 'access.root'], 'Privilege Escalation'],
+    [['privesc.'], 'Privilege Escalation Vector'],
     [['foothold', 'access.shell', 'winrm.authenticated', 'webshell'], 'Initial Access / Foothold'],
-    [['credential', 'hash.ntlm'], 'Credential Access'],
+    [['credential', 'hash.ntlm', 'db.creds'], 'Credential Access'],
     [['loot'], 'Looting'],
     [['ad.user_list', 'service.', 'port:', 'scan.', 'http.', 'smb.'], 'Service Enumeration'],
   ];
@@ -149,7 +167,12 @@
       return false;
     });
 
-    var proven = {}; hostFacts.forEach(function (f) { if (!proven[f.kind]) proven[f.kind] = f; });
+    var proven = {};
+    hostFacts.forEach(function (f) {
+      if (!proven[f.kind] || (proven[f.kind].value && proven[f.kind].value.via === 'causal_entailment' && !(f.value && f.value.via === 'causal_entailment'))) {
+        proven[f.kind] = f;
+      }
+    });
 
     // Noise: enumeration / identity / posture detail that isn't a milestone in the walked path. The
     // attack-path ribbon and the report narrative both derive from these steps, so this is the single
@@ -160,6 +183,7 @@
     var hasDomainCompromise = !!(proven['loot.ntds'] || proven['objective.root_flag']);
 
     function isNoise(kind) {
+      if (proven[kind] && proven[kind].value && proven[kind].value.via === 'causal_entailment') return true;
       if (/^port:\d+$/.test(kind)) return true;   // individual open ports (ports.open is the anchor)
       if (/^service\./.test(kind)) return true;    // per-service enumeration evidence (dns/ldap/msrpc/...)
       if (/^scan\./.test(kind)) return true;       // nmap scan-profile markers (quick/version/vuln/udp)
@@ -168,7 +192,6 @@
       if (/^objective\.flag_located_/.test(kind)) return true; // internal slot-specific duplicate of objective.flag_located
       if (kind === 'objective.flag_located' && hasCapturedFlag) return true; // superseded once the flag value is captured
       if (kind === 'credential.available' && proven['credential.plaintext']) return true; // redundant with cracked/recovered plaintext cred
-      if (kind === 'ad.acl_lead' && (proven['ad.control_paths'] || proven['ad.group_joined'])) return true;
       if (kind === 'ad.control_paths' && proven['ad.group_joined']) return true;
       if (hasDomainCompromise && {
         'hash.sntp': 1, 'ad.coerced_auth': 1, 'smb.readable_share': 1, 'smb.writable_share': 1,
@@ -179,7 +202,7 @@
         'host.hostname': 1, 'host.domain': 1, 'host.fqdn': 1, 'host.os_family': 1, 'host.os_hint': 1,
         'host.kernel': 1, 'smb.signing': 1, 'smb.smbv1': 1, 'smb.guest_session': 1, 'smb.null_session': 1,
         'ad.base_dn': 1, 'ad.domain_known': 1, 'ad.domain_sid': 1, 'ad.dc_candidate': 1,
-        'ad.anonymous_bind': 1, 'ad.group_list': 1, 'ad.attack_paths': 1, 'ad.graph.collected': 1,
+        'ad.anonymous_bind': 1, 'ad.group_list': 1, 'ad.graph.collected': 1,
         'web.title': 1, 'config.review': 1, 'credential.validation': 1, 'credential.validated': 1,
         'credential.candidate': 1, 'ldap.authenticated': 1, 'smb.authenticated': 1, 'smb.shares': 1,
         'smb.content_accessible': 1, 'winrm.authenticated': 1, 'loot.files': 1,
@@ -191,7 +214,7 @@
 
     var MILESTONE_PRIORITY = [
       'loot.ntds', 'access.system', 'access.root', 'access.admin',
-      'hash.krbtgt', 'ad.dcsync_granted', 'ad.domain_control', 'ad.group_joined', 'ad.control_paths', 'ad.acl_lead',
+      'hash.krbtgt', 'ad.dcsync_granted', 'ad.domain_control', 'ad.group_joined', 'ad.control_paths', 'ad.acl_lead', 'ad.attack_paths',
       'foothold.windows', 'foothold.linux', 'foothold.webshell', 'access.shell',
       'credential.plaintext', 'credential.available',
       'hash.asrep', 'hash.tgs', 'hash.ntlm', 'ad.user_list', 'ports.open',
@@ -201,23 +224,60 @@
       return idx >= 0 ? idx : (100 + phaseIdx(k));
     }
 
+    var EQUIV = {
+      'credential.plaintext': 'credential.available',
+      'credential.available': 'credential.plaintext',
+      'access.root': 'access.admin',
+      'access.admin': 'access.root',
+      'ad.attack_paths': 'ad.acl_lead',
+      'ad.acl_lead': 'ad.attack_paths'
+    };
+
     // the action most likely responsible for a proven kind - its prereqs give the causal backlink.
     var producers = {}; // kind -> [Action]
-    actions.forEach(function (a) { (a.produces || []).forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
+    actions.forEach(function (a) {
+      (a.produces || []).forEach(function (k) {
+        (producers[k] = producers[k] || []).push(a);
+        var eq = EQUIV[k];
+        if (eq && (a.produces || []).indexOf(eq) === -1) {
+          (producers[eq] = producers[eq] || []).push(a);
+        }
+      });
+    });
+    function hasProven(k) { return !!(proven[k] || (EQUIV[k] && proven[EQUIV[k]])); }
+    function resolvePrior(k, priorSet) {
+      if (priorSet[k] && proven[k]) return k;
+      var eq = EQUIV[k];
+      if (eq && priorSet[eq] && proven[eq]) return eq;
+      return null;
+    }
     function enablers(kind, priorSet) {
       var cands = producers[kind] || [];
       if (!cands.length) return [];
       var best = null, bestScore = -1;
       cands.forEach(function (a) {
         var all = a.requires_all || [], any = a.requires_any || [];
-        var score = all.filter(function (k) { return proven[k]; }).length + (any.some(function (k) { return proven[k]; }) ? 1 : 0);
-        if (all.every(function (k) { return proven[k]; })) score += 100;
+        var allProven = all.every(hasProven);
+        var anyProven = !any.length || any.some(hasProven);
+        var priorHits = all.filter(function (k) { return !!resolvePrior(k, priorSet); }).length
+          + (any.some(function (k) { return !!resolvePrior(k, priorSet); }) ? 1 : 0);
+        if (!priorHits) return;
+        var score = all.filter(hasProven).length + (any.some(hasProven) ? 1 : 0) + priorHits * 50;
+        if (allProven && anyProven) score += 100;
         if (score > bestScore) { bestScore = score; best = a; }
       });
       if (!best) return [];
-      var out = (best.requires_all || []).filter(function (k) { return proven[k] && priorSet[k]; });
-      var anyOk = (best.requires_any || []).filter(function (k) { return proven[k] && priorSet[k]; });
-      if (anyOk.length) out.push(anyOk[0]);
+      var out = [];
+      (best.requires_all || []).forEach(function (k) {
+        var r = resolvePrior(k, priorSet);
+        if (r && out.indexOf(r) === -1) out.push(r);
+      });
+      var anyOk = [];
+      (best.requires_any || []).forEach(function (k) {
+        var r = resolvePrior(k, priorSet);
+        if (r && anyOk.indexOf(r) === -1) anyOk.push(r);
+      });
+      if (anyOk.length && out.indexOf(anyOk[0]) === -1) out.push(anyOk[0]);
       return out.filter(function (k) { return k !== kind; });
     }
 
@@ -248,6 +308,14 @@
           tool = 'evil-winrm';
         }
       }
+      if (!cmd && r.dispatch && r.dispatch !== 'paste') {
+        cmd = String(r.dispatch);
+        if (!tool || tool === 'paste') tool = String(r.dispatch).split(/\s+/)[0];
+      } else if (!cmd && r.file) {
+        cmd = '# attached: ' + r.file;
+      } else if (!cmd && r.action_id) {
+        cmd = String(r.action_id);
+      }
       if ((!tool || /^[a-z0-9]+(?:-[a-z0-9]+)+$/i.test(tool)) && cmd) {
         tool = (cmd.split(/\s+/)[0] || tool).replace(/;+$/, '');
       }
@@ -274,6 +342,11 @@
     // recon anchors first (seeded/observed, usually no command)
     ANCHORS.forEach(function (k) { if (proven[k]) emit(k, '', '', (proven[k].created_at) || 0, ''); });
     // then everything the ledger produced, in run order (at most 1 non-flag milestone per command row + any flags)
+    var ACCESS_DEDUP = {
+      'access.system': 1, 'access.admin': 1, 'access.root': 1,
+      'foothold.windows': 1, 'foothold.linux': 1, 'foothold.webshell': 1,
+      'access.shell': 1, 'winrm.authenticated': 1, 'smb.authenticated': 1
+    };
     acts.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (r) {
       var ct = cleanStepCommand(r);
       var rOut = String(r.stdout || '');
@@ -291,10 +364,14 @@
       if (nonFlags.length) {
         var primary = nonFlags[0];
         emit(primary, ct.cmd, ct.tool, r.at || 0, rOut);
-        // Mark co-produced secondary facts from the same single command (e.g. dcsync co-minting hash.ntlm/hash.krbtgt)
-        // as seen so a later re-run does not re-emit them out of order.
+        // Mark co-produced secondary facts from the same single command (e.g. dcsync co-minting hash.ntlm/hash.krbtgt,
+        // or a shell/foothold command co-minting foothold.linux + access.shell) as seen so they are not re-emitted.
         if (primary === 'loot.ntds') {
           nonFlags.slice(1).forEach(function (k) { seen[k] = true; });
+        } else if (ACCESS_DEDUP[primary]) {
+          nonFlags.slice(1).forEach(function (k) { if (ACCESS_DEDUP[k]) seen[k] = true; });
+        } else if (primary === 'ad.acl_lead' || primary === 'ad.attack_paths') {
+          nonFlags.slice(1).forEach(function (k) { if (k === 'ad.acl_lead' || k === 'ad.attack_paths') seen[k] = true; });
         }
       }
       flags.sort(function (a, b) { return (a === 'objective.root_flag' ? 1 : 0) - (b === 'objective.root_flag' ? 1 : 0); });

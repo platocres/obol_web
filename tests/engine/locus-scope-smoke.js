@@ -41,6 +41,13 @@ ok(scopeOf('kerberoast') === 'oscp', 'kerberoast is core OSCP — a secondary ta
 ok(scopeOf('ssh-key-login') === 'oscp', 'ssh-key-login is core — the overloaded credential.certificate fact must NOT escalate it');
 ok(scopeOf('crack-shadow') === 'oscp', 'crack-shadow (/etc/shadow) is core — the shadow-cred regex must NOT catch it');
 ok(scopeOf('eternalblue') === 'oscp', 'EternalBlue is core OSCP');
+ok(scopeOf('dcsync') === 'oscp', 'dcsync is core OSCP');
+ok(scopeOf('bloodyad-acl') === 'oscp', 'bloodyad-acl is core OSCP');
+ok(scopeOf('ad-acl-abuse') === 'oscp', 'ad-acl-abuse is core OSCP');
+ok(scopeOf('gmsa-read') === 'oscp', 'gmsa-read is core OSCP');
+ok(scopeOf('gpo-abuse') === 'oscp', 'gpo-abuse is core OSCP');
+ok(scopeOf('windows-service-dacl-abuse') === 'oscp', 'windows-service-dacl-abuse is core OSCP');
+ok(scopeOf('smtp-open-relay') === 'oscp', 'smtp-open-relay is core OSCP');
 ok(scopeOf('delegation-abuse') === 'oscp+', 'delegation abuse is OSCP+');
 ok(scopeOf('adcs-esc') === 'oscp+', 'ADCS ESC is OSCP+');
 ok(scopeOf('ntlm-relay-attack') === 'oscp+', 'NTLM relay is OSCP+');

@@ -141,10 +141,13 @@
     var keys = Object.keys(paths).filter(function (p) { return p && p.toLowerCase().indexOf('http') !== 0; });
     if (!keys.length) return;
     var ordered = C.uniqueSortedCI(keys);
-    var value = { paths: ordered.slice(0, 50), count: ordered.length };
+    var value = { paths: ordered.slice(0, 500), count: ordered.length };
     var interesting = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-    if (interesting.length) value.interesting = interesting.slice(0, 20);
+    if (interesting.length) value.interesting = interesting.slice(0, 200);
     _add(facts, mkFact('web.content_map', 'host:' + ws.target, value, S, source));
+    _add(facts, mkFact('web.paths', 'host:' + ws.target, value, S, source));
+    var uploadPath = ordered.find(function (p) { return /(?:^|\/)upload(?:s|\.[a-z0-9]+)?(?:\b|\/|$)/i.test(p); });
+    if (uploadPath) _add(facts, mkFact('web.upload_form', 'host:' + ws.target, { path: uploadPath, evidence: 'upload endpoint discovered: ' + uploadPath }, S, source));
     _exposed_artifacts(ordered, command || '', ws, source, facts);
   }
   C._parse_web_content = _parse_web_content;
@@ -165,9 +168,9 @@
     });
     var pKeys = C.uniqueSortedCI(Object.keys(paths));
     if (pKeys.length) {
-      var val = { paths: pKeys.slice(0, 50), count: pKeys.length, tool: 'nikto' };
+      var val = { paths: pKeys.slice(0, 500), count: pKeys.length, tool: 'nikto' };
       var inter = pKeys.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-      if (inter.length) val.interesting = inter.slice(0, 20);
+      if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', h, val, S, source));
       _exposed_artifacts(pKeys, command || '', ws, source, facts);
     }
@@ -189,9 +192,9 @@
       });
       var ordered = C.uniqueSortedCI(Object.keys(paths));
       if (!ordered.length) return true;
-      var val = { paths: ordered.slice(0, 50), count: ordered.length };
+      var val = { paths: ordered.slice(0, 500), count: ordered.length };
       var inter = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-      if (inter.length) val.interesting = inter.slice(0, 20);
+      if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', 'host:' + ws.target, val, S, source));
       _exposed_artifacts(ordered, command || '', ws, source, facts);
       return true;
@@ -216,9 +219,9 @@
     if (!matched) return false;
     var ordered = C.uniqueSortedCI(Object.keys(paths));
     if (ordered.length) {
-      var val = { paths: ordered.slice(0, 50), count: ordered.length };
+      var val = { paths: ordered.slice(0, 500), count: ordered.length };
       var inter = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-      if (inter.length) val.interesting = inter.slice(0, 20);
+      if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', 'host:' + ws.target, val, S, source));
       _exposed_artifacts(ordered, command || '', ws, source, facts);
     }
@@ -245,7 +248,7 @@
         var m = /^(https?:\/\/\S+)\s+\[(\d{3})\](.*)$/.exec(line);
         if (m) {
           matched = true;
-          var brackets = reAll(/\[([^\]]+)\]/g, m[3]).map(function (b) { return b[1].trim(); }).filter(Boolean);
+          var brackets = reAll(/\[([^\]\r\n]{1,200})\]/g, m[3]).map(function (b) { return b[1].trim(); }).filter(Boolean);
           if (brackets.length >= 1) titles.push(brackets[0]);
           brackets.slice(1).forEach(function (b) { techs.push({ name: 'httpx', value: b }); });
         }
@@ -307,7 +310,7 @@
     var names = [];
     reAll(_ARJUN_FOUND_RE, text).forEach(function (hit) {
       hit.groups.names.replace(/\n/g, ',').split(',').forEach(function (raw) {
-        var name = raw.replace(/\s*\([A-Za-z]+\)\s*$/, '').trim();
+        var name = raw.replace(/[ \t]*\([A-Za-z]+\)[ \t]*$/, '').trim();
         if (_ARJUN_NAME_RE.test(name) && ['found', 'detected'].indexOf(name.toLowerCase()) < 0) names.push(name);
       });
     });
@@ -326,11 +329,13 @@
   var _PARAM_URL_RE = /[?&][A-Za-z_][\w.]*=/;
   var _FORM_INPUT_RE = /<input\b[^>]*\bname\s*=/i;
   var _UPLOAD_FORM_RE = /type\s*=\s*["']?\s*file\b|enctype\s*=\s*["']?\s*multipart\/form-data/i;
+  var _LOGIN_FORM_RE = /<input\b[^>]*\btype\s*=\s*["']?\s*password\b/i;
 
   function _parse_web_surface(text, ws, command, source, facts) {
     var t = text || '', h = 'host:' + ws.target;
     if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || reSearch(_PARAM_URL_RE, command || '')) _add(facts, mkFact('web.parameterized', h, { evidence: 'parameter or form input observed' }, S, source));
     if (reSearch(_UPLOAD_FORM_RE, t)) _add(facts, mkFact('web.upload_form', h, { evidence: 'file-upload form' }, S, source));
+    if (reSearch(_LOGIN_FORM_RE, t)) _add(facts, mkFact('web.login_form', h, { evidence: 'password input form' }, S, source));
   }
   C._parse_web_surface = _parse_web_surface;
 
@@ -355,7 +360,8 @@
     var head = reSearch(C._GIT_HEAD_RE, text);
     if (head) branch = head.groups.branch;
     var lc = command.toLowerCase();
-    var sourceFound = !!head || ((lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) && reSearch(C._GIT_DUMPER_SUCCESS_RE, text) && !/\b(?:error|failed|not found|403|404)\b/i.test(text));
+    var hasGitDumpSuccess = (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) && reSearch(C._GIT_DUMPER_SUCCESS_RE, text);
+    var sourceFound = !!head || (hasGitDumpSuccess && (!/\b(?:error|failed|not found|403|404)\b/i.test(text) || /(?:Fetching|Downloading)\s+[^\r\n]*\b(?:HEAD|refs\/heads|objects\/pack|config|index)\b|\[\+\]\s*Running\s+git\s+checkout/i.test(text)));
     if (sourceFound) {
       var value = { kind: 'git', tool: (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) ? 'git-dumper' : 'curl' };
       if (branch) value.branch = branch;
@@ -366,9 +372,10 @@
   }
   C._parse_git_source = _parse_git_source;
 
-  function _parse_sqlmap(text, ws, source, facts) {
+  function _parse_sqlmap(text, ws, source, facts, command) {
     if (!text.trim()) return;
     var h = 'host:' + ws.target;
+    var cmdStr = String(command || '') + ' ' + String(source || '');
     var vuln = reSearch(C._SQLMAP_VULN_RE, text);
     if (!vuln && /all tested parameters do not appear to be injectable|does not seem to be injectable/i.test(text)) return;
     if (vuln) _add(facts, mkFact('web.sqli_confirmed', h, { tool: 'sqlmap', evidence: C._line_for_match(text, vuln) }, S, source));
@@ -391,11 +398,40 @@
       _add(facts, mkFact('db.databases', h, value, S, source));
     }
     var tableRefs = reAll(C._SQLMAP_TABLE_RE, text).map(function (m) { return { database: m.groups.database, table: m.groups.table }; });
-    if (tableRefs.length) _add(facts, mkFact('db.tables', h, { tool: 'sqlmap', tables: tableRefs.slice(0, 50) }, S, source));
+    var hasDumpedTable = tableRefs.length > 0;
+    if (!tableRefs.length && /\[\d+\s+tables?\]/i.test(text)) {
+      var curDbM = /Database:\s*([A-Za-z0-9_$.-]+)/i.exec(text) || /(?:^|\s)-D\s+['"]?([A-Za-z0-9_$.-]+)/i.exec(cmdStr);
+      var curDb = curDbM ? curDbM[1] : '';
+      var tblBlockRe = /\[\d+\s+tables?\][\s\S]*?\+[+-]+\+\r?\n((?:\|[ \t]*[^\s|\r\n][^|\r\n]*\|\r?\n)+)\+[+-]+\+/gi, tbm;
+      while ((tbm = tblBlockRe.exec(text)) !== null) {
+        tbm[1].split(/\r?\n/).forEach(function (rLine) {
+          var rm = /^\|\s*([A-Za-z0-9_$.-]+)\s*\|$/.exec(rLine.trim());
+          if (rm) tableRefs.push({ database: curDb, table: rm[1] });
+        });
+      }
+    }
+    if (!tableRefs.length && /\b--dump\b/i.test(cmdStr) && /\+[+-]+\+\r?\n\|/.test(text)) {
+      var dumpTblM = /(?:^|\s)-T\s+['"]?([A-Za-z0-9_$.-]+)/i.exec(cmdStr);
+      var dumpDbM = /(?:^|\s)-D\s+['"]?([A-Za-z0-9_$.-]+)/i.exec(cmdStr);
+      if (dumpTblM) {
+        tableRefs.push({ database: dumpDbM ? dumpDbM[1] : '', table: dumpTblM[1] });
+        hasDumpedTable = true;
+      }
+    }
+    if (tableRefs.length) {
+      _add(facts, mkFact('db.tables', h, { tool: 'sqlmap', tables: tableRefs.slice(0, 50) }, S, source));
+      if (!vuln) _add(facts, mkFact('web.sqli_confirmed', h, { tool: 'sqlmap', evidence: 'sqlmap enumerated database tables' }, S, source));
+    }
+    if (/database management system users privileges:/i.test(text) && /\bprivilege:\s*(?:FILE|SUPER|ALL\s+PRIVILEGES|DBA)\b/i.test(text)) {
+      _add(facts, mkFact('db.admin', h, { tool: 'sqlmap', detail: 'elevated DBMS user privilege (FILE/SUPER/DBA) confirmed' }, S, source));
+      if (!vuln) _add(facts, mkFact('web.sqli_confirmed', h, { tool: 'sqlmap', evidence: 'sqlmap enumerated DBMS privileges' }, S, source));
+    }
     var colSet = {};
-    reAll(/\b(user(?:name)?|login|email|pass(?:word)?|passwd|pwd|hash|token|api[_-]?key)\b/i, text).forEach(function (m) { colSet[m[1].toLowerCase()] = true; });
+    var textNoUrls = text.replace(/https?:\/\/\S+/gi, '');
+    reAll(/\b(user(?:name)?|login|email|pass(?:word)?|passwd|pwd|hash|token|api[_-]?key)\b/i, textNoUrls).forEach(function (m) { colSet[m[1].toLowerCase()] = true; });
     var credentialColumns = C.uniqueSortedCI(Object.keys(colSet));
-    if (credentialColumns.length && (reSearch(C._SQLMAP_DUMP_RE, text) || /\bdumped to CSV file\b|\bfetching entries for table\b/i.test(text) || tableRefs.length)) {
+    var hasDumpSignal = !!(reSearch(C._SQLMAP_DUMP_RE, text) || /\bdumped to CSV file\b|\bfetching entries for table\b/i.test(text) || hasDumpedTable);
+    if (credentialColumns.length && hasDumpSignal) {
       var v2 = { tool: 'sqlmap', credential_columns: credentialColumns.slice(0, 20) };
       if (tableRefs.length) v2.tables = tableRefs.slice(0, 20);
       _add(facts, mkFact('db.creds', h, v2, S, source));

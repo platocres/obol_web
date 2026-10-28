@@ -1,5 +1,5 @@
 /*!
- * data/oscp-scope.js — OSCP exam scope for the Checklist "OSCP" view. The default checklist view ("All")
+ * data/oscp-scope.js - OSCP exam scope for the Checklist "OSCP" view. The default checklist view ("All")
  * shows every command obol has inventoried; the "OSCP" view hides the moves below, which are out of the
  * PEN-200 exam's scope or banned in the exam. Everything NOT listed here stays visible, so the OSCP view
  * is the core exam methodology (recon, manual web exploitation, Linux/Windows privilege escalation, the

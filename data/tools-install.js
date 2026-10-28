@@ -165,7 +165,7 @@
       canonical: 'pygpoabuse', variants: ['pygpoabuse', 'pygpoabuse.py'],
       source: 'Hackndo/pyGPOAbuse', license: 'MIT', purpose: 'GPO edit-rights -> scheduled task' },
     { key: 'zerologon-scan', label: 'zerologon (tester)', category: 'AD', os: 'linux', class: 'git',
-      install: 'git clone https://github.com/SecuraBV/CVE-2020-1472 ~/tools/zerologon',
+      install: 'git clone https://github.com/SecuraBV/CVE-2020-1472 ~/tools/CVE-2020-1472',
       canonical: 'zerologon-scan', variants: ['zerologon-scan', 'zerologon_tester.py'],
       source: 'SecuraBV/CVE-2020-1472', license: 'MIT', purpose: 'safe Zerologon vulnerability check' },
     // APT tools
@@ -307,11 +307,11 @@
       install: 'git clone https://github.com/00theway/Ghostcat-CNVD-2020-10487 ~/tools/Ghostcat-CNVD-2020-10487', canonical: 'ajpShooter.py', variants: ['ajpShooter.py', 'ajpshooter.py'],
       source: '00theway/Ghostcat-CNVD-2020-10487', license: 'Apache-2.0', purpose: 'Apache Tomcat AJP Ghostcat (CVE-2020-1938) file read and RCE' },
     { key: 'set_empty_pw.py', label: 'set_empty_pw.py (Zerologon)', category: 'AD', os: 'linux', class: 'git',
-      install: 'git clone https://github.com/RiskSense-Ops/zerologon ~/tools/zerologon-exploit', canonical: 'set_empty_pw.py', variants: ['set_empty_pw.py', 'set_empty_pw'],
-      source: 'RiskSense-Ops/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account password reset script' },
+      install: 'git clone https://github.com/risksense/zerologon ~/tools/zerologon', canonical: 'set_empty_pw.py', variants: ['set_empty_pw.py', 'set_empty_pw'],
+      source: 'risksense/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account password reset script' },
     { key: 'reinstall_original_pw.py', label: 'reinstall_original_pw.py (Zerologon)', category: 'AD', os: 'linux', class: 'git',
-      install: 'git clone https://github.com/RiskSense-Ops/zerologon ~/tools/zerologon-exploit', canonical: 'reinstall_original_pw.py', variants: ['reinstall_original_pw.py', 'reinstall_original_pw'],
-      source: 'RiskSense-Ops/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account NTLM hash restore script' },
+      install: 'git clone https://github.com/risksense/zerologon ~/tools/zerologon', canonical: 'reinstall_original_pw.py', variants: ['reinstall_original_pw.py', 'reinstall_original_pw'],
+      source: 'risksense/zerologon', license: 'Apache-2.0', purpose: 'Zerologon (CVE-2020-1472) DC machine-account NTLM hash restore script' },
     { key: 'keepass-dump-masterkey', label: 'keepass_dump_masterkey.py', category: 'Cracking', os: 'linux', class: 'git',
       install: 'git clone https://github.com/matro7sh/keepass-dump-masterkey ~/tools/keepass-dump-masterkey', canonical: 'keepass_dump_masterkey.py', variants: ['keepass_dump_masterkey.py', 'keepass-dump-masterkey', 'poc.py'],
       source: 'matro7sh/keepass-dump-masterkey', license: 'MIT', purpose: 'CVE-2023-32784 KeePass 2.x memory dump master-password recovery' },
@@ -469,7 +469,8 @@
    'cat', 'grep', 'find', 'ln', 'tar', 'unzip', 'strings', 'uname', 'ip', 'systemctl',
    'busctl', 'sudoedit', 'screen', 'tmux', 'git', 'python', 'ruby', 'gpg', 'docker',
    'kubectl', 'aws', 'az', 'gcloud', 'wsl', 'net', 'schtasks', 'type', 'diskshadow',
-   'fodhelper', 'procmon', 'sqlplus', 'burp', 'graphql', 'barmie', 'quiche-client'].forEach(function (n) {
+   'fodhelper', 'procmon', 'sqlplus', 'burp', 'graphql', 'barmie', 'quiche-client',
+   'ifconfig', 'ipconfig', 'netstat', 'route', 'arp', 'unshadow', 'runas', 'robocopy'].forEach(function (n) {
     if (!A[n]) A[n] = { key: n, label: n, category: 'Built-in', os: 'multi', class: 'builtin',
       on_kali: true, install: '', canonical: n, variants: [n], source: '', license: '', purpose: 'shell / OS-native binary' };
   });

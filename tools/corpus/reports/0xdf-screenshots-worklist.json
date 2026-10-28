@@ -1,0 +1,464 @@
+{
+  "generated_at": "2026-10-24T00:16:37.083Z",
+  "note": "Tier 1 vision worklist: unique CONTENT captures per box (png/webp format pairs collapsed), leverage-ranked, plus Markdown structural context metrics across all walkthroughs. Open high-signal no-adjacent-code captures to extract terminal output, web-console scripts, webshell commands, or Burp payloads that fenced code blocks did not carry. qa-only; nothing ships.",
+  "calibration": "75 visually inspected screenshots across 63 boxes + 194-walkthrough structural context sweep (2026-10-23): 73.9% of image-<timestamp> captures (1,375 / 1,861) have no step-adjacent fenced code block (idx +- 2) and 55.5% (1,032 / 1,861) sit in leaf sections with zero code blocks. 19 of 75 inspected captures (25.3% overall; 38.0% of high-suspicion captures) carried unique CLI commands, Jenkins Groovy/Pipeline scripts, webshell one-liners, Burp Repeater payloads, or system info not in the Markdown text. Validated OCR extraction records live in tools/corpus/labels/0xdf-screenshots-ocr.json.",
+  "boxes_scanned": 194,
+  "boxes_with_captures": 142,
+  "totals": {
+    "unique_content_captures": 1861,
+    "unique_decorations": 1993,
+    "files_on_disk": 6592
+  },
+  "markdown_context": {
+    "walkthroughs_scanned": 194,
+    "total_image_refs": 1861,
+    "strictly_adjacent_code": 7,
+    "step_adjacent_code": 481,
+    "no_step_adjacent_code": 1380,
+    "section_has_code": 889,
+    "section_no_code": 972,
+    "high_signal_no_adjacent_code_count": 382
+  },
+  "worklist": [
+    {
+      "box": "streamio",
+      "unique_content_captures": 39,
+      "decorations": 9,
+      "sample": [
+        "assets/streamio/image-20220912140616784-b428212c4f32.png",
+        "assets/streamio/image-20220912141524919-cc95c3738d65.png",
+        "assets/streamio/image-20220912141748783-399493ee72df.png",
+        "assets/streamio/image-20220912141855883-3dbe5864cb2d.png"
+      ]
+    },
+    {
+      "box": "hathor",
+      "unique_content_captures": 38,
+      "decorations": 7,
+      "sample": [
+        "assets/hathor/image-20221108152554825-37d383276952.png",
+        "assets/hathor/image-20221108152633710-0a652cde92a7.png",
+        "assets/hathor/image-20221108152718535-70e9d7f00faf.webp",
+        "assets/hathor/image-20221108152815270-24c8c9393834.webp"
+      ]
+    },
+    {
+      "box": "talkative",
+      "unique_content_captures": 38,
+      "decorations": 9,
+      "sample": [
+        "assets/talkative/image-20220822115423876-25ee6b5000a2.png",
+        "assets/talkative/image-20220822120246636-2e3b556708bf.png",
+        "assets/talkative/image-20220822125009556-5353b7afec7c.webp",
+        "assets/talkative/image-20220822125143661-b05b589a2f7e.webp"
+      ]
+    },
+    {
+      "box": "worker",
+      "unique_content_captures": 37,
+      "decorations": 8,
+      "sample": [
+        "assets/worker/image-20200820204515730-b1e8242c654d.webp",
+        "assets/worker/image-20200821125356347-351872aaa003.png",
+        "assets/worker/image-20200821125446426-15a535712961.png",
+        "assets/worker/image-20200822063505111-572809a88732.png"
+      ]
+    },
+    {
+      "box": "cereal",
+      "unique_content_captures": 35,
+      "decorations": 8,
+      "sample": [
+        "assets/cereal/image-20210311163036686-6c0647cce7f2.webp",
+        "assets/cereal/image-20210311163350756-1a4d73288c41.webp",
+        "assets/cereal/image-20210311163427277-4665ba1c8e13.webp",
+        "assets/cereal/image-20210311164605003-7cd3f5eb36f3.png"
+      ]
+    },
+    {
+      "box": "monitored",
+      "unique_content_captures": 35,
+      "decorations": 9,
+      "sample": [
+        "assets/monitored/image-20240508155916679-a1e3b74c73f5.webp",
+        "assets/monitored/image-20240508161546921-0a4f1afa5d9f.webp",
+        "assets/monitored/image-20240508164304849-b608e60407d5.png",
+        "assets/monitored/image-20240508164340230-aa9820e0dc38.png"
+      ]
+    },
+    {
+      "box": "schooled",
+      "unique_content_captures": 35,
+      "decorations": 8,
+      "sample": [
+        "assets/schooled/image-20210401135637848-b2a50fcb682e.png",
+        "assets/schooled/image-20210401135823357-660352ba84da.webp",
+        "assets/schooled/image-20210401135829512-016f8ad6ef50.png",
+        "assets/schooled/image-20210401140807992-43933abd9f7f.webp"
+      ]
+    },
+    {
+      "box": "fingerprint",
+      "unique_content_captures": 34,
+      "decorations": 8,
+      "sample": [
+        "assets/fingerprint/image-20211028161136873-316a20dbea70.png",
+        "assets/fingerprint/image-20211028161359383-2ab17e862427.png",
+        "assets/fingerprint/image-20211028162622904-09eac19382ab.png",
+        "assets/fingerprint/image-20211028164536029-3ad9289d73f8.png"
+      ]
+    },
+    {
+      "box": "object",
+      "unique_content_captures": 33,
+      "decorations": 4,
+      "sample": [
+        "assets/object/image-20220226165134417-333f909c6f45.png",
+        "assets/object/image-20220226165731219-85acbded8d50.png",
+        "assets/object/image-20220226165955672-534d4ee9a6b1.png",
+        "assets/object/image-20220227062407251-59f112bd0523.png"
+      ]
+    },
+    {
+      "box": "search",
+      "unique_content_captures": 31,
+      "decorations": 8,
+      "sample": [
+        "assets/search/image-20211116175949465-8a17d122c96c.png",
+        "assets/search/image-20211116180041099-5c8acff5f858.webp",
+        "assets/search/image-20211116180117960-77b08466c19f.png",
+        "assets/search/image-20211116221652379-3c3f84cd0e9c.webp"
+      ]
+    },
+    {
+      "box": "writer",
+      "unique_content_captures": 31,
+      "decorations": 8,
+      "sample": [
+        "assets/writer/image-20210904045955772-f32c8a0889de.png",
+        "assets/writer/image-20210904050222226-64c3adc7b65b.png",
+        "assets/writer/image-20210904051600396-91efabd7e76a.webp",
+        "assets/writer/image-20210904053030686-5311a20eff28.webp"
+      ]
+    },
+    {
+      "box": "anubis",
+      "unique_content_captures": 30,
+      "decorations": 9,
+      "sample": [
+        "assets/anubis/image-20220121182147737-890df59c9646.webp",
+        "assets/anubis/image-20220121182412980-6447b99f9a52.png",
+        "assets/anubis/image-20220122062603551-00183458a3c3.webp",
+        "assets/anubis/image-20220122062702284-a066f85e25b1.png"
+      ]
+    },
+    {
+      "box": "clicker",
+      "unique_content_captures": 28,
+      "decorations": 8,
+      "sample": [
+        "assets/clicker/image-20240125075933307-06065a11c9e6.png",
+        "assets/clicker/image-20240125080056217-0ec58d64da99.webp",
+        "assets/clicker/image-20240125091819416-8ba0f5a77ceb.webp",
+        "assets/clicker/image-20240125093756372-59fae588fd34.webp"
+      ]
+    },
+    {
+      "box": "mentor",
+      "unique_content_captures": 27,
+      "decorations": 7,
+      "sample": [
+        "assets/mentor/image-20230228112827012-886c20f34b3c.png",
+        "assets/mentor/image-20230228113011580-671f8201875e.png",
+        "assets/mentor/image-20230228153614477-85e14cc04fe2.webp",
+        "assets/mentor/image-20230228162308308-5543c753d89c.png"
+      ]
+    },
+    {
+      "box": "seventeen",
+      "unique_content_captures": 27,
+      "decorations": 8,
+      "sample": [
+        "assets/seventeen/image-20220503164410659-94234f66826d.png",
+        "assets/seventeen/image-20220503170416911-9554f935c86e.webp",
+        "assets/seventeen/image-20220503170458860-71969feb0f21.webp",
+        "assets/seventeen/image-20220503170711054-18e808f82cb2.webp"
+      ]
+    },
+    {
+      "box": "brainfuck",
+      "unique_content_captures": 26,
+      "decorations": 7,
+      "sample": [
+        "assets/brainfuck/image-20220511205416314-1581adb3699b.png",
+        "assets/brainfuck/image-20220511210428221-568afeaa26e3.png",
+        "assets/brainfuck/image-20220511210955982-e6594f46c85a.png",
+        "assets/brainfuck/image-20220512075119269-678c8157ebb6.webp"
+      ]
+    },
+    {
+      "box": "intentions",
+      "unique_content_captures": 25,
+      "decorations": 10,
+      "sample": [
+        "assets/intentions/image-20230914133954040-314da02e67b8.webp",
+        "assets/intentions/image-20230914134703031-3adb15836cb5.webp",
+        "assets/intentions/image-20230914141439421-47e2ba057cc7.png",
+        "assets/intentions/image-20230914141832915-436dd161a593.png"
+      ]
+    },
+    {
+      "box": "book",
+      "unique_content_captures": 24,
+      "decorations": 7,
+      "sample": [
+        "assets/book/image-20200225110857515-dbb553c25f43.png",
+        "assets/book/image-20200225110945917-ab949bcf41b7.png",
+        "assets/book/image-20200225111026234-3e8a03b96319.webp",
+        "assets/book/image-20200225111057627-098189510468.webp"
+      ]
+    },
+    {
+      "box": "cerberus",
+      "unique_content_captures": 24,
+      "decorations": 10,
+      "sample": [
+        "assets/cerberus/image-20230322060753076-14ffc3b15330.png",
+        "assets/cerberus/image-20230322061526163-094bba99b23b.png",
+        "assets/cerberus/image-20230322062318808-387cd1f84c08.webp",
+        "assets/cerberus/image-20230322062549882-3befbdf6a8a4.webp"
+      ]
+    },
+    {
+      "box": "usage",
+      "unique_content_captures": 24,
+      "decorations": 8,
+      "sample": [
+        "assets/usage/image-20240712134051382-91bfe723a156.png",
+        "assets/usage/image-20240712134630963-342dd0026fdf.png",
+        "assets/usage/image-20240712134725465-f7a580bff3da.png",
+        "assets/usage/image-20240712134942746-a71c42a06a05.webp"
+      ]
+    },
+    {
+      "box": "soccer",
+      "unique_content_captures": 23,
+      "decorations": 8,
+      "sample": [
+        "assets/soccer/image-20230604134858470-dc0382a9d1a4.png",
+        "assets/soccer/image-20230604135245436-8b0ba6b2b988.png",
+        "assets/soccer/image-20230604140005575-2dbb56ec550d.webp",
+        "assets/soccer/image-20230604142515207-13c84f006a0a.png"
+      ]
+    },
+    {
+      "box": "editor",
+      "unique_content_captures": 22,
+      "decorations": 10,
+      "sample": [
+        "assets/editor/image-20250809071436791-026d54842ccb.png",
+        "assets/editor/image-20250809072647962-a5f7787db03f.png",
+        "assets/editor/image-20250809072746867-218d4c45e40a.webp",
+        "assets/editor/image-20250809072838022-088a2c2360a4.webp"
+      ]
+    },
+    {
+      "box": "pivotapi",
+      "unique_content_captures": 22,
+      "decorations": 9,
+      "sample": [
+        "assets/pivotapi/image-20210212105835607-171d15fbf54a.webp",
+        "assets/pivotapi/image-20210212124906614-60218b32eea2.webp",
+        "assets/pivotapi/image-20210212125833689-2e347b205fae.webp",
+        "assets/pivotapi/image-20210212125942210-3ce338f23b25.png"
+      ]
+    },
+    {
+      "box": "popcorn",
+      "unique_content_captures": 22,
+      "decorations": 7,
+      "sample": [
+        "assets/popcorn/image-20200621114758759-392aa1be2914.png",
+        "assets/popcorn/image-20200621114938644-a357fd8a28f1.png",
+        "assets/popcorn/image-20200621115424749-3f2046a58b38.webp",
+        "assets/popcorn/image-20200621115845409-511fc75d15fd.png"
+      ]
+    },
+    {
+      "box": "builder",
+      "unique_content_captures": 21,
+      "decorations": 5,
+      "sample": [
+        "assets/builder/image-20240209132202670-9e4fb50370f9.png",
+        "assets/builder/image-20240209132627823-ef84dbd0f92b.png",
+        "assets/builder/image-20240209132705558-30f4d6fb9da8.webp",
+        "assets/builder/image-20240209171545905-4c2532593f65.webp"
+      ]
+    },
+    {
+      "box": "breadcrumbs",
+      "unique_content_captures": 20,
+      "decorations": 8,
+      "sample": [
+        "assets/breadcrumbs/image-20210202094715255-342373b349f4.png",
+        "assets/breadcrumbs/image-20210202094756237-cb43eaa29314.png",
+        "assets/breadcrumbs/image-20210202095457991-475186b1475d.webp",
+        "assets/breadcrumbs/image-20210202095520505-53b5d3fd4a40.png"
+      ]
+    },
+    {
+      "box": "cozyhosting",
+      "unique_content_captures": 20,
+      "decorations": 8,
+      "sample": [
+        "assets/cozyhosting/image-20240226190405235-4a943824f5b2.webp",
+        "assets/cozyhosting/image-20240227062335313-0e9cff0c5a5f.png",
+        "assets/cozyhosting/image-20240227064238510-14b60bdd767b.webp",
+        "assets/cozyhosting/image-20240227064410252-2cb4569efd9f.webp"
+      ]
+    },
+    {
+      "box": "love",
+      "unique_content_captures": 20,
+      "decorations": 8,
+      "sample": [
+        "assets/love/image-20210720203033238-5c4331812be0.webp",
+        "assets/love/image-20210720203317276-7833acaf187d.webp",
+        "assets/love/image-20210720203645843-a882bddeffe8.webp",
+        "assets/love/image-20210720203839317-6593426b4752.png"
+      ]
+    },
+    {
+      "box": "shibboleth",
+      "unique_content_captures": 19,
+      "decorations": 9,
+      "sample": [
+        "assets/shibboleth/image-20220330210643070-9b3b3d3bb5e3.png",
+        "assets/shibboleth/image-20220330211059288-1eb4e8ce11b5.webp",
+        "assets/shibboleth/image-20220330211542781-6997ea65c74d.webp",
+        "assets/shibboleth/image-20220330211820391-2197f5ce445d.png"
+      ]
+    },
+    {
+      "box": "absolute",
+      "unique_content_captures": 18,
+      "decorations": 8,
+      "sample": [
+        "assets/absolute/image-20230521125137159-772d4f3d2a2f.png",
+        "assets/absolute/image-20230521125805708-1c6ca32c4db7.webp",
+        "assets/absolute/image-20230522132556877-61321167451d.png",
+        "assets/absolute/image-20230522153157773-0ed548313c7c.webp"
+      ]
+    },
+    {
+      "box": "paper",
+      "unique_content_captures": 18,
+      "decorations": 8,
+      "sample": [
+        "assets/paper/image-20220604163635047-e886dbf834dc.png",
+        "assets/paper/image-20220605113210026-9dd9f7d5af45.png",
+        "assets/paper/image-20220605113359028-591f3a61eb43.webp",
+        "assets/paper/image-20220605113813775-4d697ca0db7d.png"
+      ]
+    },
+    {
+      "box": "seal",
+      "unique_content_captures": 18,
+      "decorations": 7,
+      "sample": [
+        "assets/seal/image-20210903152853888-ad4cc56852ed.png",
+        "assets/seal/image-20210903153437593-0554b348a0c9.png",
+        "assets/seal/image-20210903154004678-14fe2a87cc1d.png",
+        "assets/seal/image-20210903154900217-3438ba768d4a.webp"
+      ]
+    },
+    {
+      "box": "sink",
+      "unique_content_captures": 18,
+      "decorations": 8,
+      "sample": [
+        "assets/sink/image-20210122093135169-0f5d7defe26d.webp",
+        "assets/sink/image-20210122093243599-181755eb08c7.png",
+        "assets/sink/image-20210122093259295-1cb0efaf0077.png",
+        "assets/sink/image-20210122093558592-73359724c00d.png"
+      ]
+    },
+    {
+      "box": "updown",
+      "unique_content_captures": 18,
+      "decorations": 7,
+      "sample": [
+        "assets/updown/image-20230114161833935-25336af31098.webp",
+        "assets/updown/image-20230114163335051-65677b500e3e.png",
+        "assets/updown/image-20230114163429610-541b60b2ffaf.png",
+        "assets/updown/image-20230114165002047-4e3cc00293ca.webp"
+      ]
+    },
+    {
+      "box": "aero",
+      "unique_content_captures": 17,
+      "decorations": 5,
+      "sample": [
+        "assets/aero/image-20230926081003612-089d34c3084a.png",
+        "assets/aero/image-20230926081129731-10638e329e4b.png",
+        "assets/aero/image-20230926082127878-139888b954d3.png",
+        "assets/aero/image-20230926084529399-696facdbacfb.png"
+      ]
+    },
+    {
+      "box": "delivery",
+      "unique_content_captures": 17,
+      "decorations": 8,
+      "sample": [
+        "assets/delivery/image-20210106154413236-5994685e8468.webp",
+        "assets/delivery/image-20210106154548581-d93aa7712901.webp",
+        "assets/delivery/image-20210106161636820-eb86310249e6.png",
+        "assets/delivery/image-20210106162055815-8bed6fbbe7b1.png"
+      ]
+    },
+    {
+      "box": "haze",
+      "unique_content_captures": 17,
+      "decorations": 9,
+      "sample": [
+        "assets/haze/image-20250623134355318-3f01d8daefb9.webp",
+        "assets/haze/image-20250623181537355-1f65d44b182d.png",
+        "assets/haze/image-20250623181700881-6800f485c75f.png",
+        "assets/haze/image-20250623202623231-83139a2a2da6.png"
+      ]
+    },
+    {
+      "box": "jeeves",
+      "unique_content_captures": 17,
+      "decorations": 8,
+      "sample": [
+        "assets/jeeves/image-20220412175239965-118ad3ae648a.png",
+        "assets/jeeves/image-20220412175426757-2a9eb71ef2a7.png",
+        "assets/jeeves/image-20220412180522711-141aff501659.png",
+        "assets/jeeves/image-20220412191421029-9ad9f16f7e18.webp"
+      ]
+    },
+    {
+      "box": "nest",
+      "unique_content_captures": 17,
+      "decorations": 7,
+      "sample": [
+        "assets/nest/image-20200605150337111-04a4818c05b4.png",
+        "assets/nest/image-20200605150818789-47ea58ddde81.png",
+        "assets/nest/image-20200605153348120-03fe1d9da79a.png",
+        "assets/nest/image-20200605153711984-39029e9cd592.webp"
+      ]
+    },
+    {
+      "box": "nineveh",
+      "unique_content_captures": 17,
+      "decorations": 8,
+      "sample": [
+        "assets/nineveh/image-20200411052327387-77fdd0beb524.webp",
+        "assets/nineveh/image-20200411052553834-780882474eaf.webp",
+        "assets/nineveh/image-20200411052620519-9e4775175b1f.webp",
+        "assets/nineveh/image-20200411052716506-c7085f801262.png"
+      ]
+    }
+  ]
+}

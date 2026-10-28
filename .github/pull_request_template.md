@@ -53,7 +53,8 @@ Product Build Next work is not complete while its output is only a disconnected 
 For re-mining artifacts, run:
 
 ```bash
-node tools/validate-live-integration-done-gate.js data/product-hardening/<artifact>.js
+node tools/build-packs.js && node tools/gap-report.js --check && node tools/move-lint.js --check && node tools/lint-study.js --check
+node tools/verify-parser-corpus.js && node tools/verify-replay-goldens.js && node tools/verify-all-20-mined.js
 ```
 
 ## Tests

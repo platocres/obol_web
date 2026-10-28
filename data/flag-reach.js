@@ -101,6 +101,12 @@
     "rootFlag": true,
     "domain": null
   },
+  "p623": {
+    "foothold": true,
+    "userFlag": true,
+    "rootFlag": true,
+    "domain": null
+  },
   "p873": {
     "foothold": true,
     "userFlag": true,
@@ -126,6 +132,12 @@
     "domain": null
   },
   "p3389": {
+    "foothold": true,
+    "userFlag": true,
+    "rootFlag": true,
+    "domain": null
+  },
+  "p3690": {
     "foothold": true,
     "userFlag": true,
     "rootFlag": true,
@@ -161,6 +173,12 @@
     "rootFlag": true,
     "domain": null
   },
+  "p6667": {
+    "foothold": true,
+    "userFlag": true,
+    "rootFlag": true,
+    "domain": null
+  },
   "p1099": {
     "foothold": true,
     "userFlag": true,
@@ -179,7 +197,19 @@
     "rootFlag": true,
     "domain": null
   },
+  "p8089": {
+    "foothold": true,
+    "userFlag": true,
+    "rootFlag": true,
+    "domain": null
+  },
   "p10000": {
+    "foothold": true,
+    "userFlag": true,
+    "rootFlag": true,
+    "domain": null
+  },
+  "p10050": {
     "foothold": true,
     "userFlag": true,
     "rootFlag": true,

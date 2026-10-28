@@ -85,7 +85,9 @@
     if (Object.keys(hostSet).length === 1) h = 'host:' + observedHost(ws, Object.keys(hostSet)[0]);
     var domain = '';
     var dm = reSearch(C._DOMAIN_RE, text);
-    if (dm) {
+    var nm = reSearch(C._NAME_RE, text);
+    var isWorkgroup = !!(dm && nm && dm[1].trim().toLowerCase() === nm[1].trim().toLowerCase()) || !!(dm && /^workgroup$/i.test(dm[1].trim()));
+    if (dm && !isWorkgroup) {
       domain = dm[1].trim();
       if (domain && domain !== 'None' && domain !== '-') {
         _add(facts, mkFact('ad.domain_known', 'domain:' + domain, { name: domain }, S, source));
@@ -94,9 +96,8 @@
       } else { domain = ''; }
     }
     if (!multiHost) {
-      var nm = reSearch(C._NAME_RE, text);
       if (nm) _add(facts, mkFact('host.hostname', h, { name: nm[1].trim() }, S, source));
-      if (nm || domain) {
+      if (!isWorkgroup && (nm || domain)) {
         var value = { host: h.slice(5) };
         if (nm) value.name = nm[1].trim();
         if (domain) value.domain = domain;
@@ -126,11 +127,12 @@
       if (proto === 'winrm' || proto === 'rdp' || proto === 'wmi' || proto === 'mssql') C._add_os_observation(facts, lineWs, source, 'windows', line.trim(), (proto === 'winrm' || proto === 'wmi') ? 'high' : 'medium', 'nxc', proto === 'winrm' || proto === 'wmi');
       if (multiHost) {
         var ldm = reSearch(C._DOMAIN_RE, line);
-        var ldom = (ldm && ldm[1].trim() && ldm[1].trim() !== 'None' && ldm[1].trim() !== '-') ? ldm[1].trim() : '';
-        if (ldom) _add(facts, mkFact('host.domain', lh, { domain: ldom }, S, source));
         var lnm = reSearch(C._NAME_RE, line);
+        var lIsWorkgroup = !!(ldm && lnm && ldm[1].trim().toLowerCase() === lnm[1].trim().toLowerCase()) || !!(ldm && /^workgroup$/i.test(ldm[1].trim()));
+        var ldom = (!lIsWorkgroup && ldm && ldm[1].trim() && ldm[1].trim() !== 'None' && ldm[1].trim() !== '-') ? ldm[1].trim() : '';
+        if (ldom) _add(facts, mkFact('host.domain', lh, { domain: ldom }, S, source));
         if (lnm) _add(facts, mkFact('host.hostname', lh, { name: lnm[1].trim() }, S, source));
-        if (lnm || ldom) {
+        if (!lIsWorkgroup && (lnm || ldom)) {
           var lval = { host: lineHost };
           if (lnm) lval.name = lnm[1].trim();
           if (ldom) lval.domain = ldom;
@@ -154,22 +156,28 @@
 
   function _parse_nxc_smb_session(text, ws, command, source, facts) {
     var h = 'host:' + ws.target;
-    var anonymousCommand = command.indexOf("-u ''") >= 0 || command.indexOf('-u ""') >= 0;
-    var guestCommand = /\s-u\s+guest\b/i.test(command);
-    var hasNamedUser = /\s-u\s+(?!''\b|""\b|guest\b)\S+/i.test(command || '');
+    var cmdHay = (command || '') + ' ' + (source || '') + '\n' + (text || '');
+    var anonymousCommand = cmdHay.indexOf("-u ''") >= 0 || cmdHay.indexOf('-u ""') >= 0;
+    var guestCommand = /\s-u\s+['"]?guest['"]?\b/i.test(cmdHay) || /^\s*SMB\s+.*\[[+-]\].*\\guest:/im.test(text);
+    var hasNamedUser = /\s-u\s+(?!''\b|""\b|['"]?guest['"]?\b)\S+/i.test(cmdHay)
+      || /^\s*SMB\s+.*\[[+-]\]\s*(?:[^\\\s]+\\)?(?!guest\b|anonymous\b)[A-Za-z0-9._$-]+:/im.test(text);
     var gotSession = false;
-    if (!hasNamedUser && /\(Null Auth:True\)/i.test(text)) { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source)); gotSession = true; }
+    if (!hasNamedUser && !guestCommand && /\(Null Auth:True\)/i.test(text)) { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source)); gotSession = true; }
     text.split(/\r?\n/).forEach(function (line) {
       if (!/^\s*SMB\s+/i.test(line) || line.indexOf('[+]') < 0) return;
       var auth = line.split('[+]')[1].trim();
-      var credPart = auth.replace(/(?:\s+\([^)]*\))+\s*$/, '').trim();
+      var credPart = auth.replace(/(?:[ \t]+\([^)\r\n]*\))+[ \t]*$/, '').trim();
       var isGuest = guestCommand || /\(guest\)/i.test(auth) || /^(?:[^\\]+\\)?guest:/i.test(credPart);
       var isAnon = !isGuest && (anonymousCommand || /\(null auth:true\)/i.test(auth) || /^(?:[^\\]*\\)?(?:anonymous)?:$/i.test(credPart) || credPart === '');
       if (isGuest) { _add(facts, mkFact('smb.guest_session', h, { tool: 'nxc' }, S, source)); gotSession = true; }
       if (isAnon) { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc' }, S, source)); gotSession = true; }
     });
-    if (anonymousCommand && !gotSession && /^\s*SMB\s+.*\[-\].*(?:STATUS_ACCESS_DENIED|STATUS_LOGON_FAILURE)/im.test(text)) {
+    var isSamrAnonProbe = /--(?:rid-brute|users|groups|local-groups|loggedon-users|sessions)\b|\b(?:samr|lsarpc|enumdomusers|lookupnames|querydispinfo|Error enumerating\s+(?:domain\s+)?(?:users|groups)|(?:LSAD|SAMR)\s+SessionError)\b/i.test(cmdHay) && !/--shares\b/i.test(cmdHay);
+    if (anonymousCommand && !gotSession && !isSamrAnonProbe && /^\s*SMB\s+.*\[-\].*(?:STATUS_ACCESS_DENIED|STATUS_LOGON_FAILURE)/im.test(text)) {
       _add(facts, mkFact('blocker.smb_null_denied', h, { tool: 'nxc' }, S, source));
+    }
+    if (anonymousCommand && isSamrAnonProbe && /(?:STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED)/i.test(text)) {
+      _add(facts, mkFact('blocker.samr_null_denied', h, { tool: 'samr-anon', stage: 'authorization' }, S, source));
     }
   }
   C._parse_nxc_smb_session = _parse_nxc_smb_session;
@@ -310,14 +318,43 @@
   }
   C._parse_kerbrute = _parse_kerbrute;
 
-  var _LOOT_NAME_HINTS = ['password', 'passwд', 'passwd', 'cred', 'secret', 'unattend', 'sysprep', 'web.config', 'connection', 'id_rsa', 'id_ed25519', '.ppk', '.kdbx', '.key', 'vnc', 'vpn', '.bak', 'backup', '.ntds', 'ntds.dit', 'sam', '.vmdk', '.ovpn', 'notes', 'todo', 'database', 'db-connection', '.pfx', '.ps1', 'groups.xml', 'scheduledtasks.xml', 'services.xml', 'datasources.xml', 'cpassword'];
+  var _LOOT_NAME_HINTS = ['password', 'passw', 'passwd', 'cred', 'secret', 'unattend', 'sysprep', 'web.config', 'connection', 'id_rsa', 'id_ed25519', '.ppk', '.kdbx', '.key', 'vnc', 'vpn', '.bak', 'backup', '.ntds', 'ntds.dit', 'sam', '.vmdk', '.ovpn', 'notes', 'todo', 'database', 'db-connection', '.pfx', '.ps1', 'groups.xml', 'scheduledtasks.xml', 'services.xml', 'datasources.xml', 'cpassword'];
   var _SMBMAP_FILE_RE = /^\s*fr[-rwxd]{8}\s+(?<size>\d+)\s+\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4}\s+(?<name>.+?)\s*$/m;
   var _SMBMAP_SECTION_RE = /^\s*\.\\(?<path>[^*\r\n]*)\*\s*$/m;
+  // Interactive smbclient "smb: \>" ls/dir listing row:  name  ATTR  size  Day Mon DD HH:MM:SS YYYY
+  var _SMB_LS_ROW_RE = /^[ \t]+(?<name>\S(?:[^\r\n]*?\S)?)[ \t]+(?<attr>[DAHSRNCETI]+)\s+(?<size>\d+)\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4}\s*$/i;
+  // smbclient ls footer, e.g. "64607 blocks of size 4096. 20590 blocks available"
+  var _SMB_LS_FOOTER_RE = /\d+\s+blocks of size\s+\d+\.\s+\d+\s+blocks available/i;
 
   function _looks_sensitive(name) {
     var low = name.toLowerCase();
     return _LOOT_NAME_HINTS.some(function (hh) { return low.indexOf(hh) >= 0; });
   }
+
+  // Shared loot.files minting for any file/directory enumeration (SMB share spider or on-host
+  // shell listing). files[] = [{ share, path, size }]; `via` records the source shape so evidence
+  // surfaces can tell an SMB-share spider from a native dir/Get-ChildItem listing.
+  function _emit_file_loot(facts, h, files, tool, via, text, ws, source) {
+    if (!files || !files.length) return;
+    function nameOf(f) {
+      var path = String(f.path).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      var share = String(f.share || '').replace(/^\/+|\/+$/g, '');
+      if (!share || path.indexOf(share + '/') === 0 || path === share) return path;
+      return share + '/' + path;
+    }
+    var names = C.uniqueSortedCI(files.map(nameOf));
+    var sensitive = C.uniqueSortedCI(names.filter(_looks_sensitive));
+    _add(facts, mkFact('loot.files', h, { files: names, count: names.length, tool: tool, entries: files, sensitive: sensitive, via: via }, S, source));
+
+    var gppFiles = names.filter(function (n) { return /groups\.xml|scheduledtasks\.xml|services\.xml|datasources\.xml/i.test(n); });
+    if (gppFiles.length) {
+      _add(facts, mkFact('config.review', h, { kind: 'gpp_xml', files: gppFiles }, S, source));
+    }
+    if (text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) {
+      _parse_gpp_artifacts(text, ws, source, facts);
+    }
+  }
+  C._emit_file_loot = _emit_file_loot;
 
   function _parse_share_inventory(text, ws, command, source, facts) {
     var h = 'host:' + ws.target, files = [];
@@ -360,27 +397,181 @@
         files.push({ share: '', path: cleanPath, size: match[2] });
       }
     }
+    if (!files.length) {
+      // Interactive smbclient "smb: \>" ls/dir directory listing.
+      var lsRows = [], sawDotEntries = false;
+      text.split(/\r?\n/).forEach(function (line) {
+        var rm = _SMB_LS_ROW_RE.exec(line);
+        if (!rm) return;
+        var nm = rm.groups.name.trim();
+        if (nm === '.' || nm === '..') { sawDotEntries = true; return; }
+        if (!nm) return;
+        lsRows.push({ share: '', path: nm, size: rm.groups.size });
+      });
+      // Require a confident signal that this is a real listing: the blocks-of-size footer, the
+      // "." / ".." self entries smbclient always prints, at least two file rows, or an explicit
+      // interactive `smbclient ls/dir <file>` command.
+      if (lsRows.length && (_SMB_LS_FOOTER_RE.test(text) || sawDotEntries || lsRows.length >= 2 || /^smbclient\s+(?:ls|dir)\b/i.test(command))) {
+        files = lsRows;
+      }
+    }
+    if (!files.length && /stream:\s*\[/i.test(text)) {
+      var adsRe = /^\s*stream:\s*\[(:[^:\]\r\n]+:\$DATA)\],\s*(\d+)\s+bytes/gim, adsM;
+      var altFile = (/altname:\s*([^\r\n]+)/i.exec(text) || [])[1] || 'stream';
+      while ((adsM = adsRe.exec(text)) !== null) {
+        files.push({ share: '', path: altFile.trim() + adsM[1], size: adsM[2] });
+      }
+    }
     if (!files.length) return;
-    function nameOf(f) {
-      var path = String(f.path).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-      var share = String(f.share).replace(/^\/+|\/+$/g, '');
-      if (!share || path.indexOf(share + '/') === 0 || path === share) return path;
-      return share + '/' + path;
-    }
-    var names = C.uniqueSortedCI(files.map(nameOf));
-    var sensitive = C.uniqueSortedCI(names.filter(_looks_sensitive));
     var tool = command.toLowerCase().indexOf('spider_plus') >= 0 ? 'spider_plus' : (command.toLowerCase().indexOf('smbmap') >= 0 ? 'smbmap' : 'smbclient');
-    _add(facts, mkFact('loot.files', h, { files: names, count: names.length, tool: tool, entries: files, sensitive: sensitive, via: 'smb-share' }, S, source));
-
-    var gppFiles = names.filter(function (n) { return /groups\.xml|scheduledtasks\.xml|services\.xml|datasources\.xml/i.test(n); });
-    if (gppFiles.length) {
-      _add(facts, mkFact('config.review', h, { kind: 'gpp_xml', files: gppFiles }, S, source));
-    }
-    if (text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) {
-      _parse_gpp_artifacts(text, ws, source, facts);
-    }
+    _emit_file_loot(facts, h, files, tool, 'smb-share', text, ws, source);
   }
   C._parse_share_inventory = _parse_share_inventory;
+
+  // Native on-host directory listings. Two formats, often pasted with no tool token on the unit
+  // command (just "dir" / "ls" / "gci"):
+  //   cmd.exe  dir:   " Directory of C:\path"  then  "MM/DD/YYYY  HH:MM AM   <size|<DIR>>   name"
+  //   PowerShell Get-ChildItem / ls / Invoke-Command { ls }:  "    Directory: C:\path"  then a
+  //     "Mode  LastWriteTime  Length Name [PSComputerName]" table with "-a---  M/D/YYYY  H:MM  LEN name" rows.
+  // Each file's path is anchored to the "Directory of/Directory:" header above it, so loot.files
+  // records full host paths. Rows are only taken after the matching header is seen, so a stray date
+  // line or a bare "-a---" fragment never mints on its own.
+  var _WIN_DIR_HDR_LINE_RE = /^\s*Directory of\s+(?<path>.+?)\s*$/i;
+  var _WIN_DIR_ROW_RE = /^\s*(?<date>\d{1,2}\/\d{1,2}\/\d{4})\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
+  var _PS_DIR_HDR_LINE_RE = /^\s*Directory:\s+(?<path>.+?)\s*$/i;
+  var _PS_LS_HEADER_RE = /^\s*Mode\s+LastWriteTime\s+Length\s+Name(?<pscol>\s+PSComputerName)?\s*$/i;
+  var _PS_LS_ROW_RE = /^\s*(?<mode>[-dalrhscetn]{4,7})\s+\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?<len>\d+)?\s+(?<rest>\S.*?)\s*$/i;
+
+  function _fs_join(dir, name) {
+    if (!dir) return name;
+    return dir.replace(/[\\/]+$/, '') + '\\' + name;
+  }
+
+  function _parse_fs_listing(text, ws, command, source, facts) {
+    var h = 'host:' + ws.target;
+    var cmdFiles = [], psFiles = [], psHasCol = false;
+    var curPath = '', mode = null;
+    text.split(/\r?\n/).forEach(function (line) {
+      var winHdr = _WIN_DIR_HDR_LINE_RE.exec(line);
+      if (winHdr) { curPath = winHdr.groups.path.trim(); mode = 'cmd'; return; }
+      var psHdr = _PS_DIR_HDR_LINE_RE.exec(line);
+      if (psHdr) { curPath = psHdr.groups.path.trim(); mode = 'ps'; return; }
+      var psColHdr = _PS_LS_HEADER_RE.exec(line);
+      if (psColHdr) { mode = 'ps'; psHasCol = psHasCol || !!psColHdr.groups.pscol; return; }
+      if (mode === 'cmd') {
+        var wr = _WIN_DIR_ROW_RE.exec(line);
+        if (wr) {
+          var wn = wr.groups.name.trim();
+          if (wn && wn !== '.' && wn !== '..') {
+            cmdFiles.push({ share: '', path: _fs_join(curPath, wn), size: wr.groups.size === '<DIR>' ? '' : wr.groups.size.replace(/,/g, '') });
+          }
+          return;
+        }
+      }
+      if (mode === 'ps') {
+        var pr = _PS_LS_ROW_RE.exec(line);
+        if (pr) {
+          var rest = pr.groups.rest;
+          var pn = (psHasCol ? rest.split(/\s{2,}/)[0] : rest).trim();
+          if (pn && pn !== '.' && pn !== '..') {
+            psFiles.push({ share: '', path: _fs_join(curPath, pn), size: pr.groups.len || '' });
+          }
+        }
+      }
+    });
+    if (cmdFiles.length) _emit_file_loot(facts, h, cmdFiles, 'dir', 'shell-listing', text, ws, source);
+    if (psFiles.length) _emit_file_loot(facts, h, psFiles, psHasCol ? 'invoke-command' : 'powershell', 'shell-listing', text, ws, source);
+  }
+  C._parse_fs_listing = _parse_fs_listing;
+
+  // ── Confirmed file transfer / tool staged onto the host (outcome axis) ─────────────
+  // A download or copy that OBOL can PROVE landed: certutil URLCache, wget "... saved [n/n]",
+  // scp "name  100% ...", bitsadmin "Transfer complete", or a Windows "N file(s) copied". Mints a
+  // terminal host.tool_staged receipt (the host. prefix makes it a report fact, not a move gate) so a
+  // staged linpeas/nc/chisel is acknowledged instead of minting nothing. Each branch needs a tool-
+  // appropriate SUCCESS token, so a failed or in-progress transfer mints nothing, and certutil arg
+  // errors stay with blocker.certutil_usage. curl -O / Invoke-WebRequest -OutFile are intentionally
+  // left out: their success is silent (no positive token), and a bare "100" meter row collides with
+  // web-enum output, so recognizing them would cost a false positive.
+  var _TRANSFER_WGET_OK_RE = /(?:^|\s)['"]?(?<f>[^\s'"]+)['"]?\s+saved\s+\[\d/im;
+  var _TRANSFER_SAVING_RE = /^\s*Saving to:\s*['"]?(?<f>[^'"\r\n]+?)['"]?\s*$/im;
+  var _TRANSFER_SCP_RE = /^[ \t]*(?<f>\S[^\r\n]{0,200}?)[ \t]+100%[ \t]+[\d.]+[ \t]*[KMGT]?B?\b/im;
+  var _TRANSFER_CERTUTIL_OK_RE = /CertUtil:\s*-\w[\w-]*\s*command completed successfully/i;
+  var _TRANSFER_BITS_OK_RE = /\bTransfer\s+complete\b/i;
+  var _TRANSFER_COPY_OK_RE = /^\s*\d+\s+file\(s\)\s+copied\b/im;
+
+  function _staged_basename(s) { return (s || '').trim().replace(/[`'"]/g, '').replace(/^.*[\\/]/, ''); }
+  function _staged_name(command, text, tool) {
+    var m;
+    if (tool === 'wget' && (m = _TRANSFER_WGET_OK_RE.exec(text)) && m.groups.f) return _staged_basename(m.groups.f);
+    if ((m = _TRANSFER_SAVING_RE.exec(text)) && m.groups.f) return _staged_basename(m.groups.f);
+    if (tool === 'scp' && (m = _TRANSFER_SCP_RE.exec(text)) && m.groups.f) return _staged_basename(m.groups.f);
+    if ((m = /\s-(?:O|o|OutFile)\s+['"]?([^\s'"]+)/i.exec(command || ''))) return _staged_basename(m[1]);
+    if ((m = /https?:\/\/[^\s'"]+\/([^\/\s'"?#]+)/i.exec(command || ''))) return _staged_basename(m[1]);
+    var toks = (command || '').trim().split(/\s+/).filter(function (t) { return t && t.charAt(0) !== '-' && !/^https?:/i.test(t) && !/[@:]/.test(t); });
+    if (!toks.length) return '';
+    var rawLast = toks[toks.length - 1] || '';
+    var isTrailingDir = /[\\/]$/.test(rawLast) || rawLast === '.' || rawLast === '..';
+    var last = isTrailingDir ? '' : _staged_basename(rawLast);
+    if (last && last !== '.' && last !== '..') return last;
+    return toks.length >= 2 ? _staged_basename(toks[toks.length - 2]) : '';
+  }
+
+  function _parse_transfer_success(text, ws, command, source, facts) {
+    var lc = (command || '').toLowerCase();
+    var tool = '', ok = false, via = 'download';
+    if ((/\bcertutil\b/.test(lc) && /\burlcache\b/.test(lc)) || (!lc && _TRANSFER_CERTUTIL_OK_RE.test(text))) { tool = 'certutil'; ok = _TRANSFER_CERTUTIL_OK_RE.test(text); }
+    else if (/\bwget\b/.test(lc) || (!lc && _TRANSFER_WGET_OK_RE.test(text))) { tool = 'wget'; ok = _TRANSFER_WGET_OK_RE.test(text); }
+    else if (/\bscp\b/.test(lc)) { tool = 'scp'; via = 'scp'; ok = _TRANSFER_SCP_RE.test(text); }
+    else if (/\bbitsadmin\b/.test(lc)) { tool = 'bitsadmin'; ok = _TRANSFER_BITS_OK_RE.test(text); }
+    else if (/\b(?:copy|xcopy)\b/.test(lc) || (!lc && _TRANSFER_COPY_OK_RE.test(text))) { tool = 'copy'; via = 'copy'; ok = _TRANSFER_COPY_OK_RE.test(text); }
+    else if (/\bsmbclient\b/.test(lc) || /putting file\s+\S+\s+as\s+\\/i.test(text)) { tool = 'smbclient'; via = 'smb-put'; ok = /putting file\s+\S+\s+as\s+\S+/i.test(text); }
+    else if (/\b(?:mssqlclient|upload)\b/.test(lc) && /\[\+\]\s*Upload completed\b/i.test(text)) { tool = 'mssqlclient'; via = 'mssql-upload'; ok = true; }
+    if (!tool || !ok) return;
+    var h = 'host:' + ws.target;
+    _add(facts, mkFact('host.tool_staged', h, { file: _staged_name(command, text, tool), tool: tool, via: via }, S, source));
+  }
+  C._parse_transfer_success = _parse_transfer_success;
+
+  // Raw rpcclient SID/name resolution and single-object detail dumps that enum4linux-ng/nxc never
+  // relabel to the (SidTypeUser)/user:[x] rid:[y] shapes _rid_usernames already catches. These are
+  // the interactive residue of an rpcclient $> session (or a RID-cycling loop): lookupsids prints
+  // "<SID> <DOMAIN>\<name> (<type>)", lookupnames prints "<name> <SID> (<Label>: <type>)", queryuser
+  // prints "User Name : <name>", querygroup prints "Group Name : <name>". The SID_NAME_USE type tells
+  // user (1) from group (2 group / 4 alias / 5 well-known), so resolved accounts feed ad.user_list
+  // (the sprayable/roastable pivot) and resolved groups feed ad.group_list. *unknown* resolutions and
+  // NT_STATUS_NONE_MAPPED failures carry no name and mint nothing.
+  function _rpc_resolution(text) {
+    var usersMap = {}, groupsMap = {};
+    function addUser(n) { n = C._clean_username(String(n || '').trim()); if (C._valid_username(n, false)) usersMap[n] = true; }
+    function addGroup(n) {
+      n = String(n || '').trim();
+      if (n && n !== '(null)' && !/\*unknown\*/i.test(n) && !/^\$[A-Z0-9]{6}-[A-Z0-9]{12}$/i.test(n)) groupsMap[n] = true;
+    }
+    // lookupsids: "S-1-5-21-...-RID DOMAIN\name (type)". type 1 = user, 2/4/5 = group.
+    reAll(/^[ \t]*S-1-5-[0-9-]+\s+(?<dom>[^\\\s()]+)\\(?<name>[^()\r\n]+?)\s+\((?<type>\d{1,2})\)[ \t]*$/gim, text).forEach(function (m) {
+      var dom = m.groups.dom || '', name = (m.groups.name || '').trim(), t = parseInt(m.groups.type, 10);
+      if (/\*unknown\*/i.test(dom) || /\*unknown\*/i.test(name)) return;
+      if (t === 1) addUser(name);
+      else if (t === 2 || t === 4 || t === 5) addGroup(name);
+    });
+    // lookupnames: "name S-1-...-RID (Label: type)". Label names the SID_NAME_USE class.
+    reAll(/^[ \t]*(?<name>\S[^\r\n]{0,120}?)[ \t]+S-1-[0-9-]+[ \t]+\((?<label>[A-Za-z ]+):\s*\d{1,2}\)[ \t]*$/gim, text).forEach(function (m) {
+      var name = (m.groups.name || '').trim(), label = (m.groups.label || '').trim().toLowerCase();
+      if (/\*unknown\*/i.test(name)) return;
+      if (label === 'user') addUser(name);
+      else if (/group|alias/.test(label)) addGroup(name);
+    });
+    // queryuser / querygroup single-object detail dumps.
+    reAll(/^[ \t]*User Name\s*:\s*(?<name>[A-Za-z0-9._$-]+)[ \t]*$/gim, text).forEach(function (qu) {
+      if (qu.groups && qu.groups.name) addUser(qu.groups.name);
+    });
+    reAll(/^[ \t]*Group Name\s*:\s*(?<name>[^\r\n]+?)[ \t]*$/gim, text).forEach(function (qg) {
+      if (qg.groups && qg.groups.name) addGroup(qg.groups.name);
+    });
+    return { users: Object.keys(usersMap), groups: Object.keys(groupsMap) };
+  }
+  C._rpc_resolution = _rpc_resolution;
 
   function _parse_rid_user_list(text, ws, source, facts, opts) {
     opts = opts || {};
@@ -406,6 +597,18 @@
     }
     if (/\[\+\]\s*Appears to be (?:root\/parent|child) DC/i.test(text)) {
       _add(facts, mkFact('ad.dc_candidate', h, { name: (nbMatch && nbMatch[1]) ? nbMatch[1].trim() : ws.target }, S, source));
+    }
+    if (/\bWk\s+Sv\s+PDC\b|\bNT\s+Domain\s+Controller\b/i.test(text)) {
+      _add(facts, mkFact('ad.dc_candidate', h, { host: ws.target, via: 'rpcclient-srvinfo' }, S, source));
+      _add(facts, mkFact('smb.reachable', h, { port: 445, tool: 'rpcclient' }, S, source));
+      var srvCmd = String((opts && opts.command) || source || '');
+      if (/(?:^|\s)-U\s*(?:''|""|%)(?:\s|$)|\s-N\b/i.test(srvCmd)) {
+        _add(facts, mkFact('smb.null_session', h, { tool: 'rpcclient' }, S, source));
+      }
+    }
+    var rpcOsVerM = /platform_id\s*:\s*500[\s\S]{1,80}?os version\s*:\s*(\d+\.\d+)/i.exec(text);
+    if (rpcOsVerM && C._add_os_observation) {
+      C._add_os_observation(facts, ws, source, 'windows', 'Windows NT ' + rpcOsVerM[1] + ' (rpcclient srvinfo)', 'high', 'rpcclient', true);
     }
     if (/\[\+\]\s*LDAP is accessible on 389\/tcp/i.test(text)) {
       _add(facts, mkFact('ldap.reachable', h, { port: 389, tool: 'enum4linux-ng' }, S, source));
@@ -456,11 +659,13 @@
         }
       }
     });
+    var res = _rpc_resolution(text);
     var groupsMap = {};
     reAll(/^\s+groupname:\s*['"]?([^'"\r\n]+?)['"]?\s*$|\bgroup:\[(?<grp>[^\]]+)\]\s+rid:\[/gim, text).forEach(function (gm) {
       var gName = String((gm.groups && gm.groups.grp) || gm[1] || '').trim();
       if (gName && gName !== '(null)' && !/^\$[A-Z0-9]{6}-[A-Z0-9]{12}$/i.test(gName)) groupsMap[gName] = true;
     });
+    res.groups.forEach(function (g) { groupsMap[g] = true; });
     var groups = C.uniqueSortedCI(Object.keys(groupsMap));
     if (groups.length) {
       _add(facts, mkFact('ad.group_list', domScope, { groups: groups, count: groups.length, method: 'smb-rid' }, S, source));
@@ -480,8 +685,28 @@
         complexity: cplxM ? (cplxM[1].toLowerCase() === 'true') : null
       }, S, source));
     }
-    var users = C._rid_usernames(text);
-    if (!users.length) return;
+    var pwResetM = /Password changed for user\s+([A-Za-z0-9_.-]+)[\s\S]{1,120}?password reset to\s+(\S+?)\.?\s*$/im.exec(text);
+    if (pwResetM && C._valid_username(pwResetM[1], false) && C._valid_password(pwResetM[2]) && C._add_plaintext_credential) {
+      C._add_plaintext_credential(facts, ws, source, pwResetM[1], pwResetM[2], C._domain_from_facts(ws), 'rpcclient', '');
+    }
+    var users = C.uniqueSortedCI(C._rid_usernames(text).concat(res.users));
+    if (!users.length && /\bquerygroupmem\b/i.test((opts && opts.command) || source || '') && /rid:\[0x1f4\]/i.test(text)) {
+      users = ['Administrator'];
+    }
+    if (!users.length && /\b(?:nxc|netexec|crackmapexec|cme)\b[\s\S]*?(?:--rid-brute|--users)\b[\s\S]*?\|/i.test((opts && opts.command) || source || '')) {
+      var pipeLines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      if (pipeLines.length >= 2 && pipeLines.every(function (l) { return !/\s/.test(l) && C._valid_username(l, true); })) {
+        users = C.uniqueSortedCI(pipeLines);
+      }
+    }
+    if (!users.length) {
+      var ridCmd = String((opts && opts.command) || source || '') + '\n' + String(text || '');
+      var isAnonSamr = /(?:^|\s)-(?:u|U)\s*(?:''|""|%)(?:\s|$)/i.test(ridCmd) || /Server allows authentication via username ''/i.test(text);
+      if (isAnonSamr && /NT_STATUS_ACCESS_DENIED|STATUS_ACCESS_DENIED|\bCould not get users via\b/i.test(text)) {
+        _add(facts, mkFact('blocker.samr_null_denied', h, { tool: 'samr-anon', stage: 'authorization' }, S, source));
+      }
+      return;
+    }
     var ulVal = { users: users, count: users.length, method: 'smb-rid' };
     if (asrepUsers.length) ulVal.asrep_users = asrepUsers;
     _add(facts, mkFact('ad.user_list', domScope, ulVal, S, source));
@@ -492,7 +717,7 @@
     if (!facts.some(function (f) { return f.kind === 'host.os_family'; })) C._add_os_from_text(text, ws, source, facts, 'smb', 'medium', true);
     var dns = C.uniqueSortedCI(reAll(C._BASE_DN_RE, text).map(function (m) { return m[1]; }));
     if (!dns.length) {
-      var dnMatches = reAll(/^dn:\s*.*?\b(DC=[A-Za-z0-9_-]+(?:\s*,\s*DC=[A-Za-z0-9_-]+)+)\s*$/im, text);
+      var dnMatches = reAll(/^\s*(?:distinguishedName|dn)\s*:\s*.*?\b(DC=[A-Za-z0-9_-]+(?:\s*,\s*DC=[A-Za-z0-9_-]+)+)\s*$/im, text);
       dns = C.uniqueSortedCI(dnMatches.map(function (m) { return m[1].replace(/\s+/g, ''); }));
     }
     dns.forEach(function (baseDn) {
@@ -512,23 +737,56 @@
 
   function _parse_smb_shares(text, ws, source, facts) {
     if (!facts.some(function (f) { return f.kind === 'host.os_family'; })) C._add_os_from_text(text, ws, source, facts, 'smb', 'medium', true);
-    var shares = [], seen = {};
+    var shares = [], byName = {};
     function addShare(name, permission, shareType, readable) {
       name = name.trim();
       if (!name || C._SHARE_HEADER_WORDS.has(name.toLowerCase()) || name[0] === '[') return;
       if (!/^[A-Za-z0-9_$.-]{2,}$/.test(name)) return;
-      var key = name.toUpperCase() + '|' + (permission || '').toUpperCase() + '|' + (shareType || '').toUpperCase();
-      if (seen[key]) return;
-      seen[key] = true;
+      var uName = name.toUpperCase();
+      var existing = byName[uName];
+      if (existing) {
+        if (permission && (!existing.permission || existing.permission === 'NO ACCESS')) existing.permission = permission;
+        if (shareType && !existing.type) existing.type = shareType;
+        if (readable !== undefined && readable !== null && (existing.readable === undefined || readable === true)) existing.readable = readable;
+        return;
+      }
       var row = { name: name };
       if (permission) row.permission = permission;
       if (shareType) row.type = shareType;
       if (readable !== undefined && readable !== null) row.readable = readable;
+      byName[uName] = row;
       shares.push(row);
     }
+    var e4lTestingShare = '', e4lYamlShare = '';
     text.split(/\r?\n/).forEach(function (raw) {
       var line = raw.trim();
       if (!line) return;
+      var e4lTestM = /^\[\*\]\s*Testing share\s+([A-Za-z0-9_$.-]+)\s*$/i.exec(line);
+      if (e4lTestM) { e4lTestingShare = e4lTestM[1]; return; }
+      if (e4lTestingShare) {
+        var mapM = /^\[\+\]\s*Mapping:\s*(OK|DENIED)(?:,\s*Listing:\s*(OK|DENIED|N\/A))?/i.exec(line);
+        if (mapM) {
+          var mapOk = mapM[1].toUpperCase() === 'OK';
+          var listSt = (mapM[2] || '').toUpperCase();
+          var isRead = mapOk && (listSt === 'OK' || (listSt === 'N/A' && /^IPC\$$/i.test(e4lTestingShare)));
+          addShare(e4lTestingShare, isRead ? 'READ' : (mapOk ? 'READ' : 'NO ACCESS'), '', listSt === 'OK');
+          e4lTestingShare = '';
+          return;
+        }
+        if (/^\[-\]\s*Could not connect:/i.test(line)) {
+          addShare(e4lTestingShare, 'NO ACCESS', '', false);
+          e4lTestingShare = '';
+          return;
+        }
+      }
+      var yamlShM = /^ {2}([A-Za-z0-9_$.-]{2,}):\s*$/.exec(raw);
+      if (yamlShM) { e4lYamlShare = yamlShM[1]; return; }
+      if (e4lYamlShare && /^ {4}type:\s*(Disk|IPC|Printer)\b/i.test(raw)) {
+        var ytM = /^ {4}type:\s*(Disk|IPC|Printer)\b/i.exec(raw);
+        addShare(e4lYamlShare, '', ytM[1]);
+        e4lYamlShare = '';
+        return;
+      }
       if (/^SMB\s+/i.test(line)) {
         var parts = line.split(/\s+/);
         if (parts.length < 6) return;
@@ -541,13 +799,25 @@
       var sm = /^([A-Za-z0-9_$.-]{2,})\s+(READ\s*ONLY|WRITE\s*ONLY|READ\s*,\s*WRITE|WRITE\s*,\s*READ|NO\s+ACCESS)(?:\s+(.*))?$/i.exec(line);
       if (sm) {
         var sp = sm[2].toUpperCase().replace(/\s+/g, ' ');
-        var normP = sp === 'READ ONLY' ? 'READ' : (sp === 'WRITE ONLY' ? 'WRITE' : sp.replace(/\s*,\s*/, ','));
+        var normP = sp === 'READ ONLY' ? 'READ' : (sp === 'WRITE ONLY' ? 'WRITE' : (sp.indexOf(',') >= 0 ? sp.replace(/[ \t]*,[ \t]*/, ',') : sp));
         addShare(sm[1], normP, '', normP.indexOf('READ') >= 0);
         return;
       }
       var p2 = line.split(/\s+/);
       if (p2.length >= 2 && ['Disk', 'IPC', 'Printer'].indexOf(p2[1]) >= 0) addShare(p2[0], '', p2[1]);
     });
+    if (!shares.length && /-L\b/.test(String(source || '')) && /^(?:ADMIN\$|C\$|IPC\$|SYSVOL|NETLOGON)\s*$/im.test(text)) {
+      text.split(/\r?\n/).forEach(function (raw) {
+        var s = raw.trim();
+        if (s && !/\s/.test(s)) addShare(s, '', 'Disk');
+      });
+    }
+    if (/Anonymous login successful/i.test(text)) {
+      _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbclient' }, S, source));
+      _add(facts, mkFact('smb.null_session', 'host:' + ws.target, { tool: 'smbclient' }, S, source));
+    } else if (/\[\+\]\s*(?:(?:User\s+)?SMB session establish|IP:\s*\d+\.\d+\.\d+\.\d+:445\b)/i.test(text)) {
+      _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbmap' }, S, source));
+    }
     if (shares.length) {
       _add(facts, mkFact('smb.shares', 'host:' + ws.target, { shares: shares, count: shares.length }, S, source));
 
@@ -731,8 +1001,9 @@
   C._parse_gpp_decrypted = _parse_gpp_decrypted;
 
   function _unwrap_rubeus_roast(text) {
-    return String(text || '').replace(/(\$(?:krb5tgs|krb5asrep)\$[^\r\n]+)(?:\r?\n[ \t]+([0-9a-fA-F*$]+))+/g, function (m) {
-      return m.replace(/\r?\n[ \t]+/g, '');
+    var s = C._unwrap_kerberos_hashes ? C._unwrap_kerberos_hashes(text) : String(text || '');
+    return s.replace(/(\$(?:krb5tgs|krb5asrep)\$[^\r\n]+)(?:\r?\n[ \t]*([0-9a-fA-F*$]+))+/g, function (m) {
+      return m.replace(/\r?\n[ \t]*/g, '');
     });
   }
 
@@ -827,7 +1098,7 @@
   C._parse_tgs_hashes = _parse_tgs_hashes;
 
   function _parse_auth_material(auth) {
-    auth = auth.replace(/(?:\s+\([^)]*\))+\s*$/, '').trim();
+    auth = auth.replace(/(?:[ \t]+\([^)\r\n]*\))+[ \t]*$/, '').trim();
     var m = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$@-]+):(?<secret>[^\r\n]*)$/.exec(auth);
     if (!m) return ['', '', ''];
     var user = m.groups.user, domain = (m.groups.domain || '').trim();
@@ -908,7 +1179,7 @@
       var ctx = (ws && ws.context) || {};
       var service = row ? row[1].toLowerCase() : String(ctx.service || '');
       var auth = row ? row[4] : line;
-      var parsed = _parse_auth_material(auth.replace(/\s+STATUS_[A-Z_]+.*$/i, ''));
+      var parsed = _parse_auth_material(auth.replace(/[ \t]+STATUS_[A-Z_]+[^\r\n]*$/i, ''));
       var value = { reason: '', service: service };
       if (parsed[1]) value.user = parsed[1];
       if (parsed[0]) value.domain = parsed[0];
@@ -938,7 +1209,7 @@
         if (!re.test(line)) return;
         var row = /^\s*(SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(\S+)\s+\d+\s+\S+\s+(?:\[[-*]\]\s*)?(.*)$/i.exec(line);
         var lineWs = row ? Object.assign({}, ws, { target: observedHost(ws, row[2]), observedTarget: row[2] }) : ws;
-        var parsed = _parse_auth_material(row ? row[3].replace(/\s+STATUS_[A-Z_]+.*$/i, '') : '');
+        var parsed = _parse_auth_material(row ? row[3].replace(/[ \t]+STATUS_[A-Z_]+[^\r\n]*$/i, '') : '');
         var value = { tool: tool || 'auth', stage: stage || 'authentication', service: row ? row[1].toLowerCase() : (((ws || {}).context || {}).service || '') };
         if (parsed[1]) value.user = parsed[1];
         if (parsed[0]) value.domain = parsed[0];
@@ -948,48 +1219,65 @@
         _add(facts, mkFact(kind, 'host:' + lineWs.target, value, S, source));
       });
     }
-    if (/STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i.test(t))
-      add('blocker.password_change', /STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|password must (?:be )?change|must change (?:your )?password|password has expired/i);
+    if (/STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|KDC_ERR_KEY_EXPIRED|0xc0000224|0xc0000071|\bdata\s+(?:532|773)\b|password must (?:be )?change|must change (?:your )?password|password has expired/i.test(t))
+      add('blocker.password_change', /STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED|KDC_ERR_KEY_EXPIRED|0xc0000224|0xc0000071|\bdata\s+(?:532|773)\b|password must (?:be )?change|must change (?:your )?password|password has expired/i);
     if (/KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i.test(t))
       add('blocker.clock_skew', /KRB_AP_ERR_SKEW|clock skew too great|kerberos[^\n]*\bskew\b|time difference too large/i, 'auth', 'environment');
     // An NTLM refusal does not establish whether the credential is valid.
-    if (/STATUS_NOT_SUPPORTED/i.test(t) && /\b(smb|ldap|nxc|SMBv|NTLM)\b/i.test(t))
-      add('blocker.ntlm_disabled', /STATUS_NOT_SUPPORTED/i, 'auth', 'environment');
-    if (/STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i.test(t))
-      add('blocker.lockout', /STATUS_ACCOUNT_LOCKED_OUT|account (?:is |has been )?locked out|lockoutThreshold reached/i);
-    if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i.test(t))
-      add('blocker.account_restricted', /STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS/i);
+    if (/NT_STATUS_NOT_SUPPORTED|STATUS_NTLMPASSWORD_DISABLED|0xc00000bb|StrongerAuthRequired|NTLM[^\r\n]*disabled/i.test(t) || (/STATUS_NOT_SUPPORTED/i.test(t) && /\b(smb|ldap|nxc|SMBv|NTLM)\b/i.test(t)))
+      add('blocker.ntlm_disabled', /(?:NT_)?STATUS_NOT_SUPPORTED|STATUS_NTLMPASSWORD_DISABLED|0xc00000bb|StrongerAuthRequired|NTLM[^\r\n]*disabled/i, 'auth', 'environment');
+    if (/STATUS_ACCOUNT_LOCKED_OUT|KDC_ERR_CLIENT_REVOKED|0xc0000234|\bdata\s+775\b|account (?:is |has been )?locked out|lockoutThreshold reached/i.test(t))
+      add('blocker.lockout', /STATUS_ACCOUNT_LOCKED_OUT|KDC_ERR_CLIENT_REVOKED|0xc0000234|\bdata\s+775\b|account (?:is |has been )?locked out|lockoutThreshold reached/i);
+    if (/STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS|STATUS_INVALID_WORKSTATION|0xc000006e|0xc000006f|0xc0000070|0xc0000072|0xc000015b|0xc0000193|\bdata\s+(?:530|531|533|701)\b/i.test(t))
+      add('blocker.account_restricted', /STATUS_ACCOUNT_DISABLED|STATUS_ACCOUNT_RESTRICTION|STATUS_LOGON_TYPE_NOT_GRANTED|STATUS_ACCOUNT_EXPIRED|STATUS_INVALID_LOGON_HOURS|STATUS_INVALID_WORKSTATION|0xc000006e|0xc000006f|0xc0000070|0xc0000072|0xc000015b|0xc0000193|\bdata\s+(?:530|531|533|701)\b/i);
     // An LDAP WRITE denied (bloodyAD/dacledit `insufficientAccessRights` when granting DCSync, setting an
     // owner, or adding a group member) right after you GRANTED yourself that right is the classic AD wall:
     // the right exists but your CURRENT session's token predates it, so re-authenticate and retry. Keyed on
     // the LDAP-modify signature (insufficientAccessRights), not a bare ACCESS_DENIED, so it never fires on
     // the NTDS replication denial (rpc_s_access_denied), which has its own grant-first field note.
-    if (/insufficientAccessRights|insufficient access rights/i.test(t))
-      add('blocker.acl_reauth', /insufficientAccessRights|insufficient access rights/i, 'ldap', 'authorization');
+    if (/insufficientAccessRights|insufficient[ _]access[ _]rights|INSUFFICIENT_ACCESS_RIGHTS|INSUFF_ACCESS_RIGHTS|dsid-03152|ERROR_DS_DRA_ACCESS_DENIED/i.test(t))
+      add('blocker.acl_reauth', /insufficientAccessRights|insufficient[ _]access[ _]rights|INSUFFICIENT_ACCESS_RIGHTS|INSUFF_ACCESS_RIGHTS|dsid-03152|ERROR_DS_DRA_ACCESS_DENIED/i, 'ldap', 'authorization');
   }
   C._parse_auth_blockers = _parse_auth_blockers;
 
   function _parse_evil_winrm(text, ws, command, source, facts) {
     var low = text.toLowerCase();
-    if (low.indexOf('winrmauthorizationerror') >= 0 || low.indexOf('winrmhttptransporterror') >= 0 || /\b401\b/.test(text) || low.indexOf('unauthorized') >= 0) return;
+    if (low.indexOf('winrmauthorizationerror') >= 0) {
+      _add(facts, mkFact('blocker.logon_failure', 'host:' + ws.target, { tool: 'evil-winrm', service: 'winrm' }, S, source));
+      return;
+    }
+    if (low.indexOf('winrmhttptransporterror') >= 0 || /\b401\b/.test(text) || low.indexOf('unauthorized') >= 0) return;
     if (!reSearch(C._EW_PROMPT_RE, text)) return;
     var h = 'host:' + ws.target;
     var user = C._command_arg(command, ['-u', '--user', '--username']);
+    if (!user) {
+      var pm = /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?:\\|>)/i.exec(text);
+      if (pm && pm[1] && !/^(Public|Default|All Users)$/i.test(pm[1])) user = pm[1];
+    }
     var password = C._command_arg(command, ['-p', '--password']);
     var nthash = C._nt_hash(C._command_arg(command, ['-H', '--hash']));
     var domain = C._command_arg(command, ['-r', '--realm', '-d', '--domain']);
+    var isAdminPrompt = /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\Users\\Administrator(?:\\|>)/i.test(text);
     var value = { service: 'winrm', tool: 'evil-winrm', proof: 'interactive-prompt' };
     if (user) value.user = C._clean_username(user);
+    else if (isAdminPrompt) value.user = 'Administrator';
+    var isAdmin = isAdminPrompt || /^administrator$/i.test(String(value.user || ''));
+    if (isAdmin) value.admin = true;
     if (nthash) value.nthash = nthash; else if (password) value.password = password;
     if (domain) value.domain = domain;
     value = _auth_observation(ws, value);
     _add(facts, mkFact('winrm.authenticated', h, value, S, source));
     _add(facts, mkFact('foothold.windows', h, value, S, source));
+    _add(facts, mkFact('access.shell', h, { service: 'winrm', tool: 'evil-winrm', user: value.user || '' }, S, source));
+    _add(facts, mkFact('access.desktop', h, { session: 'evil-winrm', user: value.user || '', admin: isAdmin }, S, source));
     // An evil-winrm shell proves the credential works here, so it is validated.
+    var observed = Object.assign({}, value, { outcome: 'accepted' });
+    delete observed.password; delete observed.nthash;
     if (value.user) {
-      var observed = Object.assign({}, value, { outcome: 'accepted' });
-      delete observed.password; delete observed.nthash;
       _add(facts, mkFact('credential.validated', h, observed, S, source));
+    }
+    if (isAdmin) {
+      _add(facts, mkFact('access.admin', h, Object.assign({}, observed, { authorizationProof: 'evil-winrm-admin' }), S, source));
     }
     C._add_os_observation(facts, ws, source, 'windows', 'evil-winrm authenticated shell', 'high', 'evil-winrm', true);
     if (user && (nthash || (password && C._valid_password(password)))) {
@@ -1005,12 +1293,16 @@
     var lowered = text.toLowerCase();
     var zips = C.uniqueSortedCI(reAll(C._BH_ZIP_RE, text).map(function (m) { return m[0]; }));
     var jsons = C.uniqueSortedCI(reAll(C._BH_JSON_RE, text).map(function (m) { return m[0]; }));
-    var collected = (zips.length || jsons.length) && ['bloodhound', 'sharphound', 'compressing', 'collection', 'saved'].some(function (mk) { return lowered.indexOf(mk) >= 0; });
+    var infoDone = /INFO:\s*Done in \d+M \d+S/i.test(text) || (/INFO:\s*Found AD domain:/i.test(text) && /INFO:\s*Found \d+ (?:users|computers|domains|trusts)/i.test(text) && !/Traceback \(most recent call last\)/i.test(text));
+    var collected = ((zips.length || jsons.length) && ['bloodhound', 'sharphound', 'compressing', 'collection', 'saved'].some(function (mk) { return lowered.indexOf(mk) >= 0; })) || infoDone;
     if (!collected) return;
+    var domM = /INFO:\s*Found AD domain:\s*([A-Za-z0-9._-]+)/i.exec(text);
+    var dom = domM ? domM[1].toLowerCase().replace(/\.$/, '') : '';
+    if (dom) _add(facts, mkFact('ad.domain_known', 'domain:' + dom, { name: dom, tool: 'bloodhound' }, S, source));
     var value = { tool: 'bloodhound' };
     if (zips.length) value.archives = zips;
     if (jsons.length) value.files = jsons;
-    _add(facts, mkFact('ad.graph.collected', C._scope_for_domain(ws), value, S, source));
+    _add(facts, mkFact('ad.graph.collected', C._scope_for_domain(ws, dom), value, S, source));
   }
   C._parse_bloodhound_collection = _parse_bloodhound_collection;
 
@@ -1079,7 +1371,8 @@
 
   function _is_ad_abuse_command(command) {
     var l = (command || '').toLowerCase();
-    return ['bloodyad', 'dacledit', 'owneredit', 'ticketer', 'addcomputer', 'impacket-rbcd', 'rbcd.py', 'impacket-getst', 'getst.py', 'impacket-gettgt', 'gettgt.py', 'gmsadumper', 'msds-managedpassword', ' ms-mcs-admpwd', ' laps', ' -m laps', 'get-adcomputer', 'get-adserviceaccount', 'rubeus', 'klist', 'kinit', 'net group', 'net localgroup', 'net rpc'].some(function (t) { return l.indexOf(t) >= 0; });
+    if (l.indexOf('net localgroup') >= 0 && l.indexOf('/domain') >= 0) return true;
+    return ['bloodyad', 'dacledit', 'owneredit', 'ticketer', 'addcomputer', 'impacket-rbcd', 'rbcd.py', 'impacket-getst', 'getst.py', 'impacket-gettgt', 'gettgt.py', 'gmsadumper', 'msds-managedpassword', ' ms-mcs-admpwd', ' laps', ' -m laps', 'get-adcomputer', 'get-adserviceaccount', 'rubeus', 'klist', 'kinit', 'net group', 'net rpc'].some(function (t) { return l.indexOf(t) >= 0; });
   }
   C._is_ad_abuse_command = _is_ad_abuse_command;
 
@@ -1119,19 +1412,19 @@
       }
       return;
     }
+    if (/\bnet\s+localgroup\b/i.test(lc) && !/\/domain\b/i.test(lc)) return;
     var abuseVerb = ['groupmember', 'set owner', 'writeowner', 'owneredit', 'genericall', 'dacledit', '-action write',
-      'add dcsync', ' dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'add computer', 'net group', 'net localgroup', 'net rpc'
-    ].some(function (k) { return lc.indexOf(k) >= 0; });
+      'add dcsync', ' dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'add computer', 'net group', 'net rpc'
+    ].some(function (k) { return lc.indexOf(k) >= 0; }) || (lc.indexOf('net localgroup') >= 0 && lc.indexOf('/domain') >= 0);
     if (lc.indexOf('get writable') >= 0 && !abuseVerb) return;
     if (/\b(?:get-adcomputer|get-adserviceaccount|get-aduser|get-adgroup|get-domaincomputer|get-netcomputer)\b/i.test(lc) && !abuseVerb) return;
     var rightsSet = {};
-    reAll(C._AD_CONTROL_RIGHT_RE, text).forEach(function (m) { rightsSet[_canonical_right(m[1])] = true; });
     var operation = '';
     if (lc.indexOf('add dcsync') >= 0 || lc.indexOf(' dcsync') >= 0 || lc.indexOf('-rights dcsync') >= 0 || lc.indexOf('rights:dcsync') >= 0 || /is now able to dcsync/i.test(text)) { operation = 'dcsync_grant'; rightsSet.DCSync = true; }
-    else if (lc.indexOf('groupmember') >= 0 || lc.indexOf('add groupmember') >= 0 || /\bnet\s+(?:group|localgroup|rpc\s+group\s+addmem)\b.*\/add\b/i.test(lc) || /\badded to (?:group\s+)?["']?[A-Za-z0-9 _-]+["']?\s*$/im.test(text)) { operation = 'group_member_write'; rightsSet.WriteMembers = true; }
+    else if (lc.indexOf('groupmember') >= 0 || lc.indexOf('add groupmember') >= 0 || /\bnet\s+(?:group|localgroup\b[^\r\n]*\/domain|rpc\s+group\s+addmem)\b.*\/add\b/i.test(lc) || /\badded to (?:group\s+)?["']?[A-Za-z0-9 _-]+["']?\s*$/im.test(text)) { operation = 'group_member_write'; rightsSet.WriteMembers = true; }
     else if (lc.indexOf('set owner') >= 0 || lc.indexOf('writeowner') >= 0 || lc.indexOf('owneredit') >= 0 || /ownersid modified successfully|current owner information below/i.test(text)) { operation = 'owner_write'; rightsSet.WriteOwner = true; }
-    else if (lc.indexOf('set password') >= 0 || /password changed successfully!/i.test(text)) { operation = 'password_reset'; rightsSet.ForceChangePassword = true; }
-    else if (lc.indexOf('genericall') >= 0 || lc.indexOf('dacledit') >= 0 || /dacl modified successfully!/i.test(text)) { operation = 'dacl_write'; rightsSet.GenericAll = true; }
+    else if (lc.indexOf('set password') >= 0 || /password changed successfully/i.test(text)) { operation = 'password_reset'; rightsSet.ForceChangePassword = true; }
+    else if (lc.indexOf('genericall') >= 0 || lc.indexOf('dacledit') >= 0 || /dacl modified successfully/i.test(text)) { operation = 'dacl_write'; rightsSet.GenericAll = true; }
     else if (lc.indexOf('rbcd') >= 0 || textLow.indexOf('msds-allowedtoact') >= 0) { operation = 'rbcd_write'; rightsSet.RBCD = true; }
 
     var evidence = [];
@@ -1139,14 +1432,17 @@
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i].trim();
       if (!line) continue;
+      if (/^\s*\[-\]|\b(?:insufficientAccessRights|insufficient_access_rights|INSUFF_ACCESS_RIGHTS|access[_ ]denied|error|failed)\b/i.test(line)) continue;
+      reAll(C._AD_CONTROL_RIGHT_RE, line).forEach(function (m) { rightsSet[_canonical_right(m[1])] = true; });
       if (reSearch(C._AD_CONTROL_RIGHT_RE, line) || reSearch(C._AD_CONTROL_SUCCESS_RE, line)) evidence.push(line.slice(0, 220));
       if (evidence.length >= 5) break;
     }
-    var opError = reSearch(/\b(error|failed|denied|unauthorized|insufficient|traceback|not recognized|access is denied|constraint|cannot|invalid)\b/i, text);
+    var explicitAbuseSuccess = /dacl modified successfully|ownersid modified successfully|password changed successfully|successfully (?:updated|changed|reset) password|is now able to dcsync|delegation rights modified successfully|msds-allowedtoactonbehalfofotheridentity modified/i.test(text);
+    var opError = reSearch(/^\s*\[-\]|\b(error|failed|denied|unauthorized|insufficient|insufficientAccessRights|insufficient_access_rights|INSUFF_ACCESS_RIGHTS|dsid-|traceback|not recognized|access is denied|constraint|cannot|invalid)\b/im, text);
     var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
     var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:|The command completed successfully)/im.test(text) || alreadyMemberRe.test(text));
-    var success = hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
-    if (opError && !hasJoinLine && !reSearch(C._AD_CONTROL_SUCCESS_RE, text) && !alreadyMemberRe.test(text)) success = false;
+    var success = explicitAbuseSuccess || hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
+    if (opError && !explicitAbuseSuccess && !hasJoinLine && !reSearch(C._AD_CONTROL_SUCCESS_RE, text) && !alreadyMemberRe.test(text)) success = false;
     if (!success) return;
 
     var successMatch = reSearch(C._AD_CONTROL_SUCCESS_RE, text);
@@ -1160,7 +1456,7 @@
         var g = '', principal = '', mj = /^joined:\s*(.+)$/i.exec(body);
         if (mj) { g = mj[1].trim(); }
         else {
-          var ma = /^(.+?)\s+added to (?:group\s+)?(.+?)\.?$/i.exec(body);
+          var ma = /^([^\r\n]{1,120}?)[ \t]+added to (?:group[ \t]+)?([^\r\n]{1,120}?)\.?$/i.exec(body);
           if (ma) { principal = ma[1].trim(); g = ma[2].trim(); }
           else { var me = /entryalreadyexists for cn=([^,\n]+)/i.exec(body); if (me) g = me[1].trim(); }
         }
@@ -1169,12 +1465,28 @@
         joins.push({ group: C.stripChars(g, "'\""), principal: C.stripChars(principal, "'\""), line: line.slice(0, 220) });
       });
       if (!joins.length) {
-        var m = /groupmember\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i.exec(command) || /\bnet\s+(?:group|localgroup)\s+(?:'([^']+)'|"([^"]+)"|(\S+))\s+(\S+)\s+\/add/i.exec(command);
-        var cg = m ? (m[1] || m[2] || m[3] || '') : '';
-        if (cg && cg.indexOf('$') < 0 && (!opError || alreadyMemberRe.test(text))) {
-          var toks = command.split(/\s+/);
-          var princ = m && m[4] ? m[4] : (toks.length ? toks[toks.length - 1] : '');
-          joins.push({ group: C.stripChars(cg, "'\""), principal: C.stripChars(princ, "'\""), line: (evidence[0] || defaultEvidence[0] || '') });
+        var gmMatches = reAll(/groupmember\s+(?:'([^']+)'|"([^"]+)"|(\S+))/gi, command || '');
+        var netMatches = reAll(/\bnet\s+(?:group|localgroup(?=[^\r\n]*\/domain))\s+(?:'([^']+)'|"([^"]+)"|(\S+))\s+(?:'([^']+)'|"([^"]+)"|(\S+))\s+\/add/gi, (command || '') + '\n' + (text || ''));
+        if (gmMatches.length) {
+          var toks = (command || '').split(/\s+/);
+          var gmPrinc = toks.length ? toks[toks.length - 1] : '';
+          gmMatches.forEach(function (m) {
+            var cg = m[1] || m[2] || m[3] || '';
+            if (cg && cg.indexOf('$') < 0 && (!opError || explicitAbuseSuccess || hasJoinLine || alreadyMemberRe.test(text))) {
+              var key = cg.toLowerCase(); if (seenJ[key]) return; seenJ[key] = true;
+              joins.push({ group: C.stripChars(cg, "'\""), principal: C.stripChars(gmPrinc, "'\""), line: (evidence[0] || defaultEvidence[0] || '') });
+            }
+          });
+        }
+        if (netMatches.length) {
+          netMatches.forEach(function (m) {
+            var cg = m[1] || m[2] || m[3] || '';
+            var princ = m[4] || m[5] || m[6] || '';
+            if (cg && cg.indexOf('$') < 0 && (!opError || explicitAbuseSuccess || hasJoinLine || alreadyMemberRe.test(text))) {
+              var key = cg.toLowerCase(); if (seenJ[key]) return; seenJ[key] = true;
+              joins.push({ group: C.stripChars(cg, "'\""), principal: C.stripChars(princ, "'\""), line: (evidence[0] || defaultEvidence[0] || '') });
+            }
+          });
         }
       }
       joins.forEach(function (j) {
@@ -1205,7 +1517,7 @@
     if (operation === 'password_reset') {
       _add(facts, mkFact('ad.acl_paths', domScope, value, S, source));
       var spm = /set\s+password\s+(?:'([^']+)'|"([^"]+)"|(\S+))\s+(?:'([^']+)'|"([^"]+)"|(\S+))/i.exec(command || '');
-      if (spm && /password changed successfully!/i.test(text) && C._add_plaintext_credential) {
+      if (spm && /password changed successfully|successfully (?:updated|changed|reset) password/i.test(text) && C._add_plaintext_credential) {
         var spUser = spm[1] || spm[2] || spm[3] || '';
         var spPass = spm[4] || spm[5] || spm[6] || '';
         C._add_plaintext_credential(facts, ws, source, spUser, spPass, C._domain_from_facts(ws), 'bloodyad-set-password', '');
@@ -1217,8 +1529,9 @@
   function _parse_added_computer(text, ws, command, source, facts) {
     var lowered = (text + '\n' + command).toLowerCase();
     if (lowered.indexOf('addcomputer') < 0 && lowered.indexOf('machine account') < 0 && lowered.indexOf('computer account') < 0) return;
-    if (/\b(error|failed|denied|constraint|already exists)\b/i.test(text)) return;
-    var success = !!reSearch(C._ADD_COMPUTER_SUCCESS_RE, text) || /\b(success|created|added)\b/i.test(text);
+    var explicitAddSuccess = !!reSearch(C._ADD_COMPUTER_SUCCESS_RE, text) || /\bsuccessfully\s+(?:added|created)\b/i.test(text);
+    if (!explicitAddSuccess && /\b(error|failed|denied|constraint|already exists)\b/i.test(text)) return;
+    var success = explicitAddSuccess || /\b(success|created|added)\b/i.test(text);
     if (!success) return;
     var name = C._command_arg(command, ['-computer-name', '--computer-name']) || '';
     var m = reSearch(C._ADD_COMPUTER_SUCCESS_RE, text);
@@ -1335,6 +1648,7 @@
     });
     creds.forEach(function (cred) {
       _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws), cred, S, source));
+      _add(facts, mkFact('ad.laps', 'host:' + cred.targetBinding, { computer: cred.computer, user: cred.user || 'Administrator', password: cred.password, via: 'laps' }, S, source));
       _add(facts, mkFact('credential.available', 'host:' + cred.targetBinding, {
         user: cred.user || 'Administrator',
         password: cred.password,
@@ -1354,23 +1668,12 @@
     opts = opts || {};
     var domain = opts.domain_hint || (ws && ws.domain) || '';
     var scope = C._scope_for_domain(ws, domain);
-    var lines = text.split(/\r?\n/);
-    var pwRegex = /(?:password\s+(?:is|set\s+to)|pwd[:=\s]+|pass[:=\s]+|password\s*[:=])\s*['"]?([^\s'"]{4,})['"]?/i;
-    var ldifUser = '';
-    lines.forEach(function (raw) {
-      var line = raw.trim();
-      if (!line || /^dn\s*:/i.test(line)) { ldifUser = ''; return; }
-      var samM = /^sAMAccountName\s*:\s*(\S+)/i.exec(line);
-      if (samM) { ldifUser = samM[1].trim(); return; }
-      var m = line.match(/(?:(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+)?([A-Za-z0-9_.-]+)\s+(?:\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2}:\d{2})?|<never>|never|none)\s+\d*\s*(.*)/i);
-      var user = '', desc = '';
-      if (m) {
-        user = m[1].trim();
-        desc = m[2].trim();
-      } else {
-        var dm = line.match(/description\s*:\s*(.*)/i);
-        if (dm) { desc = dm[1].trim(); user = ldifUser; }
-      }
+    // Unfold RFC 2849 LDIF line continuations (CRLF/LF followed by a single space or tab)
+    var unfolded = String(text || '').replace(/\r?\n[ \t]+(?=[A-Za-z0-9_!@#$%^&*()+=.,;:'"\/\\?-])/g, '');
+    var lines = unfolded.split(/\r?\n/);
+    var pwRegex = /(?:password(?:\s+for\s+[^\r\n]{1,40}?)?\s+(?:is|set\s+to)|pwd[:=\s]+|pass[:=\s]+|password\s*[:=])\s*['"]?([^\s'"]{4,})['"]?/i;
+    var ldifUser = '', pendingDesc = '', pendingLine = '';
+    function emitDesc(user, desc, evLine) {
       if (!desc) return;
       var pwm = desc.match(pwRegex);
       if (pwm) {
@@ -1380,9 +1683,39 @@
         if (user && user !== 'user') {
           _add(facts, mkFact('credential.available', scope, cred, S, source));
         }
-        _add(facts, mkFact('config.review', scope, { file: 'description', evidence: [line], note: 'Password recovered from account description' }, S, source));
+        _add(facts, mkFact('config.review', scope, { file: 'description', evidence: [evLine], note: 'Password recovered from account description' }, S, source));
+      }
+    }
+    lines.forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || /^dn\s*:/i.test(line)) {
+        if (pendingDesc) emitDesc(ldifUser, pendingDesc, pendingLine);
+        ldifUser = ''; pendingDesc = ''; pendingLine = '';
+        if (/^dn\s*:/i.test(line)) {
+          var cnM = /\b(?:CN|uid)=([^,\r\n]+)/i.exec(line);
+          if (cnM && cnM[1] && !/\s/.test(cnM[1].trim())) ldifUser = cnM[1].trim();
+        }
+        return;
+      }
+      var samM = /^sAMAccountName\s*:\s*(\S+)/i.exec(line);
+      if (samM) {
+        ldifUser = samM[1].trim();
+        if (pendingDesc) { emitDesc(ldifUser, pendingDesc, pendingLine); pendingDesc = ''; pendingLine = ''; }
+        return;
+      }
+      var m = line.match(/^(?:(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+)?([A-Za-z0-9_.-]+)[ \t]+(?:\d{4}-\d{2}-\d{2}(?:[ \t]+\d{2}:\d{2}:\d{2})?|<never>|never|none)[ \t]+\d*[ \t]*(.*)/i);
+      if (m) {
+        emitDesc(m[1].trim(), m[2].trim(), line);
+        return;
+      }
+      var dm = line.match(/^description\s*:\s*\[?(.*?)\]?\s*$/i);
+      if (dm) {
+        var dText = dm[1].replace(/\)\s*$/, '').trim();
+        if (ldifUser) emitDesc(ldifUser, dText, line);
+        else { pendingDesc = dText; pendingLine = line; }
       }
     });
+    if (pendingDesc) emitDesc(ldifUser, pendingDesc, pendingLine);
   }
   C._parse_ldap_descriptions = _parse_ldap_descriptions;
 
@@ -1391,11 +1724,75 @@
   var _RBCD_DELEG_RE = /\b(msDS-AllowedToActOnBehalfOfOtherIdentity|Resource-Based\s+Constrained)\b/i;
   var _GMSA_DISCOVER_RE = /(msDS-GroupMSAMembership|GroupManagedServiceAccount|msDS-ManagedPasswordId|\bgMSA\b)/i;
 
+  // Domain Controllers always carry TRUSTED_FOR_DELEGATION (SERVER_TRUST_ACCOUNT | TRUSTED_FOR_DELEGATION = 532480,
+  // primaryGroupID 516, OU=Domain Controllers) by Active Directory design. Only mint ad.unconstrained when a
+  // non-DC computer or user principal exhibits unconstrained delegation.
+  function _isDcOnlyUnconstrained(text, ws) {
+    var knownDc = String((ws && (ws.dc_hostname || ws.dcHost || ws.hostname)) || '').split('.')[0].toLowerCase();
+    function stanzaIsDc(block) {
+      if (/\b(?:SERVER_TRUST_ACCOUNT|OU=Domain Controllers)\b/i.test(block)) return true;
+      if (/\bprimaryGroupID:\s*516\b/i.test(block)) return true;
+      if (/\buserAccountControl:\s*(?:532480|532512)\b/i.test(block)) return true;
+      var acctM = /\b(?:sAMAccountName|cn|name):\s*([^\r\n$]+)\$?/i.exec(block);
+      if (acctM) {
+        var acct = acctM[1].trim().toLowerCase();
+        if ((knownDc && acct === knownDc) || /^dc\d*$/.test(acct)) return true;
+      }
+      return false;
+    }
+    function stanzaHasUnconstrainedUac(block) {
+      var uacM = /\buserAccountControl:\s*(\d+)\b/i.exec(block);
+      if (!uacM) return null;
+      var uac = parseInt(uacM[1], 10);
+      if (!isFinite(uac)) return null;
+      // 0x80000 = TRUSTED_FOR_DELEGATION, 0x2000 = SERVER_TRUST_ACCOUNT (Domain Controller)
+      if ((uac & 0x80000) !== 0 && (uac & 0x2000) === 0) return uacM[0].trim();
+      return null;
+    }
+    if (/^\s*dn:\s+/im.test(text)) {
+      var stanzas = String(text).split(/\r?\n\s*\r?\n/);
+      var nonDcEv = [];
+      for (var s = 0; s < stanzas.length; s++) {
+        var st = stanzas[s];
+        if (stanzaIsDc(st)) continue;
+        var m = reSearch(_UNCONSTRAINED_RE, st);
+        if (m) nonDcEv.push(C._line_for_match(st, m));
+        else {
+          var uacEv = stanzaHasUnconstrainedUac(st);
+          if (uacEv) nonDcEv.push(uacEv);
+        }
+      }
+      return nonDcEv.length ? nonDcEv : null;
+    }
+    var lines = String(text || '').split(/\r?\n/);
+    var hits = [];
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (!_UNCONSTRAINED_RE.test(ln)) continue;
+      if (/\b(?:SERVER_TRUST_ACCOUNT|OU=Domain Controllers|Domain Controller)\b/i.test(ln)) continue;
+      // Check principal token on tabular/nxc/findDelegation lines (e.g. "DC$  Server Trust Account  Unconstrained" or "DC$ (unconstrained)").
+      // Note: '$' is non-word in JS regex so do not place \b after '$'.
+      var dcTok = /\b([A-Za-z0-9._-]+)\$(?=\s|$|[),;:])/.exec(ln);
+      if (dcTok) {
+        var hostBase = dcTok[1].split('.')[0].toLowerCase();
+        if ((knownDc && hostBase === knownDc) || /^dc\d*$/.test(hostBase)) continue;
+      }
+      hits.push(ln.trim());
+    }
+    return hits.length ? hits : null;
+  }
+
   function _parse_ad_delegation_surface(text, ws, command, source, facts) {
     if (/\bget\s+writable\b/i.test(command || '') || (C._looks_like_bloodyad_writable && C._looks_like_bloodyad_writable(text))) return;
     var scope = C._scope_for_domain(ws);
-    var um = reSearch(_UNCONSTRAINED_RE, text);
-    if (um) _add(facts, mkFact('ad.unconstrained', scope, { evidence: [C._line_for_match(text, um)] }, S, source));
+    var hasUacAttr = text.indexOf('userAccountControl:') >= 0 || text.indexOf('useraccountcontrol:') >= 0;
+    var um = reSearch(_UNCONSTRAINED_RE, text) || hasUacAttr;
+    if (um) {
+      var nonDc = _isDcOnlyUnconstrained(text, ws);
+      if (nonDc && nonDc.length) {
+        _add(facts, mkFact('ad.unconstrained', scope, { evidence: nonDc.slice(0, 4) }, S, source));
+      }
+    }
     var rm = reSearch(_RBCD_DELEG_RE, text);
     if (rm) {
       _add(facts, mkFact('ad.rbcd', scope, { evidence: [C._line_for_match(text, rm)] }, S, source));
@@ -1431,6 +1828,18 @@
     'group policy creator owners': 1, 'key admins': 1, 'enterprise key admins': 1,
     'remote management users': 1, 'distributed com users': 1,
   };
+  var _BUILTIN_NOISE_GROUP_CN = {
+    'domain users': 1, 'domain guests': 1, 'guests': 1, 'users': 1, 'domain computers': 1,
+    'domain controllers': 1, 'read-only domain controllers': 1, 'enterprise read-only domain controllers': 1,
+    'pre-windows 2000 compatible access': 1, 'incoming forest trust builders': 1,
+    'windows authorization access group': 1, 'terminal server license servers': 1,
+    'allowed rodc password replication group': 1, 'denied rodc password replication group': 1,
+    'cert publishers': 1, 'ras and ias servers': 1, 'iis_iusrs': 1, 'performance monitor users': 1,
+    'performance log users': 1, 'event log readers': 1, 'cryptographic operators': 1,
+    'network configuration operators': 1, 'certificate service dcom access': 1,
+    'rds remote access servers': 1, 'rds endpoint servers': 1, 'rds management servers': 1,
+    'access control assistance operators': 1, 'cloneable domain controllers': 1, 'protected users': 1,
+  };
   var _ACL_LEAD_NOTES = {
     'exchange windows permissions':
       'you can add yourself to Exchange Windows Permissions, which holds WriteDacl over the domain '
@@ -1454,8 +1863,8 @@
 
   function _parse_bloodyad_writable(text, ws, command, source, facts) {
     if (command.toLowerCase().indexOf('get writable') < 0 && !_looks_like_bloodyad_writable(text)) return;
-    var memberT = [], daclT = [], ownerT = [], gpoT = [], rights = {}, notes = [];
-    text.split(/(?:^|\r?\n)(?=\s*distinguishedName\s*:)/i).forEach(function (block) {
+    var memberT = [], customMemberT = [], daclT = [], ownerT = [], gpoT = [], rights = {}, notes = [];
+    text.split(/(?:^|\r?\n)(?=[ \t]*distinguishedName[ \t]*:)/i).forEach(function (block) {
       var lines = block.split(/\r?\n/).map(function (l) { return l.replace(/\s+$/, ''); }).filter(function (l) { return l.trim(); });
       if (!lines.length || !/^\s*distinguishedname\s*:/i.test(lines[0])) return;
       var dn = lines[0].split(':').slice(1).join(':').trim();
@@ -1466,7 +1875,7 @@
       }
       var isDomainRoot = !!dn && dn.split(',').every(function (p) { return p.trim().toLowerCase().indexOf('dc=') === 0; });
       var isComputer = cn.charAt(cn.length - 1) === '$' || dn.indexOf(',CN=Computers,') >= 0;
-      var isUserOrObject = dn.toLowerCase().indexOf('cn=users') >= 0 || dn.toLowerCase().indexOf('ou=') >= 0;
+      var isUserOrObject = dn.toLowerCase().indexOf('cn=users') >= 0 || dn.toLowerCase().indexOf('ou=') >= 0 || dn.toLowerCase().indexOf('cn=managed service accounts') >= 0;
       if (dn.toLowerCase().indexOf('cn=policies,cn=system') >= 0
           && Object.keys(attrs).some(function (a) { return attrs[a].indexOf('WRITE') >= 0 || attrs[a].indexOf('CREATE') >= 0; })) {
         gpoT.push(cn);
@@ -1479,9 +1888,11 @@
             rights[right] = 1; memberT.push(cn);
             var note = _ACL_LEAD_NOTES[cnl];
             if (note && notes.indexOf(note) < 0) notes.push(note);
+          } else if (!isDomainRoot && !isComputer && isUserOrObject && !_BUILTIN_NOISE_GROUP_CN[cnl]) {
+            rights[right] = 1; customMemberT.push(cn);
           }
         } else if (right === 'RBCD') {
-          if (isComputer) { rights[right] = 1; ownerT.push(cn); }
+          if (isComputer || isUserOrObject) { rights[right] = 1; ownerT.push(cn); }
         } else if (right === 'ForceChangePassword' || right === 'AddKeyCredentialLink' || right === 'WriteSPN' || right === 'GenericAll') {
           if (isDomainRoot || isComputer || _ABUSABLE_GROUP_CN[cnl] || isUserOrObject) {
             rights[right] = 1;
@@ -1496,7 +1907,7 @@
     var seenG = {};
     gpoT.forEach(function (g) { if (!seenG[g]) { seenG[g] = 1; _add(facts, mkFact('ad.gpo_writable', C._scope_for_domain(ws), { gpo: g, method: 'bloodyad' }, S, source)); } });
     var seenT = {}, targets = [];
-    memberT.concat(daclT, ownerT).forEach(function (t) { if (!seenT[t]) { seenT[t] = 1; targets.push(t); } });
+    memberT.concat(customMemberT, daclT, ownerT).forEach(function (t) { if (!seenT[t]) { seenT[t] = 1; targets.push(t); } });
     var rightList = Object.keys(rights);
     if (!(rightList.length && targets.length)) return;
     if (!notes.length) notes.push('enumerated control right (lead), cash it in with the ACL-abuse move; not a granted control path yet');
@@ -1557,7 +1968,7 @@
   var _DC_RIGHT_RE = /(WriteDacl|WRITE_DACL|GenericAll|GENERIC_ALL|WriteOwner|WRITE_OWNER|\bOwns\b|GetChangesAll|Get-Changes-All|AllExtendedRights)/i;
   var _TRUSTEE_LABEL_RE = /(?:trustee|principal|identity|account)\s*[:=]\s*(.+?)\s*$/i;
   var _DC_ROOT_DN_RE = /get object\s+['"]?(?:dc=[^,'" ]+)(?:\s*,\s*dc=[^,'" ]+)+/i;
-  var _INLINE_TRUSTEE_RE = /([A-Za-z0-9.\-]+\\[A-Za-z0-9.\-_$ ]+?)\s*$/;
+  var _INLINE_TRUSTEE_RE = /(?<![A-Za-z0-9.\-])([A-Za-z0-9.\-]{1,64}\\[A-Za-z0-9.\-_$ ]{1,64}?)[ \t]*$/;
 
   function _normalize_trustee(raw) {
     var s = C.stripChars((raw || '').trim(), "'\"");
@@ -1656,8 +2067,9 @@
     if (!text) return;
     var low = text.toLowerCase();
     if (!/zerologon|cve-2020-1472|netlogon/.test(low)) return;
-    if (/not vulnerable|target is patched|is not vulnerable|attack failed|exploit failed|patched!|STATUS_ACCESS_DENIED/i.test(text)) return;
-    if (/success!|is vulnerable|target vulnerable|can be fully compromised|exploitable|performing attack.*success/i.test(low)) {
+    var hasExplicitSuccess = /success!|is vulnerable|target vulnerable|can be fully compromised|exploitable|performing attack[^\r\n]*success/i.test(low);
+    if (!hasExplicitSuccess && /not vulnerable|target is patched|is not vulnerable|attack failed|exploit failed|patched!|STATUS_ACCESS_DENIED/i.test(text)) return;
+    if (hasExplicitSuccess && !/\bis not vulnerable\b|\bnot vulnerable\b/i.test(text)) {
       _add(facts, mkFact('ad.zerologon', C._scope_for_domain(ws), { cve: 'CVE-2020-1472', vulnerable: true }, S, source));
     }
   }
@@ -1673,11 +2085,15 @@
     var hasEditfSan = /EDITF_ATTRIBUTESUBJECTALTNAME2/i.test(text);
     var hasCra = /Certificate Request Agent/i.test(text) && /(?:Template Name|Enrollment Rights)/i.test(text);
     var hasAnyPurpose = /\bAny Purpose\b/i.test(text) && /(?:Template Name|Enrollment Rights)/i.test(text);
+    var mcaM = /^\s*(?:ManageCertificates|ManageCA)\s*:\s*([^\r\n]+)/im.exec(text);
+    var hasEsc7Perm = !!(mcaM && !/^(?:BUILTIN\\Administrators|[^\\\r\n]+\\(?:Domain Admins|Enterprise Admins|Administrators))\s*$/i.test(mcaM[1].trim()));
     if (hasEnrolleeSubject && !escs.ESC1) { escs.ESC1 = 1; order.push('ESC1'); }
     if (hasAnyPurpose && !escs.ESC2) { escs.ESC2 = 1; order.push('ESC2'); }
     if (hasCra && !escs.ESC3) { escs.ESC3 = 1; order.push('ESC3'); }
     if (hasEditfSan && !escs.ESC6) { escs.ESC6 = 1; order.push('ESC6'); }
-    var vulnWord = /\[!\]\s*vulnerabilit|is vulnerable to|vulnerable (?:certificates? )?templates|ESC\d/i.test(text) || hasEnrolleeSubject || hasEditfSan;
+    if (hasEsc7Perm && !escs.ESC7) { escs.ESC7 = 1; order.push('ESC7'); }
+    var noVulnTemplates = /\b(?:no|0)\s+vulnerable\s+(?:certificates?\s+)?templates?\b|\bnot\s+vulnerable\b/i.test(text);
+    var vulnWord = ((/\[!\]\s*vulnerabilit|is vulnerable to|vulnerable (?:certificates? )?templates|ESC\d/i.test(text) && !noVulnTemplates) || hasEnrolleeSubject || hasEditfSan || hasEsc7Perm);
     if (order.length || vulnWord) {
       var cas = C.uniqueSortedCI(reAll(/\b(?:CA Name|Enterprise CA Name)["']?\s*:\s*["']?([^\n\r"',]{1,64})/gi, text).map(function (x) { return (x[1] || '').trim(); }).filter(Boolean));
       var sections = text.split(/(?=\bTemplate Name["']?\s*:)/i);
@@ -1695,13 +2111,27 @@
       var tmpls = vulnTmpls.length
         ? C.uniqueSortedCI(vulnTmpls)
         : C.uniqueSortedCI(reAll(/\b(?:Template Name|Template)["']?\s*:\s*["']?([^\n\r"',]{1,64})/gi, text).map(function (x) { return (x[1] || '').trim(); }).filter(Boolean));
-      var adcsVal = { esc: order.slice(0, 16), templates: tmpls.slice(0, 10) };
-      if (cas.length) { adcsVal.ca = cas[0]; adcsVal.cas = cas.slice(0, 10); }
+      var adcsVal = { esc: order.slice(0, 16), templates: tmpls.slice(0, 200) };
+      if (cas.length) { adcsVal.ca = cas[0]; adcsVal.cas = cas.slice(0, 100); }
       _add(facts, mkFact('adcs.vulnerable', C._scope_for_domain(ws), adcsVal, S, source));
     }
     var pfx = reSearch(/Saved (?:certificate and private key|PFX)[^\n]*?(?:to|at)\s*'?([^\s'"]+\.pfx)'?/i, text) ||
-      reSearch(/'?([A-Za-z0-9_.-]+\.pfx)'?\s*(?:saved|written)/i, text);
-    if (pfx) _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: pfx[1], files: [pfx[1]], via: /pywhisker/i.test(command) ? 'shadow-credentials' : 'adcs' }, S, source));
+      reSearch(/(?:^|[\s'"])([A-Za-z0-9_.-]{1,120}\.pfx)'?[ \t]*(?:saved|written)/i, text) ||
+      reSearch(/\[\*\]\s*Writing (?:private key|certificate[^\r\n]*)\s+to\s+'([^']+)'/i, text);
+    if (pfx) {
+      _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: pfx[1], files: [pfx[1]], via: /pywhisker/i.test(command) ? 'shadow-credentials' : 'adcs' }, S, source));
+    } else if (/\[\*\]\s*Successfully requested certificate\b/i.test(text)) {
+      var upnM = /Got certificate with UPN\s+'([^']+)'/i.exec(text) || /(?:^|\s)-upn\s+['"]?([^\s'"]+)/i.exec(command || '');
+      var certFile = upnM ? (upnM[1].split('@')[0].toLowerCase() + '.pfx') : 'requested.pfx';
+      _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: certFile, files: [certFile], via: 'adcs' }, S, source));
+    }
+    var modM = /\[\*\]\s*Successfully (?:updated|added officer|enabled|issued certificate)(?:\s+for|\s+template)?\s*(?:'([^']+)')?/i.exec(text);
+    if (!modM && /\[\*\]\s*Updating certificate template\s*(?:'([^']+)')?/i.test(text) && !/\b(?:error|denied|insufficient|failed)\b/i.test(text)) {
+      modM = /\[\*\]\s*Updating certificate template\s*(?:'([^']+)')?/i.exec(text);
+    }
+    if (modM) {
+      _add(facts, mkFact('ad.control_paths', C._scope_for_domain(ws), { right: 'ADCSModify', target: modM[1] || 'adcs', method: 'certipy' }, S, source));
+    }
   }
   C._parse_adcs = _parse_adcs;
 
@@ -1717,9 +2147,15 @@
       var domain = rawUser.indexOf('@') >= 0 ? rawUser.split('@')[1] : (rawUser.indexOf('\\') >= 0 ? rawUser.split('\\')[0] : ((ws && ws.domainSeed) || ''));
       _add(facts, mkFact('hash.ntlm', C._scope_for_domain(ws, domain), { nthash: nthash, user: cleanUser, via: 'certipy-auth' }, S, source));
       _add(facts, mkFact('credential.available', C._scope_for_domain(ws, domain), { user: cleanUser, nthash: nthash, domain: domain, kind: 'cert_auth_nt_hash', via: 'certipy-auth' }, S, source));
+      if (/^administrator$/i.test(cleanUser) && (/-pfx\b/i.test(command || '') || /Got TGT|Saved credential cache|Trying to get TGT|Using principal/i.test(text))) {
+        _add(facts, mkFact('access.admin', 'host:' + ws.target, { user: cleanUser, domain: domain, via: 'certipy-auth' }, S, source));
+      }
       // A recovered account hash does not establish administrative authorization.
     } else if (/Got TGT|Saved credential cache|\.ccache/i.test(text)) {
       _add(facts, mkFact('credential.available', C._scope_for_domain(ws), { kind: 'cert_auth_tgt', via: 'certipy-auth' }, S, source));
+      if (/\badministrator\b/i.test(text + ' ' + (command || ''))) {
+        _add(facts, mkFact('access.admin', 'host:' + ws.target, { user: 'Administrator', via: 'certipy-auth' }, S, source));
+      }
     }
   }
 
@@ -1757,12 +2193,12 @@
 
   // LAPS read: a recovered local-admin password from ms-MCS-AdmPwd (legacy LAPS)
   // or msLAPS-Password (Windows LAPS). Grounded in the NetExec source and real
-  // Forest output. SUCCESS shapes:
+  // domain controller output. SUCCESS shapes:
   //   - nxc -M laps highlight: "Computer:<name> User:<user> Password:<cleartext>"
   //     (NetExec nxc/modules/laps.py: f"Computer:{sAMAccountName} User:{user:<15} Password:{password}")
   //   - ldapsearch / Get-ADComputer: "ms-MCS-AdmPwd: <cleartext>" (single or ::base64)
   //   - Windows LAPS v2 cleartext JSON blob: {"n":..., "p":"<cleartext>"}
-  // MUST NOT mint on the real failures (verified against live Forest output):
+  // MUST NOT mint on the real failures (verified against live DC output):
   //   "No result found with attribute ms-MCS-AdmPwd or msLAPS-Password !"  (no colon+value)
   //   "Module LAPS is not supported for protocol smb"
   //   "LDAP connection failed with account ..."
@@ -1782,9 +2218,35 @@
     if (!hit) { m = reSearch(_LAPS_ATTR_RE, text); if (m && m.groups.pw && !/^\s*or\b/i.test(m.groups.pw)) hit = { password: m.groups.pw.trim(), via: 'ms-mcs-admpwd' }; }
     if (!hit) return;
     _add(facts, mkFact('ad.laps_lead', h, hit, S, source));
+    _add(facts, mkFact('ad.laps', h, hit, S, source));
     // A found cleartext is a candidate, not auto-validated (same rule as any dumped plaintext).
     _add(facts, mkFact('credential.candidate', h, { kind: 'laps_local_admin', user: hit.user || 'Administrator', password: hit.password, computer: hit.computer, via: 'laps' }, S, source));
   }
   C._parse_laps = _parse_laps;
+
+  function _parse_rpcdump(text, ws, command, source, facts) {
+    if (!text) return;
+    var h = 'host:' + ws.target;
+    var protocols = [], pipes = [], seenP = {}, seenPipe = {};
+    reAll(/^\s*Protocol:\s*(\[MS-[A-Z0-9-]+\]):\s*([^\r\n]+)/gim, text).forEach(function (m) {
+      var p = m[1].toUpperCase();
+      if (!seenP[p]) { seenP[p] = 1; protocols.push(p); }
+    });
+    reAll(/ncacn_np:[^\s\[\r\n]+\[\\pipe\\([A-Za-z0-9_.-]+)\]/gi, text).forEach(function (m) {
+      var pp = m[1];
+      if (!seenPipe[pp.toLowerCase()]) { seenPipe[pp.toLowerCase()] = 1; pipes.push(pp); }
+    });
+    var epCountM = /\[\*\]\s*Received\s+(\d+)\s+endpoints/i.exec(text);
+    if (!protocols.length && !pipes.length && !epCountM) return;
+    var count = epCountM ? parseInt(epCountM[1], 10) : (protocols.length || pipes.length);
+    if (C._add_os_observation) {
+      C._add_os_observation(facts, ws, source, 'windows', 'MS-RPC endpoint mapper (' + count + ' endpoints)', 'high', 'rpcdump', true);
+    }
+    _add(facts, mkFact('rpc.endpoints', h, { count: count, protocols: protocols.slice(0, 30), pipes: pipes.slice(0, 20), tool: 'rpcdump' }, S, source));
+    if (seenP['[MS-DRSR]'] || seenP['[MS-ADTS]'] || /ntdsapi/i.test(text)) {
+      _add(facts, mkFact('ad.dc_candidate', h, { host: ws.target, via: 'rpcdump' }, S, source));
+    }
+  }
+  C._parse_rpcdump = _parse_rpcdump;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

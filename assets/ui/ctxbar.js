@@ -24,7 +24,7 @@
   var ENG_ROUTES = ['home', 'loadout', 'targets', 'target', 'evidence', 'path', 'map', 'domain', 'creds', 'checklist', 'findings', 'history', 'scoreboard', 'report', 'graph'];
   // the contextual sub-nav, grouped by how a box actually gets worked
   var SUBNAV = [
-    { group: 'Work the box', items: [['home', 'Hub'], ['loadout', 'Loadout'], ['targets', 'Targets'], ['path', 'Next Steps'], ['evidence', 'Evidence']] },
+    { group: 'Work the box', items: [['home', 'Hub'], ['loadout', 'Loadout'], ['targets', 'Targets'], ['path', 'Cockpit'], ['evidence', 'Evidence']] },
     { group: 'Analyze', items: [['map', 'Map'], ['domain', 'Domain'], ['creds', 'Creds']] },
     { group: 'Track & report', items: [['checklist', 'Checklist'], ['findings', 'Findings'], ['history', 'Run Log'], ['scoreboard', 'Flags'], ['report', 'Report']] },
   ];
@@ -73,13 +73,21 @@
 
   var _creds = [];
 
-  function subnavHtml(name) {
+  function subnavHtml(name, configured) {
     return SUBNAV.map(function (g) {
       return '<span class="ctx-subgroup" role="group" aria-label="' + esc(g.group) + '">'
         + '<span class="ctx-subgroup-l" aria-hidden="true">' + esc(g.group) + '</span>'
         + g.items.map(function (it) {
           var on = it[0] === name;
-          return '<a data-nav data-subnav href="#/' + it[0] + '"' + (on ? ' class="active" aria-current="page"' : '') + '>' + esc(it[1]) + '</a>';
+          var unlocked = configured || it[0] === 'home' || it[0] === 'loadout';
+          var cls = [];
+          if (on) cls.push('active');
+          if (!unlocked) cls.push('ctx-subnav-locked');
+          var attrs = (cls.length ? ' class="' + cls.join(' ') + '"' : '')
+            + (on ? ' aria-current="page"' : '')
+            + (!unlocked ? ' aria-disabled="true" title="Set up and launch your engagement first"' : '');
+          var label = (!configured && it[0] === 'home') ? 'Set Up' : it[1];
+          return '<a data-nav data-subnav href="#/' + it[0] + '"' + attrs + '>' + esc(label) + '</a>';
         }).join('')
         + '</span>';
     }).join('');
@@ -89,6 +97,7 @@
     var bar = document.getElementById('ctxbar');
     if (!bar) return;
     var name = routeName(), onEng = isEngRoute(name), onLearn = (name === 'study');
+    var configured = !OBOL.store || typeof OBOL.store.isConfigured !== 'function' || OBOL.store.isConfigured();
     syncFocusButton();
     // The engagement / credential / target context lives in the left parameter bar on every surface that
     // shows it. Learn is the one full-bleed route with no sidebar, so the context pills exist ONLY there.
@@ -110,9 +119,10 @@
         + '<select id="ctx-target" aria-label="Active target"' + (tgt.disabled ? ' disabled' : '') + '>' + tgt.html + '</select></label>'
         + '</div>';
     }
-    if (onEng) html += '<nav class="ctx-subnav" aria-label="Engagement surfaces">' + subnavHtml(name) + '</nav>';
+    if (onEng) html += '<nav class="ctx-subnav" aria-label="Engagement surfaces">' + subnavHtml(name, configured) + '</nav>';
     bar.innerHTML = html;
     bar.setAttribute('data-eng', onEng ? '1' : '0');
+    bar.setAttribute('data-configured', configured ? '1' : '0');
     bar.hidden = !html;
   }
 
@@ -145,7 +155,11 @@
       }
     });
     // keep the strip in sync with state and navigation
-    if (OBOL.store && OBOL.store.onChange) OBOL.store.onChange(function () { render(); });
+    var CTXBAR_SKIP_REASONS = { playbook: 1, checklist: 1, ws: 1 };
+    if (OBOL.store && OBOL.store.onChange) OBOL.store.onChange(function (reason) {
+      if (reason && CTXBAR_SKIP_REASONS[reason]) return;
+      render();
+    });
     window.addEventListener('hashchange', render);
   }
 

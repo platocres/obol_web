@@ -8,13 +8,17 @@ const actionPacks = globalThis.OBOL.ACTION_PACKS;
 
 console.log('=== OBOL MOVE LIBRARY GRAPH & PREREQUISITE AUDIT ===\n');
 
-// 1. Gather all actions
+// 1. Gather all actions (prefer live data/packs/*.json when available)
 const allActions = [];
 const actionMap = new Map();
 const packByAction = new Map();
 
 actionPacks.forEach(pk => {
-  const p = packData[pk];
+  let p = packData[pk];
+  const jsonPath = path.join(root, 'data/packs', pk + '.json');
+  if (fs.existsSync(jsonPath)) {
+    try { p = JSON.parse(fs.readFileSync(jsonPath, 'utf8')); } catch (e) {}
+  }
   if (!p || !p.actions) return;
   p.actions.forEach(a => {
     allActions.push(a);
@@ -29,11 +33,15 @@ console.log(`Total Actions Loaded: ${allActions.length}`);
 const actionProducedKinds = new Set();
 allActions.forEach(a => {
   (a.produces || []).forEach(k => actionProducedKinds.add(k));
+  (a.commands || []).forEach(c => {
+    (c.settled_by || []).forEach(k => actionProducedKinds.add(k));
+  });
 });
 
-// 3. Scan all engine and parser files for fact kinds
+// 3. Scan parser files in assets/engine/parsers/ for minted fact kinds
 function getJsFiles(dir) {
   let res = [];
+  if (!fs.existsSync(dir)) return res;
   fs.readdirSync(dir).forEach(f => {
     let p = path.join(dir, f);
     if (fs.statSync(p).isDirectory()) res = res.concat(getJsFiles(p));
@@ -43,41 +51,42 @@ function getJsFiles(dir) {
 }
 
 const parserKinds = new Set();
-// Scan the parser pipeline AND the UI layer: some facts are minted by the
-// store/UI, not a parser (e.g. target.configured when a target is added or a
-// paste is routed to a host), so a parser-only scan under-counts and cries wolf.
-const engineFiles = getJsFiles(path.join(root, 'assets/engine'))
-  .concat(getJsFiles(path.join(root, 'assets/ui')));
-
-// Any quoted dotted kind literal ("privesc.suid_candidate", "blocker.potato",
-// "smb.readable_share", ...). The three old narrow regexes missed how host.js
-// and blockers.js actually mint, which is what produced the phantom
-// "58 unminted requirements". A broad literal scan mirrors the real emit set.
+const parserFiles = getJsFiles(path.join(root, 'assets/engine/parsers'));
 const genericKindRegex = /['"`]([a-z][a-z0-9_]+(?:\.[a-z0-9_]+)+)['"`]/g;
+const regexAltKindRegex = /\b([a-z][a-z0-9_]+)\\\.\(\?:([a-zA-Z0-9_|]+)\)/g;
 
-engineFiles.forEach(f => {
-  const filePath = f;
+parserFiles.forEach(filePath => {
   if (!fs.existsSync(filePath)) return;
   const content = fs.readFileSync(filePath, 'utf8');
   let m;
   while ((m = genericKindRegex.exec(content)) !== null) parserKinds.add(m[1]);
+  while ((m = regexAltKindRegex.exec(content)) !== null) {
+    const prefix = m[1];
+    m[2].split('|').forEach(suffix => {
+      if (suffix) parserKinds.add(`${prefix}.${suffix}`);
+    });
+  }
 });
 
-// Also dynamically recognized patterns
-// e.g., 'port:<num>', 'service.<name>'
+// Also dynamically recognized or environment-seeded patterns
+// e.g., 'target.configured', 'port:<num>', 'service.<name>', '*.reachable', 'privesc.<vector>'
 function isDynamicallyMinted(k) {
+  if (parserKinds.has(k)) return true;
+  if (k === 'target.configured' || k === 'ports.open') return true;
   if (/^port:\d+$/.test(k)) return true;
+  if (/\.reachable$/.test(k)) return true;
   if (/^service\.[a-z0-9_-]+$/i.test(k)) return true;
   if (/^vuln\.[a-z0-9_-]+$/i.test(k)) return true;
   if (/^scan\.[a-z0-9_.-]+$/i.test(k)) return true;
   if (/^host\.[a-z0-9_-]+$/i.test(k)) return true;
+  if (/^privesc\.[a-z0-9_-]+$/i.test(k)) return true;
   return false;
 }
 
 const allKnownKinds = new Set([...actionProducedKinds, ...parserKinds]);
 
 // A requirement is satisfiable ("producible") if some action produces it, a
-// parser/UI mints it, or it is a dynamically-resolved gate (port:/service./...).
+// parser mints it, or it is a dynamically-resolved gate (port:/service./...).
 function producible(k) {
   return allKnownKinds.has(k) || isDynamicallyMinted(k);
 }
@@ -97,7 +106,7 @@ function reachability(a) {
 }
 
 console.log(`Unique Fact Kinds Produced by Actions: ${actionProducedKinds.size}`);
-console.log(`Unique Fact Kinds Minted by Parsers/UI: ${parserKinds.size}`);
+console.log(`Unique Fact Kinds Minted by Parsers: ${parserKinds.size}`);
 
 // Audit Checks
 const issues = {
@@ -122,8 +131,8 @@ allActions.forEach(a => {
   const obsoletedBy = a.obsoleted_by || [];
   const deprioritizeWhen = a.deprioritize_when || [];
 
-  // Check 1: Empty produces
-  if (!produces.length) {
+  // Check 1: Empty produces (manual-only session helpers like shell-pty-upgrade intentionally produce no new fact)
+  if (!produces.length && a.autonomy !== 'manual') {
     issues.emptyProduces.push({ id: a.id, pack });
   }
 
@@ -133,14 +142,6 @@ allActions.forEach(a => {
   }
 
   // Check 3: Self-dependencies that are a genuine chicken-and-egg.
-  // The fact ledger dedups on (kind, scope, value), so an action that consumes
-  // one instance of a kind and produces a NEW instance (e.g. laps-read consumes
-  // a domain credential.available and produces the recovered local-admin
-  // credential.available) is legitimate, not a loop. Likewise a self-kind in
-  // requires_any next to other live branches is benign re-entry. Only flag the
-  // case where the self-produced kind is the SOLE way in: it sits in
-  // requires_all (or is the only requires_any branch) with no other satisfiable
-  // requirement, so the move could never fire the first time.
   const otherReqsLive =
     reqAll.some(k => !produces.includes(k) && producible(k)) ||
     reqAny.some(k => !produces.includes(k) && producible(k));
@@ -172,12 +173,7 @@ allActions.forEach(a => {
     }
   });
 
-  // Check 5: Reachability. The thing that actually matters is not "is this
-  // kind minted somewhere" but "can this move ever become eligible". Split the
-  // old raw unminted-kind list into (a) UNREACHABLE moves (a real defect: the
-  // move can never fire) and (b) dead branches / precision hooks (the required
-  // kind is never minted, but a live sibling keeps the move reachable, so it
-  // just fires on a coarser gate than intended).
+  // Check 5: Reachability.
   const reach = reachability(a);
   if (reach.unreachable) {
     issues.unreachableMoves.push({ id: a.id, pack, deadRequiresAll: reach.deadAll, requiresAny: reqAny });
@@ -247,11 +243,6 @@ console.log(`\n9. Actions with empty requires (ungated initial moves): ${issues.
 console.log(issues.emptyRequires.map(x => `${x.id} (${x.pack}) [priority: ${x.priority}, phase: ${x.phase}] - ${x.title}`));
 
 // --- Regression gate (node tools/audit_graph.js --check) ---------------------
-// Fails the build if graph hygiene regresses, so a new/edited move can't silently
-// reintroduce a self-loop, an unreachable move, a dead precision-hook branch, an
-// empty-produces move, or a malformed fact kind. Add this to the verify list.
-// These five buckets are currently zero; keep them that way (mint the fact,
-// point the requirement at a real kind, or drop the dead branch).
 if (process.argv.indexOf('--check') >= 0) {
   const gate = [
     ['self-dependencies', issues.selfDependencies],

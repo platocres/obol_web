@@ -1,0 +1,63 @@
+{
+  "generated_at": "2026-10-23T15:14:57.152Z",
+  "filter": {
+    "axis": null,
+    "tool": "rpcclient"
+  },
+  "total_unlabeled_matching": 21,
+  "shown": 4,
+  "rows": [
+    {
+      "id": "c079477f74e9",
+      "file": "blackfield.md",
+      "tool": "rpcclient",
+      "axis": "enumeration",
+      "command": "setuserinfo2",
+      "observed_supported_kinds": [],
+      "observed_refuted_kinds": [],
+      "output_head": "Usage: setuserinfo2 username level password [password_expired]\nresult was NT_STATUS_INVALID_PARAMETER",
+      "expected_kinds": [],
+      "forbidden_kinds": []
+    },
+    {
+      "id": "11a7c9bab4bf",
+      "file": "blackfield.md",
+      "tool": "rpcclient",
+      "axis": "enumeration",
+      "command": "setuserinfo2 audit2020 23 '0xdf'",
+      "observed_supported_kinds": [],
+      "observed_refuted_kinds": [],
+      "output_head": "result: NT_STATUS_PASSWORD_RESTRICTION\nresult was NT_STATUS_PASSWORD_RESTRICTION",
+      "expected_kinds": [],
+      "forbidden_kinds": []
+    },
+    {
+      "id": "5b2e5f331cee",
+      "file": "cascade.md",
+      "tool": "rpcclient",
+      "axis": "enumeration",
+      "command": "enumdomusers",
+      "observed_supported_kinds": [
+        "ad.user_list"
+      ],
+      "observed_refuted_kinds": [],
+      "output_head": "user:[CascGuest] rid:[0x1f5]\nuser:[arksvc] rid:[0x452]\nuser:[s.smith] rid:[0x453]\nuser:[r.thompson] rid:[0x455]\nuser:[util] rid:[0x457]\nuser:[j.wakefield] rid:[0x45c]",
+      "expected_kinds": [],
+      "forbidden_kinds": []
+    },
+    {
+      "id": "8d52bd870669",
+      "file": "forest.md",
+      "tool": "rpcclient",
+      "axis": "enumeration",
+      "command": "enumdomusers",
+      "observed_supported_kinds": [
+        "ad.user_list"
+      ],
+      "observed_refuted_kinds": [],
+      "output_head": "user:[Administrator] rid:[0x1f4]       \nuser:[Guest] rid:[0x1f5]               \nuser:[krbtgt] rid:[0x1f6]              \nuser:[DefaultAccount] rid:[0x1f7]      \nuser:[$331000-VK4ADACQNUCA] rid:[0x463]\nuser:[SM_2c8eef0a09b545acb] rid:[0x464]",
+      "expected_kinds": [],
+      "forbidden_kinds": []
+    }
+  ]
+}

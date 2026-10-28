@@ -1,7 +1,7 @@
 /*!
  * obol ui - routes/report.js - the OSCP/report surface, driven by the ported OBOL.report
- * pipeline (profiles → ordered sections → md/html), two-layer redaction (on by default),
- * readiness validation, and download. Enriches findings from data/reportmeta.js.
+ * pipeline (profiles -> ordered sections -> md/html/docx), AST block-level sheet pagination,
+ * two-layer redaction, readiness validation, and download. Enriches findings from data/reportmeta.js.
  */
 (function (root) {
   'use strict';
@@ -37,7 +37,6 @@
     return OBOL.report.buildContext({
       facts: OBOL.store.factSet(),
       actions: (OBOL.packs && OBOL.packs.actions) ? OBOL.packs.actions() : [],
-      // engagement targets carry `ip`; the report engine keys on `host`.
       targets: (eng.targets || []).map(function (t) { return Object.assign({}, t, { host: t.host || t.ip }); }),
       activities: eng.activities || [],
       credentials: eng.credentials || [],
@@ -46,8 +45,9 @@
       notes: eng.reportNotes || {},
       workspace: eng.workspace || {},
       engId: eng.id,
-      reportmeta: (root.OBOL_REPORTMETA || root.OBOL && root.OBOL.reportmeta) || null,
+      reportmeta: (root.OBOL_REPORTMETA || (root.OBOL && root.OBOL.reportmeta)) || null,
       includeSecrets: !!includeSecrets,
+      hideUnreached: (eng.ui || {}).reportHideUnreached !== false,
       name: eng.name,
       platform: prof.platform || params.platform || '',
       candidate: prof.candidate || params.candidate || '',
@@ -57,44 +57,208 @@
     });
   }
 
-  // Split rendered HTML into realistic paper sheets at explicit page-breaks and major H2/H3/H4 boundaries
-  // when a section grows past a single page's visual budget (~3600 chars of markup).
-  function paginateHtml(bodyHtml, stem, title) {
-    var rawChunks = String(bodyHtml || '').split('<div class="page-break"></div>').map(function (s) { return s.trim(); }).filter(Boolean);
-    for (var i = 0; i < rawChunks.length - 1; i++) {
-      var trailMatch = rawChunks[i].match(/(\s*<h2\b[^>]*>[\s\S]*?<\/h2>)\s*$/i);
-      if (trailMatch && rawChunks[i].length > trailMatch[0].length) {
-        rawChunks[i] = rawChunks[i].slice(0, rawChunks[i].length - trailMatch[0].length).trim();
-        rawChunks[i + 1] = trailMatch[1].trim() + '\n' + rawChunks[i + 1];
-      }
+  // Estimate visual line height of a single AST block on an A4/US-Letter paper sheet (~44 visual lines).
+  // Base64 screenshot URIs (`shot_data_uri`, `data_uri`) are weighted by rendered visual height rather
+  // than byte length, and composite blocks (`proof`, `figure`, `pre`, `table`) never split mid-tag.
+  var PAGE_LINE_BUDGET = 44;
+
+  function rowVisualLines(row) {
+    if (!Array.isArray(row) || !row.length) return 1.5;
+    var totalChars = 0, maxColChars = 0;
+    for (var i = 0; i < row.length; i++) {
+      var len = String(row[i] == null ? '' : row[i]).length;
+      totalChars += len;
+      if (len > maxColChars) maxColChars = len;
     }
+    var wrapped = Math.max(Math.ceil(maxColChars / 54), Math.ceil(totalChars / 74));
+    return Math.min(12, Math.max(1.45, wrapped * 1.12 + 0.35));
+  }
+
+  function blockVisualLines(b) {
+    if (!b || !b.t) return 0;
+    switch (b.t) {
+      case 'pagebreak':
+        return 0;
+      case 'heading':
+        return b.level === 1 ? 4.2 : (b.level === 2 ? 3.4 : (b.level === 3 ? 2.6 : 2.1));
+      case 'para':
+        return 1.1 + Math.max(1, Math.ceil(String(b.text || '').length / 82)) * 1.15;
+      case 'callout':
+        return 2.0 + Math.max(1, Math.ceil(String(b.text || '').length / 76)) * 1.15;
+      case 'divider':
+        return 1.4;
+      case 'kv':
+        return 1.4 + ((b.pairs && b.pairs.length) || 0) * 1.65;
+      case 'toc':
+        return 3.4 + ((b.items && b.items.length) || 0) * 1.25;
+      case 'bullets': {
+        var sumB = 1.0;
+        (b.items || []).forEach(function (it) {
+          sumB += Math.max(1.25, Math.ceil(String(it || '').length / 78) * 1.15);
+        });
+        return sumB;
+      }
+      case 'code': {
+        var cLines = String(b.text || '').split('\n').length;
+        return 2.4 + Math.min(26, Math.max(1, cLines) * 1.1);
+      }
+      case 'terminal': {
+        var cmdLines = Math.max(1, Math.ceil(String(b.command || '').length / 70));
+        var outLines = b.output ? String(b.output).replace(/\n+$/, '').split('\n').length : 0;
+        return 2.8 + Math.min(26, (cmdLines + outLines) * 1.08);
+      }
+      case 'proof': {
+        var pWeight = 9.5;
+        if (b.block) {
+          pWeight += 1.6 + Math.min(18, Math.max(3, String(b.block).split('\n').length * 1.08));
+        }
+        if (b.shot_data_uri) {
+          pWeight += 15.5;
+        }
+        return pWeight;
+      }
+      case 'image':
+        return (b.is_render ? 15.5 : 19.0) + (b.caption ? 1.4 : 0);
+      case 'table': {
+        var tWeight = 2.2 + (b.caption ? 1.3 : 0);
+        (b.rows || []).forEach(function (r) { tWeight += rowVisualLines(r); });
+        return tWeight;
+      }
+      default:
+        return 2.0;
+    }
+  }
+
+  function isKeepWithNext(b) {
+    if (!b || !b.t) return false;
+    if (b.t === 'heading') return true;
+    if (b.t === 'para' && /^\*\*[^*\r\n]{2,90}\*\*:?\s*$/.test(String(b.text || '').trim())) return true;
+    return false;
+  }
+
+  function pageHasBody(pageBlocks) {
+    for (var i = 0; i < pageBlocks.length; i++) {
+      var b = pageBlocks[i];
+      if (b && b.t && b.t !== 'pagebreak' && !isKeepWithNext(b)) return true;
+    }
+    return false;
+  }
+
+  // AST-level sheet paginator: serializes each page independently via OBOL.report.toHtml(pageBlocks)
+  // so wrapper tags (<div class="proof-item">, <table>, <figure>, <pre>) can never split across sheets,
+  // and splits multi-page tables cleanly with repeated <thead> column headers.
+  function paginateBlocks(blocks, stem, title) {
     var pages = [];
-    rawChunks.forEach(function (chunk) {
-      if (chunk.length <= 3800 || !/<h[234]\b/i.test(chunk)) {
-        pages.push(chunk);
+    var cur = [];
+    var curLines = 0;
+
+    function flush() {
+      if (!cur.length) return;
+      var carry = [];
+      if (pageHasBody(cur)) {
+        while (cur.length && isKeepWithNext(cur[cur.length - 1])) {
+          carry.unshift(cur.pop());
+        }
+      }
+      if (cur.length) pages.push(cur);
+      cur = carry;
+      curLines = 0;
+      for (var i = 0; i < cur.length; i++) curLines += blockVisualLines(cur[i]);
+    }
+
+    (blocks || []).forEach(function (b) {
+      if (!b || !b.t) return;
+
+      if (b.t === 'pagebreak') {
+        if (pageHasBody(cur)) flush();
         return;
       }
-      var parts = chunk.split(/(?=<h[234]\b)/i);
-      var acc = '';
-      parts.forEach(function (part) {
-        var accHasBody = /<(?:p|table|ul|ol|pre|div|figure)\b/i.test(acc);
-        if (!acc || !accHasBody) {
-          acc = acc ? (acc + '\n' + part) : part;
-        } else if ((acc.length + part.length) > 3400) {
-          pages.push(acc);
-          acc = part;
-        } else {
-          acc += '\n' + part;
+
+      if (b.t === 'heading') {
+        var hw = blockVisualLines(b);
+        var minFollow = b.level <= 2 ? 9 : 6;
+        if (pageHasBody(cur) && ((b.level === 2 && curLines >= 29) || (curLines + hw + minFollow > PAGE_LINE_BUDGET))) {
+          flush();
         }
-      });
-      if (acc) pages.push(acc);
+        cur.push(b);
+        curLines += hw;
+        return;
+      }
+
+      // Split oversized tables across sheets while repeating headers on every continuation page.
+      if (b.t === 'table' && Array.isArray(b.rows) && b.rows.length > 0) {
+        var baseHdr = 2.2 + (b.caption ? 1.3 : 0);
+        var firstRowH = rowVisualLines(b.rows[0]);
+        if (pageHasBody(cur) && (curLines + baseHdr + firstRowH > PAGE_LINE_BUDGET)) {
+          flush();
+        }
+        var idx = 0, sliceIdx = 0;
+        while (idx < b.rows.length) {
+          var hdrCost = 2.2 + ((sliceIdx === 0 && b.caption) ? 1.3 : (b.caption ? 1.3 : 0));
+          if (pageHasBody(cur) && (curLines + hdrCost + rowVisualLines(b.rows[idx]) > PAGE_LINE_BUDGET)) {
+            flush();
+          }
+          var sliceRows = [];
+          var sliceLines = hdrCost;
+          while (idx < b.rows.length) {
+            var rh = rowVisualLines(b.rows[idx]);
+            if (sliceRows.length > 0 && (curLines + sliceLines + rh > PAGE_LINE_BUDGET)) break;
+            sliceRows.push(b.rows[idx]);
+            sliceLines += rh;
+            idx++;
+          }
+          cur.push({
+            t: 'table',
+            headers: b.headers || [],
+            rows: sliceRows,
+            caption: sliceIdx === 0 ? (b.caption || '') : (b.caption ? (b.caption + ' (continued)') : ''),
+          });
+          curLines += sliceLines;
+          sliceIdx++;
+          if (idx < b.rows.length) flush();
+        }
+        return;
+      }
+
+      // Split oversized unordered bullet lists (e.g. long Evidence lists) cleanly across sheets.
+      if (b.t === 'bullets' && !b.ordered && Array.isArray(b.items) && b.items.length > 10 && (curLines + blockVisualLines(b) > PAGE_LINE_BUDGET)) {
+        var bIdx = 0;
+        while (bIdx < b.items.length) {
+          var firstItH = Math.max(1.25, Math.ceil(String(b.items[bIdx] || '').length / 78) * 1.15);
+          if (pageHasBody(cur) && (curLines + 1.0 + firstItH > PAGE_LINE_BUDGET)) flush();
+          var chunkItems = [], chunkH = 1.0;
+          while (bIdx < b.items.length) {
+            var ih = Math.max(1.25, Math.ceil(String(b.items[bIdx] || '').length / 78) * 1.15);
+            if (chunkItems.length > 0 && (curLines + chunkH + ih > PAGE_LINE_BUDGET)) break;
+            chunkItems.push(b.items[bIdx]);
+            chunkH += ih;
+            bIdx++;
+          }
+          cur.push({ t: 'bullets', ordered: false, items: chunkItems });
+          curLines += chunkH;
+          if (bIdx < b.items.length) flush();
+        }
+        return;
+      }
+
+      var w = blockVisualLines(b);
+      if (pageHasBody(cur) && (curLines + w > PAGE_LINE_BUDGET)) {
+        flush();
+      }
+      cur.push(b);
+      curLines += w;
     });
-    if (!pages.length) pages.push('<p>No report content generated yet.</p>');
+
+    if (cur.length) pages.push(cur);
+    if (!pages.length) pages.push([{ t: 'para', text: 'No report content generated yet.' }]);
+
     var total = pages.length;
     return {
       total: total,
-      html: pages.map(function (pageContent, idx) {
+      pages: pages,
+      html: pages.map(function (pageBlocks, idx) {
         var pageNum = idx + 1;
+        var pageContent = OBOL.report.toHtml(pageBlocks);
         return '<article class="rep-sheet' + (pageNum === 1 ? ' rep-sheet-cover' : '') + '" data-page="' + pageNum + '">'
           + '<header class="rep-sheet-hdr">'
           + '<span class="rep-sheet-doc">' + esc(title || 'Assessment Report') + '</span>'
@@ -156,15 +320,14 @@
     var profile = ui.reportProfile || OBOL.report.defaultFor(baseCtx) || 'oscp';
     var zoom = ui.reportZoom || '0.85';
     var viewMode = ui.reportViewMode || 'pages';
-    // Full detail is shown by default; redaction is opt-in (for a report you intend to share).
     var redact = !!ui.reportRedact;
+    var hideUnreached = ui.reportHideUnreached !== false;
     var includeSecrets = !redact;
     var ctx = ctxOf(includeSecrets);
     var profileObj = OBOL.report.resolve(profile, ctx);
     var blocks = OBOL.report.document(profile, ctx);
-    var bodyHtml = OBOL.report.toHtml(blocks);
     var stem = OBOL.report.filenameStem(profileObj, ctx);
-    var paged = paginateHtml(bodyHtml, stem, profileObj.title);
+    var paged = paginateBlocks(blocks, stem, profileObj.title);
     var outlineItems = (OBOL.report.outline ? OBOL.report.outline(blocks) : []);
     var gaps = OBOL.report.validate(profile, ctx) || [];
     var pf = (!profileObj.no_flags && OBOL.report && typeof OBOL.report.preflightCheck === 'function') ? OBOL.report.preflightCheck(ctx) : null;
@@ -214,7 +377,7 @@
     if (viewMode === 'md') {
       previewInner = '<div class="rep-sheet rep-sheet-md"><pre class="rep-md-pre">' + esc(OBOL.report.toMarkdown(blocks)) + '</pre></div>';
     } else if (viewMode === 'continuous') {
-      previewInner = '<div class="rep-sheet rep-sheet-continuous"><div class="rep-sheet-body">' + bodyHtml + '</div></div>';
+      previewInner = '<div class="rep-sheet rep-sheet-continuous"><div class="rep-sheet-body">' + OBOL.report.toHtml(blocks) + '</div></div>';
     } else {
       previewInner = paged.html;
     }
@@ -237,6 +400,7 @@
         ? '<label class="rep-opt">Client <input type="text" id="rep-client" value="' + U.attr((eng.profile || {}).client || '') + '" placeholder="Organization" autocomplete="off" spellcheck="false"></label>'
         : '')
       + '<label class="rep-opt"><input type="checkbox" id="rep-redact"' + (redact ? ' checked' : '') + '> Redact Secrets <span class="rep-opt-note">(' + (redact ? 'on, safe to share' : 'off, full detail') + ')</span></label>'
+      + '<label class="rep-opt" title="When checked, unreached phases, uncaptured flags, and boilerplate recommendations are hidden until supported by evidence"><input type="checkbox" id="rep-hide-unreached"' + (hideUnreached ? ' checked' : '') + '> Hide Unreached <span class="rep-opt-note">(' + (hideUnreached ? 'on, evidence only' : 'off, full skeleton') + ')</span></label>'
       + '</div>'
       + '<div class="rep-toolbar-right">'
       + '<div class="rep-view-controls" role="group" aria-label="Preview mode and zoom">'
@@ -291,7 +455,6 @@
   }
 
   function mounted() {
-    // per-host report notes & executive summary override: persist on input, refresh preview on change.
     var notesWrap = document.querySelector('.rep-notes');
     if (notesWrap) {
       notesWrap.addEventListener('input', function (e) {
@@ -339,7 +502,6 @@
       });
     }
 
-    // Quick profile pills
     document.querySelectorAll('.rep-prof-pill').forEach(function (pill) {
       pill.addEventListener('click', function () {
         var p = pill.getAttribute('data-prof');
@@ -349,7 +511,6 @@
       });
     });
 
-    // View mode & Zoom buttons
     document.querySelectorAll('.rep-view-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var v = btn.getAttribute('data-view');
@@ -369,7 +530,6 @@
       });
     });
 
-    // Outline navigation links (smooth scroll inside #rep-out)
     var outlineNav = document.getElementById('rep-outline-nav');
     if (outlineNav) {
       outlineNav.addEventListener('click', function (ev) {
@@ -384,7 +544,6 @@
       });
     }
 
-    // Submission helper copy buttons
     document.querySelectorAll('.rep-copy-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var text = btn.getAttribute('data-copy') || '';
@@ -404,15 +563,18 @@
       OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportRedact = red.checked; }, 'ui');
       OBOL.router.render();
     });
+    var hideUn = document.getElementById('rep-hide-unreached');
+    if (hideUn) hideUn.addEventListener('change', function () {
+      OBOL.store.update(function (e) { e.ui = e.ui || {}; e.ui.reportHideUnreached = hideUn.checked; }, 'ui');
+      OBOL.router.render();
+    });
 
-    // Candidate name, OSID, Client: rebuild only the sheets on each keystroke so the input keeps focus.
     function refreshBody() {
       var e2 = activeEng(), ui2 = e2.ui || {};
       var c2 = ctxOf(!ui2.reportRedact);
       var p2 = ui2.reportProfile || OBOL.report.defaultFor(c2) || 'oscp';
       var profObj = OBOL.report.resolve(p2, c2);
       var blocks2 = OBOL.report.document(p2, c2);
-      var html2 = OBOL.report.toHtml(blocks2);
       var stem2 = OBOL.report.filenameStem(profObj, c2);
       var viewMode2 = ui2.reportViewMode || 'pages';
       var sheetsWrap = document.getElementById('rep-sheets');
@@ -420,9 +582,9 @@
         if (viewMode2 === 'md') {
           sheetsWrap.innerHTML = '<div class="rep-sheet rep-sheet-md"><pre class="rep-md-pre">' + esc(OBOL.report.toMarkdown(blocks2)) + '</pre></div>';
         } else if (viewMode2 === 'continuous') {
-          sheetsWrap.innerHTML = '<div class="rep-sheet rep-sheet-continuous"><div class="rep-sheet-body">' + html2 + '</div></div>';
+          sheetsWrap.innerHTML = '<div class="rep-sheet rep-sheet-continuous"><div class="rep-sheet-body">' + OBOL.report.toHtml(blocks2) + '</div></div>';
         } else {
-          var pg = paginateHtml(html2, stem2, profObj.title);
+          var pg = paginateBlocks(blocks2, stem2, profObj.title);
           sheetsWrap.innerHTML = pg.html;
           var st = document.getElementById('rep-stat-pages');
           if (st) st.textContent = String(pg.total);
@@ -483,5 +645,5 @@
   }
 
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.report = { render: render, mounted: mounted };
+  OBOL.routes.report = { render: render, mounted: mounted, paginateBlocks: paginateBlocks };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -200,7 +200,7 @@ const server = http.createServer((req, res) => {
     const rootCard = page.locator('.ns-card[data-action="flag-hunt-root-windows"]');
     await rootCard.locator('.ns-body').waitFor();
     check(await page.locator('.ns-card').first().getAttribute('data-action') === 'flag-hunt-root-windows', 'Selecting recovered Administrator opens the root proof attempt first');
-    check(await rootCard.getByRole('button', {name:'Remote',exact:true}).getAttribute('aria-pressed') === 'true', 'Untested Administrator defaults to the remote proof attempt in the visible card');
+    check(await rootCard.getByRole('button', {name:/^Remote/i}).getAttribute('aria-pressed') === 'true', 'Untested Administrator defaults to the remote proof attempt in the visible card');
     const proofCommands = await page.evaluate(() => {
       const c = OBOL.coach.compute(), move = c.onFlow.find(a => a.id === 'flag-hunt-root-windows');
       return {probe:OBOL.command.fillCommand(move,c.facts,{params:c.params},0).filled,admin:c.facts.forAction(move,move.commands[0]).has('access.admin')};

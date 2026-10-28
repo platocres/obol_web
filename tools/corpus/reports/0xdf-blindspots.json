@@ -1,0 +1,494 @@
+{
+  "generated_at": "2026-10-24T00:34:08.991Z",
+  "walkthroughs": 194,
+  "units_with_output": 6916,
+  "minted": 3052,
+  "blind": 3864,
+  "actionable": {
+    "units": 1842,
+    "minted": 1796,
+    "blind": 46
+  },
+  "per_tool": [
+    {
+      "tool": "other",
+      "factBearing": false,
+      "withOutput": 3968,
+      "minted": 1030,
+      "blind": 2938,
+      "blindRate": 0.74
+    },
+    {
+      "tool": "netcat",
+      "factBearing": false,
+      "withOutput": 351,
+      "minted": 110,
+      "blind": 241,
+      "blindRate": 0.69
+    },
+    {
+      "tool": "evil-winrm",
+      "factBearing": false,
+      "withOutput": 102,
+      "minted": 1,
+      "blind": 101,
+      "blindRate": 0.99
+    },
+    {
+      "tool": "metasploit",
+      "factBearing": false,
+      "withOutput": 103,
+      "minted": 7,
+      "blind": 96,
+      "blindRate": 0.93
+    },
+    {
+      "tool": "curl-read",
+      "factBearing": false,
+      "withOutput": 84,
+      "minted": 0,
+      "blind": 84,
+      "blindRate": 1
+    },
+    {
+      "tool": "smbclient-launch",
+      "factBearing": false,
+      "withOutput": 64,
+      "minted": 0,
+      "blind": 64,
+      "blindRate": 1
+    },
+    {
+      "tool": "ssh",
+      "factBearing": false,
+      "withOutput": 80,
+      "minted": 19,
+      "blind": 61,
+      "blindRate": 0.76
+    },
+    {
+      "tool": "python",
+      "factBearing": false,
+      "withOutput": 41,
+      "minted": 2,
+      "blind": 39,
+      "blindRate": 0.95
+    },
+    {
+      "tool": "gdb",
+      "factBearing": false,
+      "withOutput": 35,
+      "minted": 0,
+      "blind": 35,
+      "blindRate": 1
+    },
+    {
+      "tool": "meterpreter",
+      "factBearing": false,
+      "withOutput": 42,
+      "minted": 9,
+      "blind": 33,
+      "blindRate": 0.79
+    },
+    {
+      "tool": "ftp",
+      "factBearing": false,
+      "withOutput": 65,
+      "minted": 41,
+      "blind": 24,
+      "blindRate": 0.37
+    },
+    {
+      "tool": "sqlite",
+      "factBearing": false,
+      "withOutput": 16,
+      "minted": 1,
+      "blind": 15,
+      "blindRate": 0.94
+    },
+    {
+      "tool": "dns",
+      "factBearing": true,
+      "withOutput": 31,
+      "minted": 20,
+      "blind": 11,
+      "blindRate": 0.35
+    },
+    {
+      "tool": "mysql-app-rows",
+      "factBearing": false,
+      "withOutput": 10,
+      "minted": 0,
+      "blind": 10,
+      "blindRate": 1
+    },
+    {
+      "tool": "wfuzz-empty",
+      "factBearing": false,
+      "withOutput": 9,
+      "minted": 0,
+      "blind": 9,
+      "blindRate": 1
+    },
+    {
+      "tool": "mysql-ack",
+      "factBearing": false,
+      "withOutput": 8,
+      "minted": 0,
+      "blind": 8,
+      "blindRate": 1
+    },
+    {
+      "tool": "mssql-app-rows",
+      "factBearing": false,
+      "withOutput": 8,
+      "minted": 0,
+      "blind": 8,
+      "blindRate": 1
+    },
+    {
+      "tool": "sudo-l-denied",
+      "factBearing": false,
+      "withOutput": 7,
+      "minted": 0,
+      "blind": 7,
+      "blindRate": 1
+    },
+    {
+      "tool": "feroxbuster-empty",
+      "factBearing": false,
+      "withOutput": 7,
+      "minted": 0,
+      "blind": 7,
+      "blindRate": 1
+    },
+    {
+      "tool": "curl-xfer",
+      "factBearing": false,
+      "withOutput": 6,
+      "minted": 0,
+      "blind": 6,
+      "blindRate": 1
+    },
+    {
+      "tool": "wget",
+      "factBearing": false,
+      "withOutput": 40,
+      "minted": 35,
+      "blind": 5,
+      "blindRate": 0.13
+    },
+    {
+      "tool": "smbclient",
+      "factBearing": true,
+      "withOutput": 191,
+      "minted": 186,
+      "blind": 5,
+      "blindRate": 0.03
+    },
+    {
+      "tool": "rpcclient",
+      "factBearing": true,
+      "withOutput": 20,
+      "minted": 15,
+      "blind": 5,
+      "blindRate": 0.25
+    },
+    {
+      "tool": "mssql",
+      "factBearing": true,
+      "withOutput": 42,
+      "minted": 37,
+      "blind": 5,
+      "blindRate": 0.12
+    },
+    {
+      "tool": "hashcat",
+      "factBearing": true,
+      "withOutput": 62,
+      "minted": 58,
+      "blind": 4,
+      "blindRate": 0.06
+    },
+    {
+      "tool": "gobuster-empty",
+      "factBearing": false,
+      "withOutput": 4,
+      "minted": 0,
+      "blind": 4,
+      "blindRate": 1
+    },
+    {
+      "tool": "ffuf-empty",
+      "factBearing": false,
+      "withOutput": 4,
+      "minted": 0,
+      "blind": 4,
+      "blindRate": 1
+    },
+    {
+      "tool": "sqlmap",
+      "factBearing": true,
+      "withOutput": 47,
+      "minted": 43,
+      "blind": 4,
+      "blindRate": 0.09
+    },
+    {
+      "tool": "GetNPUsers-none",
+      "factBearing": false,
+      "withOutput": 4,
+      "minted": 0,
+      "blind": 4,
+      "blindRate": 1
+    },
+    {
+      "tool": "ldapsearch",
+      "factBearing": true,
+      "withOutput": 6,
+      "minted": 3,
+      "blind": 3,
+      "blindRate": 0.5
+    },
+    {
+      "tool": "curl-fail",
+      "factBearing": false,
+      "withOutput": 3,
+      "minted": 0,
+      "blind": 3,
+      "blindRate": 1
+    },
+    {
+      "tool": "smbclient-empty",
+      "factBearing": false,
+      "withOutput": 3,
+      "minted": 0,
+      "blind": 3,
+      "blindRate": 1
+    },
+    {
+      "tool": "certipy-none",
+      "factBearing": false,
+      "withOutput": 3,
+      "minted": 0,
+      "blind": 3,
+      "blindRate": 1
+    },
+    {
+      "tool": "certipy",
+      "factBearing": true,
+      "withOutput": 69,
+      "minted": 67,
+      "blind": 2,
+      "blindRate": 0.03
+    },
+    {
+      "tool": "mimikatz",
+      "factBearing": false,
+      "withOutput": 3,
+      "minted": 1,
+      "blind": 2,
+      "blindRate": 0.67
+    },
+    {
+      "tool": "wfuzz",
+      "factBearing": true,
+      "withOutput": 36,
+      "minted": 34,
+      "blind": 2,
+      "blindRate": 0.06
+    },
+    {
+      "tool": "GetUserSPNs-none",
+      "factBearing": false,
+      "withOutput": 2,
+      "minted": 0,
+      "blind": 2,
+      "blindRate": 1
+    },
+    {
+      "tool": "mssql-ack",
+      "factBearing": false,
+      "withOutput": 2,
+      "minted": 0,
+      "blind": 2,
+      "blindRate": 1
+    },
+    {
+      "tool": "nmap",
+      "factBearing": true,
+      "withOutput": 427,
+      "minted": 426,
+      "blind": 1,
+      "blindRate": 0
+    },
+    {
+      "tool": "netexec/cme",
+      "factBearing": true,
+      "withOutput": 378,
+      "minted": 377,
+      "blind": 1,
+      "blindRate": 0
+    },
+    {
+      "tool": "smbmap",
+      "factBearing": true,
+      "withOutput": 62,
+      "minted": 61,
+      "blind": 1,
+      "blindRate": 0.02
+    },
+    {
+      "tool": "mysql",
+      "factBearing": true,
+      "withOutput": 35,
+      "minted": 34,
+      "blind": 1,
+      "blindRate": 0.03
+    },
+    {
+      "tool": "sudo-l",
+      "factBearing": true,
+      "withOutput": 52,
+      "minted": 51,
+      "blind": 1,
+      "blindRate": 0.02
+    },
+    {
+      "tool": "feroxbuster",
+      "factBearing": true,
+      "withOutput": 80,
+      "minted": 80,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "kerbrute",
+      "factBearing": true,
+      "withOutput": 7,
+      "minted": 7,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "GetNPUsers",
+      "factBearing": true,
+      "withOutput": 6,
+      "minted": 6,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "bloodhound",
+      "factBearing": true,
+      "withOutput": 19,
+      "minted": 19,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "enum4linux",
+      "factBearing": true,
+      "withOutput": 1,
+      "minted": 1,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "GetUserSPNs",
+      "factBearing": true,
+      "withOutput": 6,
+      "minted": 6,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "secretsdump",
+      "factBearing": true,
+      "withOutput": 20,
+      "minted": 20,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "curl",
+      "factBearing": true,
+      "withOutput": 138,
+      "minted": 138,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "gobuster",
+      "factBearing": true,
+      "withOutput": 69,
+      "minted": 69,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "winpeas",
+      "factBearing": true,
+      "withOutput": 1,
+      "minted": 1,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "wpscan",
+      "factBearing": true,
+      "withOutput": 5,
+      "minted": 5,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "postgres",
+      "factBearing": true,
+      "withOutput": 3,
+      "minted": 3,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "ffuf",
+      "factBearing": true,
+      "withOutput": 10,
+      "minted": 10,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "john",
+      "factBearing": true,
+      "withOutput": 16,
+      "minted": 16,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "hydra",
+      "factBearing": true,
+      "withOutput": 3,
+      "minted": 3,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "dirb",
+      "factBearing": true,
+      "withOutput": 0,
+      "minted": 0,
+      "blind": 0,
+      "blindRate": 0
+    },
+    {
+      "tool": "linpeas",
+      "factBearing": true,
+      "withOutput": 0,
+      "minted": 0,
+      "blind": 0,
+      "blindRate": 0
+    }
+  ]
+}

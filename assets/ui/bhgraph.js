@@ -8,7 +8,18 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
 
-  var ICON = { user: '\uD83D\uDC64', group: '\uD83D\uDC65', computer: '\uD83D\uDDA5', domain: '\uD83C\uDF10', object: '\u2b24', gpo: '\uD83D\uDCDC' };
+  var ICON = {
+    user: '\uD83D\uDC64',
+    group: '\uD83D\uDC65',
+    computer: '\uD83D\uDDA5',
+    domain: '\uD83C\uDF10',
+    object: '\u2b24',
+    gpo: '\uD83D\uDCDC',
+    ou: '\uD83D\uDCC2',
+    container: '\uD83D\uDCE6',
+    certtemplate: '\uD83D\uDD11',
+    ca: '\uD83C\uDFDB'
+  };
   var NW = 150, NH = 34, COLW = 240, ROW = 90, PADX = 24, PADY = 38;
   var R = 20;   // node circle radius (BloodHound-style round nodes, label underneath)
 
@@ -17,50 +28,98 @@
   function trunc(s, n) { s = String(s || ''); return s.length <= (n || 16) ? s : s.slice(0, (n || 16) - 1) + '\u2026'; }
 
   // Lay out nodes into depth columns, vertically centered against the tallest column; return {id:{x,y}}.
+  // Goal nodes are right-aligned into the rightmost column and sparse depth indices are compacted.
   function layout(graph) {
-    var byDepth = {}, maxRows = 1;
-    graph.nodes.forEach(function (n) {
-      var col = (byDepth[n.depth] = byDepth[n.depth] || []);
+    var nodes = (graph && graph.nodes) || [];
+    var nonGoalMax = 0, hasNonGoal = false;
+    nodes.forEach(function (n) {
+      var isGoal = !!(n.goal || n.role === 'goal');
+      var d = typeof n.depth === 'number' && !isNaN(n.depth) ? n.depth : 0;
+      if (!isGoal) {
+        hasNonGoal = true;
+        if (d > nonGoalMax) nonGoalMax = d;
+      }
+    });
+    var rawByDepth = {};
+    var hasEdges = !!(graph && graph.edges && graph.edges.length);
+    nodes.forEach(function (n) {
+      var isGoal = !!(n.goal || n.role === 'goal');
+      var d = typeof n.depth === 'number' && !isNaN(n.depth) ? n.depth : 0;
+      if (isGoal) {
+        d = Math.max(d, hasNonGoal ? nonGoalMax + 1 : (hasEdges ? 1 : 0));
+      }
+      var col = (rawByDepth[d] = rawByDepth[d] || []);
       col.push(n);
+    });
+    var sortedDepths = Object.keys(rawByDepth).map(Number).sort(function (a, b) { return a - b; });
+    var byDepth = {}, maxRows = 1;
+    sortedDepths.forEach(function (origD, compactIdx) {
+      var col = rawByDepth[origD];
+      byDepth[compactIdx] = col;
       if (col.length > maxRows) maxRows = col.length;
     });
     var pos = {};
+    var maxX = 0, maxY = 0;
     Object.keys(byDepth).forEach(function (d) {
       var col = byDepth[d];
       var offsetY = ((maxRows - col.length) * ROW) / 2;
-      col.forEach(function (n, i) { pos[n.id] = { x: PADX + (+d) * COLW, y: PADY + offsetY + i * ROW }; });
+      col.forEach(function (n, i) {
+        var x = PADX + (+d) * COLW;
+        var y = PADY + offsetY + i * ROW;
+        pos[n.id] = { x: x, y: y, col: +d };
+        if (x + NW > maxX) maxX = x + NW;
+        if (y + NH > maxY) maxY = y + NH;
+      });
     });
+    var width = Math.max(maxX + PADX, 720);
+    var height = Math.max(maxY + PADY + 28, 240);
+    Object.defineProperty(pos, 'width', { value: width, enumerable: false, writable: true, configurable: true });
+    Object.defineProperty(pos, 'height', { value: height, enumerable: false, writable: true, configurable: true });
     return pos;
   }
 
   function center(p) { return { x: p.x + NW / 2, y: p.y + NH / 2 }; }
-  function isLongFlatSpan(a, b) {
-    return Math.abs(b.x - a.x) > COLW * 1.3 && Math.abs(b.y - a.y) < 36;
+  function isMultiColumnSpan(a, b) {
+    return Math.abs(b.x - a.x) > COLW * 1.15;
   }
   // Draw the edge from circle boundary to circle boundary so the arrowhead sits just outside the target
-  // node (visible), not buried under it. If an edge skips a depth column on the same horizontal band,
-  // arc it above the intermediate column so it does not slice straight through intermediate nodes.
+  // node (visible), not buried under it. If an edge spans across intermediate depth columns,
+  // arc it smoothly above intermediate columns so it stays legible.
   function edgePath(pos, e) {
-    if (!pos[e.from] || !pos[e.to]) return '';
+    if (!pos || !e || !pos[e.from] || !pos[e.to]) return '';
     var a = center(pos[e.from]), b = center(pos[e.to]);
     var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
     var ux = dx / len, uy = dy / len;
     var x1 = a.x + ux * R, y1 = a.y + uy * R;
     var x2 = b.x - ux * R, y2 = b.y - uy * R;
-    if (isLongFlatSpan(a, b)) {
-      var cx = (x1 + x2) / 2, cy = Math.min(y1, y2) - 42;
+    if (isMultiColumnSpan(a, b)) {
+      var cx = (x1 + x2) / 2;
+      var cy = Math.max(18, Math.min(y1, y2) - 46);
       return 'M' + x1 + ',' + y1 + ' Q' + cx + ',' + cy + ' ' + x2 + ',' + y2;
     }
     return 'M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2;
   }
 
-  function edgeLabelPoint(pos, from, to) {
+  // Place edge labels at t=0.35 on multi-column spans so they sit between column d and d+1
+  // instead of colliding with intermediate column nodes at t=0.5.
+  function edgeLabelPoint(pos, from, to, idx) {
+    if (!pos || !pos[from] || !pos[to]) return { x: 0, y: 0 };
     var a = center(pos[from]), b = center(pos[to]);
-    if (isLongFlatSpan(a, b)) {
-      return { x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 26 };
+    var stagger = idx ? ((idx % 2 === 1 ? -1 : 1) * 9) : 0;
+    if (isMultiColumnSpan(a, b)) {
+      var spanCols = Math.max(2, Math.round(Math.abs(b.x - a.x) / COLW));
+      var t = Math.min(0.35, 0.48 / spanCols), inv = 1 - t;
+      var cx = (a.x + b.x) / 2;
+      var cy = Math.max(18, Math.min(a.y, b.y) - 46);
+      var bx = inv * inv * a.x + 2 * inv * t * cx + t * t * b.x;
+      var by = inv * inv * a.y + 2 * inv * t * cy + t * t * b.y;
+      return { x: Math.round(bx), y: Math.round(by - 6 + stagger) };
     }
-    var t = 0.58;
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t - 6 };
+    var tLinear = 0.54;
+    return {
+      x: Math.round(a.x + (b.x - a.x) * tLinear),
+      y: Math.round(a.y + (b.y - a.y) * tLinear - 6 + stagger)
+    };
   }
 
   function chipLabel(hops, idx, multiSrc) {
@@ -102,7 +161,7 @@
       return;
     }
     var pos = layout(graph);
-    var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain' || n.goal) goalIds[n.id] = 1; });
+    var goalIds = {}; graph.nodes.forEach(function (n) { if (n.type === 'domain' || n.goal || n.role === 'goal') goalIds[n.id] = 1; });
     // Progress overlay: colour every node on the canvas by your real/what-if status, not just the path
     // source. opts.owned (a map of UPPER short name -> 1) marks the accounts you hold; opts.reached marks
     // the ones an owned account already controls. With no overlay given, fall back to the old depth-0 rule.
@@ -124,11 +183,11 @@
 
     // Per-node lookup + outgoing edges, for the hover card (full name, role, and what it can abuse).
     var nodeById = {}; graph.nodes.forEach(function (n) { nodeById[n.id] = n; });
-    var outEdges = {}; graph.edges.forEach(function (e) { (outEdges[e.from] = outEdges[e.from] || []).push(e); });
+    var outEdges = {}; (graph.edges || []).forEach(function (e) { (outEdges[e.from] = outEdges[e.from] || []).push(e); });
 
     var svgNS = 'http://www.w3.org/2000/svg';
-    var maxX = 0, maxY = 0;
-    Object.keys(pos).forEach(function (k) { maxX = Math.max(maxX, pos[k].x + NW); maxY = Math.max(maxY, pos[k].y + NH); });
+    var vbWidth = pos.width || 720;
+    var vbHeight = pos.height || 240;
 
     // path chips + active path detail banner
     var chipRow = '';
@@ -171,7 +230,7 @@
       + '</div>';
 
     container.innerHTML = chipRow + '<div class="bh-graph-wrap"><svg class="bh-graph" xmlns="' + svgNS + '" width="100%" '
-      + 'viewBox="0 0 ' + (maxX + PADX) + ' ' + (maxY + PADY) + '">'
+      + 'viewBox="0 0 ' + vbWidth + ' ' + vbHeight + '">'
       + '<defs>'
       + '<marker id="bh-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
       + '<path d="M0,0 L10,5 L0,10 z" class="bh-arrowhead"/></marker>'
@@ -187,7 +246,7 @@
     // Merge parallel edges between the same (from, to) pair so multiple ACL rights between the same
     // two principals never draw overlapping labels on the exact same line.
     var mergedEdges = [], pairMap = {};
-    graph.edges.forEach(function (e) {
+    (graph.edges || []).forEach(function (e) {
       var isMem = isMemberOf(e.edge);
       var pKey = e.from + '\u0000' + e.to + '\u0000' + (isMem ? 'M' : 'A');
       var m = pairMap[pKey];
@@ -205,6 +264,7 @@
     });
 
     // edges first (under nodes)
+    var abuseIdx = 0;
     mergedEdges.forEach(function (m) {
       var g = document.createElementNS(svgNS, 'g');
       g.setAttribute('class', 'bh-edge ' + (m.isMem ? 'bh-edge-member' : 'bh-edge-abuse'));
@@ -215,7 +275,7 @@
       path.setAttribute('data-from', m.from); path.setAttribute('data-to', m.to);
       g.appendChild(path);
       if (!m.isMem) {
-        var pt = edgeLabelPoint(pos, m.from, m.to);
+        var pt = edgeLabelPoint(pos, m.from, m.to, abuseIdx++);
         var defaultLbl = m.edges.length > 1 ? (m.edges[0] + ' +' + (m.edges.length - 1)) : m.edges[0];
         var lbl = document.createElementNS(svgNS, 'text');
         lbl.setAttribute('class', 'bh-edge-label');
@@ -249,7 +309,7 @@
       g.appendChild(circle);
       var ico = document.createElementNS(svgNS, 'text');
       ico.setAttribute('class', 'bh-node-ico'); ico.setAttribute('x', cx); ico.setAttribute('y', cy + 6);
-      ico.setAttribute('text-anchor', 'middle'); ico.textContent = ICON[n.type] || '';
+      ico.setAttribute('text-anchor', 'middle'); ico.textContent = ICON[n.type] || ICON.object;
       g.appendChild(ico);
       var lbl = document.createElementNS(svgNS, 'text');
       lbl.setAttribute('class', 'bh-node-lbl'); lbl.setAttribute('x', cx); lbl.setAttribute('y', cy + R + 15);
@@ -276,7 +336,18 @@
     wire(svg, vp, pos, opts, { card: card, nodeById: nodeById, outEdges: outEdges, goalIds: goalIds, ownedIds: ownedIds, inspectedIds: inspectedIds, reachedIds: reachedIds, pathList: pathList, count: graph.count, deadEnds: deadEnds });
   }
 
-  var TYPE_NAME = { user: 'User', group: 'Group', computer: 'Computer', domain: 'Domain', gpo: 'GPO', object: 'Object' };
+  var TYPE_NAME = {
+    user: 'User',
+    group: 'Group',
+    computer: 'Computer',
+    domain: 'Domain',
+    gpo: 'GPO',
+    ou: 'OU',
+    container: 'Container',
+    certtemplate: 'Cert Template',
+    ca: 'Cert Authority',
+    object: 'Object'
+  };
   // Build the hover-card HTML for a node: full (untruncated) name, type, role, path membership, and
   // the outgoing relationships (grey MemberOf, red abusable control) so a chopped-off group is legible.
   function nodeCardHtml(n, ctx) {
@@ -301,7 +372,7 @@
     var pathLine = paths
       ? '<div class="bh-nc-paths">On ' + paths + ' attack path' + (paths === 1 ? '' : 's') + '</div>'
       : (n.deadEnd ? '<div class="bh-nc-paths deadend">0 outbound paths to Domain Admin (dead-end account)</div>' : '');
-    return '<div class="bh-nc-h">' + esc((ICON[n.type] || '') + ' ' + (n.label || n.id)) + '</div>'
+    return '<div class="bh-nc-h">' + esc((ICON[n.type] || ICON.object) + ' ' + (n.label || n.id)) + '</div>'
       + '<div class="bh-nc-sub">' + esc(TYPE_NAME[n.type] || n.type || 'object') + roles + '</div>'
       + pathLine
       + relsBlock;
@@ -432,5 +503,5 @@
     });
   }
 
-  OBOL.bhgraph = { renderInto: renderInto, layout: layout };
+  OBOL.bhgraph = { renderInto: renderInto, layout: layout, edgePath: edgePath, edgeLabelPoint: edgeLabelPoint, ICONS: ICON };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

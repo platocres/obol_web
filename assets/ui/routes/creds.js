@@ -53,8 +53,23 @@
   // owns the box: on HTB Forest svc-alfresco is a valid foothold you escalate FROM, not an admin.
   function cellStatus(cred, host) {
     var f = OBOL.store.factSetForTarget(host.ip);
-    var u = String(cred.user || '').toLowerCase();
+    var u = String(cred.user || '').toLowerCase().replace(/^.*\\/, '').replace(/@.*$/, '');
     if (!u) return { level: '' };
+    var eng = (OBOL.store && OBOL.store.active && OBOL.store.active()) || {};
+    var rawCreds = eng.credentials || [];
+    var verifiedOnHost = Array.isArray(cred.verified) && cred.verified.indexOf(host.ip) >= 0;
+    var credSecret = cred.secret || cred.password || cred.nthash || '';
+    var sameUserDiffSecret = false;
+    rawCreds.forEach(function (rc) {
+      if (!rc) return;
+      var rcu = String(rc.user || rc.username || '').toLowerCase().replace(/^.*\\/, '').replace(/@.*$/, '');
+      if (rcu !== u) return;
+      var rcSec = rc.secret || rc.password || rc.nthash || '';
+      if (credSecret && rcSec && rcSec !== credSecret) sameUserDiffSecret = true;
+      if ((cred.id && rc.id === cred.id) || (!credSecret || !rcSec || rcSec === credSecret)) {
+        if (Array.isArray(rc.verified) && rc.verified.indexOf(host.ip) >= 0) verifiedOnHost = true;
+      }
+    });
     if (OBOL.context) {
       var candidate = OBOL.context.material({user:cred.user,domain:cred.domain,password:cred.secret,nthash:cred.nthash});
       var rows = (f.facts || []).filter(function (x) {
@@ -62,12 +77,16 @@
         var v = x.value || {};
         if (v.credentialFingerprint) return v.credentialFingerprint === candidate.credentialFingerprint;
         if (v.credentialId) return v.credentialId === candidate.id;
-        if (!v.password && !v.nthash && !v.hash) return false;
+        if (!v.password && !v.nthash && !v.hash) {
+          if (sameUserDiffSecret) return false;
+          var fu = String(v.user || v.username || v.principal || v.identity || '').toLowerCase().replace(/^.*\\/, '').replace(/@.*$/, '');
+          return fu === u;
+        }
         return OBOL.context.material(v, x.scope).credentialFingerprint === candidate.credentialFingerprint;
       });
-      var auth = rows.filter(function (x) { return /^(?:credential\.validated|(?:smb|ldap|winrm|ssh|rdp|mssql)\.authenticated)$/.test(x.kind); });
+      var auth = rows.filter(function (x) { return /^(?:credential\.validated|(?:smb|ldap|winrm|ssh|rdp|mssql|ftp|wmi)\.authenticated)$/.test(x.kind); });
       var admin = rows.some(function (x) { return /^access\.(?:admin|root|system)$/.test(x.kind); });
-      return {level:admin ? 'admin' : auth.length ? 'valid' : '', services:auth.map(function (x) { return (x.value || {}).service || x.kind.split('.')[0]; }).filter(function(v,i,a){return a.indexOf(v)===i;})};
+      return {level:admin ? 'admin' : (auth.length || verifiedOnHost) ? 'valid' : '', services:auth.map(function (x) { return (x.value || {}).service || x.kind.split('.')[0]; }).filter(function(v,i,a){return a.indexOf(v)===i;})};
     }
     function ident(v) { return String((v && (v.identity || v.user)) || '').toLowerCase(); }
     var adminHere = false, validHere = false;
@@ -272,7 +291,7 @@
     var rows = LIST_META.filter(function (m) { return (lists[m[0]] || []).length; }).map(function (m) {
       var items = lists[m[0]], joined = items.join('\n');
       var fileCmd = 'cat > ' + lootDir() + '/' + m[2] + " <<'EOF'\n" + joined + '\nEOF';
-      var preview = items.slice(0, 5).join(', ') + (items.length > 5 ? ', …' : '');
+      var preview = items.slice(0, 5).map(function (s) { return s.length > 48 ? s.slice(0, 48) + '...' : s; }).join(', ') + (items.length > 5 ? ', ...' : '');
       var created = createdFile(m[2]);
       return '<details class="cv-list" data-cvkey="list:' + m[0] + '"' + (isOpen('list:' + m[0], false) ? ' open' : '') + '>'
         + '<summary class="cv-list-sum"><span class="cv-list-tw"><span class="cv-list-k">' + esc(m[1]) + '</span><span class="cv-list-n">' + items.length + '</span>'

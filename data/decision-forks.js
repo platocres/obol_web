@@ -1,14 +1,14 @@
 /*!
- * obol data — decision-forks.js — OBOL.DECISION_FORKS
+ * obol data - decision-forks.js - OBOL.DECISION_FORKS
  *
  * The one-line fork CONDITION per move, for the decision map (see docs/DECISION-MAP.md). The map derives
  * the tree STRUCTURE and the ranked spine from the engine; this file adds only the short, authored
- * sentence that labels the branch point — the observable question whose answer decides where you go:
+ * sentence that labels the branch point - the observable question whose answer decides where you go:
  *   { '<moveId>': { cond: 'the yes/no the result turns on', onFail: 'what to do if it does not pan out' } }
  * `cond` renders on the node as "does X? → branch"; `onFail` is the authored hint for the "it didn't work"
  * edge (the map already derives the alternatives from alternativesFor, so onFail is just the human nudge).
  * Keep both to one plain sentence. A move with no entry still renders (structure + alternatives are
- * derived) — the lint simply reports it as a fork-condition gap, so coverage is visible and fillable.
+ * derived) - the lint simply reports it as a fork-condition gap, so coverage is visible and fillable.
  */
 (function (root) {
   'use strict';
@@ -215,9 +215,9 @@
     'pivot-reach-listener': { cond: 'Does the forwarded internal service answer on your localhost port?', onFail: 'No answer → check the forward is up and you named the right listener port.' },
     'pivot-internal-dns': { cond: 'Does the internal resolver return the DC locator SRV records (or a zone transfer)?', onFail: 'Refused/empty → the resolver may not be a DC, or AXFR is blocked; you still have the SRV answers to work from.' },
     // ---- proof ----
-    'flag-hunt-linux': { cond: 'Can you read the user flag (user.txt/local.txt) with proof context visible?', onFail: 'Not readable yet — any shell should read it; confirm your foothold.' },
+    'flag-hunt-linux': { cond: 'Can you read the user flag (user.txt/local.txt) with proof context visible?', onFail: 'Not readable yet - any shell should read it; confirm your foothold.' },
     'flag-hunt-root-linux': { cond: 'Can you read the root flag (/root/root.txt) now that id shows uid=0?', onFail: 'Permission denied → you are not root yet; finish privilege escalation first.' },
-    'flag-hunt-windows': { cond: 'Can you read the user flag (Desktop\\local.txt) with proof context visible?', onFail: 'Not readable yet — any shell should read it; confirm your foothold.' },
+    'flag-hunt-windows': { cond: 'Can you read the user flag (Desktop\\local.txt) with proof context visible?', onFail: 'Not readable yet - any shell should read it; confirm your foothold.' },
     'flag-hunt-root-windows': { cond: 'Can you read the proof flag (Administrator Desktop\\proof.txt) as SYSTEM/Administrator?', onFail: 'Access denied → you are not SYSTEM/Administrator yet; finish escalation first.' },
     // ---- web ----
     'ssrf': { cond: 'Does the server fetch a URL you control (internal target or callback)?', onFail: 'No fetch, the parameter is not SSRFable.' },
@@ -319,6 +319,85 @@
     "shell-revshell-windows": { cond: "Does the Windows reverse shell connect back and survive?", onFail: "No callback → egress is filtered; try another port or a different payload." },
     "linux-remote-exec": { cond: "Does the credential/key give command execution on the remote host?", onFail: "No exec → the account lacks a shell; try a different service or user." },
     "windows-persistence": { cond: "Is a persistence mechanism installed and confirmed to survive logoff?", onFail: "Not needed yet → finish escalation and proof first." }
-
+,
+    "spider-secrets": { cond: "Does Filter Spidered Shares for Secrets confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "remote-app-creds": { cond: "Does Harvest Stored Application Credentials (NetExec) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "fix-acl-reauth": { cond: "Does ACL Write Denied: Re-Authenticate After the Grant confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "smb-share-browse-download": { cond: "Does Interactive SMB Share Browsing & File Retrieval confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "win-interactive-shell": { cond: "Did Evil-WinRM, psexec, wmiexec, or xfreerdp open a stable interactive session on the Windows host?", onFail: "WinRM/SMB exec blocked by UAC or firewall -> try another protocol (wmiexec/atexec/rdp) or check account privileges." },
+    "ad-recycle-bin-enum": { cond: "Does Active Directory Recycle Bin & Deleted Objects Enumeration confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "azuread-connect-dump": { cond: "Does Azure AD Connect Database Credential Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "blind-brute-ssh": { cond: "Does Blind SSH Brute (Common Users, Last Resort) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "vnc-decrypt": { cond: "Does VNC Stored Password Decryption confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "keepass-dump-recover": { cond: "Does KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "cisco-decrypt": { cond: "Does Cisco Password Decryption and Hash Cracking confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "validate-credential": { cond: "Does Validate A Found Credential confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "adminer-mysql-fileread": { cond: "Does Adminer Rogue MySQL Client Arbitrary File Read confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "redis-rogue-server-rce": { cond: "Does Redis Rogue Server Master Replication RCE confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nosqli-regex-extract": { cond: "Does MongoDB NoSQL Injection Regex Credential Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "h2-database-console-rce": { cond: "Does H2 Database Web Console SQL Query Java Alias RCE confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "oracle-tns-odat-rce": { cond: "Does Oracle Database TNS ODAT DBMS_SCHEDULER Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "aerospike-udf-rce": { cond: "Does Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "sqlite-table-extract": { cond: "Does Exposed SQLite Database Table Extraction and Credential Recovery confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "access-db-export": { cond: "Does Microsoft Access Database (.mdb / .accdb) Analysis confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "ole-macro-analysis": { cond: "Does Office Document VBA Macro Analysis and Credential Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "gpg-private-key-decrypt": { cond: "Does GPG Private Key Cracking and Artifact Decryption confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "wildcard-symlink-privesc": { cond: "Does Archive Wildcard Symlink Abuse confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "git-repo-forensics": { cond: "Does Local Git Repository Forensics & History Inspection confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "lxd-container-privesc": { cond: "Does LXD / LXC Group Membership Host Filesystem Mount Privesc confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "gdbserver-remote-execution": { cond: "Does GDBserver Remote Code Execution (TCP 1337) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "gnu-screen-root-attach": { cond: "Does GNU Screen / Tmux Root Session Attachment confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "chkrootkit-local-privesc": { cond: "Does chkrootkit Cron Execution Local Privilege Escalation confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "npm-package-privesc": { cond: "Does npm Package Lifecycle Hook Local Privilege Escalation confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "screen-suid-privesc": { cond: "Does GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "ligolo-tunnel-pivot": { cond: "Does Ligolo-ng TUN Interface Pivot and Internal Subnet Routing confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "http3-quic-probe": { cond: "Does HTTP/3 and QUIC Protocol Service Probing confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "ipmi-bmc-cipher0": { cond: "Does IPMI BMC Cipher Suite 0 Bypass and Hash Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "unrealircd-backdoor": { cond: "Does UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "heartbleed-memory-leak": { cond: "Does OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "samba-usermap-script-rce": { cond: "Does Samba username map script Remote Command Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "snmp-process-cmdline-harvest": { cond: "Does SNMP Process Table Command-Line Credential Harvesting (hrSWRun) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "certutil-usage-doctor": { cond: "Does Certutil Rejected Your Arguments confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "jenkins-cli-fileread": { cond: "Does Jenkins CLI Arbitrary File Read (CVE-2024-23897) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "activemq-cve-2023-46604": { cond: "Does Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nvms1000-traversal": { cond: "Does TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "exiftool-cve-2021-22204": { cond: "Does ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "php-backdoor-useragent": { cond: "Does PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "opennetadmin-rce": { cond: "Does OpenNetAdmin (ONA) v18.1.1 Command Injection RCE confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nostromo-rce": { cond: "Does Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "jackson-databind-rce": { cond: "Does Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "pfsense-rrd-rce": { cond: "Does pfSense RRD Graph Command Injection RCE (CVE-2014-4688) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "web-config-upload-bypass": { cond: "Does IIS web.config Extension Filter Upload Bypass confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nibbleblog-myimage-upload-rce": { cond: "Does Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "solr-velocity-template-rce": { cond: "Does Apache Solr Velocity Template RCE (CVE-2019-17558) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "gitlab-ci-webshell": { cond: "Does GitLab CI/CD Automated Runner Webshell Deployment confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "iis6-webdav-scstorage": { cond: "Does Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "pdf-export-xss-fileread": { cond: "Does Server-Side XSS Dynamic PDF Export Local File Disclosure confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "amportal-conf-leak": { cond: "Does FreePBX / Asterisk amportal.conf Credential Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "rejetto-hfs-rce": { cond: "Does Rejetto HttpFileServer Macro Injection RCE confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "coldfusion-scheduled-task-rce": { cond: "Does Adobe ColdFusion Directory Traversal & Scheduled Task RCE confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "ftp-webroot-upload-webshell": { cond: "Does Anonymous FTP Webroot Write to Webshell Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "http-request-smuggling-auth": { cond: "Does HTTP Request Smuggling Authentication Bypass and Siphoning confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nginx-log-poisoning-lfi": { cond: "Does Nginx Access Log Poisoning via Local File Inclusion confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "myfaces-viewstate-deserialization-rce": { cond: "Does Apache MyFaces ViewState Java Deserialization Remote Code Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "node-serialize-rce": { cond: "Does Node.js node-serialize IIFE Remote Code Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "usermin-auth-rce": { cond: "Does Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "zabbix-agent-system-run": { cond: "Does Zabbix Agent system.run Remote Command Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "nsclient-web-privesc": { cond: "Does NSClient++ Local Privilege Escalation via Web Management API confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "vhd-mount-sam-extract": { cond: "Does Extract SAM/SYSTEM from Backup VHD Images confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "wsl-bash-enum": { cond: "Does Windows Subsystem for Linux (WSL) Credential Harvesting confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "prtg-config-extract": { cond: "Does PRTG Network Monitor Configuration Credential Extraction confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "prtg-notification-rce": { cond: "Does PRTG Network Monitor Notification Command Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "chm-payload-exec": { cond: "Does Compiled HTML Help (.CHM) Document Weaponization confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "sireprat-iot-exec": { cond: "Does Windows IoT SirepRAT Remote Code Execution confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "crack-modular-hash": { cond: "Does Offline Hash Cracking — PBKDF2 / Argon2 / Flask / Gitea / phpass confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "writable-etc-shadow-sudoers": { cond: "Does Writable /etc/shadow or /etc/sudoers Direct Escalation confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "linux-root-cred-harvest": { cond: "Does Post-Root Credential & SSH Key Harvest confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "runas-savedcred-exec": { cond: "Does Stored Windows Credential Execution (runas /savecred) confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "sebackup-serestore-abuse": { cond: "Does SeBackupPrivilege & SeRestorePrivilege Registry / File Read confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "smbv1-vuln-verify": { cond: "Does SMBv1 Dialect & Vulnerability Verification confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "rpc-endpoint-abuse": { cond: "Does MSRPC Endpoint Mapper & Interface Enumeration confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "fix-samr-null-denied": { cond: "Does SAMR Null Session Denied — Pivot to Authenticated / LSA / SMB Enum confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." },
+    "post-proof-loot-sweep": { cond: "Does Post-Proof Loot & Network Pivot Sweep confirm the expected signal?", onFail: "Signal not present -> record the negative result and pivot to the next branch." }
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

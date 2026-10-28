@@ -35,6 +35,8 @@ async function imported(raw){check(await S.importData(raw.engagement ? raw : {en
  check(eng.facts.filter(x=>x.kind==='credential.candidate'&&(x.value||{}).association==='unresolved').length===2,'Ambiguous recovered material remains visible as unresolved candidates');
  check(!S.doneIdsForTarget(A)['old-probe'],'Legacy zero-fact retirement is reopened');
  check(S.doneIdsForTarget(A)['manual-move'],'Explicit manual completion remains respected');
+ S.setChecklist('fresh-v2-probe','empty:' + O.pack.accessEpoch(S.factSetForTarget(A)),A);
+ check(S.doneIdsForTarget(A)['fresh-v2-probe']===true,'v2 empty:<epoch> checklist entries set at runtime are preserved across doneIdsForTarget calls');
  check(eng.unresolvedLegacyChecklist[JSON.stringify([A,'old-probe'])],'Legacy automatic retirement remains inspectable');
  const alice=O.context.credentials(eng).find(c=>c.user==='alice');
  check(S.resolvedContext({target:A}).credentialId===alice.id,'Saved active target retains its unambiguous selection');

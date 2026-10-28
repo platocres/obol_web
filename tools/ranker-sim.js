@@ -185,7 +185,7 @@ const RUBRIC = [
       // stop demanding it there too (else it flags states the ranker never
       // promised to pin).
       if (has(ctx.facts, 'ad.dc_candidate') && has(ctx.facts, 'ad.domain_known')) return null;
-      if (hasAny(ctx.facts, ACCESS_KINDS) || hasAny(ctx.facts, CRED_KINDS)) return null;
+      if (hasAny(ctx.facts, ACCESS_KINDS) || hasAny(ctx.facts, CRED_KINDS) || hasAny(ctx.facts, ['ad.user_list', 'hash.asrep', 'hash.tgs', 'smb.readable_share', 'smb.shares'])) return null;
       // Is an orient move even eligible in the full ranked set? If not, nothing to pin.
       const eligibleOrient = ctx.all.some(a => produces(a, AD_ORIENT_KINDS) && !AD_ORIENT_KINDS.every(k => has(ctx.facts, k)));
       if (!eligibleOrient) return null;
@@ -212,7 +212,7 @@ const RUBRIC = [
     test: (ctx) => {
       if (!has(ctx.facts, 'scan.nmap.quick')) return null;
       if (has(ctx.facts, 'scan.nmap.version')) return null; // past the opening
-      if (hasAny(ctx.facts, ACCESS_KINDS) || hasAny(ctx.facts, CRED_KINDS)) return null;
+      if (hasAny(ctx.facts, ACCESS_KINDS) || hasAny(ctx.facts, CRED_KINDS) || hasAny(ctx.facts, ['ad.user_list', 'hash.asrep', 'hash.tgs', 'smb.readable_share', 'smb.shares'])) return null;
       const lead = ctx.top[0];
       if (!lead) return null;
       const isScan = produces(lead, ['scan.nmap.version']) || /version-script|service-scan|nmap-version/i.test(lead.id);

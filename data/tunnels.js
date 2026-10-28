@@ -1,15 +1,15 @@
 /*!
- * obol data — tunnels.js — OBOL.TUNNELS + OBOL.renderTunnelSteps
+ * obol data - tunnels.js - OBOL.TUNNELS + OBOL.renderTunnelSteps
  *
  * The tunnel-setup catalog: the ways to pivot into a network you can only reach through a compromised
  * host, each with a thorough, hand-held, machine-by-machine setup guide. One shared source so the
- * connectivity panel's chooser (home.js) and the coach's staging guide (path.js) never drift — both
+ * connectivity panel's chooser (home.js) and the coach's staging guide (path.js) never drift - both
  * render through OBOL.renderTunnelSteps below. Ligolo-ng is the recommended default (a real routed
  * interface, no proxychains); the rest are offered for when it does not fit.
  *
  * These tools are the classic beginner wall: you have a shell on a dual-homed box, but the tool that
- * bridges you into the hidden subnet has to be STAGED on two machines at once — prepared on your Kali
- * box AND carried onto the compromised host you are pivoting through — before a single packet moves.
+ * bridges you into the hidden subnet has to be STAGED on two machines at once - prepared on your Kali
+ * box AND carried onto the compromised host you are pivoting through - before a single packet moves.
  * So every guide walks that explicitly: prepare on Kali, stage the agent onto the host, open the
  * tunnel, use it, clean up. Nothing is left as "transfer the binary first" in a footnote.
  *
@@ -18,12 +18,12 @@
  * Shape of each step:
  *   { phase, where, title, cmd?, alts?:[{label,cmd,note?}], why?, note?, check? }
  *     phase  groups the steps under a heading ("Prepare on Kali", "Stage the agent onto the host", ...)
- *     where  'local' (your Kali box) or 'host' (the compromised pivot) — drives the machine label
+ *     where  'local' (your Kali box) or 'host' (the compromised pivot) - drives the machine label
  *     cmd    the command, {{token}}s filled from the engagement params at render time; a value obol
  *            cannot know is written as a literal <placeholder> so it is obviously operator-supplied
- *     alts   OS/tool variants of one step (Linux vs Windows download) — shown all at once, nothing hidden
+ *     alts   OS/tool variants of one step (Linux vs Windows download) - shown all at once, nothing hidden
  *     why    plain-language what-this-does-and-why (the hand-holding)
- *     check  "you'll know it worked when ..." — a confidence checkpoint before moving on
+ *     check  "you'll know it worked when ..." - a confidence checkpoint before moving on
  */
 (function (root) {
   'use strict';

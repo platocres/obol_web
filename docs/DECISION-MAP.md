@@ -106,7 +106,7 @@ CI next to the pack/stamp checks.
 
 This is the durable payoff the build was for. To find and close coverage gaps:
 
-1. **Run the X-ray.** `node tools/gap-report.js --verify` from `obol_web/`. It prints COVERAGE,
+1. **Run the X-ray.** `node tools/gap-report.js --verify` from `qa/`. It prints COVERAGE,
    PARSE (gap + partial), WIRING (unreachable / dead-end / missing hand-off), orphan parser facts,
    fork-condition coverage, and the drift check. The counts line at the top is the at-a-glance score.
 2. **Triage by class, in this order:**
@@ -123,7 +123,7 @@ This is the durable payoff the build was for. To find and close coverage gaps:
 3. **Close the gap** by editing the real engine/packs/parsers — **never** by hand-editing the map.
    The map re-derives.
 4. **Re-run** `--verify` until the class you targeted is zero (or documented), and
-   `node tests/engine/decisionmap-smoke.js` passes.
+   `node tools/gap-report.js --check`, `node tests/engine/pack-lint.js`, `node tests/engine/study-lint.js`, and `node tests/engine/legacy/decisionmap-smoke.js` pass.
 5. **Extend the oracle as you learn.** When you discover a technique the map *should* teach for a
    port, add it to `coverage-expected.js` — now the gap is tracked even before the move exists.
 
@@ -188,7 +188,7 @@ demonstrate all its observable result kinds; adding a signature alone cannot cha
 | `data/parser-signatures.js` | authored "looks for" sentences **and** the parser **capability set** (`OBOL.PARSER_SIGNATURES`). |
 | `data/coverage-expected.js` | authored expected-technique oracle per port (`OBOL.COVERAGE_EXPECTED`). |
 | `tools/gap-report.js` | the CLI X-ray. `--verify` adds the drift check; `--check` exits non-zero on hard problems. |
-| `tests/engine/decisionmap-smoke.js` | engine smoke: forest shape, filter, spine, hand-offs, the three gap lenses. |
+| `tests/engine/legacy/decisionmap-smoke.js` | archived static engine smoke: forest shape, filter, spine, hand-offs, the three gap lenses (superseded in active CI by `tools/gap-report.js --check`, `tests/engine/pack-lint.js`, and `tests/engine/study-lint.js`). |
 | `assets/ui/routes/study.js` | by-port view: the Cards ⇄ Decision map toggle (`_evMode`) and the `wirePortMap` mount hook. |
 
 The renderer is deliberately reusable: it is mounted in the Learn by-port view now, and is meant to

@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
-  <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the OBOL engine: proof-gated next-move coach, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=2fbba13c">
+  <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the OBOL engine: proof-gated operator cockpit, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
+  <link rel="stylesheet" href="assets/css/obol.css?v=80e007d0">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -15,8 +15,9 @@
            Neon (synthwave sunset) and the others remain selectable in the settings panel. */
         document.documentElement.setAttribute('data-skin', (p && p.skin) || 'obol');
         var a = parseFloat(localStorage.getItem('obol.surface-alpha'));
-        if (isNaN(a)) a = 0.5; /* fade surfaces so the motion background shows through, but keep panels readable */
+        if (isNaN(a)) a = 1; /* fade surfaces so the motion background shows through, but keep panels readable */
         if (a >= 0 && a <= 1) document.documentElement.style.setProperty('--surface-alpha', String(a));
+        if (localStorage.getItem('obol.motion') === 'off') document.documentElement.setAttribute('data-motion', 'off');
         if (localStorage.getItem('obol.params-collapsed') === '1') document.documentElement.setAttribute('data-params-collapsed', '1');
       } catch (e) {}
     })();
@@ -46,6 +47,7 @@
         <div><h1>OBOL</h1><div class="tagline">Offensive Box Operations Ledger</div></div>
       </div>
       <nav class="mainnav" aria-label="Primary">
+        <a data-nav href="#/start">Start Here</a>
         <a data-nav href="#/study">Learn</a>
         <a data-nav data-nav-match="home loadout targets target evidence path map domain creds checklist findings history scoreboard report graph" href="#/home">Engagements</a>
         <a data-nav href="#/tools">Tools</a>
@@ -109,7 +111,7 @@
   <!-- Mobile bottom tab bar (shown only on narrow screens; primary sections + a More sheet). -->
   <nav id="tabbar" class="tabbar" aria-label="Sections">
     <a class="tab" href="#/home" data-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11 12 4l8 7"/><path d="M6 10v9h12v-9"/></svg><span>Home</span></a>
-    <a class="tab" href="#/path" data-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5Z" fill="currentColor" stroke="none"/></svg><span>Coach</span></a>
+    <a class="tab" href="#/path" data-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 10.5 10.5 8.5 15.5 13.5 13.5Z" fill="currentColor" stroke="none"/></svg><span>Cockpit</span></a>
     <a class="tab" href="#/evidence" data-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="12" height="16" rx="2"/><path d="M9.5 4h5v2.6h-5z"/><path d="M9 11h6M9 14.5h4"/></svg><span>Evidence</span></a>
     <a class="tab" href="#/tools" data-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6.4a3.5 3.5 0 0 0-4.6 4.5L4.7 16.6 7.4 19.3 13 13.6a3.5 3.5 0 0 0 4.5-4.6l-2.1 2.1-1.9-.5-.5-1.9z"/></svg><span>Tools</span></a>
     <button class="tab" id="tab-more" type="button" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg><span>More</span></button>
@@ -136,58 +138,58 @@
   </div>
 
   <!-- Critical path only. Everything else is route-lazy (assets/ui/lazy.js). -->
-  <script defer src="assets/engine/facts.js?v=e23021b3"></script>
-  <script defer src="assets/engine/phases.js?v=d4a6fc5e"></script>
-  <script defer src="assets/engine/pack.js?v=626a44ae"></script>
-  <script defer src="assets/engine/profile.js?v=2179856c"></script>
-  <script defer src="assets/engine/context.js?v=49345b06"></script>
-  <script defer src="assets/engine/command.js?v=e7dc3142"></script>
+  <script defer src="assets/engine/facts.js?v=89563a24"></script>
+  <script defer src="assets/engine/phases.js?v=cf6dbbd7"></script>
+  <script defer src="assets/engine/pack.js?v=3bcdeb48"></script>
+  <script defer src="assets/engine/profile.js?v=9e4a6e49"></script>
+  <script defer src="assets/engine/context.js?v=56839ff6"></script>
+  <script defer src="assets/engine/command.js?v=4168e09d"></script>
   <script defer src="assets/engine/workspace.js?v=df6b7730"></script>
   <script defer src="assets/engine/vfs.js?v=b4c3595d"></script>
   <script defer src="assets/engine/loot.js?v=60db5fe5"></script>
   <script defer src="assets/engine/playbook.js?v=73750f11"></script>
-  <script defer src="assets/engine/chain.js?v=dfc7eda9"></script>
-  <script defer src="data/findings-catalog.js?v=3cae45e2"></script>
-  <script defer src="data/narratives.js?v=f5205094"></script>
-  <script defer src="assets/engine/findings.js?v=e6f64d28"></script>
-  <script defer src="data/packs-bundle.js?v=c244628f"></script>
-  <script defer src="data/tools-install.js?v=e49d5c68"></script>
-  <script defer src="data/tunnels.js?v=d01a63d8"></script>
-  <script defer src="data/pivot-troubleshooter.js?v=ad994ee0"></script>
-  <script defer src="data/field-notes.js?v=1bd7ebb8"></script>
+  <script defer src="assets/engine/chain.js?v=d3bb8d95"></script>
+  <script defer src="data/findings-catalog.js?v=c433961e"></script>
+  <script defer src="data/narratives.js?v=52db4e19"></script>
+  <script defer src="assets/engine/findings.js?v=8a4aeb1d"></script>
+  <script defer src="data/packs-bundle.js?v=7aea469c"></script>
+  <script defer src="data/tools-install.js?v=30d082d5"></script>
+  <script defer src="data/tunnels.js?v=9f49c482"></script>
+  <script defer src="data/pivot-troubleshooter.js?v=e78366a3"></script>
+  <script defer src="data/field-notes.js?v=af69718c"></script>
   <script defer src="data/tool-staging.js?v=85818c47"></script>
   <script defer src="assets/engine/pivotdoctor.js?v=ec9d2e5a"></script>
   <script defer src="assets/engine/packs.js?v=a90dc37a"></script>
   <script defer src="data/gtfobins.js?v=ff786d3f"></script>
   <script defer src="assets/engine/resolve.js?v=8974eeaa"></script>
-  <script defer src="assets/ui/util.js?v=fe55474c"></script>
-  <script defer src="assets/ui/icons.js?v=9fffb690"></script>
+  <script defer src="assets/ui/util.js?v=c972ce66"></script>
+  <script defer src="assets/ui/icons.js?v=03d2117e"></script>
   <script defer src="assets/ui/mobile.js?v=912b45f0"></script>
   <script defer src="assets/ui/factpick.js?v=012097b2"></script>
-  <script defer src="assets/ui/store.js?v=8d31b9ff"></script>
-  <script defer src="assets/ui/credbar.js?v=40b7cdb9"></script>
-  <script defer src="data/tips.js?v=d9fb019f"></script>
-  <script defer src="assets/ui/tips.js?v=8c303d93"></script>
-  <script defer src="assets/ui/ctxbar.js?v=19884c54"></script>
-  <script defer src="assets/ui/quickpaste.js?v=ca6ee4e8"></script>
+  <script defer src="assets/ui/store.js?v=45b33942"></script>
+  <script defer src="assets/ui/credbar.js?v=f9c56f48"></script>
+  <script defer src="data/tips.js?v=0ce10649"></script>
+  <script defer src="assets/ui/tips.js?v=e7c9d4f3"></script>
+  <script defer src="assets/ui/ctxbar.js?v=eb188a0b"></script>
+  <script defer src="assets/ui/quickpaste.js?v=5c94ec44"></script>
   <script defer src="assets/ui/chainview.js?v=3b7e3f4c"></script>
-  <script defer src="assets/ui/graphview.js?v=52fc2284"></script>
-  <script defer src="assets/ui/graphtip.js?v=bb9b0267"></script>
-  <script defer src="assets/engine/outcomes.js?v=39ed672d"></script>
-  <script defer src="assets/ui/ingest.js?v=e7d2cad7"></script>
-  <script defer src="assets/ui/router.js?v=a6127913"></script>
-  <script defer src="assets/ui/lazy.js?v=b4edcde5"></script>
+  <script defer src="assets/ui/graphview.js?v=87e3677a"></script>
+  <script defer src="assets/ui/graphtip.js?v=86afaf65"></script>
+  <script defer src="assets/engine/outcomes.js?v=5c2d5a9e"></script>
+  <script defer src="assets/ui/ingest.js?v=db2b2e05"></script>
+  <script defer src="assets/ui/router.js?v=15b04eaa"></script>
+  <script defer src="assets/ui/lazy.js?v=00effdf0"></script>
   <script defer src="assets/ui/palette.js?v=5d1537c0"></script>
-  <script defer src="assets/ui/routes/home.js?v=7db0ac36"></script>
-  <script defer src="assets/ui/routes/targets.js?v=9165a1fc"></script>
-  <script defer src="assets/ui/routes/evidence.js?v=cff2778d"></script>
-  <script defer src="assets/ui/routes/path.js?v=aefa92d6"></script>
-  <script defer src="assets/ui/boot.js?v=55fa8582"></script>
+  <script defer src="assets/ui/routes/home.js?v=ddefbbe0"></script>
+  <script defer src="assets/ui/routes/targets.js?v=ac091e0b"></script>
+  <script defer src="assets/ui/routes/evidence.js?v=2cad4328"></script>
+  <script defer src="assets/ui/routes/path.js?v=76e75d73"></script>
+  <script defer src="assets/ui/boot.js?v=861a1b77"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->
-  <script defer src="assets/ui/backdrop.js?v=f7abea05"></script>
-  <script defer src="assets/ui/coin.js?v=c2f042ec"></script>
-  <script defer src="assets/ui/settings.js?v=c805a94f"></script>
+  <script defer src="assets/ui/backdrop.js?v=37b673dc"></script>
+  <script defer src="assets/ui/coin.js?v=8ac33e12"></script>
+  <script defer src="assets/ui/settings.js?v=a1ee25b0"></script>
 </body>
 </html>

@@ -169,9 +169,9 @@ assert(pathHtml.includes('10.10.11.41 (DC01)'), 'Hero target selector has option
 assert(pathHtml.includes('10.10.11.42 (WEB01)'), 'Hero target selector has option for Target B: 10.10.11.42 (WEB01)');
 assert(pathHtml.includes('coach-hero-lens'), 'Hero banner consolidates Scope filter lens');
 assert(pathHtml.includes('coach-hero-aside'), 'Hero banner has aside container');
-assert(pathHtml.includes('hero-loadout-badge'), 'Hero banner has consolidated Loadout badge in top-right');
-assert(pathHtml.includes('hero-ready-tag'), 'Hero banner integrates Ready Now move count badge');
-assert(pathHtml.includes('campaign-bar-inner'), 'Campaign Playbook uses single-row campaign-bar-inner layout');
+assert(!pathHtml.includes('hero-loadout-badge'), 'Loadout badge is omitted from the coach hero');
+assert(pathHtml.includes('Moves Ready'), 'Hero banner integrates Moves Ready count metric');
+assert(pathHtml.includes('hero-utility-row'), 'Hero banner uses hero-utility-row layout');
 assert(pathHtml.includes('Field Notes'), 'Field Notes header rendered on canvas');
 assert(!pathHtml.includes('Anatomy of a Move'), 'Anatomy of a Move replaced by Field Notes');
 assert(!pathHtml.includes('<div class="ns-railhead"><h2>Ready Now'), 'Standalone Ready Now railhead divider removed');

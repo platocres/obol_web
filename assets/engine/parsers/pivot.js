@@ -36,6 +36,17 @@
     var a = +o[0];
     return a !== 127 && a < 224 && !(a === 169 && +o[1] === 254) && ip !== '0.0.0.0';
   }
+  function isHostIp(ip) {
+    if (!isRoutable(ip)) return false;
+    var o = String(ip).split('.');
+    var last = +o[3];
+    return last !== 0 && last !== 255;
+  }
+  function isPrivateHostIp(ip) {
+    if (!isHostIp(ip)) return false;
+    var o = String(ip).split('.').map(Number);
+    return o[0] === 10 || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 192 && o[1] === 168);
+  }
   // Prefix length of a dotted-quad netmask, or -1 if it is not a valid contiguous mask. Rejects
   // 0.0.0.0 (default) and the degenerate ends so only real subnet masks (e.g. /8../30) count.
   function maskPrefix(mask) {
@@ -110,6 +121,8 @@
   // banner so a pasted output alone still counts. Conservative: a tool name plus a real success token.
   function _parse_tunnel(text, ws, source, facts, command) {
     var h = 'host:' + ws.target, lc = String(command || '').toLowerCase(), t = String(text || ''), cmd = String(command || '');
+    var hasPositiveTunnel = /(?:session#\d+.*tun:|Connected \(Latency|\bsession\b.*(?:established|opened)|Agent joined|session \d+ opened|Interface\s+\S+\s+(?:created|up)|\[Tunnel\] Interface ligolo|\bc\s*:\s*Connected\b|client:\s*Connected|Entering interactive session|new session|obol:fact:pivot_active)/i.test(t);
+    if (/connection refused|permission denied|authentication failed|timed?\s*out|could not connect|cannot connect|unreachable|fatal|fata\[|server died|exiting|error:/i.test(t) && !hasPositiveTunnel) return;
 
     // obol sync token: obol:fact:pivot_active | subnet=... | via=... | host=...
     var syncRe = /obol:fact:pivot_active\s*\|\s*subnet=([^\s|]+)\s*\|\s*via=([^\s|]+)\s*\|\s*host=([^\s|]+)/i;
@@ -154,8 +167,9 @@
     String(text).split(/\r?\n/).forEach(function (line) {
       if (!mac.test(line)) return;                       // a neighbour entry resolves to a MAC
       if (/\b(?:INCOMPLETE|FAILED)\b/i.test(line)) return; // an unresolved cache slot is not a reachable host
+      if (/\bff[:-]ff[:-]ff[:-]ff[:-]ff[:-]ff\b/i.test(line)) return; // broadcast MAC is not a neighbour host
       var ip = (line.match(/(\d{1,3}(?:\.\d{1,3}){3})/) || [])[1];
-      if (ip && isRoutable(ip)) hosts[ip] = 1;
+      if (ip && isHostIp(ip)) hosts[ip] = 1;
     });
     var list = Object.keys(hosts);
     if (list.length) _add(facts, mkFact('scan.local.neighbors', h, { hosts: list.slice(0, 32) }, S, source));
@@ -186,9 +200,9 @@
   function _parse_local_dns(text, ws, source, facts) {
     var h = 'host:' + ws.target, servers = {}, m;
     var reNs = /^\s*nameserver\s+(\d{1,3}(?:\.\d{1,3}){3})/gim;
-    while ((m = reNs.exec(text))) { if (isRoutable(m[1])) servers[m[1]] = 1; }
+    while ((m = reNs.exec(text))) { if (isPrivateHostIp(m[1])) servers[m[1]] = 1; }
     var reWin = /DNS Servers[^\n:]*:\s*((?:\d{1,3}\.){3}\d{1,3}(?:[\s\S]{0,40}?\d{1,3}(?:\.\d{1,3}){3})*)/gi;
-    while ((m = reWin.exec(text))) { (m[1].match(/\d{1,3}(?:\.\d{1,3}){3}/g) || []).forEach(function (ip) { if (isRoutable(ip)) servers[ip] = 1; }); }
+    while ((m = reWin.exec(text))) { (m[1].match(/\d{1,3}(?:\.\d{1,3}){3}/g) || []).forEach(function (ip) { if (isPrivateHostIp(ip)) servers[ip] = 1; }); }
     var list = Object.keys(servers);
     if (list.length) _add(facts, mkFact('scan.local.dns', h, { servers: list.slice(0, 8) }, S, source));
   }

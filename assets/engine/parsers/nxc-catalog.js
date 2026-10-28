@@ -39,9 +39,9 @@
   function modCreds(text, ws, kind) {
     var out = [], seen = {};
     payloadLines(text).forEach(function (l) {
-      var m = l.match(/(?:user(?:name)?|login|ssid)\s*[:=]\s*(\S+).*?(?:pass(?:word)?|pwd|key)\s*[:=]\s*(\S+)/i)
+      var m = l.match(/(?:user(?:name)?|login|ssid)[ \t]*[:=][ \t]*(\S+)[^\r\n]{0,160}?(?:pass(?:word)?|pwd|key)[ \t]*[:=][ \t]*(\S+)/i)
         || l.match(/^(\S+):([^:\s]{3,})$/);
-      var pw = l.match(/(?:pass(?:word)?|pwd|key)\s*[:=]\s*(\S{3,})/i);
+      var pw = l.match(/(?:pass(?:word)?|pwd|key)[ \t]*[:=][ \t]*(\S{3,})/i);
       if (m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, user: m[1], password: m[2], tool: 'nxc' } }); }
       else if (pw && !m && !seen[l]) { seen[l] = 1; out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: kind, password: pw[1], tool: 'nxc' } }); }
     });
@@ -92,8 +92,8 @@
       extract: function (text, ws) {
         var out = [];
         payloadLines(text).forEach(function (l) {
-          var up = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|[^\]]+)\]\s*([^\s:]+\\[^\s:]+|[A-Za-z0-9_.-]+)\s+-\s+(?:password|secret)\s*:\s*(\S+)/i);
-          var m = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|.*)\].*?(?:password|secret)\s*:\s*(\S+)/i) || l.match(/\b([^\s:]+):([^\s:]{4,})\s*$/);
+          var up = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|[^\]]+)\][ \t]*([^\s:]+\\[^\s:]+|[A-Za-z0-9_.-]+)[ \t]+-[ \t]+(?:password|secret)[ \t]*:[ \t]*(\S+)/i);
+          var m = l.match(/\[(?:SYSTEM|CREDENTIAL|CHROME|[^\]]*)\][^\r\n]{0,200}?(?:password|secret)[ \t]*:[ \t]*(\S+)/i) || l.match(/\b([^\s:]+):([^\s:]{4,})\s*$/);
           if (m) {
             var pw = up ? up[2] : (m[2] || m[1]);
             var usr = up ? up[1] : (m[2] ? m[1] : undefined);
@@ -110,21 +110,46 @@
         var users = C._usernames(text);
         return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-loggedon', note: 'users with a live session on this host (lateral-movement targets)' } }] : [];
       } },
-    { id: 'smb-gpp-password', proto: 'smb', module: 'gpp_password', produces: ['credential.candidate'],
+    { id: 'smb-gpp-password', proto: 'smb', module: 'gpp_password', produces: ['credential.candidate', 'credential.plaintext', 'credential.available'],
       gate: ['smb.reachable', 'port:445'],
       extract: function (text, ws) {
-        // nxc -M gpp_password prints decrypted creds: "Usernames: ['svc']" / "Passwords: ['pw']" (or user:pass).
-        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
-        var ps = (text.match(/Passwords?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
-        if (us || ps) return [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_cpassword', user: us && us.trim(), password: ps && ps.trim(), tool: 'nxc', via: 'gpp_password' } }];
-        return [];
+        // nxc -M gpp_password prints decrypted creds: "Usernames: ['svc']" / "Found cpassword: pw" or "Passwords: ['pw']".
+        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\r\n]+)/i) || [])[1];
+        var ps = (text.match(/(?:Found\s*c?passwords?|Passwords?)\s*:\s*\[?['"]?([^'"\]\r\n]+)/i) || [])[1];
+        if (!us && !ps) return [];
+        var rawUser = us ? us.trim() : '';
+        var cleanPass = ps ? ps.trim() : '';
+        var domPart = '';
+        if (rawUser.indexOf('\\') >= 0) {
+          var parts = rawUser.split(/\\+/);
+          domPart = parts[0].trim();
+          rawUser = parts[parts.length - 1].trim();
+        }
+        var cleanUser = rawUser.replace(/\s*\([^)]*\)\s*$/, '').trim();
+        var domName = domPart || (C && C._domain_from_facts ? C._domain_from_facts(ws) : '') || (ws && ws.domain) || '';
+        var out = [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_cpassword', user: cleanUser || rawUser, password: cleanPass, domain: domName, tool: 'nxc', via: 'gpp_password' } }];
+        if (cleanUser && cleanPass) {
+          out.push({ kind: 'credential.plaintext', scope: host(ws), value: { kind: 'gpp_plaintext', user: cleanUser, password: cleanPass, domain: domName, via: 'gpp_password' } });
+          out.push({ kind: 'credential.available', scope: host(ws), value: { user: cleanUser, password: cleanPass, domain: domName, method: 'gpp-decrypt', via: 'gpp_password' } });
+        }
+        return out;
       } },
-    { id: 'smb-gpp-autologin', proto: 'smb', module: 'gpp_autologin', produces: ['credential.candidate'],
+    { id: 'smb-gpp-autologin', proto: 'smb', module: 'gpp_autologin', produces: ['credential.candidate', 'credential.plaintext', 'credential.available'],
       gate: ['smb.reachable', 'port:445'],
       extract: function (text, ws) {
-        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
-        var ps = (text.match(/Passwords?\s*:\s*\[?['"]?([^'"\]\n]+)/i) || [])[1];
-        return (us || ps) ? [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_autologin', user: us && us.trim(), password: ps && ps.trim(), tool: 'nxc' } }] : [];
+        var us = (text.match(/Usernames?\s*:\s*\[?['"]?([^'"\]\r\n]+)/i) || [])[1];
+        var ps = (text.match(/(?:Found\s*c?passwords?|Passwords?)\s*:\s*\[?['"]?([^'"\]\r\n]+)/i) || [])[1];
+        if (!us && !ps) return [];
+        var rawUser = us ? us.trim() : '';
+        var cleanPass = ps ? ps.trim() : '';
+        var cleanUser = rawUser.split(/\\+/).pop().replace(/\s*\([^)]*\)\s*$/, '').trim();
+        var domName = (C && C._domain_from_facts ? C._domain_from_facts(ws) : '') || (ws && ws.domain) || '';
+        var out = [{ kind: 'credential.candidate', scope: host(ws), value: { kind: 'gpp_autologin', user: cleanUser || rawUser, password: cleanPass, tool: 'nxc', via: 'gpp_password' } }];
+        if (cleanUser && cleanPass) {
+          out.push({ kind: 'credential.plaintext', scope: host(ws), value: { kind: 'gpp_plaintext', user: cleanUser, password: cleanPass, domain: domName, via: 'gpp_password' } });
+          out.push({ kind: 'credential.available', scope: host(ws), value: { user: cleanUser, password: cleanPass, domain: domName, method: 'gpp-decrypt', via: 'gpp_password' } });
+        }
+        return out;
       } },
     { id: 'smb-lsassy', proto: 'smb', module: 'lsassy', produces: ['hash.ntlm', 'credential.plaintext', 'credential.candidate', 'credential.available'],
       gate: ['access.admin', 'access.system'],
@@ -167,7 +192,7 @@
         }
         var hits = [];
         payloadLines(text).forEach(function (l) {
-          if (LOOT_HINT_RE.test(l)) { var m = l.match(/[^\s\/\\]+\.[A-Za-z0-9]{1,8}\b|[^\s\/\\]*(?:passw|cred|secret|unattend|backup)[^\s\/\\]*/i); if (m) hits.push(m[0]); }
+          if (LOOT_HINT_RE.test(l)) { var m = l.match(/[^\s\/\\]{1,120}\.[A-Za-z0-9]{1,8}\b|[^\s\/\\]{0,80}(?:passw|cred|secret|unattend|backup)[^\s\/\\]{0,80}/i); if (m) hits.push(m[0]); }
         });
         if (hits.length) out.push({ kind: 'credential.candidate', scope: host(ws), value: { kind: 'spider_secret_file', files: hits.slice(0, 50), count: hits.length, tool: 'nxc', note: 'filenames matching credential-material hints - pull and inspect' } });
         return out;
@@ -233,8 +258,8 @@
     { id: 'smb-keepass-discover', proto: 'smb', module: 'keepass_discover', produces: ['loot.keepass_dump', 'loot.files'],
       gate: ['foothold.windows', 'access.admin'],
       extract: function (text, ws) {
-        if (/\.kdbx\b|keepass.*found|found.*\.kdbx/i.test(text) && !hasDenied(text)) {
-          var m = text.match(/[A-Za-z]:\\[^\r\n"']*\.kdbx\b|\/[^\s"']*\.kdbx\b/i);
+        if (/\.kdbx\b|keepass[^\r\n]{0,80}?found|found[^\r\n]{0,80}?\.kdbx/i.test(text) && !hasDenied(text)) {
+          var m = text.match(/[A-Za-z]:\\[^\r\n"']{1,260}?\.kdbx\b|\/[^\s"']{1,260}?\.kdbx\b/i);
           return [
             { kind: 'loot.keepass_dump', scope: host(ws), value: { path: m ? m[0] : 'Database.kdbx', detail: 'KeePass .kdbx database discovered via nxc keepass_discover', tool: 'nxc' } },
             { kind: 'loot.files', scope: host(ws), value: { kind: 'keepass_kdbx', path: m ? m[0] : 'Database.kdbx', tool: 'nxc' } }
@@ -258,7 +283,7 @@
         // pre-created (pre-Win2000) computer accounts authenticate with the lowercased machine name as the
         // password - a usable credential candidate.
         var out = [];
-        payloadLines(text).forEach(function (l) { var m = l.match(/([A-Za-z0-9_-]+\$)\s*:\s*([A-Za-z0-9_-]+)/); if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'pre2k_computer', user: m[1], password: m[2], tool: 'nxc' } }); });
+        payloadLines(text).forEach(function (l) { var m = l.match(/([A-Za-z0-9_-]{1,64}\$)[ \t]*:[ \t]*([A-Za-z0-9_-]{1,64})/); if (m) out.push({ kind: 'credential.candidate', scope: dom(ws), value: { kind: 'pre2k_computer', user: m[1], password: m[2], tool: 'nxc' } }); });
         return out;
       } },
     { id: 'smb-ntlmv1', proto: 'smb', module: 'ntlmv1', produces: ['config.review'],
@@ -387,10 +412,30 @@
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
         var out = [], lines = payloadLines(text);
-        var unconstrained = lines.some(function (l) { return /unconstrained/i.test(l); });
-        var any = lines.some(function (l) { return /\$|delegat|constrained/i.test(l); });
-        if (unconstrained) out.push({ kind: 'ad.unconstrained', scope: dom(ws), value: { detail: 'accounts trusted for unconstrained delegation', tool: 'nxc' } });
-        else if (any) out.push({ kind: 'ad.attack_paths', scope: dom(ws), value: { kind: 'delegation', detail: 'constrained/RBCD delegation accounts', tool: 'nxc' } });
+        var knownDc = String((ws && (ws.dc_hostname || ws.dcHost || ws.hostname)) || '').split('.')[0].toLowerCase();
+        function isDcPrincipalLine(l) {
+          if (/\b(?:SERVER_TRUST_ACCOUNT|OU=Domain Controllers|Domain Controller)\b/i.test(l)) return true;
+          var m = /\b([A-Za-z0-9._-]+)\$/.exec(l);
+          if (m) {
+            var base = m[1].split('.')[0].toLowerCase();
+            if ((knownDc && base === knownDc) || /^dc\d*$/.test(base)) return true;
+          }
+          return false;
+        }
+        var nonDcUnconstrained = lines.filter(function (l) {
+          if (/unconstrained/i.test(l)) return !isDcPrincipalLine(l);
+          // nxc --trusted-for-delegation sometimes prints bare principal names (without the word "unconstrained")
+          if (/^[A-Za-z0-9._-]+\$?\s*$/.test(l.trim()) || /\b[A-Za-z0-9._-]+\$(?=\s|$|[),;:])/.test(l)) {
+            if (!/constrained|rbcd|allowedtodelegate/i.test(l) && !isDcPrincipalLine(l)) return false;
+          }
+          return false;
+        });
+        var constrainedOrRbcd = lines.some(function (l) { return /\b(?:constrained|rbcd|allowedtodelegate|allowedtoact)/i.test(l) && !/unconstrained/i.test(l); });
+        var nonDcMachineOnly = !nonDcUnconstrained.length && !constrainedOrRbcd && lines.some(function (l) {
+          return /\b[A-Za-z0-9._-]+\$(?=\s|$|[),;:])/.test(l) && !/unconstrained|constrained/i.test(l) && !isDcPrincipalLine(l);
+        });
+        if (nonDcUnconstrained.length) out.push({ kind: 'ad.unconstrained', scope: dom(ws), value: { detail: 'non-DC accounts trusted for unconstrained delegation', evidence: nonDcUnconstrained.slice(0, 4), tool: 'nxc' } });
+        else if (constrainedOrRbcd || nonDcMachineOnly) out.push({ kind: 'ad.attack_paths', scope: dom(ws), value: { kind: 'delegation', detail: 'constrained/RBCD delegation accounts', tool: 'nxc' } });
         return out;
       } },
     { id: 'ldap-find-delegation', proto: 'ldap', flag: '--find-delegation', produces: ['ad.unconstrained', 'ad.attack_paths'],
@@ -530,7 +575,7 @@
         if (hasDenied(text)) return [];
         var m = text.match(/screenshot[^\r\n]*?\bsaved(?:\s+to)?\s+([^\s"']+\.png)\b/i)
           || text.match(/\bsaved(?:\s+screenshot)?(?:\s+to)?\s+([^\s"']+\.png)\b/i)
-          || (/screenshot/i.test(text) && text.match(/([^\s"']*\.png)\b/i));
+          || (/screenshot/i.test(text) && text.match(/([^\s"']{1,200}?\.png)\b/i));
         return m ? [{ kind: 'loot.files', scope: host(ws), value: { kind: 'rdp_screenshot', path: m[1], detail: 'RDP desktop screenshot saved by NetExec (--screenshot)', tool: 'nxc' } }] : [];
       } },
     { id: 'rdp-nla-screenshot', proto: 'rdp', flag: '--nla-screenshot', produces: ['loot.files'], gate: ['rdp.reachable', 'port:3389'],

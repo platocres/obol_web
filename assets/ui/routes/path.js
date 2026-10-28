@@ -1,6 +1,11 @@
 /*!
- * obol ui - routes/path.js - THE COACH (Next Path).
- * A pure proof-gated coach: ranked next moves from the engine, each with its *why*, its
+ * obol ui - routes/path.js - THE COCKPIT (formerly "Coach" / "Next Steps").
+ * NOTE FOR DEVELOPERS & AGENTS: In the user-facing UI and documentation, this workspace is
+ * called "Cockpit" (and its top card is the "Cockpit HUD"). In the codebase, its route hash is
+ * `#/path`, its JS namespace is `OBOL.coach` / `OBOL.routes.path`, and its CSS selectors use
+ * `.coach-*` and `.ns-*`. Keep these internal identifiers intact to preserve test and link stability.
+ *
+ * A proof-gated operator cockpit: ranked next moves from the engine, each with its *why*, its
  * copy-ready command variant(s), its *does-not-prove* honesty line, and what it *produces*.
  * NO toggles/switches here - command *building* lives in the Tools route. Blocked moves are
  * listed with their unmet-prereq reason; adding the unlocking fact promotes them live.
@@ -13,22 +18,29 @@
   function esc(s) { return U.esc(s); }
 
   // Scope lens (teaching filter, orthogonal to fact-gating): narrow the visible moves to a syllabus level
-  // so a newcomer isn't handed the whole arsenal at once. Default 'oscp+' hides only the handful of
-  // genuinely out-of-scope edge CVEs (zerologon/noPac/PrintNightmare/MS14-068/SCCM/WSUS); the operator
-  // flips it any time. Persisted per-browser; a read in a private window simply falls back to the default.
-  var LENS_KEY = 'obol.scope-lens', LENS_ORDER = { oscp: 0, 'oscp+': 1, beyond: 2, all: 2 };
+  // so a newcomer isn't handed the whole arsenal at once. Default 'oscp+' (displayed as OSCP) includes the
+  // full modern OSCP/PEN-200 syllabus and hides only the handful of genuinely out-of-scope edge CVEs
+  // (zerologon/noPac/PrintNightmare/MS14-068/SCCM/WSUS); the operator flips to All any time.
+  var LENS_KEY = 'obol.scope-lens', LENS_ORDER = { oscp: 1, 'oscp+': 1, beyond: 2, all: 2 };
   function lensGet() {
     try {
-      var v = localStorage.getItem(LENS_KEY);
-      if (v === 'oscp' || v === 'oscp+' || v === 'all') return v;
+      var v = localStorage.getItem(LENS_KEY) || localStorage.getItem('obol.scope.lens.v1');
+      if (v === 'all') return 'all';
+      if (v === 'oscp' || v === 'oscp+') return 'oscp+';
     } catch (e) {}
     try {
       var eng = (OBOL.store && OBOL.store.active) ? OBOL.store.active() : null;
-      if (eng && eng.profile && OBOL.profile && OBOL.profile.defaultLens) return OBOL.profile.defaultLens(eng.profile);
+      if (eng && eng.profile && OBOL.profile && OBOL.profile.defaultLens) {
+        var dl = OBOL.profile.defaultLens(eng.profile);
+        return dl === 'all' ? 'all' : 'oscp+';
+      }
     } catch (e) {}
     return 'oscp+';
   }
-  function lensSet(v) { try { localStorage.setItem(LENS_KEY, v); } catch (e) {} }
+  function lensSet(v) {
+    var norm = v === 'all' ? 'all' : 'oscp+';
+    try { localStorage.setItem(LENS_KEY, norm); localStorage.setItem('obol.scope.lens.v1', norm); } catch (e) {}
+  }
   function scopeAllowed(scope, lens) { if (lens === 'all') return true; return LENS_ORDER[scope || 'oscp'] <= LENS_ORDER[lens]; }
 
   var CAMPAIGN_KEY = 'obol.campaign';
@@ -60,7 +72,7 @@
       if (!present) miss.push(e);
     });
     if (!miss.length) return '';
-    return '<div class="cmd-missing">⚠ Not On Your Box: ' + miss.map(function (e) {
+    return '<div class="cmd-missing">' + OBOL.ic('bolt') + ' Not On Your Box: ' + miss.map(function (e) {
       var how = e.install ? '<code class="cmd-miss-cmd" data-copy="' + U.attr(e.install) + '" title="Click to copy">' + esc(e.install) + '</code>'
         : (e.manual_url ? '<a href="' + U.attr(e.manual_url) + '" target="_blank" rel="noopener">get it ↗</a>' : 'see Loadout');
       return '<b>' + esc(e.label || e.key) + '</b> ' + how;
@@ -80,7 +92,7 @@
       ? ('Loadout synced ' + Math.round(ageDays) + 'd ago, re-sync your box?')
       : ('Loadout: ' + present + ' tools · ' + (p.staged || []).length + ' staged ready');
     return '<a class="lo-strip ' + (stale ? 'lo-strip-stale' : 'lo-strip-ok') + '" href="#/loadout">'
-      + '<span class="lo-strip-ico">' + (stale ? '⚠' : '✓') + '</span>'
+      + '<span class="lo-strip-ico">' + (stale ? OBOL.ic('bolt') : OBOL.ic('check')) + '</span>'
       + '<span class="lo-strip-txt">' + esc(txt) + '</span><span class="lo-strip-go">Loadout →</span></a>';
   }
 
@@ -99,7 +111,7 @@
       ? ('Loadout: Sync Stale (' + Math.round(ageDays) + 'd)')
       : ('Loadout: ' + present + ' Tools Ready');
     return '<a class="hero-loadout-badge ' + (stale ? 'lo-stale' : 'lo-ok') + '" href="#/loadout" title="' + esc(txt) + '">'
-      + '<span class="lo-badge-ico">' + (stale ? '⚠' : '✓') + '</span>'
+      + '<span class="lo-badge-ico">' + (stale ? OBOL.ic('bolt') : OBOL.ic('check')) + '</span>'
       + '<span class="lo-badge-txt">' + esc(txt) + '</span>'
       + '<span class="lo-badge-go">→</span></a>';
   }
@@ -272,15 +284,17 @@
   // the command cannot run. Operator config (target, lhost, lport, wordlist) is deliberately NOT here: the
   // user sets those, so a command that only needs config still shows with its fill box.
   var GATE_TOKENS = (OBOL.command && OBOL.command.EARNED_TOKENS) || { domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
-    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, ca_name: 1, template: 1,
-    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1 };
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, abuse_groups_quoted: 1, ca_name: 1, template: 1,
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_smb_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1 };
   // Human phrasing for the "unlocks once you have ..." affordance (deduped). user/password both read as
   // "a credential" so a command needing both reads once.
   var GATE_LABEL = { domain: 'the domain', basedn: 'the base DN', dc: 'the DC', dc_netbios: 'the DC name',
     dc_account: 'the DC account', user: 'a credential', password: 'a credential', nthash: 'an NT hash',
     userlist: 'a user list', hashfile: 'a captured hash', domain_sid: 'the domain SID', group: 'a group',
+    abuse_groups_quoted: 'a writable group',
     ca_name: 'the CA name', template: 'a cert template', pfx: 'a certificate', nmap_ports: 'a port scan',
     krbtgt_hash: 'the krbtgt hash', target_sam: 'the SAM', flag_path_local: 'the located user flag',
+    flag_smb_path_local: 'the located user flag',
     flag_path_root: 'the located root flag', share: 'a readable share', cpassword: 'a GPP cpassword' };
   // A command is GATED when, after filling from the engagement's facts/params, it still carries an unfilled
   // EARNED token: a value meant to come from a proven fact the operator has not earned yet. Its time has not
@@ -317,7 +331,12 @@
         var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
         return (move.eligible && commandFacts && !move.eligible(commandFacts)) || cmdGated(filled[i]);
       },
-      function (cmd, i) { return cmdWasTriedInEpoch(move, cmd, filled[i], eng, curEpoch); }
+      function (cmd, i) {
+        var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
+        var ctx = (commandFacts && commandFacts._resolvedContext) || move.resolvedContext || (facts && facts._resolvedContext);
+        var tgt = move.contextTarget || (ctx && ctx.target) || (commandParams && commandParams.target) || '';
+        return cmdWasTriedInEpoch(move, cmd, filled[i], eng, curEpoch, tgt, ctx);
+      }
     );
   }
   // "Because <held gate> → expect <first payoff>" - the attack-graph cause/effect in one plain line.
@@ -362,14 +381,14 @@
           if ((!domPart || hTo.toLowerCase() !== domPart.toLowerCase()) && hTo.indexOf('.') < 0) isGrp = true;
         }
         var done = isGrp ? !!joinedGroups[hTo.toLowerCase()] : hasDcsync;
-        var statusTag = done ? '✓ Done' : (!currentMarked ? (currentMarked = true, '→ Run Now') : 'Next');
+        var statusTag = done ? 'Done' : (!currentMarked ? (currentMarked = true, '→ Run Now') : 'Next');
         var badgeStyle = done
           ? 'background:rgba(46,160,67,0.16);color:#3fb950;border:1px solid rgba(46,160,67,0.4);'
           : (statusTag === '→ Run Now'
             ? 'background:rgba(56,139,253,0.16);color:#58a6ff;border:1px solid rgba(56,139,253,0.45);'
             : 'background:rgba(139,148,158,0.12);color:#8b949e;border:1px solid rgba(139,148,158,0.3);');
         hopPills.push('<span class="bh-hop-pill" style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border-radius:4px;font-size:12px;' + badgeStyle + '">'
-          + '<b>Step ' + stepN + ':</b> ' + esc(h.edge) + ' → <code>' + esc(hTo) + '</code> <span>(' + statusTag + ')</span></span>');
+          + '<b>Step ' + stepN + ':</b> ' + esc(h.edge) + ' → <code>' + esc(hTo) + '</code> <span>(' + (done ? OBOL.ic('check') + ' ' : '') + statusTag + ')</span></span>');
       });
       if (hopPills.length) {
         bhHopBanner = '<div class="bh-path-banner" style="margin:0 0 8px 0;padding:8px 10px;border-radius:6px;background:rgba(56,139,253,0.06);border:1px solid rgba(56,139,253,0.22);display:flex;flex-wrap:wrap;align-items:center;gap:8px">'
@@ -378,6 +397,8 @@
           + '</div>';
       }
     }
+    var seenCmdKeys = {};
+    var locusStep = {};
     (action.commands || []).forEach(function (cmdObj, i) {
       var commandFacts = facts && facts.forAction ? facts.forAction(action, cmdObj) : facts;
       if (action.eligible && commandFacts && !action.eligible(commandFacts)) {
@@ -388,10 +409,15 @@
       // A command that has done its job drops out: a run-once probe (the switchless null-session check)
       // disappears once the fact it was there to prove is held, so you never re-run a question you answered.
       if (OBOL.pack.commandSettled(cmdObj, commandFacts)) return;
-      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, commandFacts, action)) return;
+      if (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmdObj, commandFacts, action)) {
+        if (action.id === 'flag-hunt-windows' && cmdObj.requires_admin && !spansBoth) {
+          gatedNeeds['administrative access (to spawn an on-host WMI/PsExec shell when WinRM 5985 & RDP 3389 are closed)'] = 1;
+        }
+        return;
+      }
       var v = filled[i] || {};
       if (v.blocked) {
-        items.push({ index: i, locus: OBOL.pack.commandLocus(cmdObj), hidden: false, isLead: i === selIdx, ran: false, html: '<div class="cmd-note" role="status">' + esc((v.errors || []).join(' ')) + '</div>' });
+        items.push({ index: i, locus: OBOL.pack.commandLocus(cmdObj), hidden: false, isLead: i === selIdx, ran: false, alt: !!cmdObj.alt, html: '<div class="cmd-note" role="status">' + esc((v.errors || []).join(' ')) + '</div>' });
         return;
       }
       // A command whose time has not come drops out too: it still needs an EARNED fact (base DN, domain, a
@@ -401,6 +427,22 @@
       if (gates.length) { gates.forEach(function (t) { gatedNeeds[GATE_LABEL[t] || t] = 1; }); return; }
       var locus = OBOL.pack.commandLocus(cmdObj);
       var hidden = spansBoth && locus !== selLocus;
+      if (v.filled) {
+        var dedupKey = locus + '|' + String(v.filled).trim()
+          .replace(/'([A-Za-z0-9_@%+=:,./-]+)'/g, '$1')
+          .replace(/"([A-Za-z0-9_@%+=:,./-]+)"/g, '$1')
+          .replace(/\s+(?:-d|--domain)\s+\S+/g, '')
+          .replace(/\s+/g, ' ');
+        if (seenCmdKeys[dedupKey]) {
+          if (i === selIdx) {
+            var prev = seenCmdKeys[dedupKey];
+            prev.isLead = true;
+            prev.html = prev.html.replace('class="ns-cmd"', 'class="ns-cmd active"');
+          }
+          return;
+        }
+      }
+      var stepNum = (locusStep[locus] = (locusStep[locus] || 0) + 1);
       var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
       var ran = OBOL.command.commandWasRun(v.run || v.filled, acts, params) || cmdWasTriedInEpoch(action, cmdObj, v, eng, curEpoch);
       var unfilled = OBOL.command.unfilledTokens(v.filled || '');
@@ -410,12 +452,13 @@
             return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
               + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
           }).join('') + '</div>' : '';
-      var step = action.sequence ? ('<span class="ns-cmd-step">' + (i + 1) + '</span>') : '';
+      var step = action.sequence ? ('<span class="ns-cmd-step">' + stepNum + '</span>') : '';
       var ranTag = ran ? '<span class="ns-cmd-ran" title="OBOL saw this in your run ledger">Ran</span>' : '';
       var isLead = (i === selIdx);
       var fn = OBOL.fieldNote ? OBOL.fieldNote(action, i) : null;
-      var noteText = (cmdObj && cmdObj.note) || (fn && fn.what) || (fn && fn.land && fn.land[0]) || '';
-      var noteHtml = (focusMode && isLead && noteText) ? ('<div class="ns-cmd-note">' + fmtNote(noteText) + '</div>') : '';
+      var webNoteText = (v && v.webNote) || (cmdObj && cmdObj.web_note) || '';
+      var noteText = webNoteText || (cmdObj && cmdObj.note) || (fn && fn.what) || (fn && fn.land && fn.land[0]) || '';
+      var noteHtml = (webNoteText || (focusMode && isLead && noteText)) ? ('<div class="ns-cmd-note">' + fmtNote(noteText) + '</div>') : '';
 
       var rowHtml = '<div class="ns-cmd' + (isLead ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + ' tabindex="0" role="group" aria-label="' + U.attr('Command ' + (i + 1) + ', ' + locus) + '"'
@@ -428,7 +471,9 @@
         + noteHtml
         + fillRow + missingToolHint(action, v) + '</div>';
 
-      items.push({ index: i, locus: locus, hidden: hidden, isLead: isLead, ran: ran, html: rowHtml });
+      var itemObj = { index: i, locus: locus, hidden: hidden, isLead: isLead, ran: ran, alt: !!cmdObj.alt, html: rowHtml };
+      items.push(itemObj);
+      if (v.filled && dedupKey) seenCmdKeys[dedupKey] = itemObj;
     });
 
     var rows = '';
@@ -463,16 +508,35 @@
       }
     } else {
       var untriedItems = items.filter(function (it) { return !it.ran; });
+      var primaryUntried = untriedItems.filter(function (it) { return !it.alt; });
+      var altUntried = untriedItems.filter(function (it) { return it.alt; });
       var ranItems = items.filter(function (it) { return it.ran; });
-      if (untriedItems.length && ranItems.length) {
-        rows = untriedItems.map(function (it) { return it.html; }).join('');
-        var ranHtml = ranItems.map(function (it) { return it.html; }).join('');
-        rows += '<div class="ns-focus-alts">'
-          + '<details class="ns-more-ways">'
-          + '<summary class="ns-chip-more-ways">' + esc('Already tried (' + ranItems.length + ')') + '</summary>'
-          + '<div class="ns-alt-cmds">' + ranHtml + '</div>'
-          + '</details>'
-          + '</div>';
+      if (untriedItems.length) {
+        var mainList = primaryUntried.length ? primaryUntried : untriedItems;
+        rows = mainList.map(function (it) { return it.html; }).join('');
+        if (primaryUntried.length && altUntried.length) {
+          var visibleAltCount = altUntried.filter(function (it) { return !it.hidden; }).length;
+          if (visibleAltCount > 0) {
+            var altLabel = 'Show ' + visibleAltCount + (visibleAltCount === 1 ? ' More Way' : ' More Ways');
+            rows += '<div class="ns-focus-alts">'
+              + '<details class="ns-more-ways">'
+              + '<summary class="ns-chip-more-ways">' + esc(altLabel) + '</summary>'
+              + '<div class="ns-alt-cmds">' + altUntried.map(function (it) { return it.html; }).join('') + '</div>'
+              + '</details>'
+              + '</div>';
+          } else {
+            rows += altUntried.map(function (it) { return it.html; }).join('');
+          }
+        }
+        if (ranItems.length) {
+          var ranHtml = ranItems.map(function (it) { return it.html; }).join('');
+          rows += '<div class="ns-focus-alts">'
+            + '<details class="ns-more-ways">'
+            + '<summary class="ns-chip-more-ways">' + esc('Already tried (' + ranItems.length + ')') + '</summary>'
+            + '<div class="ns-alt-cmds">' + ranHtml + '</div>'
+            + '</details>'
+            + '</div>';
+        }
       } else {
         rows = items.map(function (it) { return it.html; }).join('');
       }
@@ -551,6 +615,30 @@
     return selLocus;
   }
 
+  function renderPathChooserRegion(action, pc, pcOpen, selIdx) {
+    if (!action) return '';
+    var hasMap = !!(OBOL.pathChooser && OBOL.pathChooser.ACTION_TO_DECK && OBOL.pathChooser.ACTION_TO_DECK[action.id]);
+    var hasGroups = !!(pc && pc.groups && pc.groups.length);
+    if (!hasGroups && !hasMap) return '';
+    var readyLanes = 0, totalLanes = 0;
+    if (hasGroups) {
+      pc.groups.forEach(function (g) {
+        (g.lanes || []).forEach(function (l) {
+          totalLanes++;
+          if (l.status !== 'locked') readyLanes++;
+        });
+      });
+    }
+    var countN = readyLanes || totalLanes || 3;
+    var hasAlert = !!(pc && pc.needsBothFlagsOnHost);
+    return '<div class="ns-pc-wrap ns-pc-card-bridge" data-action="' + esc(action.id) + '">'
+      + '<button type="button" class="ns-open-deck-btn' + (hasAlert ? ' has-alert' : '') + '" data-open-deck-action="' + esc(action.id) + '">'
+      + '<span class="ns-open-deck-left"><span class="ns-pc-spark">' + OBOL.ic('branch') + '</span><span class="ns-open-deck-title">Choose Your Path in Operator Deck</span></span>'
+      + '<span class="ns-open-deck-meta">' + countN + ' Ready Lane' + (countN === 1 ? '' : 's') + ' · Swap Tools &amp; Options →</span>'
+      + '</button>'
+      + '</div>';
+  }
+
   // Closed cards need only their summary. Build commands when a card is opened.
   function nsCard(action, facts, params, opts) {
     opts = opts || {};
@@ -558,21 +646,40 @@
     var famClass = ' ns-ph-' + OBOL.phases.phaseOfAction(action);
     var nCmd = (action.commands || []).length, body = '';
     if (opts.selected) {
-    var dirs = OBOL.workspace.tokens(OBOL.store.active());
-    var filled = opts.filled || OBOL.command.fillAll(action, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: dirs });
+    var activeEng = OBOL.store.active() || {};
+    var dirs = OBOL.workspace.tokens(activeEng);
+    var filled = opts.filled || OBOL.command.fillAll(action, facts, { params: params, profile: activeEng.profile, workspace: dirs });
     var loci = OBOL.pack.moveCommandLoci(action, facts);
-    var rawLocus = (opts.selected && nsSel.userLocus && nsSel.locus) ? nsSel.locus : ((opts.selected && nsSel.locus) ? nsSel.locus : OBOL.pack.defaultCommandLocus(action, facts));
-    var selLocus = (opts.selected && nsSel.userLocus && loci.both) ? rawLocus : effectiveLocus(action, facts, filled, rawLocus);
-    var selIdx = nsSel.idx;
+    var isFocused = (action.id === nsSel.id);
+    var rawLocus = (isFocused && nsSel.userLocus && nsSel.locus) ? nsSel.locus : OBOL.pack.defaultCommandLocus(action, facts);
+    var selLocus = (isFocused && nsSel.userLocus && loci.both) ? rawLocus : effectiveLocus(action, facts, filled, rawLocus);
+    var curSelCmd = isFocused && action.commands ? action.commands[nsSel.idx] : null;
+    var curSelFacts = curSelCmd && facts && facts.forAction ? facts.forAction(action, curSelCmd) : facts;
+    var curSelInvalid = !curSelCmd
+      || (loci.both && OBOL.pack.commandLocus(curSelCmd) !== selLocus)
+      || OBOL.pack.commandSettled(curSelCmd, curSelFacts)
+      || cmdGated(filled[nsSel.idx]);
+    var selIdx = (isFocused && !curSelInvalid) ? nsSel.idx : firstCmdIndexForLocus(action, selLocus, facts, filled);
+    if (isFocused && curSelInvalid) {
+      nsSel.idx = selIdx;
+    }
+    var pc = (OBOL.pathChooser && OBOL.pathChooser.build) ? OBOL.pathChooser.build(action, facts, params, filled, activeEng) : null;
+    var hasDeckMap = !!(OBOL.pathChooser && OBOL.pathChooser.ACTION_TO_DECK && OBOL.pathChooser.ACTION_TO_DECK[action.id]);
+    var pcHtml = (pc || hasDeckMap) ? renderPathChooserRegion(action, pc, false, selIdx) : '';
     var cardTargetIp = (opts.targetBadge && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(opts.targetBadge))
       ? opts.targetBadge
       : ((OBOL.store.activeTarget && OBOL.store.activeTarget()) || (params && params.target) || '');
     var toggle = loci.both
       ? '<div class="ns-toggle" role="group" aria-label="Where to run this">'
-        + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '">Remote</button>'
-        + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '">On-Host</button>'
+        + '<span class="ns-toggle-k">Run from:</span>'
+        + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '" title="Run remotely from your Kali terminal">Remote (Kali)</button>'
+        + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '" title="Run inside an interactive shell on the target host">On-Host Shell</button>'
         + '</div>' : '';
+    var leadTip = opts.suggested
+      ? '<div class="ns-card-tip">After running a command, click <strong>Paste Output</strong> so OBOL reads the result (or click <strong>Ran - Nothing Found</strong> inside Paste Output if it came back empty).</div>'
+      : '';
     body = '<div class="ns-body">'
+      + pcHtml
       + toggle
       + prepBlock(action, facts, dirs)
       + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both, facts, opts.focusMode) + '</div>'
@@ -581,9 +688,11 @@
       + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + nsBuildInTools(action)
       + '</div>'
+      + leadTip
       + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[selIdx] && filled[selIdx].filled) || (filled[0] && filled[0].filled) || '') + '" hidden>'
-      + '<textarea class="mi-text" placeholder="Paste this command\'s full output here, prompt and all. The coach reads it, mints only what it proves, and advances." spellcheck="false"></textarea>'
+      + '<textarea class="mi-text" placeholder="Paste the terminal output from running this command (or paste multiple commands run in sequence). If it ran cleanly with no output, click Ran - Nothing Found below." spellcheck="false"></textarea>'
       + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '" data-target-ip="' + esc(cardTargetIp) + '">Ingest to Facts</button>'
+      + '<button type="button" class="btn-ghost mi-empty" data-action="' + esc(action.id) + '" data-target-ip="' + esc(cardTargetIp) + '" title="Click if this command completed cleanly with empty output or found nothing">Ran - Nothing Found</button>'
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
       + '<span class="mi-result" role="status"></span></div></div>'
       + '</div>';
@@ -628,7 +737,7 @@
         if ((k === 'blocker.smb_null_denied' || k === 'blocker.ldap_anonymous_disabled') && hasAuthContext) {
           return;
         }
-        if (k === 'blocker.dcsync_denied' && (facts.has('ad.control_paths') || facts.has('ad.domain_control') || facts.has('loot.ntds'))) {
+        if ((k === 'blocker.dcsync_denied' || k === 'blocker.acl_reauth') && (facts.has('ad.control_paths') || facts.has('ad.domain_control') || facts.has('loot.ntds'))) {
           return;
         }
         if (k === 'blocker.nxc_bh_config' && (facts.has('ad.graph.collected') || facts.has('ad.attack_paths'))) {
@@ -644,6 +753,7 @@
             .replace(/<(?:user|username|svc|target-user)>/g, '{{user}}')
             .replace(/<pass>/g, "'{{password}}'")
             .replace(/<domain>/g, '{{domain}}')
+            .replace(/<group>/g, '{{joined_group}}')
             .replace(/<host\.domain>/g, '{{dc_fqdn|{{domain}}}}')
             .replace(/<share>/g, '{{share}}')
             .replace(/<hashfile>/g, '{{hashfile}}');
@@ -667,7 +777,7 @@
             + '<span class="fix-card-badge">DIAGNOSTIC DETECTED</span>'
             + '<h3 class="fix-card-title">' + esc(d.title || d.factKind) + '</h3>'
             + '</div>'
-            + (d.factKind ? ('<button type="button" class="fix-card-dismiss" data-dismiss-blocker="' + esc(d.factKind) + '" data-fact-scope="' + esc(d.factScope || '') + '" title="Dismiss this diagnostic">✓ Resolved</button>') : '')
+            + (d.factKind ? ('<button type="button" class="fix-card-dismiss" data-dismiss-blocker="' + esc(d.factKind) + '" data-fact-scope="' + esc(d.factScope || '') + '" title="Dismiss this diagnostic">' + OBOL.ic('check') + ' Resolved</button>') : '')
             + '</div>'
             + '<div class="fix-card-body">'
             + (d.why ? ('<div class="fix-card-why"><strong>Root Cause:</strong> ' + esc(d.why) + '</div>') : '')
@@ -677,7 +787,7 @@
                 + '<button type="button" class="btn-copy fix-card-copy" data-copy="' + U.attr(d.code) + '" title="Copy fix command">Copy Fix</button>'
                 + '</div>') : '')
             + (d.gotcha ? ('<div class="fix-card-gotcha"><strong>Gotcha / Trap:</strong> ' + esc(d.gotcha) + '</div>') : '')
-            + '<div class="fix-card-gotcha"><strong>Next Step:</strong> No need to paste this fix output back. Click <strong>✓ Resolved</strong> above (or proceed directly to <strong>#1 Suggested Start</strong> below; this banner clears automatically when your next move succeeds).</div>'
+            + '<div class="fix-card-gotcha"><strong>Next Step:</strong> No need to paste this fix output back. Click <strong>Resolved</strong> above (or proceed directly to <strong>#1 Suggested Start</strong> below; this banner clears automatically when your next move succeeds).</div>'
             + '</div>'
             + '</div>';
         }).join('')
@@ -738,8 +848,8 @@
       if (isLin && O.linux) orient += nsSetupStep(O.linux.label, O.linux.cmd);
       if (isWin && O.windows) orient += nsSetupStep(O.windows.label, O.windows.cmd);
       var leadTxt = flagsOn
-        ? 'You have a shell. Get your bearings first, then the coach ranks your next moves. Do not forget to grab the flag.'
-        : 'You have a shell. Get your bearings and record your host identity first, then the coach ranks privilege escalation, credential harvesting, and lateral movement.';
+        ? 'You have a shell. Get your bearings first, then the Cockpit ranks your next moves. Do not forget to grab the flag.'
+        : 'You have a shell. Get your bearings and record your host identity first, then the Cockpit ranks privilege escalation, credential harvesting, and lateral movement.';
       var html = '<p class="ns-cn-h">Once You Are In</p>'
         + '<p class="ns-oyi-lead">' + leadTxt + '</p>';
       if (orient) html += '<div class="ns-setup">' + orient + '</div>';
@@ -895,9 +1005,21 @@
     if (/\bhash\./.test(produces) || tools.hashcat || tools.john || /roast|ntds|secretsdump|lsass|\bsam\b|dcsync|hashdump/i.test(idt)) {
       add('hashid', 'Identify / Crack In Workbench');
     }
-    // a sudo / SUID escape
-    if (move.id === 'sudo-abuse' || move.id === 'suid-gtfobins' || /gtfobins/i.test(idt)) {
-      add('gtfobins', 'Open GTFOBins Browser');
+    // password spraying
+    if (/password.?spray|\bspray\b/i.test(idt)) {
+      add('spray', 'Plan Spray In Workbench');
+    }
+    // a sudo / SUID / LOLBAS escape
+    if (move.id === 'sudo-abuse' || move.id === 'suid-gtfobins' || /gtfobins|lolbas/i.test(idt)) {
+      add('gtfobins', 'Open GTFOBins & LOLBAS');
+    }
+    // pivoting / port forwarding / tunneling
+    if (/pivot|port.?forward|tunnel|chisel|ligolo|socat|proxychains|internal.?port/i.test(idt) || /\bpivot\./.test(produces)) {
+      add('pivot', 'Build Pivot / Tunnel');
+    }
+    // file transfer / staging tools (linpeas, winpeas, pspy, sharphound, potato)
+    if (/linpeas|winpeas|pspy|sharphound|potato|file.?transfer|stage.?tool|upload.?payload/i.test(idt)) {
+      add('transfer', 'Build File Transfer');
     }
     // WEB content discovery / vhosts only. Gate on the actual tools (gobuster/ffuf/feroxbuster/dirb/
     // wfuzz), or a title that is unambiguously about web fuzzing. NOT a bare "discovery" (that matched
@@ -912,11 +1034,11 @@
       add('revshell', 'Build A Reverse Shell');
     }
     // JWT
-    if (/\bjwt\b|json web token/i.test(idt)) add('jwt', 'Decode The JWT');
+    if (/\bjwt\b|json web token/i.test(idt)) add('jwt', 'Forge / Sign JWT');
     // manual SQL injection: the Workbench builds the payloads step by step
     if (/sql injection|sqli|sql-inj/i.test(idt)) add('sqli', 'Build The SQLi');
     // payloads that often need encoding or evasion (LFI/traversal, command injection, XSS)
-    if (/command inj|cmdi|local file inclusion|\blfi\b|traversal|\bxss\b|cross-site script/i.test(idt)) add('encoder', 'Encode A Payload');
+    if (/command inj|cmdi|local file inclusion|\blfi\b|traversal|\bxss\b|cross-site script/i.test(idt)) add('codec', 'Encode / Evasion Payload');
     return out.slice(0, 2);
   }
   function nsWorkbench(move) {
@@ -974,7 +1096,7 @@
       });
     }
     if (!out.length && prod.length) {
-      out.push({ trigger: 'Move Completed', action: 'Minted facts advance the coach frontier; check Ready Now for the next unlocked commands.' });
+      out.push({ trigger: 'Move Completed', action: 'Minted facts advance the Cockpit frontier; check Ready Now for the next unlocked commands.' });
     }
     return out;
   }
@@ -990,6 +1112,7 @@
         .replace(/<(?:user|username|svc|target-user)>/g, '{{user}}')
         .replace(/<pass>/g, "'{{password}}'")
         .replace(/<domain>/g, '{{domain}}')
+        .replace(/<group>/g, '{{joined_group}}')
         .replace(/<host\.domain>/g, '{{dc_fqdn|{{domain}}}}')
         .replace(/<share>/g, '{{share}}')
         .replace(/<hashfile>/g, '{{hashfile}}');
@@ -1051,6 +1174,9 @@
 
     // Staged command display
     if (cmdText) html += '<div class="ns-canvas-cmd' + phCls + '"><code>' + esc(cmdText) + '</code></div>';
+    if (filled[idx] && filled[idx].webNote) {
+      html += '<div class="ns-cmd-note" style="margin:6px 0 10px 0">' + fmtNote(filled[idx].webNote) + '</div>';
+    }
 
     // "See It Run": toggleable Learn-style example run + expected output for this move.
     html += nsExampleBlock(move, idx, cmdText);
@@ -1091,7 +1217,7 @@
       + '<div class="pillar-content">'
       + '<p class="pillar-text"><strong>Objective:</strong> ' + esc(goalText) + '</p>'
       + (whenText ? ('<div class="pillar-subtext"><strong>When To Run:</strong> ' + esc(whenText) + '</div>') : '')
-      + (winText ? ('<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">✓</span><span><strong>Expected Proof:</strong> ' + fmtNote(winText) + '</span></div>') : '')
+      + (winText ? ('<div class="ns-cn-win"><span class="ns-tick" aria-hidden="true">' + OBOL.ic('check') + '</span><span><strong>Expected Proof:</strong> ' + fmtNote(winText) + '</span></div>') : '')
       + '<div class="anatomy-pill-nav"><button type="button" class="anatomy-next-pill-btn" data-pillar-tab="p2">Next: 2. Syntax & Flags →</button></div>'
       + '</div></section>';
 
@@ -1231,7 +1357,9 @@
 
   // The aspirational "Opens Up Next" strip: capability-unlocks only, nearest first, each with its fact
   // chips. Capped to a peek with a "+N more" expander so it invites rather than overwhelms.
+  var _deferredOpensMoreHtml = '';
   function nsOpensStrip(opens) {
+    _deferredOpensMoreHtml = '';
     if (!opens.length) return '';
     var CAP = 8;
     function card(o) {
@@ -1243,13 +1371,16 @@
         + '<div class="ns-ocard-near">' + o.steps + ' Step' + (o.steps === 1 ? '' : 's') + ' Away</div></div>';
     }
     var peek = opens.slice(0, CAP), more = opens.slice(CAP);
+    if (more.length) {
+      _deferredOpensMoreHtml = more.map(card).join('');
+    }
     return '<section class="ns-opens"><div class="ns-opens-head">'
       + '<span class="ns-opens-kick">Opens Up Next</span>'
       + '<span class="ns-opens-sub">What a little more progress unlocks, closest first.</span>'
       + '<span class="ns-opens-n">' + opens.length + '</span></div>'
       + '<div class="ns-opens-peek">' + peek.map(card).join('') + '</div>'
       + (more.length ? '<details class="ns-opens-more"><summary>' + more.length + ' more, further out</summary>'
-          + '<div class="ns-opens-peek">' + more.map(card).join('') + '</div></details>' : '')
+          + '<div class="ns-opens-peek" data-opens-deferred="1"></div></details>' : '')
       + '</section>';
   }
 
@@ -1424,9 +1555,15 @@
     }
     var hasAdSignal = facts.has('ad.dc_candidate') || facts.has('ad.domain_known') || facts.has('ad.base_dn') ||
       facts.has('kerberos.reachable') || facts.has('ldap.reachable') ||
-      facts.has('port:88') || facts.has('port:389') || facts.has('port:636') || facts.has('port:3268');
+      facts.has('port:88') || facts.has('port:389') || facts.has('port:636') || facts.has('port:3268') ||
+      // Downstream AD progress is itself conclusive AD signal: once you hold an attack path, ACL lead, domain
+      // control, or DCSync loot, the engagement is unambiguously AD even if the discovery-phase port/domain
+      // facts were never logged, so AD-only follow-ons (dcsync, etc.) belong in Ready Now, not Coming Up.
+      facts.has('ad.control_paths') || facts.has('ad.acl_lead') || facts.has('ad.attack_paths') ||
+      facts.has('ad.domain_control') || facts.has('loot.ntds');
     function isAdOnlyMove(a) {
       if (!a || a.pack_id !== 'ad_2026_09') return false;
+      if (a.id === 'rpc-endpoint-abuse') return false;
       if (/^(ad-|kerberoast|asrep-roast|bloodhound-|bloodyad-|dcsync|golden-ticket|silver-ticket|trust-enum|sccm-|wsus-abuse|certifried|adcs-|shadow-credentials|delegation-abuse|gmsa-read|laps-read|adidns-abuse|timeroasting|zerologon-|nopac|ms14-068|kerberos-|azuread-)/.test(a.id)) return true;
       var prod = a.produces || [];
       return prod.length > 0 && prod.every(function (k) { return /^(ad\.|kerberos\.|hash\.asrep|hash\.tgs|hash\.krbtgt|loot\.ntds|persistence\.domain|sccm\.)/.test(k); });
@@ -1437,6 +1574,18 @@
       if (!hasAdSignal && isAdOnlyMove(a)) { comingUp.push(a); return; }
       if (OBOL.phases.prematurity(a, facts) === 0 && hasRunnableCommand(a)) onFlow.push(a); else comingUp.push(a);
     });
+    if (onFlow.length > 1 && OBOL.command && typeof OBOL.command.moveDryTriesInEpoch === 'function') {
+      var dryMap = {}, origIdx = {};
+      onFlow.forEach(function (a, idx) {
+        origIdx[a.id] = idx;
+        dryMap[a.id] = OBOL.command.moveDryTriesInEpoch(a, facts, eng, curEpoch, params.target);
+      });
+      onFlow = onFlow.slice().sort(function (a, b) {
+        var da = dryMap[a.id] || 0, db = dryMap[b.id] || 0;
+        if (da !== db) return da - db;
+        return (origIdx[a.id] || 0) - (origIdx[b.id] || 0);
+      });
+    }
     var locked = OBOL.pack.lockedActions(facts, pack);
 
     // Scope lens: filter the visible moves to the chosen syllabus level. Count what the lens hides so the
@@ -1504,6 +1653,85 @@
   // render() emits it once at the top of the coach, then clears it.
   var _pasteFlash = null;
   var _dismissedOutcomes = {};
+  var _seenOutcomeToast = {};
+  var _expandedOutcomes = {};
+  var _outcomeToastTimer = 0;
+
+  function outcomeTone(kind) {
+    if (kind === 'success') return 'ok';
+    if (kind === 'rejected' || kind === 'authorization-denied' || kind === 'environment-error' || kind === 'parser-error') return 'err';
+    return 'warn';
+  }
+
+  function renderCompactOutcomeWidget(latestOutcome, outcomeId, fallbackTarget) {
+    var o = (latestOutcome && latestOutcome.outcome) || {};
+    var oKind = o.kind || 'unknown';
+    var oStatus = o.status || 'unresolved';
+    var tone = outcomeTone(oKind);
+    var c = o.context || {};
+    var ctxLine = [c.target || fallbackTarget, c.principal, c.service, c.locus].filter(Boolean).join(' / ');
+    var obs = o.observed || [];
+    var obsCount = obs.length;
+    var isExpanded = !!_expandedOutcomes[outcomeId];
+    var isFreshToast = !isExpanded && !_seenOutcomeToast[outcomeId] && !!(latestOutcome.at && (Date.now() - latestOutcome.at < 8000));
+    var pillTitle = o.title || 'Latest recorded outcome';
+
+    var routing = o.routing || {};
+    var forced = routing.mode === 'forced'
+      ? ('<div class="ev-hint outcome-routing">Filed to: ' + esc(routing.target)
+        + (routing.sourceTargets && routing.sourceTargets.length ? ' (output named: ' + routing.sourceTargets.map(esc).join(', ') + ')' : '') + '</div>')
+      : '';
+    var diagHtml = '';
+    if (o.errorFixes && o.errorFixes.length) {
+      diagHtml += '<div class="outcome-triage-list">' + o.errorFixes.map(function (ef) {
+        return '<div class="outcome-triage-card outcome-triage-err">'
+          + '<div class="ot-head"><span class="ot-badge ot-badge-err">Error Diagnosis</span> <strong>' + esc(ef.title) + '</strong></div>'
+          + '<p class="ot-why">' + esc(ef.why) + '</p>'
+          + (ef.fixCmd ? '<div class="ot-cmd"><code>' + esc(ef.fixCmd) + '</code><button type="button" class="btn-copy" data-copy="' + U.attr(ef.fixCmd) + '">Copy Fix</button></div>' : '')
+          + '</div>';
+      }).join('') + '</div>';
+    }
+    if (o.baselines && o.baselines.length) {
+      diagHtml += '<div class="outcome-triage-list">' + o.baselines.map(function (bl) {
+        return '<div class="outcome-triage-card outcome-triage-base">'
+          + '<div class="ot-head"><span class="ot-badge ot-badge-base">' + esc(bl.verdict || 'Benign Baseline') + '</span> <strong>' + esc(bl.title) + '</strong></div>'
+          + '<p class="ot-why">' + esc(bl.detail) + '</p>'
+          + '<p class="ot-next"><strong>Next Step:</strong> ' + esc(bl.next) + '</p>'
+          + '</div>';
+      }).join('') + '</div>';
+    }
+    var summaryHtml = (!obsCount && o.summary)
+      ? ('<p class="coach-outcome-summary">' + esc(o.summary) + '</p>')
+      : '';
+    var obsHtml = obsCount
+      ? ('<ul class="outcome-observed coach-outcome-list">' + obs.map(function (m) {
+          return '<li>' + esc(String(m).replace(/^Observed:\s*/i, '')) + '</li>';
+        }).join('') + '</ul>')
+      : '';
+    var credPromptHtml = (OBOL.credbar && OBOL.credbar.prompt)
+      ? OBOL.credbar.prompt((o.context && o.context.target) || fallbackTarget)
+      : '';
+
+    return '<div class="coach-flash coach-outcome-widget' + (isFreshToast ? ' is-toast' : '') + (isExpanded ? ' is-expanded' : '') + ' outcome-tone-' + esc(tone) + '" data-receipt-id="' + esc(outcomeId) + '">'
+      + '<div class="coach-outcome-drawer" id="coach-outcome-drawer">'
+      + '<div class="coach-outcome-drawer-head">'
+      + '<span class="coach-outcome-kicker">' + esc(ctxLine || 'Latest Paste') + '</span>'
+      + '<a href="#/history" class="coach-outcome-loglink">Run Log →</a>'
+      + '</div>'
+      + '<div class="coach-outcome-body">' + forced + summaryHtml + obsHtml + diagHtml + '</div>'
+      + '</div>'
+      + (credPromptHtml ? ('<div class="coach-outcome-credbar">' + credPromptHtml + '</div>') : '')
+      + '<div class="coach-outcome-pillbar">'
+      + '<button type="button" class="coach-outcome-pill" data-outcome="' + esc(oKind) + '" data-outcome-status="' + esc(oStatus) + '" aria-expanded="' + (isExpanded ? 'true' : 'false') + '" aria-controls="coach-outcome-drawer" title="Click to expand or collapse latest outcome details">'
+      + '<span class="coach-outcome-dot" aria-hidden="true"></span>'
+      + '<span class="coach-outcome-pill-t">' + esc(pillTitle) + '</span>'
+      + (obsCount > 0 ? ('<span class="coach-outcome-count">+' + obsCount + '</span>') : '')
+      + '<span class="coach-outcome-chev" aria-hidden="true">' + (isExpanded ? '▾' : '▴') + '</span>'
+      + '</button>'
+      + '<button type="button" class="coach-flash-x" title="Dismiss outcome" aria-label="Dismiss">×</button>'
+      + '</div>'
+      + '</div>';
+  }
   // Rank a fact kind by how much the operator cares to hear it announced (0 = loudest).
   function flashRank(k) {
     if (/^objective\.(root_flag|local_flag|flag)$/.test(k)) return 0;
@@ -1594,7 +1822,7 @@
 
     if (track && track.phases) {
       steps = track.phases.map(function (ph, idx) {
-        return { id: ph.id, label: (idx + 1) + '. ' + ph.name };
+        return { id: ph.id, label: (idx + 1) + '. ' + String(ph.name || '').replace(/^\d+\.\s*/, '') };
       });
     }
 
@@ -1616,18 +1844,20 @@
     steps.forEach(function (step, i) {
       var cls = 'campaign-step';
       var stateIcon = '';
+      var displayLabel = String(step.label || '');
       if (i < activeIdx) {
         cls += ' done';
-        stateIcon = '<span class="step-check">✓</span> ';
+        stateIcon = '<span class="step-check">' + OBOL.ic('check') + '</span> ';
       } else if (i === activeIdx) {
         cls += ' active';
         stateIcon = '<span class="step-dot">●</span> ';
       } else {
         cls += ' pending';
         stateIcon = '<span class="step-num">' + (i + 1) + '</span> ';
+        displayLabel = displayLabel.replace(/^\d+\.\s*/, '');
       }
       html += '<div class="' + cls + '">'
-        + '<span class="step-label">' + stateIcon + esc(step.label) + '</span>'
+        + '<span class="step-label">' + stateIcon + esc(displayLabel) + '</span>'
         + '</div>';
       if (i < steps.length - 1) {
         html += '<span class="campaign-step-arrow" aria-hidden="true">→</span>';
@@ -1638,13 +1868,11 @@
   }
 
   function renderHeroScopeLens(lens, hiddenBy) {
+    var isAll = lens === 'all';
     return '<div class="coach-hero-lens" role="group" aria-label="Syllabus scope filter">'
       + '<span class="hero-lens-label">Scope</span>'
-      + ['oscp', 'oscp+', 'all'].map(function (v) {
-          var txt = v === 'oscp' ? 'OSCP' : (v === 'oscp+' ? 'OSCP+' : 'All');
-          return '<button type="button" class="hero-lens-opt lens-opt' + (lens === v ? ' on' : '') + '" data-lens="' + v + '"'
-            + ' aria-pressed="' + (lens === v ? 'true' : 'false') + '">' + txt + '</button>';
-        }).join('')
+      + '<button type="button" class="hero-lens-opt lens-opt' + (!isAll ? ' on' : '') + '" data-lens="oscp+" aria-pressed="' + (!isAll ? 'true' : 'false') + '" title="OSCP / PEN-200 scope (hides only legacy infrastructure CVEs)">OSCP</button>'
+      + '<button type="button" class="hero-lens-opt lens-opt' + (isAll ? ' on' : '') + '" data-lens="all" aria-pressed="' + (isAll ? 'true' : 'false') + '" title="Full arsenal including legacy CVEs, SCCM, and WSUS">All</button>'
       + (hiddenBy ? '<span class="hero-lens-hint" title="' + hiddenBy + ' move' + (hiddenBy === 1 ? '' : 's') + ' above this level">(' + hiddenBy + ' hidden)</span>' : '')
       + '</div>';
   }
@@ -1658,7 +1886,7 @@
     }
     if (!allTgts.length) return '';
     var html = '<div class="coach-hero-target">'
-      + '<label class="ctx-pill ctx-target" title="Focus Next Steps on a specific target or view engagement-wide">'
+      + '<label class="ctx-pill ctx-target" title="Focus Cockpit on a specific target or view engagement-wide">'
       + '<span class="ctx-ic" aria-hidden="true">' + (OBOL.ic ? OBOL.ic('crosshair') : '') + '</span>'
       + '<span class="ctx-k">Target</span>'
       + '<select id="coach-target-select" class="coach-target-select" aria-label="Target Filter">'
@@ -1741,7 +1969,7 @@
     if (comp.allTargetsComplete) {
       return '<div class="ns-complete-banner" role="region" aria-label="Objective Complete">'
         + '<div class="ns-complete-head">'
-        + '<span class="ns-complete-icon" aria-hidden="true">' + (OBOL.ic ? OBOL.ic('flag') : '✓') + '</span>'
+        + '<span class="ns-complete-icon" aria-hidden="true">' + (OBOL.ic ? OBOL.ic('flag') : '') + '</span>'
         + '<div class="ns-complete-titles">'
         + '<div class="ns-complete-kicker">Objective Complete · All Targets Resolved</div>'
         + '<h2 class="ns-complete-h2">Congratulations! All flags have been captured on ' + esc(comp.targetLabel) + '.</h2>'
@@ -1766,7 +1994,7 @@
 
     return '<div class="ns-complete-banner ns-host-complete-banner" role="region" aria-label="Host Complete">'
       + '<div class="ns-complete-head">'
-      + '<span class="ns-complete-icon" aria-hidden="true">' + (OBOL.ic ? OBOL.ic('flag') : '✓') + '</span>'
+      + '<span class="ns-complete-icon" aria-hidden="true">' + (OBOL.ic ? OBOL.ic('flag') : '') + '</span>'
       + '<div class="ns-complete-titles">'
       + '<div class="ns-complete-kicker">Host Complete · ' + comp.unresolvedTargets.length + ' Unresolved Target' + (comp.unresolvedTargets.length === 1 ? '' : 's') + ' Remaining</div>'
       + '<h2 class="ns-complete-h2">All flags captured on ' + esc(comp.targetLabel) + '!</h2>'
@@ -1778,6 +2006,288 @@
       + nextBtns
       + '<a href="#/targets" class="btn-ghost ns-complete-btn">View All Targets</a>'
       + '<a href="#/report" class="btn-ghost ns-complete-btn">Preview Report</a>'
+      + '</div>'
+      + '</div>';
+  }
+
+  var _deckActiveStepId = null;
+
+  function renderHeroOperatorDeck(facts, params, eng) {
+    eng = eng || (OBOL.store && OBOL.store.active && OBOL.store.active()) || {};
+    var deck = (OBOL.pathChooser && typeof OBOL.pathChooser.buildDeck === 'function')
+      ? OBOL.pathChooser.buildDeck(facts, params, eng)
+      : null;
+    if (!deck) return '';
+    var deckOpen = !!(eng && eng.ui && eng.ui.operatorDeckOpen);
+    var tabs = deck.tabs || [];
+    var savedTabId = (eng && eng.ui && (eng.ui.operatorDeckTab || eng.ui.deckTab)) || '';
+    var selTab = (savedTabId && tabs.filter(function (t) { return t.id === savedTabId; })[0])
+      || deck.selectedTab
+      || tabs[0]
+      || null;
+    var activeTabId = selTab ? selTab.id : 'flags';
+    var lanes = (selTab && selTab.lanes) || [];
+    var savedLaneMap = (eng && eng.ui && eng.ui.operatorDeckLane) || {};
+    var savedLaneId = selTab ? savedLaneMap[selTab.id] : '';
+    var selLane = (savedLaneId && lanes.filter(function (l) { return l.id === savedLaneId; })[0])
+      || ((deck.selectedLane && lanes.indexOf(deck.selectedLane) >= 0) ? deck.selectedLane : null)
+      || lanes.filter(function (l) { return l.status === 'ready'; })[0]
+      || lanes[0]
+      || null;
+
+    var credList = (OBOL.credbar && typeof OBOL.credbar.list === 'function')
+      ? OBOL.credbar.list(eng)
+      : ((OBOL.creds && typeof OBOL.creds.gather === 'function')
+          ? OBOL.creds.gather(eng, facts)
+          : ((OBOL.context && typeof OBOL.context.credentials === 'function')
+              ? OBOL.context.credentials(eng)
+              : []));
+    var activeCredKey = (OBOL.creds && typeof OBOL.creds.activeKey === 'function')
+      ? OBOL.creds.activeKey(eng)
+      : ((OBOL.context && typeof OBOL.context.selectedId === 'function')
+          ? (OBOL.context.selectedId(eng, (params && params.target) || '') || '')
+          : '');
+    var hasActiveCred = !!(activeCredKey || (params && (params.username || params.user)));
+    var actId = deck.activeIdentity || {};
+
+    // Single inline Identity selector in the top bar (zero extra rows)
+    var idSelectHtml = '<label class="hero-op-id-select-wrap' + (hasActiveCred ? (actId.isAdmin ? ' is-admin' : ' is-user') : ' is-anon') + '" title="Switch active identity for Operator Deck commands">'
+      + '<span class="hero-op-id-ic">' + OBOL.ic(actId.isAdmin ? 'shield' : 'key') + '</span>'
+      + '<select class="hero-op-cred-select" data-deck-cred-select aria-label="Active Identity">'
+      + '<option value="none"' + (!hasActiveCred ? ' selected' : '') + '>Null / No Credential</option>'
+      + credList.map(function (c) {
+          var cid = c.id || (OBOL.creds && OBOL.creds.keyOf ? OBOL.creds.keyOf(c) : (c.user || c.username || ''));
+          var cKey = (OBOL.creds && OBOL.creds.keyOf) ? OBOL.creds.keyOf(c) : cid;
+          var isOn = (activeCredKey && (cid === activeCredKey || cKey === activeCredKey))
+            || (!activeCredKey && hasActiveCred && String(c.user || c.username || '').toLowerCase() === String((params && (params.username || params.user)) || '').toLowerCase());
+          var cDom = c.domain ? (c.domain + '\\') : '';
+          var cUser = c.user || c.username || 'account';
+          var sKind = (c.type === 'NT' || (c.nthash && !c.secret && !c.password)) ? 'NT Hash' : 'Password';
+          return '<option value="' + U.attr(cid) + '"' + (isOn ? ' selected' : '') + '>' + esc(cDom + cUser + ' (' + sKind + ')') + '</option>';
+        }).join('')
+      + '</select>'
+      + '</label>';
+
+    // Single unified 5-Tab Strip right inside the 44px bar
+    var barTabsHtml = '<div class="hero-op-bar-tabs" role="tablist" aria-label="Operator Deck Categories">'
+      + tabs.map(function (tb) {
+          var isOn = !!(deckOpen && selTab && selTab.id === tb.id);
+          var rc = typeof tb.readyCount === 'number' ? tb.readyCount : 0;
+          return '<button type="button" role="tab" class="hero-op-bar-tab tab-theme-' + esc(tb.id) + (isOn ? ' active' : '') + (rc > 0 ? ' has-ready' : '') + '"'
+            + ' data-deck-tab="' + esc(tb.id) + '" aria-selected="' + (isOn ? 'true' : 'false') + '" title="' + U.attr(tb.title) + '">'
+            + OBOL.ic(tb.icon || 'branch')
+            + '<span class="hero-op-bar-tab-t">' + esc(tb.title) + '</span>'
+            + '<span class="hero-op-bar-tab-cnt">' + rc + '</span>'
+            + '</button>';
+        }).join('')
+      + '</div>';
+
+    // Left column (.hero-op-lanes) + Right column (.hero-op-steps-pane)
+    var lanesHtml = '<div class="hero-op-lanes" role="group" aria-label="Execution Lanes">'
+      + lanes.map(function (ln) {
+          var isLaneOn = !!(selLane && selLane.id === ln.id);
+          var isDone = ln.status === 'done' || ln.done || /^done$/i.test(ln.badge || '');
+          var isLocked = ln.status === 'locked';
+          var stateCls = isLocked ? 'is-locked' : (isDone ? 'is-done is-ready' : 'is-ready');
+          var bIcon = ln.badgeIcon ? OBOL.ic(ln.badgeIcon) : (isLocked ? OBOL.ic('lock') : OBOL.ic('check'));
+          return '<button type="button" class="hero-op-lane-card ' + stateCls + (isLaneOn ? ' active' : '') + '"'
+            + ' data-deck-lane="' + esc(ln.id) + '" data-deck-tab-id="' + esc(activeTabId) + '"'
+            + ' aria-pressed="' + (isLaneOn ? 'true' : 'false') + '">'
+            + '<div class="hero-op-lane-top">'
+            + '<span class="hero-op-lane-title">' + esc(ln.title || ln.label || ln.id) + '</span>'
+            + '<span class="hero-op-lane-badge ' + stateCls + '">' + bIcon + '<span>' + esc(ln.badge || (isLocked ? 'Locked' : 'Ready')) + '</span></span>'
+            + '</div>'
+            + (ln.sub ? '<div class="hero-op-lane-sub">' + esc(ln.sub) + '</div>' : '')
+            + '</button>';
+        }).join('')
+      + '</div>';
+
+    var deckTargetIp = (OBOL.store && OBOL.store.activeTarget && OBOL.store.activeTarget()) || (params && params.target) || '';
+    var paneHtml = '<div class="hero-op-steps-pane">';
+    if (selLane) {
+      var laneSteps = selLane.steps || [];
+      var activeStep = laneSteps.filter(function (s) { return (s.id || String(s.stepNum)) === _deckActiveStepId; })[0]
+        || laneSteps.filter(function (s) { return !s.done; })[0]
+        || laneSteps[0]
+        || null;
+      var selDone = selLane.status === 'done' || selLane.done || /^done$/i.test(selLane.badge || '');
+      var selLocked = selLane.status === 'locked';
+      var selStateCls = selLocked ? 'is-locked' : (selDone ? 'is-done is-ready' : 'is-ready');
+      var selBadgeIc = selLane.badgeIcon ? OBOL.ic(selLane.badgeIcon) : (selLocked ? OBOL.ic('lock') : OBOL.ic('check'));
+
+      paneHtml += '<div class="hero-op-pane-head">'
+        + '<div class="hero-op-pane-titles">'
+        + '<h3 class="hero-op-pane-title">' + esc(selLane.title || selLane.label || '') + '</h3>'
+        + '<span class="hero-op-pane-inst">' + (selLocked ? ('Locked (' + esc(selLane.lockReason || 'Prerequisites not yet met') + ') · Previewing command templates') : 'Copy a step (or run steps in sequence) and click Paste Output') + '</span>'
+        + '</div>'
+        + '<span class="hero-op-lane-badge ' + selStateCls + '">' + selBadgeIc + '<span>' + esc(selLane.badge || (selLocked ? 'Locked' : 'Ready')) + '</span></span>'
+        + '</div>';
+
+      if (deck.needsBothFlagsOnHost && activeTabId === 'flags') {
+        var flagAlertText = deck.localFlagCapturedRemotely
+          ? 'user.txt was grabbed remotely — use "Capture Both User + Root Flags On-Host" for a combined exam proof screenshot'
+          : 'Admin access achieved before user.txt was captured on-host — use "Capture Both User + Root Flags On-Host (One Shot)" to grab both flags in a single exam frame';
+        paneHtml += '<div class="hero-op-callout is-flag-alert" role="note">'
+          + '<span class="hero-op-callout-ic">' + OBOL.ic('flag') + '</span>'
+          + '<span><strong>' + flagAlertText + '</strong></span>'
+          + '</div>';
+      }
+
+      if (selLocked && selLane.lockReason) {
+        paneHtml += '<div class="hero-op-callout is-locked-reason" role="note">'
+          + '<span class="hero-op-callout-ic">' + OBOL.ic('lock') + '</span>'
+          + '<span>' + esc(selLane.lockReason) + '</span>'
+          + '</div>';
+      }
+
+      paneHtml += '<div class="hero-op-steps">';
+      laneSteps.forEach(function (st, sIdx) {
+        var stNum = st.stepNum || (sIdx + 1);
+        var stId = st.id || ('step-' + stNum);
+        var stLabel = st.label || st.title || ('Step ' + stNum);
+        var stCmd = st.command || st.filled || '';
+        var stNote = st.note || st.sub || '';
+        var stLocus = st.locus === 'onhost' ? 'onhost' : 'remote';
+        var isStActive = !!(activeStep && (activeStep.id || ('step-' + activeStep.stepNum)) === stId);
+
+        var stStatusHtml = st.done
+          ? '<span class="hero-op-step-status is-done">' + OBOL.ic('check') + '<span>Done</span></span>'
+          : (selLocked
+              ? '<span class="hero-op-step-status is-locked" title="' + U.attr(selLane.lockReason || 'Locked') + '">' + OBOL.ic('lock') + '<span>' + esc(selLane.badge || 'Locked') + '</span></span>'
+              : (st.needsPrevStepPaste
+                  ? '<span class="hero-op-step-status is-wait">' + OBOL.ic('clip') + '<span>Paste Prev Step First</span></span>'
+                  : (st.isEducatedGuess
+                      ? '<span class="hero-op-step-status is-guess" title="Educated Guess (Unverified Path) — run Locate step to confirm">' + (OBOL.ic('alert') || '⚠') + '<span>' + esc(st.guessBadge || 'Educated Guess') + '</span></span>'
+                      : (st.verifiedPath
+                          ? '<span class="hero-op-step-status is-ready is-verified" title="Flag path verified from evidence">' + OBOL.ic('zap') + '<span>Ready · Verified Path</span></span>'
+                          : '<span class="hero-op-step-status is-ready">' + OBOL.ic('zap') + '<span>Ready</span></span>'))));
+
+        var stLocusHtml = '<span class="hero-op-step-locus is-' + stLocus + '">'
+          + OBOL.ic(stLocus === 'onhost' ? 'host' : 'box')
+          + '<span>' + (stLocus === 'onhost' ? 'On Target' : 'From Kali') + '</span>'
+          + '</span>';
+
+        var variantsHtml = '';
+        if (st.variants && st.variants.length > 1) {
+          var vLbl = st.variantLabel || 'Tool:';
+          variantsHtml = '<div class="hero-op-variants" role="group" aria-label="Swap variant">'
+            + '<span class="hero-op-variants-k">' + esc(vLbl) + '</span>'
+            + st.variants.map(function (v) {
+                var isVarOn = st.selectedVariantId ? (v.id === st.selectedVariantId) : (v.command === stCmd);
+                return '<button type="button" class="hero-op-variant-pill' + (isVarOn ? ' active' : '') + '"'
+                  + ' data-deck-variant="' + esc(v.id) + '"'
+                  + ' data-lane-id="' + esc(selLane.id) + '"'
+                  + ' data-step-id="' + esc(stId) + '"'
+                  + ' aria-pressed="' + (isVarOn ? 'true' : 'false') + '">'
+                  + esc(v.label) + '</button>';
+              }).join('')
+            + '</div>';
+        }
+
+        var paramGroupsHtml = '';
+        if (st.paramGroups && st.paramGroups.length) {
+          paramGroupsHtml = st.paramGroups.map(function (pg) {
+            return '<div class="hero-op-param-row" role="group" aria-label="' + U.attr(pg.label || pg.key) + '">'
+              + '<span class="hero-op-param-k">' + esc(pg.label || pg.key) + '</span>'
+              + (pg.options || []).map(function (opt) {
+                  var isOptOn = (pg.active === opt.id);
+                  var setAttr = opt.setParams ? (' data-deck-param-json="' + U.attr(JSON.stringify(opt.setParams)) + '"') : '';
+                  return '<button type="button" class="hero-op-param-pill' + (isOptOn ? ' active' : '') + '"'
+                    + ' data-deck-param="' + esc(pg.key) + '"'
+                    + ' data-deck-param-val="' + esc(opt.id) + '"'
+                    + setAttr
+                    + ' aria-pressed="' + (isOptOn ? 'true' : 'false') + '">'
+                    + '<span>' + esc(opt.label) + '</span>'
+                    + (opt.sub ? '<span class="hero-op-param-pill-sub">· ' + esc(opt.sub) + '</span>' : '')
+                    + '</button>';
+                }).join('')
+              + '</div>';
+          }).join('');
+        }
+
+        var fillInputsHtml = '';
+        if (st.fillInputs && st.fillInputs.length) {
+          fillInputsHtml = '<div class="hero-op-fill-row">'
+            + st.fillInputs.map(function (fi) {
+                return '<label class="hero-op-fill-field">'
+                  + '<span class="hero-op-fill-k">' + esc(fi.label || fi.key) + '</span>'
+                  + '<input type="text" class="hero-op-fill-input" data-deck-param-input="' + esc(fi.key) + '"'
+                  + ' value="' + U.attr(fi.value || '') + '"'
+                  + ' placeholder="' + U.attr(fi.placeholder || '') + '"'
+                  + ' autocomplete="off" spellcheck="false">'
+                  + '</label>';
+              }).join('')
+            + '</div>';
+        }
+
+        var unfilled = (OBOL.command && typeof OBOL.command.unfilledTokens === 'function')
+          ? OBOL.command.unfilledTokens(stCmd) : [];
+        var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
+        var fillRow = fillable.length
+          ? '<div class="cmd-fill-row">' + fillable.map(function (t) {
+              return '<label class="cmd-fill-lbl"><span>' + esc(FILL_LABEL[t] || t) + '</span>'
+                + '<input class="cmd-fill" data-tok="' + esc(t) + '" placeholder="' + esc(FILL_PH[t] || ('value for ' + t)) + '" autocomplete="off" spellcheck="false"></label>';
+            }).join('') + '</div>' : '';
+
+        paneHtml += '<div class="hero-op-step step-n-' + ((stNum - 1) % 3 + 1) + (st.done ? ' is-done' : '') + (selLocked ? ' is-locked' : '') + (isStActive ? ' active' : '') + (st.needsPrevStepPaste ? ' is-wait' : '') + (st.isEducatedGuess ? ' is-guess' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
+          + ' data-deck-step="' + esc(stId) + '"'
+          + ' data-step-num="' + esc(String(stNum)) + '"'
+          + ' data-step-label="' + U.attr(stLabel) + '"'
+          + ' data-cmd="' + U.attr(stCmd) + '"'
+          + ' data-locus="' + esc(stLocus) + '"'
+          + (fillable.length ? ' data-tmpl="' + U.attr(stCmd) + '"' : '')
+          + ' tabindex="0" role="group" aria-label="' + U.attr('Step ' + stNum + ': ' + stLabel) + '">'
+          + '<div class="hero-op-step-head">'
+          + '<span class="hero-op-step-num">' + stNum + '</span>'
+          + '<span class="hero-op-step-label">' + esc(stLabel) + '</span>'
+          + variantsHtml
+          + stLocusHtml
+          + stStatusHtml
+          + '</div>'
+          + paramGroupsHtml
+          + fillInputsHtml
+          + '<div class="ns-pc-cmd-row" data-copy="' + U.attr(stCmd) + '">'
+          + '<pre class="cmd-run"><code class="cmd-run-code">' + esc(stCmd) + '</code></pre>'
+          + '<div class="hero-op-step-actions">'
+          + '<button type="button" class="btn-copy" data-copy="' + U.attr(stCmd) + '">' + OBOL.ic('copy') + ' Copy</button>'
+          + '<button type="button" class="btn-deck-paste" data-deck-paste-step'
+          + ' data-action="' + esc(selLane.actionId || '') + '"'
+          + ' data-cmd="' + U.attr(stCmd) + '"'
+          + ' data-locus="' + esc(stLocus) + '"'
+          + ' data-step-label="' + U.attr('Step ' + stNum + ' · ' + stLabel) + '"'
+          + ' data-target-ip="' + esc(deckTargetIp) + '"'
+          + ' title="Open Quick-Paste modal for this step">' + OBOL.ic('clip') + ' Paste Output</button>'
+          + '</div>'
+          + '</div>'
+          + fillRow
+          + (stNote ? '<div class="hero-op-step-note">' + fmtNote(stNote) + '</div>' : '')
+          + '</div>';
+      });
+      paneHtml += '</div>'; // .hero-op-steps
+    }
+    paneHtml += '</div>'; // .hero-op-steps-pane
+
+    return '<div class="hero-op-deck-wrap deck-theme-' + esc(activeTabId) + (deckOpen ? ' is-open' : '') + (deck.unlocked ? ' is-unlocked' : ' is-locked-pre') + (deck.needsBothFlagsOnHost ? ' has-flag-alert' : '') + '" id="hero-op-deck" data-deck-active-tab="' + esc(activeTabId) + '">'
+      + '<div class="hero-op-bar">'
+      + '<div class="hero-op-bar-left">'
+      + '<button type="button" class="hero-op-brand-btn" data-deck-toggle aria-expanded="' + (deckOpen ? 'true' : 'false') + '" aria-controls="hero-op-drawer">'
+      + '<span class="hero-op-brand-ic">' + OBOL.ic('branch') + '</span>'
+      + '<span class="hero-op-brand-title">OPERATOR DECK</span>'
+      + '</button>'
+      + idSelectHtml
+      + '</div>'
+      + barTabsHtml
+      + '<div class="hero-op-bar-right">'
+      + '<button type="button" class="hero-op-toggle-btn" data-deck-toggle aria-expanded="' + (deckOpen ? 'true' : 'false') + '" aria-controls="hero-op-drawer">'
+      + (deckOpen ? 'Collapse ▴' : 'Expand ▾')
+      + '</button>'
+      + '</div>'
+      + '</div>'
+      + '<div class="hero-op-drawer" id="hero-op-drawer"' + (deckOpen ? '' : ' hidden') + '>'
+      + '<div class="hero-op-workspace">'
+      + lanesHtml
+      + paneHtml
+      + '</div>'
       + '</div>'
       + '</div>';
   }
@@ -1799,10 +2309,7 @@
     var latestOutcome = (eng.activities || []).find(function (a) { return a && a.outcome && (!outcomeTarget || a.target === outcomeTarget); });
     var outcomeId = latestOutcome ? String(latestOutcome.target || '') + ':' + String(latestOutcome.at || '') : '';
     if (latestOutcome && !_dismissedOutcomes[outcomeId]) {
-      html += '<div class="coach-flash" data-receipt-id="' + esc(outcomeId) + '">'
-        + '<div class="coach-flash-h"><span>Latest recorded outcome</span><button class="coach-flash-x" aria-label="Dismiss">×</button></div>'
-        + OBOL.ingest.renderOutcome(latestOutcome.outcome)
-        + '<a href="#/history">Review saved output in Run Log</a></div>';
+      html += renderCompactOutcomeWidget(latestOutcome, outcomeId, outcomeTarget);
     }
 
     // hero
@@ -1814,10 +2321,7 @@
         + '<span class="hero-ready-tag"><span class="ready-pulse">●</span> <strong>All Flags Secured</strong></span>'
         + (onFlow.length ? ('<span class="kicker-sep">·</span><span>' + onFlow.length + ' optional move' + (onFlow.length === 1 ? '' : 's') + ' available</span>') : '')
         + '</div>')
-      : ('<div class="coach-kicker">Next Move · Frontier: <strong>' + esc(U.titleCase(phaseName)) + '</strong>'
-        + '<span class="kicker-sep">·</span>'
-        + '<span class="hero-ready-tag"><span class="ready-pulse">●</span> Ready Now: <strong>' + onFlow.length + ' move' + (onFlow.length === 1 ? '' : 's') + '</strong></span>'
-        + '</div>');
+      : ('<div class="coach-kicker">Next Move · Frontier: <strong>' + esc(U.titleCase(phaseName)) + '</strong></div>');
     var heroH1 = compState.complete
       ? (compState.allTargetsComplete
           ? ('Objective Complete: ' + esc(compState.targetLabel))
@@ -1827,29 +2331,74 @@
       ? (compState.allTargetsComplete
           ? 'Both user.txt and root.txt are secured and verified. Export your report, review your findings, or explore optional post-exploitation moves below.'
           : 'All flags are secured on this host. Switch to an unresolved target below to continue the engagement.')
-      : (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the coach ranks your next commands.');
+      : (onFlow.length ? esc(U.firstSentence(onFlow[0].hypothesis || '')) : 'Paste tool output on the Evidence route (or add a fact) and the Cockpit ranks your next commands.');
+
+    var mOpen = nsMultiOpen();
+    var focusMode = nsFocusMode();
+    var wsConfigured = OBOL.workspace.isConfigured(eng);
+    var wsPending = wsConfigured && !((eng.ui || {}).wsScaffoldDone) && factCount < 3;
+    var pthCalloutHtml = (params && params.nthash && !params.password)
+      ? ('<div class="coach-pth-callout"><strong>Pass-the-Hash Active:</strong> Commands for <code>' + esc(params.username || params.user || 'selected account') + '</code> are automatically filled with <code>-H</code> / <code>-hashes</code>.</div>')
+      : '';
+
+    var heroWsHtml = '';
+    if (wsConfigured && !wsPending) {
+      var scaffoldCompact = OBOL.workspace.scaffold(eng);
+      var wsRootCompact = OBOL.workspace.tokens(eng).root || '~/ctf';
+      heroWsHtml = '<div class="ws-compact">'
+        + '<span class="ws-compact-l">' + OBOL.ic('folder') + ' Working directory: <code title="' + U.attr(wsRootCompact) + '">' + esc(wsRootCompact) + '</code></span>'
+        + '<button type="button" class="btn-copy ws-compact-copy" data-copy="' + U.attr(scaffoldCompact) + '">' + OBOL.ic('copy') + ' Copy mkdir &amp;&amp; cd</button>'
+        + '</div>';
+    }
+    var heroControlsHtml = '';
+    if (onFlow.length && !compState.complete) {
+      heroControlsHtml = '<div class="ns-controls" role="group" aria-label="Card display options">';
+      if (onFlow.length > 1) {
+        heroControlsHtml += '<button type="button" id="ns-multiopen" class="hero-pill-toggle ns-multi-toggle' + (mOpen ? ' on' : '') + '" aria-pressed="' + (mOpen ? 'true' : 'false') + '" title="Keep multiple move cards expanded at the same time">'
+          + '<span class="hero-pill-dot" aria-hidden="true"></span><span>Keep Cards Open</span></button>'
+          + (mOpen ? '<button type="button" class="ns-collapse-others hero-pill-collapse" data-ns-collapse title="Collapse all open cards back to the active one">Collapse To One</button>' : '');
+      }
+      heroControlsHtml += '<button type="button" id="ns-focusmode" class="hero-pill-toggle ns-focus-toggle' + (focusMode ? ' on' : '') + '" aria-pressed="' + (focusMode ? 'true' : 'false') + '" title="Show only the lead runnable command on each card">'
+        + '<span class="hero-pill-dot" aria-hidden="true"></span><span>Focus Mode</span></button>'
+        + '</div>';
+    }
+    var heroCenterHtml = heroControlsHtml
+      ? ('<div class="coach-hero-center hero-utility-row">' + heroControlsHtml + '</div>')
+      : '';
 
     html += '<div class="coach-hero' + (compState.complete ? ' coach-hero-complete' : '') + '">'
-      + '<div class="coach-hero-main">'
       + '<div class="coach-hero-top">'
-      + heroKickerHtml
-      + '<div class="coach-hero-controls">' + targetSelectorHtml + scopeLensHtml + '</div>'
+      + '<div class="coach-hero-top-left">' + heroKickerHtml + targetSelectorHtml + scopeLensHtml + heroWsHtml + '</div>'
       + '</div>'
+      + '<div class="coach-hero-body">'
+      + '<div class="coach-hero-main">'
       + '<h1 class="coach-h1">' + heroH1 + '</h1>'
       + '<p class="coach-sub">' + heroSub + '</p>'
+      + pthCalloutHtml
       + '</div>'
+      + heroCenterHtml
       + '<div class="coach-hero-aside">'
-      + '<div class="coach-hero-aside-top">' + arsenalHeroBadge() + '</div>'
+      + '<div class="coach-metrics-deck">'
+      + '<div class="metric-group metric-group-moves">'
+      + '<div class="metric-group-h" title="How many moves your proven facts have unlocked or are 1 step from unlocking">Moves Unlocked &amp; Upcoming</div>'
       + '<div class="coach-metrics">'
-      + '<div class="metric"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">' + (compState.complete ? 'Optional' : 'Ready') + '</span></div>'
-      + '<div class="metric"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">Coming Up</span></div>'
-      + '<div class="metric"><span class="metric-n">' + opensCount + '</span><span class="metric-l">Opens Up Next</span></div>'
-      + '<div class="metric"><span class="metric-n">' + factCount + '</span><span class="metric-l">Facts</span></div>'
-      + '</div></div></div>';
+      + '<div class="metric metric-ready" title="Unlocked moves ready to run right now"><span class="metric-n">' + onFlow.length + '</span><span class="metric-l">' + (compState.complete ? 'Optional Moves' : 'Moves Ready') + '</span></div>'
+      + '<div class="metric metric-coming" title="Unlocked moves queued for a later phase"><span class="metric-n">' + comingUp.length + '</span><span class="metric-l">Coming Up</span></div>'
+      + '<div class="metric metric-opens" title="Locked moves that are 1 fact away from unlocking"><span class="metric-n">' + opensCount + '</span><span class="metric-l">Opens Up Next</span></div>'
+      + '</div></div>'
+      + '<div class="metric-group metric-group-facts">'
+      + '<div class="metric-group-h" title="Total facts derived from terminal output pasted into OBOL on this engagement">From Pastes</div>'
+      + '<div class="coach-metrics">'
+      + '<div class="metric metric-facts" title="Facts derived from terminal output you pasted into OBOL on this engagement"><span class="metric-n">' + factCount + '</span><span class="metric-l">Derived Facts</span></div>'
+      + '</div></div>'
+      + '</div></div></div>'
+      + renderHeroOperatorDeck(facts, params, eng)
+      + '</div>';
 
     var campId = c.campId || 'all';
     var campTrack = c.campTrack || null;
     var hiddenByCamp = c.hiddenByCamp || 0;
+
     html += '<div class="coach-campaign-bar" id="coach-campaign-bar">'
       + '<div class="campaign-bar-inner">'
       + '<div class="campaign-selector-wrap">'
@@ -1871,49 +2420,38 @@
 
     html += defenseAdvisory(facts);
 
-    // Planned route to the objective: the planner's lowest-cost dependable path from what's proven to
-    // the goal. Re-planned on every render as evidence accrues. A plausible route, not a promise - the
-    // box decides which steps actually land; this sharpens as you capture more.
-    var hasEvidence = false;
-    if (facts && facts.facts) {
-      for (var fki = 0; fki < facts.facts.length; fki++) {
-        if (OBOL.pack.isEvidenceFact && OBOL.pack.isEvidenceFact(facts.facts[fki].kind)) {
-          hasEvidence = true;
-          break;
-        }
-      }
-    }
-    var route = (!compState.complete && hasEvidence && OBOL.pack.planPath) ? OBOL.pack.planPath(facts, pack, { noFlags: !flagsOn }) : null;
-    if (route && route.reachable && route.path && route.path.length > 1 && factCount > 1) {
-      html += '<details class="coach-route"><summary class="coach-sec-h">Planned Route To The Objective'
-        + ' <span class="coach-route-n">' + route.path.length + ' steps</span></summary>'
-        + '<ol class="coach-route-list">'
-        + route.path.map(function (id, i) {
-          var a = pack.filter(function (x) { return x.id === id; })[0];
-          return '<li class="coach-route-step' + (i === 0 ? ' next' : '') + '">' + esc(a ? a.title : id) + '</li>';
-        }).join('')
-        + '</ol>'
-        + '<div class="coach-route-note">The shortest dependable path from what you have proven to the goal, it re-plans as you capture evidence. A plausible route, not a guarantee.</div>'
-        + '</details>';
-    }
-
     // one-time workspace scaffold: create the output tree once, then every command below writes
-    // into it and tells you which file to attach. Dismissible; auto-hides once you're rolling.
-    if (OBOL.workspace.isConfigured(eng) && !((eng.ui || {}).wsScaffoldDone) && factCount < 3) {
+    // into it and tells you which file to attach. Soft-gates the move cards until the operator
+    // copies the setup command or explicitly opts out, preventing "No such file or directory" errors.
+    if (wsPending) {
       var scaffold = OBOL.workspace.scaffold(eng);
-      var scandir = OBOL.workspace.tokens(eng).scandir;
+      var wsTokens = OBOL.workspace.tokens(eng);
+      var scandir = wsTokens.scandir;
+      var wsRoot = wsTokens.root || '~/ctf';
       var stamp = OBOL.workspace.promptStamp ? OBOL.workspace.promptStamp((params || {}).lhost_iface || '') : (OBOL.workspace.PROMPT_STAMP_ZSH || '');
-      html += '<div class="ws-banner">'
-        + '<div class="ws-banner-h">' + OBOL.ic('folder') + ' Set up your working directory, run this once on your Kali box:</div>'
+      html += '<div class="ws-banner is-glow">'
+        + '<div class="ws-banner-top">'
+        + '<span class="ns-suggested">STEP 0 · RUN THIS FIRST</span>'
+        + '<span class="ns-chip">KALI WORKSPACE</span>'
+        + '<span class="ns-chip ns-chip-tgt">' + esc(wsRoot) + '</span>'
+        + '<span class="ws-banner-rank">#0</span>'
+        + '</div>'
+        + '<div class="ws-banner-h">' + OBOL.ic('folder') + ' Set up your working directory, run this once on your Kali box</div>'
+        + '<div class="ws-banner-note ws-banner-sub">Every command below writes directly into relative folders (<code>' + esc(scandir) + '</code>, <code>loot/</code>, <code>exploit/</code>, <code>www/</code>, <code>proof/</code>). Run this once in your Kali terminal before starting so scans do not fail with "No such file or directory".</div>'
+        + '<div class="ws-cmd-row ws-copy-unlock" data-copy="' + U.attr(scaffold) + '" title="Click to copy command and unlock moves">'
         + '<pre class="cmd-run"><code>' + esc(scaffold) + '</code></pre>'
-        + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(scaffold) + '">copy</button>'
-        + '<button class="btn-ghost ws-done">Got It</button></div>'
-        + '<div class="ws-banner-note">Commands below write into <code>' + esc(scandir) + '</code>, run one, then attach its output file in Evidence.</div>'
+        + '<span class="ws-cmd-copy">' + OBOL.ic('copy') + '</span>'
+        + '</div>'
+        + '<div class="ws-banner-actions">'
+        + '<button type="button" class="btn-primary ws-copy-unlock" data-copy="' + U.attr(scaffold) + '">' + OBOL.ic('copy') + ' Copy Command &amp; Unlock Moves</button>'
+        + '<button type="button" class="btn-ghost ws-done">I Already Ran This</button>'
+        + '<button type="button" class="ws-skip ws-done">Opt Out / Skip Setup</button>'
+        + '</div>'
         + (stamp
           ? ('<details class="ws-stamp"><summary>Optional: stamp your prompt with the time + VPN IP <span class="ev-import-tag">Recommended</span></summary>'
             + '<div class="ws-banner-note">Paste this into <code>~/.zshrc</code> once. It prints a dim <code>[UTC time] [tun0:IP]</code> line before each prompt (your prompt is untouched), so later you can paste your <strong>whole session</strong> into Evidence and OBOL orders it correctly and auto-fills your <code>{{lhost}}</code>.</div>'
             + '<pre class="cmd-run"><code>' + esc(stamp) + '</code></pre>'
-            + '<div class="ws-banner-actions"><button class="btn-copy" data-copy="' + U.attr(stamp) + '">copy</button></div>'
+            + '<div class="ws-banner-actions"><button type="button" class="btn-copy" data-copy="' + U.attr(stamp) + '">Copy Prompt Stamp</button></div>'
             + '</details>')
           : '')
         + '</div>';
@@ -1930,11 +2468,11 @@
       nsSel.userLocus = false;
       var initFilled = selMove ? OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }) : [];
       nsSel.locus = selMove ? effectiveLocus(selMove, facts, initFilled, OBOL.pack.defaultCommandLocus(selMove, facts)) : null;
-      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts) : 0;
+      nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts, initFilled) : 0;
     } else {
       var selCmds = selMove.commands || [];
       var selFilled = OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
-      if (!nsSel.locus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove, facts);
+      if (!nsSel.locus || !nsSel.userLocus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove, facts);
       if (!nsSel.userLocus) nsSel.locus = effectiveLocus(selMove, facts, selFilled, nsSel.locus);
       // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe now
       // hidden), OR one still gated on an unearned fact (now hidden), OR one that no longer matches the
@@ -1942,12 +2480,13 @@
       // the selected card would show no active row.
       var selCur = selCmds[nsSel.idx];
       var selEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
-      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || cmdGated(selFilled[nsSel.idx]) || OBOL.pack.commandLocus(selCur) !== nsSel.locus || cmdWasTriedInEpoch(selMove, selCur, selFilled[nsSel.idx], eng, selEpoch)) {
-        nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts);
+      var selCmdFacts = (selCur && facts && facts.forAction) ? facts.forAction(selMove, selCur) : facts;
+      var selCtx = (selCmdFacts && selCmdFacts._resolvedContext) || selMove.resolvedContext || (facts && facts._resolvedContext);
+      var selTgt = selMove.contextTarget || (selCtx && selCtx.target) || (params && params.target) || '';
+      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || cmdGated(selFilled[nsSel.idx]) || OBOL.pack.commandLocus(selCur) !== nsSel.locus || cmdWasTriedInEpoch(selMove, selCur, selFilled[nsSel.idx], eng, selEpoch, selTgt, selCtx)) {
+        nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts, selFilled);
       }
     }
-    var mOpen = nsMultiOpen();
-    var focusMode = nsFocusMode();
     if (mOpen && nsSel.id) nsOpen[nsSel.id] = true;   // the focused card is always one of the open set
     function cardOpts(a, i, section) {
       var badge = actionTargetLabel(a, facts, eng, c.target);
@@ -1957,9 +2496,16 @@
 
     // Narrow screens are best-effort: the two-column coach + canvas really wants width. Say so plainly
     // (shown only under the single-column breakpoint) and tell a phone user where the field notes land.
-    html += '<p class="ns-mobile-note">The coach is designed for a larger screen. On a phone it still works: tap a move to expand its commands, and its full field notes appear lower down.</p>';
+    html += '<p class="ns-mobile-note">The Cockpit is designed for a larger screen. On a phone it still works: tap a move to expand its commands, and its full field notes appear lower down.</p>';
 
-    html += '<div class="ns-coach"><div class="ns-main">';
+    if (wsPending) {
+      html += '<div class="ws-gate-notice">'
+        + '<span><strong>Moves Locked Until Step 0 Is Acknowledged:</strong> Copy the working-directory command above (or click <em>Opt Out / Skip Setup</em>) to unlock the Cockpit.</span>'
+        + '<button type="button" class="btn-ghost ws-done">Skip &amp; Unlock Moves</button>'
+        + '</div>';
+    }
+
+    html += '<div class="ns-coach' + (wsPending ? ' ws-gated' : '') + '"><div class="ns-main">';
 
     // Diagnostic Fix Cards for active blocker.* errors
     var coachFixCards = renderCoachFixCards(facts);
@@ -1969,21 +2515,6 @@
 
     if (compState.complete) {
       html += renderCompletionBanner(compState, onFlow.length);
-    }
-
-    // Multi-open toggle: default OFF keeps the single-focus coach (open one card at a time); ON lets you
-    // keep several cards open to compare. Only shown when there is more than one card to compare.
-    // Focus Mode toggle: default OFF keeps standard card commands; ON shows only the lead runnable command and field note.
-    if (onFlow.length && !compState.complete) {
-      html += '<div class="ns-controls">';
-      if (onFlow.length > 1) {
-        html += '<label class="ns-multi-toggle"><input type="checkbox" id="ns-multiopen"' + (mOpen ? ' checked' : '') + '>'
-          + '<span>Keep Cards Open</span></label>'
-          + (mOpen ? '<button type="button" class="ns-collapse-others" data-ns-collapse>Collapse To One</button>' : '');
-      }
-      html += '<label class="ns-focus-toggle"><input type="checkbox" id="ns-focusmode"' + (focusMode ? ' checked' : '') + '>'
-        + '<span>Focus Mode</span></label>'
-        + '</div>';
     }
 
     var READY_CAP = 8;
@@ -2006,7 +2537,7 @@
         html += '</div></details>';
       }
     } else {
-      html += '<div class="ns-empty">No ready moves yet. Paste a scan on the Evidence route, or add a target fact, and the coach will rank your next commands here.</div>';
+      html += '<div class="ns-empty">No ready moves yet. Paste a scan on the Evidence route, or add a target fact, and the Cockpit will rank your next commands here.</div>';
     }
 
     if (comingUp.length) {
@@ -2043,6 +2574,18 @@
     // own container instead: it's recreated on each render, so its listeners die with the old DOM.
     var mount = ctx.mount.querySelector('.coach') || ctx.mount;
 
+    var opensMore = mount.querySelector('.ns-opens-more');
+    if (opensMore) {
+      opensMore.addEventListener('toggle', function () {
+        if (!opensMore.open) return;
+        var slot = opensMore.querySelector('[data-opens-deferred="1"]');
+        if (slot && _deferredOpensMoreHtml) {
+          slot.removeAttribute('data-opens-deferred');
+          slot.innerHTML = _deferredOpensMoreHtml;
+        }
+      });
+    }
+
     // Background-load the ~1MB sample-output fixtures (off the critical boot path) so "See It Run" can
     // show a real example run and its output in the field notes. When they land, repaint the open card.
     if (!(OBOL.study && OBOL.study.replayFor) && OBOL.lazy && OBOL.lazy.loadGroup) {
@@ -2058,29 +2601,37 @@
       var facts = (targetIp && OBOL.store.factSetForTarget) ? OBOL.store.factSetForTarget(targetIp) : OBOL.store.factSet();
       var params = Object.assign({}, (OBOL.store.active() || {}).params || {});
       if (targetIp) params.target = targetIp;
+      var resolved = null;
       if (OBOL.store.resolvedContext) {
-        var resolved = OBOL.store.resolvedContext({target:targetIp || params.target,facts:facts});
+        resolved = OBOL.store.resolvedContext({target:targetIp || params.target,facts:facts});
         facts = resolved.facts; params = resolved.params;
       }
-      return { facts: facts, pack: OBOL.packs.actions(), params: params };
+      return { facts: facts, pack: OBOL.packs.actions(), params: params, resolved: resolved, targetIp: targetIp || params.target || '' };
     }
-    function moveById(pack, id) { return pack.filter(function (a) { return a.id === id; })[0]; }
+    function moveById(pack, id, fx) {
+      var found = pack.filter(function (a) { return a.id === id; })[0];
+      if (!found || !fx || !fx.resolved) return found;
+      var bound = Object.create(found);
+      bound.resolvedContext = fx.resolved;
+      bound.contextTarget = fx.targetIp || '';
+      return bound;
+    }
     function hydrateCard(card, move, fx, filled) {
       if (!card.hasAttribute('data-body-deferred')) return;
       var holder = document.createElement('div');
-      holder.innerHTML = nsCard(move, fx.facts, fx.params, {selected:true,filled:filled,focusMode:nsFocusMode()});
+      holder.innerHTML = nsCard(move, fx.facts, fx.params, {selected:true,filled:filled,focusMode:nsFocusMode(),targetBadge:card.getAttribute('data-context-target') || fx.targetIp || ''});
       card.insertBefore(holder.querySelector('.ns-body'), card.querySelector('.ns-foot'));
       card.removeAttribute('data-body-deferred');
     }
     function repaintCanvas() {
       var el = mount.querySelector('#ns-canvas'); if (!el) return;
-      var fx = freshCtx(); var m = moveById(fx.pack, nsSel.id);
+      var fx = freshCtx(); var m = moveById(fx.pack, nsSel.id, fx);
       el.innerHTML = nsCanvasHtml(m, nsSel.idx, fx.facts, fx.params);
     }
     function selectCard(card) {
       var id = card.getAttribute('data-action'); if (!id) return;
       nsSel.target = card.getAttribute('data-context-target') || null;
-      var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
+      var fx = freshCtx(); var m = moveById(fx.pack, id, fx); if (!m) return;
       nsSel.id = id;
       nsSel.userLocus = false;
       var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
@@ -2100,6 +2651,19 @@
       repaintCanvas();
     }
     function syncCardLocus(card, locus) {
+      var pcOpenEl = card.querySelector('.ns-path-chooser:not([hidden])');
+      if (pcOpenEl) {
+        var activeStepEl = pcOpenEl.querySelector('.ns-pc-step.active') || pcOpenEl.querySelector('.ns-pc-step:not(.done)') || pcOpenEl.querySelector('.ns-pc-step');
+        if (activeStepEl) {
+          Array.prototype.forEach.call(pcOpenEl.querySelectorAll('.ns-pc-step'), function (s) { s.classList.remove('active'); });
+          activeStepEl.classList.add('active');
+          nsSel.idx = parseInt(activeStepEl.getAttribute('data-cmd-index'), 10) || 0;
+          nsSel.locus = activeStepEl.getAttribute('data-locus') || locus || 'remote';
+          var miPc = card.querySelector('.move-ingest');
+          if (miPc) miPc.setAttribute('data-cmd', activeStepEl.getAttribute('data-cmd') || '');
+          return;
+        }
+      }
       var tgl = card.querySelector('.ns-toggle');
       if (tgl) Array.prototype.forEach.call(tgl.querySelectorAll('button'), function (b) {
         var on = b.getAttribute('data-locus') === locus;
@@ -2124,14 +2688,53 @@
         if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
       }
     }
-    // dismiss the "what obol learned" flash banner
+    // Floating outcome toast -> minimized pill: auto-settle after 3.8s, click pill to expand/collapse, click × to dismiss
+    var outcomeWidget = mount.querySelector('.coach-outcome-widget');
+    if (outcomeWidget && outcomeWidget.classList.contains('is-toast')) {
+      clearTimeout(_outcomeToastTimer);
+      var toastRid = outcomeWidget.getAttribute('data-receipt-id') || '';
+      _outcomeToastTimer = setTimeout(function () {
+        _seenOutcomeToast[toastRid] = true;
+        if (outcomeWidget && outcomeWidget.classList) outcomeWidget.classList.remove('is-toast');
+      }, 3800);
+    }
+    U.on(mount, 'click', '.coach-outcome-pill', function (e, t) {
+      var fl = t.closest('.coach-outcome-widget');
+      if (!fl) return;
+      clearTimeout(_outcomeToastTimer);
+      var rid = fl.getAttribute('data-receipt-id') || '';
+      _seenOutcomeToast[rid] = true;
+      var willExpand = !(fl.classList.contains('is-expanded') || fl.classList.contains('is-toast'));
+      fl.classList.remove('is-toast');
+      fl.classList.toggle('is-expanded', willExpand);
+      _expandedOutcomes[rid] = willExpand;
+      t.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+      var chev = t.querySelector('.coach-outcome-chev');
+      if (chev) chev.textContent = willExpand ? '▾' : '▴';
+    });
     U.on(mount, 'click', '.coach-flash-x', function (e, t) {
-      var fl = t.closest('.coach-flash'); if (fl) { _dismissedOutcomes[fl.getAttribute('data-receipt-id') || ''] = true; fl.remove(); }
+      clearTimeout(_outcomeToastTimer);
+      var fl = t.closest('.coach-flash');
+      if (fl) {
+        var rid = fl.getAttribute('data-receipt-id') || '';
+        _dismissedOutcomes[rid] = true;
+        delete _expandedOutcomes[rid];
+        if (OBOL.credbar && typeof OBOL.credbar.clearNotice === 'function') OBOL.credbar.clearNotice();
+        fl.remove();
+      }
+    });
+    U.on(mount, 'click', '[data-dismiss-cred-notice]', function (e, t) {
+      if (OBOL.credbar && typeof OBOL.credbar.clearNotice === 'function') OBOL.credbar.clearNotice();
+      var card = t.closest('.credential-next');
+      var wrap = t.closest('.coach-outcome-credbar');
+      if (card) card.remove();
+      if (wrap && !wrap.children.length) wrap.remove();
     });
     // Open the clicked card and make it the focus, WITHOUT closing the other open cards (multi-open mode).
     function openCardKeepOthers(card) {
       var id = card.getAttribute('data-action'); if (!id) return;
-      var fx = freshCtx(); var m = moveById(fx.pack, id); if (!m) return;
+      nsSel.target = card.getAttribute('data-context-target') || null;
+      var fx = freshCtx(); var m = moveById(fx.pack, id, fx); if (!m) return;
       nsOpen[id] = true; nsSel.id = id; nsSel.userLocus = false;
       var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
       nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m, fx.facts));
@@ -2156,27 +2759,27 @@
     }
     // click a card (but not an interactive control inside it) to open it
     U.on(mount, 'click', '.ns-card', function (e, t) {
-      if (e.target.closest('.ns-cmd') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('summary') || e.target.closest('.ns-chip-lib')) return;
+      if (e.target.closest('.ns-cmd') || e.target.closest('.ns-pc-wrap') || e.target.closest('.ns-toggle') || e.target.closest('button') || e.target.closest('a') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('summary') || e.target.closest('.ns-chip-lib')) return;
       if (nsMultiOpen()) { if (t.classList.contains('selected')) collapseCard(t); else openCardKeepOthers(t); }
       else if (!t.classList.contains('selected')) selectCard(t);
     });
     U.on(mount, 'keydown', '.ns-card', function (e, t) {
-      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea, summary')) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, a, input, textarea, summary, .ns-pc-wrap')) {
         e.preventDefault();
         if (nsMultiOpen()) { if (t.classList.contains('selected')) collapseCard(t); else openCardKeepOthers(t); }
         else if (!t.classList.contains('selected')) selectCard(t);
       }
     });
-    // multi-open toggle + "collapse to one"
-    U.on(mount, 'click', '#ns-multiopen', function (e, t) {
-      var on = !!t.checked;
+    // multi-open pill toggle + "collapse to one"
+    U.on(mount, 'click', '#ns-multiopen', function () {
+      var on = !nsMultiOpen();
       if (!on) nsOpen = nsSel.id ? (function () { var o = {}; o[nsSel.id] = true; return o; })() : {};
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.nsMultiOpen = on; }, 'ui');
       OBOL.router.render();
     });
-    // focus mode toggle
-    U.on(mount, 'click', '#ns-focusmode', function (e, t) {
-      var on = !!t.checked;
+    // focus mode pill toggle
+    U.on(mount, 'click', '#ns-focusmode', function () {
+      var on = !nsFocusMode();
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.nsFocusMode = on; }, 'ui');
       OBOL.router.render();
     });
@@ -2189,10 +2792,421 @@
       var card = t.closest('.ns-card'); if (!card) return;
       nsSel.locus = t.getAttribute('data-locus');
       nsSel.userLocus = true;
-      var fx = freshCtx(); var m = moveById(fx.pack, card.getAttribute('data-action'));
+      var fx = freshCtx(); var m = moveById(fx.pack, card.getAttribute('data-action'), fx);
       if (m) nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts);
       syncCardLocus(card, nsSel.locus);
       repaintCanvas();
+    });
+    // Hero Operator Deck & Path Chooser interactive handlers
+    function refreshHeroOperatorDeck() {
+      var curDeckEl = mount.querySelector('#hero-op-deck');
+      if (!curDeckEl) {
+        OBOL.router.render();
+        return;
+      }
+      var fx = freshCtx();
+      var activeEng = OBOL.store.active() || {};
+      var html = renderHeroOperatorDeck(fx.facts, fx.params, activeEng);
+      if (!html) return;
+      var holder = document.createElement('div');
+      holder.innerHTML = html;
+      var nextDeckEl = holder.firstElementChild;
+      if (nextDeckEl && curDeckEl.parentNode) {
+        curDeckEl.parentNode.replaceChild(nextDeckEl, curDeckEl);
+      }
+    }
+    function pickDeckStep(stepEl) {
+      var deckEl = stepEl.closest('#hero-op-deck'); if (!deckEl) return;
+      Array.prototype.forEach.call(deckEl.querySelectorAll('.hero-op-step'), function (x) { x.classList.remove('active'); });
+      stepEl.classList.add('active');
+      _deckActiveStepId = stepEl.getAttribute('data-deck-step') || null;
+      var cmdStr = stepEl.getAttribute('data-cmd') || (stepEl.querySelector('[data-copy]') && stepEl.querySelector('[data-copy]').getAttribute('data-copy')) || '';
+      var locStr = stepEl.getAttribute('data-locus') || 'remote';
+      var stepLabel = stepEl.getAttribute('data-step-label') || '';
+      var stepNum = stepEl.getAttribute('data-step-num') || '';
+      var mi = deckEl.querySelector('.hero-op-paste .move-ingest');
+      if (mi) {
+        mi.setAttribute('data-cmd', cmdStr);
+        mi.setAttribute('data-locus', locStr);
+      }
+      var pasteTargetLbl = deckEl.querySelector('.hero-op-paste-step-target');
+      if (pasteTargetLbl && (stepNum || stepLabel)) {
+        pasteTargetLbl.textContent = 'Step ' + stepNum + (stepLabel ? ' · ' + stepLabel : '');
+      }
+    }
+    U.on(mount, 'click', '[data-deck-toggle]', function (e) {
+      if (e.target && e.target.closest('[data-deck-tab]')) return;
+      var curEng = OBOL.store.active() || {};
+      var nextOpen = !((curEng.ui || {}).operatorDeckOpen);
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.operatorDeckOpen = nextOpen;
+      }, 'ui');
+      refreshHeroOperatorDeck();
+    });
+    U.on(mount, 'keydown', '[data-deck-toggle]', function (e, t) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        t.click();
+      }
+    });
+    U.on(mount, 'click', '[data-deck-tab]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var tabId = t.getAttribute('data-deck-tab');
+      if (!tabId) return;
+      _deckActiveStepId = null;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        var curTab = eng.ui.operatorDeckTab || 'flags';
+        if (eng.ui.operatorDeckOpen && curTab === tabId) {
+          eng.ui.operatorDeckOpen = false;
+        } else {
+          eng.ui.operatorDeckOpen = true;
+          eng.ui.operatorDeckTab = tabId;
+        }
+      }, 'ui');
+      refreshHeroOperatorDeck();
+    });
+    U.on(mount, 'click', '[data-deck-lane]', function (e, t) {
+      var laneId = t.getAttribute('data-deck-lane');
+      var tabId = t.getAttribute('data-deck-tab-id') || (((OBOL.store.active() || {}).ui || {}).operatorDeckTab) || 'flags';
+      if (!laneId) return;
+      _deckActiveStepId = null;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.operatorDeckOpen = true;
+        eng.ui.operatorDeckTab = tabId;
+        eng.ui.operatorDeckLane = eng.ui.operatorDeckLane || {};
+        eng.ui.operatorDeckLane[tabId] = laneId;
+      }, 'ui');
+      refreshHeroOperatorDeck();
+    });
+    U.on(mount, 'click', '[data-deck-variant]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var variantId = t.getAttribute('data-deck-variant');
+      var laneId = t.getAttribute('data-lane-id') || '';
+      var stepId = t.getAttribute('data-step-id') || '';
+      if (!variantId || !laneId || !stepId) return;
+      _deckActiveStepId = stepId;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.deckVariantSel = eng.ui.deckVariantSel || {};
+        eng.ui.deckVariantSel[laneId + ':' + stepId] = variantId;
+      }, 'ui');
+      refreshHeroOperatorDeck();
+    });
+    function switchDeckCredential(credId) {
+      var activeEng = OBOL.store.active() || {};
+      if (credId === 'none' || !credId) {
+        if (OBOL.credbar && typeof OBOL.credbar.clear === 'function') {
+          OBOL.credbar.clear(activeEng);
+        } else if (OBOL.credbar && typeof OBOL.credbar.apply === 'function') {
+          OBOL.credbar.apply(activeEng, null);
+        } else if (OBOL.store && typeof OBOL.store.selectCredential === 'function') {
+          OBOL.store.selectCredential(null);
+        } else {
+          OBOL.store.update(function (eng) {
+            eng.params = eng.params || {};
+            eng.params.username = '';
+            eng.params.user = '';
+            eng.params.password = '';
+            eng.params.nthash = '';
+            eng.params.credentialId = '';
+          }, 'params');
+        }
+        if (OBOL.credbar && OBOL.credbar.render) OBOL.credbar.render();
+        if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
+        if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        OBOL.router.render();
+        return;
+      }
+      if (OBOL.credbar && typeof OBOL.credbar.apply === 'function') {
+        OBOL.credbar.apply(activeEng, credId);
+        if (OBOL.credbar.render) OBOL.credbar.render();
+        if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
+        if (OBOL.router) OBOL.router.render();
+        return;
+      }
+      var allCreds = (OBOL.credbar && typeof OBOL.credbar.list === 'function')
+        ? OBOL.credbar.list(activeEng)
+        : ((OBOL.creds && typeof OBOL.creds.gather === 'function') ? OBOL.creds.gather(activeEng) : []);
+      var found = allCreds.filter(function (c) {
+        var cid = c.id || (OBOL.creds && OBOL.creds.keyOf ? OBOL.creds.keyOf(c) : '');
+        var cKey = (OBOL.creds && OBOL.creds.keyOf) ? OBOL.creds.keyOf(c) : '';
+        return cid === credId || cKey === credId || String(c.user || c.username || '') === credId;
+      })[0];
+      if (found && OBOL.creds && typeof OBOL.creds.activate === 'function') {
+        OBOL.creds.activate(found);
+        return;
+      }
+      if (OBOL.store && typeof OBOL.store.selectCredential === 'function') {
+        try { OBOL.store.selectCredential(credId); } catch (err) {}
+        if (OBOL.credbar && OBOL.credbar.render) OBOL.credbar.render();
+        if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
+        if (OBOL.router) OBOL.router.render();
+      }
+    }
+    U.on(mount, 'click', '[data-deck-cred]', function (e, t) {
+      switchDeckCredential(t.getAttribute('data-deck-cred'));
+    });
+    U.on(mount, 'change', '[data-deck-cred-select]', function (e, t) {
+      switchDeckCredential(t.value);
+    });
+    U.on(mount, 'click', '[data-open-deck-action]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var actionId = t.getAttribute('data-open-deck-action') || '';
+      var mapEntry = (OBOL.pathChooser && OBOL.pathChooser.ACTION_TO_DECK && OBOL.pathChooser.ACTION_TO_DECK[actionId]) || null;
+      var tabId = null, laneId = null;
+      if (typeof mapEntry === 'string') {
+        var parts = mapEntry.split(':');
+        tabId = parts[0] || null;
+        laneId = parts[1] || null;
+      } else if (mapEntry && typeof mapEntry === 'object') {
+        tabId = mapEntry.tab || mapEntry.tabId || null;
+        laneId = mapEntry.lane || mapEntry.laneId || null;
+      }
+      if (!tabId && OBOL.pathChooser && typeof OBOL.pathChooser.buildDeck === 'function') {
+        var fx = freshCtx();
+        var d = OBOL.pathChooser.buildDeck(fx.facts, fx.params, OBOL.store.active() || {});
+        if (d && d.tabs) {
+          for (var ti = 0; ti < d.tabs.length; ti++) {
+            var tb = d.tabs[ti];
+            var ln = (tb.lanes || []).filter(function (l) { return l.actionId === actionId || l.id === actionId; })[0];
+            if (ln) { tabId = tb.id; laneId = ln.id; break; }
+          }
+        }
+      }
+      _deckActiveStepId = null;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.operatorDeckOpen = true;
+        if (tabId) eng.ui.operatorDeckTab = tabId;
+        if (tabId && laneId) {
+          eng.ui.operatorDeckLane = eng.ui.operatorDeckLane || {};
+          eng.ui.operatorDeckLane[tabId] = laneId;
+        }
+      }, 'ui');
+      refreshHeroOperatorDeck();
+      var deckEl = mount.querySelector('#hero-op-deck');
+      if (deckEl && deckEl.scrollIntoView) {
+        try { deckEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+        catch (err) { deckEl.scrollIntoView(); }
+      }
+    });
+    U.on(mount, 'click', '[data-deck-param]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var key = t.getAttribute('data-deck-param');
+      var val = t.getAttribute('data-deck-param-val');
+      var jsonRaw = t.getAttribute('data-deck-param-json');
+      if (!key) return;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.deckParams = eng.ui.deckParams || {};
+        if (jsonRaw) {
+          try {
+            var patch = JSON.parse(jsonRaw);
+            Object.keys(patch).forEach(function (k) { eng.ui.deckParams[k] = patch[k]; });
+          } catch (err) {
+            eng.ui.deckParams[key] = val;
+          }
+        } else {
+          eng.ui.deckParams[key] = val;
+          if (key === 'smb_share') eng.ui.deckParams.smb_preset = '';
+        }
+      }, 'ui');
+      refreshHeroOperatorDeck();
+    });
+    U.on(mount, 'input', '[data-deck-param-input]', function (e, t) {
+      var key = t.getAttribute('data-deck-param-input');
+      if (!key) return;
+      var val = t.value || '';
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.deckParams = eng.ui.deckParams || {};
+        eng.ui.deckParams[key] = val;
+        eng.ui.deckParams.smb_preset = '';
+      }, 'ui');
+      var stepEl = t.closest('[data-deck-step]');
+      if (!stepEl || !OBOL.pathChooser || typeof OBOL.pathChooser.buildDeck !== 'function') return;
+      var stepId = stepEl.getAttribute('data-deck-step');
+      var fx = freshCtx();
+      var engNow = OBOL.store.active() || {};
+      var credKey = (engNow.ui && typeof engNow.ui.operatorDeckCredKey === 'string') ? engNow.ui.operatorDeckCredKey : null;
+      var deckParams = Object.assign({}, fx.params);
+      if (credKey) {
+        var cParts = credKey.split('|');
+        deckParams.user = cParts[0] || '';
+        deckParams.username = cParts[0] || '';
+        if (cParts[1]) deckParams.domain = cParts[1];
+        if (cParts[2] === 'password' && cParts[3]) {
+          deckParams.password = cParts[3];
+          deckParams.nthash = '';
+          deckParams.dahash = '';
+        } else if (cParts[2] === 'nthash' && cParts[3]) {
+          deckParams.nthash = cParts[3];
+          deckParams.password = '';
+        }
+      }
+      var liveDeck = OBOL.pathChooser.buildDeck(fx.facts, deckParams, engNow);
+      var foundStep = null;
+      (liveDeck.tabs || []).forEach(function (tb) {
+        (tb.lanes || []).forEach(function (ln) {
+          (ln.steps || []).forEach(function (st) {
+            if (st.id === stepId) foundStep = st;
+          });
+        });
+      });
+      if (foundStep) {
+        var newCmd = foundStep.command || '';
+        stepEl.setAttribute('data-cmd', newCmd);
+        var codeEl = stepEl.querySelector('.cmd-run-code');
+        if (codeEl) codeEl.textContent = newCmd;
+        Array.prototype.forEach.call(stepEl.querySelectorAll('[data-copy]'), function (cp) { cp.setAttribute('data-copy', newCmd); });
+        var pasteBtn = stepEl.querySelector('[data-deck-paste-step]');
+        if (pasteBtn) pasteBtn.setAttribute('data-cmd', newCmd);
+        (foundStep.fillInputs || []).forEach(function (fi) {
+          var inp = stepEl.querySelector('[data-deck-param-input="' + fi.key + '"]');
+          if (inp && inp !== t) inp.setAttribute('placeholder', fi.placeholder || '');
+        });
+        Array.prototype.forEach.call(stepEl.querySelectorAll('[data-deck-param="smb_preset"]'), function (b) {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
+      }
+    });
+    U.on(mount, 'click', '[data-deck-step]', function (e, t) {
+      if (e.target.closest('.cmd-fill') || e.target.closest('.hero-op-fill-input') || e.target.closest('[data-deck-param]') || e.target.closest('[data-deck-variant]') || e.target.closest('[data-deck-paste-step]')) return;
+      pickDeckStep(t);
+    });
+    U.on(mount, 'keydown', '[data-deck-step]', function (e, t) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, input')) {
+        e.preventDefault();
+        pickDeckStep(t);
+      }
+    });
+    U.on(mount, 'click', '[data-deck-paste-step]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var stepEl = t.closest('[data-deck-step]');
+      if (stepEl) pickDeckStep(stepEl);
+      var cmd = t.getAttribute('data-cmd') || (stepEl && stepEl.getAttribute('data-cmd')) || '';
+      var actionId = t.getAttribute('data-action') || t.getAttribute('data-action-id') || '';
+      var locus = t.getAttribute('data-locus') || (stepEl && stepEl.getAttribute('data-locus')) || 'remote';
+      var label = t.getAttribute('data-step-label') || 'Operator Deck Step';
+      var fx = freshCtx();
+      var target = t.getAttribute('data-target-ip') || (fx.params && (fx.params.target || fx.params.dc_ip)) || '';
+      if (OBOL.quickpaste && typeof OBOL.quickpaste.open === 'function') {
+        OBOL.quickpaste.open({
+          command: cmd,
+          actionId: actionId,
+          locus: locus,
+          label: label,
+          target: target
+        });
+      }
+    });
+    function pickPcStep(stepEl) {
+      var card = stepEl.closest('.ns-card'); if (!card) return;
+      Array.prototype.forEach.call(card.querySelectorAll('.ns-pc-step'), function (x) { x.classList.remove('active'); });
+      stepEl.classList.add('active');
+      nsSel.id = card.getAttribute('data-action') || nsSel.id;
+      nsSel.idx = parseInt(stepEl.getAttribute('data-cmd-index'), 10) || 0;
+      nsSel.locus = stepEl.getAttribute('data-locus') || 'remote';
+      var mi = card.querySelector('.move-ingest');
+      if (mi) mi.setAttribute('data-cmd', stepEl.getAttribute('data-cmd') || (stepEl.querySelector('[data-copy]') && stepEl.querySelector('[data-copy]').getAttribute('data-copy')) || '');
+      repaintCanvas();
+    }
+    function refreshCardPathChooser(card) {
+      if (!card) return;
+      var actionId = card.getAttribute('data-action');
+      var fx = freshCtx();
+      var m = moveById(fx.pack, actionId, fx);
+      if (!m || !(OBOL.pathChooser && OBOL.pathChooser.build)) return;
+      var activeEng = OBOL.store.active() || {};
+      var dirs = OBOL.workspace.tokens(activeEng);
+      var filled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: activeEng.profile, workspace: dirs });
+      var pc = OBOL.pathChooser.build(m, fx.facts, fx.params, filled, activeEng);
+      if (!pc) return;
+      var pcOpen = !!(activeEng.ui && activeEng.ui.pathChooserOpen);
+      if (pcOpen && pc.selectedLane && pc.selectedLane.steps && pc.selectedLane.steps.length) {
+        var nextStep = pc.selectedLane.steps.filter(function (s) { return !s.done; })[0] || pc.selectedLane.steps[0];
+        if (nextStep) {
+          nsSel.id = actionId;
+          nsSel.idx = nextStep.cmdIndex;
+          nsSel.locus = nextStep.locus || 'remote';
+        }
+      }
+      var wrap = card.querySelector('.ns-pc-wrap');
+      if (wrap) {
+        var holder = document.createElement('div');
+        holder.innerHTML = renderPathChooserRegion(m, pc, pcOpen, nsSel.idx);
+        var nextWrap = holder.firstElementChild;
+        if (nextWrap) wrap.parentNode.replaceChild(nextWrap, wrap);
+      }
+      var tgl = card.querySelector('.ns-toggle');
+      var cmds = card.querySelector('.ns-cmds');
+      if (pcOpen) {
+        if (tgl) tgl.setAttribute('hidden', '');
+        if (cmds) cmds.setAttribute('hidden', '');
+        var activeStepEl = card.querySelector('.ns-pc-step.active') || card.querySelector('.ns-pc-step');
+        var mi = card.querySelector('.move-ingest');
+        if (mi && activeStepEl) mi.setAttribute('data-cmd', activeStepEl.getAttribute('data-cmd') || '');
+      } else {
+        if (tgl) tgl.removeAttribute('hidden');
+        if (cmds) cmds.removeAttribute('hidden');
+        syncCardLocus(card, nsSel.locus);
+      }
+      repaintCanvas();
+    }
+    U.on(mount, 'click', '[data-pc-toggle]', function (e, t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      var curEng = OBOL.store.active() || {};
+      var nextOpen = !((curEng.ui || {}).pathChooserOpen);
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.pathChooserOpen = nextOpen;
+      }, 'ui');
+      refreshCardPathChooser(card);
+    });
+    U.on(mount, 'keydown', '[data-pc-toggle]', function (e, t) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        t.click();
+      }
+    });
+    U.on(mount, 'click', '[data-pc-group]', function (e, t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      var actionId = t.getAttribute('data-action') || card.getAttribute('data-action');
+      var groupId = t.getAttribute('data-pc-group');
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.pathChooserOpen = true;
+        eng.ui.pathChooserSel = eng.ui.pathChooserSel || {};
+        eng.ui.pathChooserSel[actionId] = { groupId: groupId, laneId: null };
+      }, 'ui');
+      refreshCardPathChooser(card);
+    });
+    U.on(mount, 'click', '[data-pc-lane]', function (e, t) {
+      var card = t.closest('.ns-card'); if (!card) return;
+      var actionId = t.getAttribute('data-action') || card.getAttribute('data-action');
+      var groupId = t.getAttribute('data-pc-group');
+      var laneId = t.getAttribute('data-pc-lane');
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.pathChooserOpen = true;
+        eng.ui.pathChooserSel = eng.ui.pathChooserSel || {};
+        eng.ui.pathChooserSel[actionId] = { groupId: groupId, laneId: laneId };
+      }, 'ui');
+      refreshCardPathChooser(card);
+    });
+    U.on(mount, 'click', '.ns-pc-step', function (e, t) {
+      if (e.target.closest('.cmd-fill')) return;
+      pickPcStep(t);
+    });
+    U.on(mount, 'keydown', '.ns-pc-step', function (e, t) {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('button, input')) {
+        e.preventDefault();
+        pickPcStep(t);
+      }
     });
     // pick a command row → it drives the canvas field notes (mouse or keyboard)
     function pickCmd(t) {
@@ -2232,11 +3246,26 @@
       U.copy(t.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Flag copied' : 'Copy failed', ok ? '' : 'err'); });
     });
     U.on(mount, 'click', '.btn-copy', function (e, t) {
+      var deckStep = t.closest('.hero-op-step');
+      if (deckStep) pickDeckStep(deckStep);
+      var pcStep = t.closest('.ns-pc-step');
+      if (pcStep) pickPcStep(pcStep);
       var cmdRow = t.closest('.ns-cmd');
       if (cmdRow) pickCmd(cmdRow);
       var card = t.closest('.ns-card');
-      var copiedCmd = t.getAttribute('data-copy') || '';
-      if (card && copiedCmd && OBOL.ingest && typeof OBOL.ingest.setLastCopied === 'function') {
+      var copiedCmd = t.getAttribute('data-copy') || (t.closest('[data-copy]') && t.closest('[data-copy]').getAttribute('data-copy')) || '';
+      if (deckStep && copiedCmd && OBOL.ingest && typeof OBOL.ingest.setLastCopied === 'function') {
+        var deckPasteBtn = deckStep.querySelector('[data-deck-paste-step]');
+        var deckEl = deckStep.closest('#hero-op-deck');
+        var deckIngest = deckEl && deckEl.querySelector('.hero-op-paste .move-ingest');
+        var deckGo = deckIngest && deckIngest.querySelector('.mi-go');
+        OBOL.ingest.setLastCopied({
+          command: copiedCmd,
+          actionId: (deckPasteBtn && (deckPasteBtn.getAttribute('data-action') || deckPasteBtn.getAttribute('data-action-id'))) || (deckIngest && deckIngest.getAttribute('data-action')) || '',
+          target: (deckPasteBtn && deckPasteBtn.getAttribute('data-target-ip')) || (deckGo && deckGo.getAttribute('data-target-ip')) || '',
+          locus: deckStep.getAttribute('data-locus') || 'remote'
+        });
+      } else if (card && copiedCmd && OBOL.ingest && typeof OBOL.ingest.setLastCopied === 'function') {
         var goBtn = card.querySelector('.mi-go');
         var copyMove = moveById(OBOL.packs.actions(), card.getAttribute('data-action') || '');
         var copyObj = copyMove && copyMove.commands && copyMove.commands[nsSel.idx];
@@ -2255,7 +3284,7 @@
       var was; try { was = localStorage.getItem(key) === '1'; localStorage.setItem(key, was ? '0' : '1'); } catch (x) { was = false; }
       var on = !was;
       t.setAttribute('aria-checked', on ? 'true' : 'false');
-      t.innerHTML = on ? '✓' : '';
+      t.innerHTML = on ? OBOL.ic('check') : '';
       var li = t.closest('.stage-step'); if (li) li.classList.toggle('done', on);
     });
     U.on(mount, 'click', '.cmd-miss-cmd', function (e, t) {
@@ -2267,18 +3296,30 @@
     });
     // inline free-text token fill ({{command}} etc.): substitute live into the command + copy button.
     U.on(mount, 'input', '.cmd-fill', function (e, t) {
-      var cmd = t.closest('.ns-cmd') || t.closest('.cmd'); if (!cmd) return;
+      var cmd = t.closest('.ns-cmd') || t.closest('.ns-pc-step') || t.closest('.hero-op-step') || t.closest('.cmd'); if (!cmd) return;
       var out = cmd.getAttribute('data-tmpl') || '';
       Array.prototype.forEach.call(cmd.querySelectorAll('.cmd-fill'), function (inp) {
         var val = (inp.value || '').trim();
-        if (val) out = out.split('{{' + inp.getAttribute('data-tok') + '}}').join(val);
+        if (!val) return;
+        var tok = inp.getAttribute('data-tok') || '';
+        var ph = '{{' + tok + '}}';
+        var pos = out.indexOf(ph);
+        if (pos >= 0 && pos > 0 && (out.charAt(pos - 1) === "'" || out.charAt(pos - 1) === '"')) {
+          var q = out.charAt(pos - 1);
+          var safe = q === "'" ? val.replace(/'/g, "'\\''") : val.replace(/(["\\$`])/g, '\\$1');
+          out = out.split(ph).join(safe);
+        } else {
+          out = out.split(ph).join(val);
+        }
       });
       var code = cmd.querySelector('.cmd-run-code') || cmd.querySelector('.cmd-run code'); if (code) code.textContent = out;
       var copy = cmd.querySelector('.btn-copy'); if (copy) copy.setAttribute('data-copy', out);
+      var cmdRowWrap = cmd.querySelector('.ns-pc-cmd-row') || cmd.querySelector('.hero-op-cmd-row'); if (cmdRowWrap) cmdRowWrap.setAttribute('data-copy', out);
+      var deckPaste = cmd.querySelector('[data-deck-paste-step]'); if (deckPaste) deckPaste.setAttribute('data-cmd', out);
       cmd.setAttribute('data-cmd', out);
       if (cmd.classList.contains('active')) {
         var card = cmd.closest('.ns-card');
-        var mi = card && card.querySelector('.move-ingest');
+        var mi = (card && card.querySelector('.move-ingest')) || (cmd.closest('#hero-op-deck') && cmd.closest('#hero-op-deck').querySelector('.hero-op-paste .move-ingest'));
         if (mi) mi.setAttribute('data-cmd', out);
       }
     });
@@ -2375,9 +3416,19 @@
       U.toast('Marked done, recomputing');
       OBOL.router.render();
     });
-    // dismiss the workspace scaffold banner
+    // copy working-directory setup command + unlock moves in one click
+    U.on(mount, 'click', '.ws-copy-unlock', function (e, t) {
+      var cmd = t.getAttribute('data-copy') || '';
+      U.copy(cmd).then(function (ok) {
+        OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
+        U.toast(ok ? 'Working directory command copied - moves unlocked!' : 'Moves unlocked', ok ? '' : 'err');
+        OBOL.router.render();
+      });
+    });
+    // dismiss / opt out of the workspace scaffold banner
     U.on(mount, 'click', '.ws-done', function () {
       OBOL.store.update(function (eng) { eng.ui = eng.ui || {}; eng.ui.wsScaffoldDone = true; }, 'ui');
+      U.toast('Moves unlocked');
       OBOL.router.render();
     });
     // "Got It" on a Set Up First prep step: collapse it to one line (obol can't see your disk, so you tell
@@ -2441,7 +3492,7 @@
       var inputObj = inputMove && inputMove.id === nsSel.id && inputMove.commands && inputMove.commands[nsSel.idx];
       var r = OBOL.ingest.run({ text: text, command: box.getAttribute('data-cmd') || '',
         actionId: box.getAttribute('data-action') || '', source: 'paste',
-        scope: tIp ? ('host:' + tIp) : undefined, locus: nsSel.locus || 'remote', commandObj: inputObj || undefined });
+        scope: tIp ? ('host:' + tIp) : undefined, locus: box.getAttribute('data-locus') || nsSel.locus || 'remote', commandObj: inputObj || undefined });
       if (!r.ok) { if (out) out.textContent = r.reason === 'parsers' ? 'Parsers still loading, try again.' : 'Nothing to parse.'; t.disabled = false; return; }
       if (r.arsenal && r.arsenal.ok && !r.added) {
         U.toast('Loadout stocked ' + r.arsenal.present + ' tools, ' + r.arsenal.staged + ' staged');
@@ -2464,6 +3515,25 @@
       U.toast(OBOL.ingest.outcomeMessage(r));
       t.disabled = false;
       OBOL.router.render();
+      });
+    });
+    U.on(mount, 'click', '.mi-empty', function (e, t) {
+      var box = t.closest('.move-ingest'); if (!box) return;
+      var out = box.querySelector('.mi-result');
+      if (out) out.textContent = 'Recording…';
+      t.disabled = true;
+      OBOL.ingest.ensureParsers().then(function (okp) {
+        if (!okp) { if (out) out.textContent = 'Parsers still loading, try again.'; t.disabled = false; return; }
+        var tIp = t.getAttribute('data-target-ip') || '';
+        var inputMove = moveById(OBOL.packs.actions(), box.getAttribute('data-action') || '');
+        var inputObj = inputMove && inputMove.id === nsSel.id && inputMove.commands && inputMove.commands[nsSel.idx];
+        var r = OBOL.ingest.run({ text: '[OBOL: completed with no output / nothing found]', command: box.getAttribute('data-cmd') || '',
+          actionId: box.getAttribute('data-action') || '', source: 'paste',
+          scope: tIp ? ('host:' + tIp) : undefined, locus: box.getAttribute('data-locus') || nsSel.locus || 'remote', commandObj: inputObj || undefined });
+        _pasteFlash = { outcome: r.outcome, target: tIp || ((OBOL.store.active() || {}).params || {}).target || '' };
+        U.toast(OBOL.ingest.outcomeMessage(r));
+        t.disabled = false;
+        OBOL.router.render();
       });
     });
   }

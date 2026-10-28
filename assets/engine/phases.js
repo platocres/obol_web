@@ -16,6 +16,7 @@
   var PHASES = ['recon', 'enum', 'creds', 'access', 'escalate', 'loot'];
   var PHASE_INDEX = {};
   PHASES.forEach(function (name, i) { PHASE_INDEX[name] = i; });
+  PHASE_INDEX.lateral = PHASE_INDEX.escalate;
 
   // An UNMAPPED fact kind defaults to 'enum', deliberately early, so an un-ruled recon
   // signal cannot silently shove the frontier to loot and flatten the move ranking.
@@ -27,27 +28,47 @@
     ['port:', 'recon'], ['scan.', 'recon'],
     ['ldap.reachable', 'recon'], ['smb.reachable', 'recon'],
     ['kerberos.reachable', 'recon'], ['winrm.reachable', 'recon'],
-    ['http.reachable', 'recon'], ['service.', 'recon'],
+    ['http.reachable', 'recon'], ['ssh.reachable', 'recon'],
+    ['ftp.reachable', 'recon'], ['rdp.reachable', 'recon'],
+    ['mssql.reachable', 'recon'], ['mysql.reachable', 'recon'],
+    ['postgres.reachable', 'recon'], ['redis.reachable', 'recon'],
+    ['telnet.reachable', 'recon'], ['snmp.reachable', 'recon'],
+    ['nfs.reachable', 'recon'], ['rsync.reachable', 'recon'],
+    ['service.', 'recon'],
     ['dns.reachable', 'recon'], ['dns.zone', 'enum'], ['dns.email', 'enum'],
     ['dns.takeover', 'access'],
     ['ad.dc_candidate', 'enum'], ['ad.domain_known', 'enum'], ['ad.base_dn', 'enum'],
     ['ad.anonymous_bind', 'enum'], ['ad.user_list', 'enum'], ['ad.protected_user', 'enum'],
+    ['ad.', 'enum'],
     ['smb.null_session', 'enum'], ['smb.guest_session', 'enum'], ['smb.shares', 'enum'],
     ['enum.deep', 'enum'],
     ['web.content_map', 'enum'], ['web.vhost', 'enum'], ['web.source', 'enum'],
     ['web.users', 'enum'], ['web.parameterized', 'enum'],
     ['hash.', 'creds'], ['kerberos.tickets', 'creds'], ['credential.', 'creds'],
+    ['access.root', 'escalate'], ['access.system', 'escalate'],
+    ['access.admin', 'escalate'], ['mssql.sysadmin', 'escalate'],
     ['ldap.authenticated', 'access'], ['smb.authenticated', 'access'],
     ['winrm.authenticated', 'access'], ['web.authenticated', 'access'],
     ['access.', 'access'], ['foothold.', 'access'], ['phish.', 'access'],
     ['ad.graph.collected', 'escalate'], ['ad.attack_paths', 'escalate'],
-    ['ad.control_paths', 'escalate'], ['ad.trusts', 'escalate'],
+    ['ad.control_paths', 'escalate'], ['ad.domain_control', 'escalate'],
+    ['ad.dcsync_granted', 'escalate'], ['ad.dcsync_rights', 'escalate'],
+    ['ad.acl_', 'escalate'], ['ad.group_joined', 'escalate'],
+    ['ad.delegation', 'escalate'], ['ad.rbcd', 'escalate'],
+    ['ad.unconstrained', 'escalate'], ['ad.laps', 'escalate'],
+    ['ad.gmsa', 'escalate'], ['ad.gpo_', 'escalate'],
+    ['ad.maq_allow', 'escalate'], ['ad.nopac', 'escalate'],
+    ['ad.trusts', 'escalate'],
     ['ad.computer_added', 'escalate'], ['adcs.', 'escalate'],
     ['ad.zerologon', 'escalate'], ['ad.coerced_auth', 'escalate'],
     ['ad.gpo_control', 'escalate'], ['ad.sid_history', 'escalate'],
     ['privesc.', 'escalate'],
     ['defense.control', 'escalate'],
     ['relay.success', 'escalate'], ['lateral.movement', 'escalate'],
+    ['tunnel.', 'lateral'], ['pivot.', 'lateral'],
+    ['network.subnet_candidate', 'lateral'], ['host.multihomed', 'lateral'],
+    ['scan.local.routes', 'lateral'], ['scan.local.interfaces', 'lateral'],
+    ['scan.local.neighbors', 'lateral'],
     ['vuln.', 'escalate'], ['exploit.candidate', 'escalate'],
     // scanner detection is ENUMERATION output, not post-foothold escalation — a longer,
     // more-specific prefix wins over the generic vuln./finding. above.
@@ -66,10 +87,12 @@
   }
 
   function phaseOfKind(kind) {
+    if (!kind) return DEFAULT_PHASE;
     for (var i = 0; i < SORTED_RULES.length; i++) {
       var prefix = SORTED_RULES[i][0];
       if (kind === prefix || kind.indexOf(prefix) === 0) return SORTED_RULES[i][1];
     }
+    if (/\.reachable$/.test(kind)) return 'recon';
     return DEFAULT_PHASE;
   }
 
@@ -82,14 +105,25 @@
     return best;
   }
 
+  var ACTION_PHASE_ALIASES = {
+    privesc: 'escalate',
+    elevate: 'escalate',
+    foothold: 'access',
+    exploit: 'access',
+    pivot: 'lateral',
+    post: 'loot',
+    findings: 'loot'
+  };
+
   // An action's phase: an explicit `phase` the pack set on it, else the latest phase of
   // anything it produces (fallback: the latest phase of its prerequisites).
   function phaseOfAction(action) {
-    var explicit = action.phase || '';
-    if (explicit in PHASE_INDEX) return explicit;
-    var kinds = (action.produces || []).slice();
+    var explicit = String((action && action.phase) || '').toLowerCase();
+    if (explicit && ACTION_PHASE_ALIASES[explicit]) explicit = ACTION_PHASE_ALIASES[explicit];
+    if (explicit && explicit !== 'web' && explicit !== 'ad' && (explicit in PHASE_INDEX)) return explicit;
+    var kinds = ((action && action.produces) || []).slice();
     if (!kinds.length) {
-      kinds = (action.requires_all || []).slice().concat(action.requires_any || []);
+      kinds = ((action && action.requires_all) || []).slice().concat((action && action.requires_any) || []);
     }
     if (!kinds.length) return 'recon';
     return maxByPhase(kinds);
@@ -112,6 +146,10 @@
 
   // How many phases past the target's frontier an action reaches (0 == on-flow).
   function prematurity(action, factset) {
+    if (action && Array.isArray(action.produces) && action.produces.some(function (k) { return /^objective\.|^proof\./.test(k); })
+      && typeof action.eligible === 'function' && factset && action.eligible(factset)) {
+      return 0;
+    }
     return Math.max(0, phaseIndex(phaseOfAction(action)) - frontierIndex(factset));
   }
 
@@ -189,4 +227,3 @@
     evaluateEngagementState: evaluateEngagementState,
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
-

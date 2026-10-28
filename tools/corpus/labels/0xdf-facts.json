@@ -1,0 +1,1520 @@
+{
+  "version": 1,
+  "description": "FACTS-axis ground truth: the fact kinds each real 0xdf corpus block SHOULD mint (expected_kinds, the floor) and must NOT mint (forbidden_kinds, false-positive guards), authored by human review of the live output. Stores no verbatim output (copyright boundary, CORPUS-MINING.md Principle 7); tools/corpus/facts-axis.js re-reads the output from the local corpus by block id. expected_values assert value-level content via verify-parser-corpus deepContains. A miss (expected kind not minted) is the facts-axis backlog, not a test failure; a forbidden hit is a real false positive and fails the axis.",
+  "cases": [
+    {
+      "id": "1731e10ce8d3",
+      "file": "absolute.md",
+      "command": "nmap -p- --min-rate 10000 10.10.11.181",
+      "note": "Full TCP sweep of an AD DC. Floor: host up, open-port set, and the service reachabilities that drive AD moves.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "winrm.reachable",
+        "dns.reachable",
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "expected_values": [
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              53,
+              80,
+              88,
+              135,
+              445
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "c15d541b7945",
+      "file": "absolute.md",
+      "command": "nmap -sCV -p 53,80,88,135,139,389,445,464,593,636,3268,3269,5985,9389 10.10.11.181",
+      "note": "Version + default-script scan of the same DC. Floor adds scan.nmap.version; still no creds or foothold from a scan.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "kerberos.reachable",
+        "winrm.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "7851a2bbdbaf",
+      "file": "access.md",
+      "command": "nmap -sV -sC -p 21,23,80 -oA nmap/scripts 10.10.10.98",
+      "note": "Small Windows box: ftp (Microsoft ftpd), telnet, http. Floor: host up, open ports, version scan, ftp + http reachable.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ftp.reachable",
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "e3982202c718",
+      "file": "active.md",
+      "command": "nmap -sT -p- --min-rate 5000 -oA nmap/alltcp 10.10.10.100",
+      "note": "Full TCP sweep of Active (AD DC). Floor: DC candidate plus the core AD service reachabilities.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ac250340317e",
+      "file": "admirer.md",
+      "command": "gobuster dir -u http://10.10.10.187 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -x php -t 20 po scans/gobuster-root-medium-php",
+      "note": "Gobuster v3.0.1 with real results (/index.php 200, /assets 301, /images 301, /server-status 403). Floor: the content map, and it must contain the discovered paths.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [],
+      "expected_values": [
+        {
+          "kind": "web.content_map",
+          "value_contains": {
+            "paths": [
+              "/index.php",
+              "/server-status"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "0d3304adc53f",
+      "file": "access.md",
+      "command": "nmap -u http://10.10.10.98 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 20 -x asp,aspx,txt",
+      "note": "Gobuster v2.0.1 banner-only block: the run started and finished with NO paths shown in this block. Correct behavior is to mint nothing; a true negative. Guard: must not invent a content map from a banner.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "web.content_map"
+      ]
+    },
+    {
+      "id": "25f59588e9ad",
+      "file": "anubis.md",
+      "command": "curl 172.20.144.1 -Headers @{\"Host\"=\"softwareportal.windcorp.htb\"} -UseBasicParsing",
+      "note": "PowerShell Invoke-WebRequest style 200 OK with a Server header. Floor: http reachable and the server banner. A GET must not claim a credential.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "44f6c4664832",
+      "file": "admirer.md",
+      "command": "curl http://10.10.10.187/admin-dir/credentials.txt",
+      "note": "Freeform labeled credential block: the body discloses three credential sets (internal mail, FTP, WordPress) as bracket-header + bare-user + bare-pass, with no key=value delimiter. Previously the documented facts-axis miss (websource keyed only on config/.env shapes); CLOSED 2026-10-23 by websource `_parse_labeled_creds` (source 'labeled-leak'), which now mints a labeled_leak credential.candidate for this shape. Ground truth: this block should mint credential.candidate.",
+      "expected_kinds": [
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "74c167634281",
+      "file": "active.md",
+      "command": "nmap -sV -sC 10.10.10.100",
+      "note": "Version + script scan of an AD DC (Active). Floor: host up, open ports, nmap version evidence, DC candidate, and the core AD service reachabilities. A service scan never yields creds or foothold.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "dns.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "expected_values": [
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              53,
+              88,
+              135,
+              389,
+              445,
+              636
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "3c2203c68976",
+      "file": "active.md",
+      "command": "nmap -sU --top-ports 100 10.10.10.100",
+      "note": "UDP top-ports sweep. Floor: host up, open UDP port set, and the udp-scan marker. No TCP service reachability is implied by a UDP sweep, and no creds.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.udp"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "389dbccc1ab7",
+      "file": "acute.md",
+      "command": "nmap -p 443 -sCV 10.10.11.145",
+      "note": "Single-port https service scan (443 only). Floor: host up, open port, http reachable. Guard: a single https port must not imply ftp or smb, and a scan is never a credential.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "ftp.reachable",
+        "smb.reachable"
+      ],
+      "expected_values": [
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              443
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "3b8eadebf59b",
+      "file": "absolute.md",
+      "command": "netexec smb 10.10.11.181 -u guest -p ''",
+      "note": "SMB probe with an unauthenticated / guest logon that is rejected. Floor: smb reachable, DC candidate from the host banner, domain learned, and the logon-failure blocker. Guard: a rejected logon is never an authenticated session or a validated credential.",
+      "expected_kinds": [
+        "smb.reachable",
+        "ad.dc_candidate",
+        "host.domain",
+        "blocker.logon_failure"
+      ],
+      "forbidden_kinds": [
+        "smb.authenticated",
+        "credential.validated",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "d1781294fe49",
+      "file": "absolute.md",
+      "command": "netexec smb 10.10.11.181 -u svc_user -p redacted",
+      "note": "SMB logon refused with STATUS_ACCOUNT_RESTRICTION (valid secret, but the account cannot log on this way). Floor: smb reachable and the account-restricted blocker. Guard: a restricted logon did not authenticate the session.",
+      "expected_kinds": [
+        "smb.reachable",
+        "blocker.account_restricted"
+      ],
+      "forbidden_kinds": [
+        "smb.authenticated",
+        "credential.validated"
+      ]
+    },
+    {
+      "id": "8c10cc887a79",
+      "file": "absolute.md",
+      "command": "netexec smb 10.10.11.181 -u svc_user -p redacted -k",
+      "note": "SMB logon accepted (plus sign, no Pwn3d marker). Floor: smb reachable, authenticated session, validated and available credential. Guard: a non-admin logon is not admin access, and it is not a logon failure.",
+      "expected_kinds": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.validated",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "blocker.logon_failure"
+      ]
+    },
+    {
+      "id": "0ef562d37746",
+      "file": "absolute.md",
+      "command": "smbclient //10.10.11.181/share -U redacted",
+      "note": "SMB share listing that exposes a Groups.xml (GPP) file worth pulling. Floor: the loot file pointer and a config-review flag. Guard: an undecrypted GPP file is not yet a plaintext or available credential.",
+      "expected_kinds": [
+        "loot.files",
+        "config.review"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "23708bbeb1b8",
+      "file": "anubis.md",
+      "command": "curl -s http://10.10.10.102/invalid",
+      "note": "HTTP 404 error body (PowerShell Invoke-WebRequest wrapper). STRICTER FLOOR / BACKLOG 2026-10-23: the server answered over HTTP, which proves http.reachable; the curl parser mints that for a clean 200 + Server header (case 25f59588e9ad) but not for this error-wrapped non-200 path, so the reachability fact is a tracked miss (the failures-axis HTTP error-body item). Guard: a 404 is not a credential.",
+      "expected_kinds": [
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "15c36eaaa705",
+      "file": "admirer.md",
+      "command": "ssh -i id_rsa root@10.10.10.187",
+      "note": "SSH session whose banner discloses the uname string. Floor: the OS family and kernel learned from the banner. Guard: OBOL is proof-first, so a login banner alone (no same-paste whoami/id) must not mint a linux foothold or a captured credential.",
+      "expected_kinds": [
+        "host.os_family",
+        "host.kernel"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "eba147fe19f3",
+      "file": "access.md",
+      "command": "ftp 10.10.10.98",
+      "note": "Anonymous FTP login accepted, with a server banner. Floor: ftp reachable, the banner, the anonymous-login fact, and the OS family if the banner discloses it. Guard: anonymous access is not a captured credential and not a shell foothold.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner",
+        "ftp.anonymous_login"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "100754e619b9",
+      "file": "access.md",
+      "command": "ftp> ls",
+      "note": "FTP directory listing that exposes backup.mdb (a 5.6MB Access DB worth pulling). STRICTER FLOOR / BACKLOG 2026-10-23: a listing that names a loot-worthy file should mint loot.files the way smbclient listings already do; the ftp listing path does not yet, so this is a tracked facts-axis miss, not a test failure. Guard: a listing is still not a credential or a foothold.",
+      "expected_kinds": [
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "7dbc761132fe",
+      "file": "absolute.md",
+      "command": "feroxbuster -u http://10.10.11.181 -w raft-medium.txt",
+      "note": "Feroxbuster run with discovered paths. Floor: the web content map. Guard: content discovery never yields a credential.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "a110794644ff",
+      "file": "bankrobber.md",
+      "command": "gobuster dir -u http://10.10.10.154 -w directory-list-2.3-medium.txt",
+      "note": "Gobuster v3 run with real results and a tech hint from the responses. Floor: the content map and the web tech fact. Guard: content discovery is not a credential.",
+      "expected_kinds": [
+        "web.content_map",
+        "web.tech"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "d544ab81342b",
+      "file": "arkham.md",
+      "command": "gobuster dir -u http://10.10.10.130 -w common.txt",
+      "note": "Gobuster v2 banner-only block: the run header printed but no paths are shown in this block. Correct behavior is to mint nothing. True-negative guard: no content map from a banner.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "web.content_map"
+      ]
+    },
+    {
+      "id": "77660d8e54d4",
+      "file": "escape.md",
+      "command": "mssqlclient.py -windows-auth redacted@10.10.11.202",
+      "note": "mssqlclient.py interactive session established (SQL prompt). Floor: a database session. Guard: opening a DB shell is not OS admin access and is not a captured credential.",
+      "expected_kinds": [
+        "db.session"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "6c9958a7f6c0",
+      "file": "falafel.md",
+      "command": "sqlmap -r req.txt --dump",
+      "note": "sqlmap confirmed injection with a dump that surfaces databases, tables, and credential columns. Floor: injection confirmed, databases, tables, dumped creds, and a credential candidate. Guard: a DB dump is not a shell on the host.",
+      "expected_kinds": [
+        "web.sqli_confirmed",
+        "db.databases",
+        "db.tables",
+        "db.creds",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "628a62ff5317",
+      "file": "falafel.md",
+      "command": "sqlmap -r req.txt --dbs",
+      "note": "sqlmap confirmed injection with database enumeration, no dump yet. Floor: injection confirmed and the database list. Guard: a confirmed injection without a dump is not yet a credential.",
+      "expected_kinds": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "db.creds"
+      ]
+    },
+    {
+      "id": "1aac7c48a9f7",
+      "file": "absolute.md",
+      "command": "GetNPUsers.py domain/ -usersfile users.txt -no-pass -dc-ip 10.10.11.181",
+      "note": "AS-REP roast that returns a crackable hash. Floor: the asrep hash and a credential candidate. Guard: an uncracked hash is not an available credential and not a windows foothold.",
+      "expected_kinds": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "b29075a7bab6",
+      "file": "intelligence.md",
+      "command": "GetNPUsers.py domain/user -no-pass -dc-ip 10.10.10.248",
+      "note": "AS-REP request against a user that has pre-authentication required: no hash returned. Correct behavior is to mint nothing. True-negative guard: no asrep hash and no credential candidate from a pre-auth-required response.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "hash.asrep",
+        "credential.candidate"
+      ]
+    },
+    {
+      "id": "537da08e2c7a",
+      "file": "active.md",
+      "command": "GetUserSPNs.py domain/user:redacted -dc-ip 10.10.10.100",
+      "note": "GetUserSPNs listing the SPN table (request hashes saved to a file, not shown inline here). Floor: the AD user list learned from the SPN table. Guard: an SPN listing without an inline ticket is not a captured credential.",
+      "expected_kinds": [
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "cd04fe60da8b",
+      "file": "active.md",
+      "command": "cat GetUserSPNs.out",
+      "note": "Reading back a Kerberoast output file that contains a TGS ticket hash. Floor: the tgs hash and a credential candidate. Guard: an uncracked ticket is not an available credential and not a foothold.",
+      "expected_kinds": [
+        "hash.tgs",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "a764723cdbb6",
+      "file": "absolute.md",
+      "command": "ldapsearch -x -H ldap://10.10.11.181 -D redacted -w redacted -b dc=domain",
+      "note": "LDAP bind rejected with invalid credentials. Correct behavior is to mint nothing. True-negative guard: a failed bind did not validate the credential and did not enumerate users.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "credential.validated",
+        "ad.user_list",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "4f0fb39ad9dc",
+      "file": "acute.md",
+      "command": "secretsdump.py -sam sam.save -system system.save LOCAL",
+      "note": "Local SAM dump yielding NTLM hashes. Floor: the ntlm hashes, a credential candidate, the SAM loot pointer, and an available credential (the hash can pass-the-hash). Guard: a hash is not a plaintext password.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "credential.candidate",
+        "loot.sam",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext"
+      ]
+    },
+    {
+      "id": "b9bc42b9b8e7",
+      "file": "authority.md",
+      "command": "secretsdump.py domain/redacted@10.10.11.222 -just-dc",
+      "note": "DCSync / NTDS dump yielding domain hashes including krbtgt. Floor: the ntlm hashes, the krbtgt hash, the NTDS loot pointer, a credential candidate, and an available credential. Guard: domain hashes are not plaintext.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext"
+      ]
+    },
+    {
+      "id": "7a92ca0d0b04",
+      "file": "administrator.md",
+      "command": "hashcat -m 13100 tgs.hash rockyou.txt",
+      "note": "Hashcat cracks a hash to plaintext. Floor: the recovered plaintext and an available credential. Guard: cracking a ticket does not by itself place a windows foothold.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "334332242611",
+      "file": "bitlab.md",
+      "command": "john --wordlist=rockyou.txt id_rsa.hash",
+      "note": "John cracks an SSH private-key passphrase. Floor: a credential candidate (the key), the recovered plaintext passphrase, and an available credential. Guard: cracking a passphrase is not yet a linux foothold.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux"
+      ]
+    },
+    {
+      "id": "e0073d6bdba8",
+      "file": "bitlab.md",
+      "command": "sudo -l",
+      "note": "sudo -l showing a NOPASSWD entry for a specific binary. Floor: the sudo rights, the specific sudo binary, and the privesc lead. Guard: a sudo right is a lead, not yet confirmed root access.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.admin"
+      ]
+    },
+    {
+      "id": "b5c626dc93b5",
+      "file": "blocky.md",
+      "command": "sudo -l",
+      "note": "sudo -l showing (ALL : ALL) ALL. Floor: the sudo rights and the privesc lead. Guard: the right to escalate is a lead, not yet root access until a shell confirms it.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.admin"
+      ]
+    },
+    {
+      "id": "5b2e5f331cee",
+      "file": "cascade.md",
+      "command": "rpcclient -U redacted 10.10.10.182 -c enumdomusers",
+      "note": "rpcclient enumdomusers returning domain accounts. Floor: the AD user list. Guard: enumerating users is not a captured credential.",
+      "expected_kinds": [
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "3cf87096b3ad",
+      "file": "administrator.md",
+      "command": "evil-winrm -i 10.10.11.42 -u redacted -p redacted",
+      "note": "evil-winrm connection banner only (Establishing connection), no shell prompt shown in this block. Correct behavior is to mint nothing from the banner. True-negative guard: a connection banner is not admin access and not a captured credential.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.admin",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "e0c783a21aa5",
+      "file": "anubis.md",
+      "command": "proxychains curl softwareportal.windcorp.htb",
+      "note": "Successful 200 HTML fetch through proxychains (the S-chain prints OK and the page title renders). STRICTER FLOOR / BACKLOG 2026-10-23: a 200 response proves http.reachable, but the proxychains prefix and the absent status/header lines defeat the curl reachability parser, so it mints nothing. Tracked miss. Guard: fetching a page is not a captured credential.",
+      "expected_kinds": [
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "credential.available"
+      ]
+    },
+    {
+      "id": "f87b247fe3a8",
+      "file": "anubis.md",
+      "command": "curl softwareportal.windcorp.htb",
+      "note": "curl against a hostname that does not resolve (DNS failure, no connection made). Correct behavior is to mint nothing. True-negative anchor paired with the HTTP error-body backlog above: when the error-response parser is built it must NOT fire http.reachable on a name-resolution failure, where nothing was ever reached.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "http.reachable",
+        "web.server",
+        "credential.available"
+      ]
+    },
+    {
+      "id": "4875bf636e3b",
+      "file": "absolute.md",
+      "command": "KRB5CCNAME=/tmp/krb5cc_1000 certipy shadow auto -username m.lovegod@absolute.htb -account ",
+      "note": "Stage 4 expansion (certipy (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "381aa8850ac0",
+      "file": "authority.md",
+      "command": "certipy find -u svc_ldap -p 'lDaP_1n_th3_cle4r!' -target authority.htb -text -stdout -vuln",
+      "note": "Stage 4 expansion (certipy (authority.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "adcs.vulnerable"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "6e9e4ac41ca1",
+      "file": "authority.md",
+      "command": "certipy req -username '0xdf$' -password 0xdf0xdf0xdf -ca AUTHORITY-CA -dc-ip 10.10.11.222 ",
+      "note": "Stage 4 expansion (certipy (authority.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.certificate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "563c5f3ec85b",
+      "file": "certified.md",
+      "command": "certipy shadow auto -username judith.mader@certified.htb -password judith09 -account manag",
+      "note": "Stage 4 expansion (certipy (certified.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "9f2eb623477a",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100",
+      "note": "Stage 4 expansion (smbmap (active.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "6063576e7b8e",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100 -d active.htb -u SVC_TGS -p GPPstillStandingStrong2k18",
+      "note": "Stage 4 expansion (smbmap (active.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "c957a6b651c1",
+      "file": "active.md",
+      "command": "smbmap -H 10.10.10.100 -d active.htb -u administrator -p Ticketmaster1968",
+      "note": "Stage 4 expansion (smbmap (active.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "access.admin_share",
+        "share.users_readable",
+        "smb.writable_share"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "d769b910088e",
+      "file": "arkham.md",
+      "command": "smbmap -u 0xdf -H 10.10.10.130",
+      "note": "Stage 4 expansion (smbmap (arkham.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "share.users_readable"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "208e1f26ae7c",
+      "file": "active.md",
+      "command": "smbclient dir",
+      "note": "Stage 4 expansion (smbclient (active.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "c801b1307b6d",
+      "file": "active.md",
+      "command": "smbclient get user.txt",
+      "note": "Stage 4 expansion (smbclient (active.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "c7170fcdc40f",
+      "file": "anubis.md",
+      "command": "smbclient --user=windcorp.htb/localadmin -L //10.10.11.102",
+      "note": "Stage 4 expansion (smbclient (anubis.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "host.os_hint",
+        "host.os_family",
+        "smb.shares"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "4c17fbb2fa79",
+      "file": "armageddon.md",
+      "command": "mysql -e 'show tables;' -u drupaluser -p'CQHEy@9M*m23gBVj' drupal",
+      "note": "Stage 4 expansion (mysql (armageddon.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "db.tables"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "347e0b7ed7e2",
+      "file": "busqueda.md",
+      "command": "mysql show databases;",
+      "note": "Stage 4 expansion (mysql (busqueda.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "db.databases",
+        "db.session",
+        "vuln.gitea"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "6bed8536d6cf",
+      "file": "busqueda.md",
+      "command": "mysql select name,email,passwd from user;",
+      "note": "Stage 4 expansion (mysql (busqueda.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "loot.material",
+        "db.hashes",
+        "credential.candidate",
+        "vuln.gitea"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "588d3a42fa46",
+      "file": "eighteen.md",
+      "command": "mssqlclient.py eighteen.htb/kevin:'iNa2we6haRj2gaw!'@eighteen.htb",
+      "note": "Stage 4 expansion (mssql (eighteen.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "db.session"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "f4c525a40cf6",
+      "file": "escape.md",
+      "command": "KRB5CCNAME=administrator.ccache mssqlclient.py -k dc.sequel.htb",
+      "note": "Stage 4 expansion (mssql (escape.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "db.session"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "a262b0b3b8b0",
+      "file": "escapetwo.md",
+      "command": "mssqlclient.py -windows-auth sequel.htb/rose:KxEPkKe6R8su@dc01.sequel.htb",
+      "note": "Stage 4 expansion (mssql (escapetwo.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "db.session"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "94655297de97",
+      "file": "absolute.md",
+      "command": "hashcat d.klay.hash /usr/share/wordlists/rockyou.txt",
+      "note": "Stage 4 expansion (hashcat (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "147bad50e9af",
+      "file": "anubis.md",
+      "command": "hashcat -m 5600 localadmin.hash /usr/share/wordlists/rockyou.txt",
+      "note": "Stage 4 expansion (hashcat (anubis.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ebe7a0e20733",
+      "file": "apt.md",
+      "command": "hashcat -m 17220 backup.zip.hash /usr/share/wordlists/rockyou.txt --user",
+      "note": "Stage 4 expansion (hashcat (apt.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "de451bd8b9fc",
+      "file": "blackfield.md",
+      "command": "hashcat -m 18200 svc.asrep.hash /usr/share/wordlists/rockyou.txt --force",
+      "note": "Stage 4 expansion (hashcat (blackfield.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "025b6d257b90",
+      "file": "heist.md",
+      "command": "/opt/john/run/john --wordlist=/usr/share/wordlists/rockyou.txt level5_hash",
+      "note": "Stage 4 expansion (john (heist.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "fc6d11bbdd42",
+      "file": "node.md",
+      "command": "john myplace.backup.zip.hash --wordlist=/usr/share/wordlists/rockyou.txt --format=PKZIP",
+      "note": "Stage 4 expansion (john (node.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ff0eee03fdc7",
+      "file": "openadmin.md",
+      "command": "/opt/john/run/john --wordlist=rockyou_ninja joanna-enc.john",
+      "note": "Stage 4 expansion (john (openadmin.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "abe2c8894382",
+      "file": "help.md",
+      "command": "sqlmap -r ticket_attachment.request --level 5 --risk 3 -p param[]",
+      "note": "Stage 4 expansion (sqlmap (help.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "21aeee0bec23",
+      "file": "intentions.md",
+      "command": "sqlmap -r genres.request --second-req feed.request --batch --tamper=space2comment --techni",
+      "note": "Stage 4 expansion (sqlmap (intentions.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "cd0744c92ed6",
+      "file": "jarvis.md",
+      "command": "sqlmap -u http://10.10.10.143:80/room.php?cod=1 --random-agent --level 1 --risk 1  --batch",
+      "note": "Stage 4 expansion (sqlmap (jarvis.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.sqli_confirmed",
+        "db.databases"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ec726ec9686e",
+      "file": "absolute.md",
+      "command": "bloodhound-python -u d.klay -p 'Darkmoonsky248girl' -k -d absolute.htb -dc dc.absolute.htb",
+      "note": "Stage 4 expansion (bloodhound (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.graph.collected"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "4ac672157501",
+      "file": "administrator.md",
+      "command": "bloodhound-python -d administrator.htb -c all -u olivia -p ichliebedich -ns 10.10.11.42 --",
+      "note": "Stage 4 expansion (bloodhound (administrator.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.graph.collected"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "2098cd39c928",
+      "file": "fluffy.md",
+      "command": "bloodhound-ce-python -c all -d fluffy.htb -u j.fleischman -p 'J0elTHEM4n1990!' -ns 10.10.1",
+      "note": "Stage 4 expansion (bloodhound (fluffy.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.graph.collected"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "9d6104230b85",
+      "file": "anubis.md",
+      "command": "wfuzz -u https://10.10.11.102 -H \"Host: FUZZ.windcorp.htb\" -w /usr/share/seclists/Discover",
+      "note": "Stage 4 expansion (wfuzz (anubis.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.vhost"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "77aae01e6893",
+      "file": "control.md",
+      "command": "wfuzz -c -w headers -u http://10.10.10.167/admin.php -H \"FUZZ: 10.10.10.167\" --hh 89",
+      "note": "Stage 4 expansion (wfuzz (control.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "6b0f1848ce9a",
+      "file": "boardlight.md",
+      "command": "ffuf -u http://10.10.11.11 -H \"Host: FUZZ.board.htb\" -w /opt/SecLists/Discovery/DNS/subdom",
+      "note": "Stage 4 expansion (ffuf (boardlight.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.vhost"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "19d3073513a3",
+      "file": "clicker.md",
+      "command": "ffuf -u http://10.10.11.232 -H \"Host: FUZZ.clicker.htb\" -w /opt/SecLists/Discovery/DNS/sub",
+      "note": "Stage 4 expansion (ffuf (clicker.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.vhost"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "5664a0a9eabc",
+      "file": "editorial.md",
+      "command": "ffuf -u http://editorial.htb/upload-cover -request ssrf.request -w <( seq 0 65535) -ac",
+      "note": "Stage 4 expansion (ffuf (editorial.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "43da7ec24ec3",
+      "file": "admirer.md",
+      "command": "gobuster dir -u http://10.10.10.187/admin-dir -w /usr/share/wordlists/dirbuster/directory-",
+      "note": "Stage 4 expansion (gobuster (admirer.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "9d4fd1193394",
+      "file": "arkham.md",
+      "command": "gobuster -u http://10.10.10.130:8080 -w /usr/share/wordlists/dirbuster/directory-list-2.3-",
+      "note": "Stage 4 expansion (gobuster (arkham.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "30e0734c835a",
+      "file": "acute.md",
+      "command": "feroxbuster -u https://atsserver.acute.local/ -x aspx -k -w /usr/share/seclists/Discovery/",
+      "note": "Stage 4 expansion (feroxbuster (acute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "df16e219bde1",
+      "file": "aero.md",
+      "command": "feroxbuster -u http://10.10.11.237 -w /opt/SecLists/Discovery/Web-Content/raft-medium-dire",
+      "note": "Stage 4 expansion (feroxbuster (aero.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "11a7c9bab4bf",
+      "file": "blackfield.md",
+      "command": "rpcclient setuserinfo2 audit2020 23 '0xdf'",
+      "note": "Stage 4 expansion (rpcclient (blackfield.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "blocker.password_restriction"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "8d52bd870669",
+      "file": "forest.md",
+      "command": "rpcclient enumdomusers",
+      "note": "Stage 4 expansion (rpcclient (forest.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "9f74b579cfde",
+      "file": "forest.md",
+      "command": "rpcclient enumdomgroups",
+      "note": "Stage 4 expansion (rpcclient (forest.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.group_list"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "2e366a5dc2ee",
+      "file": "forest.md",
+      "command": "rpcclient querygroup 0x200",
+      "note": "Stage 4 expansion (rpcclient (forest.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.group_list"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "f13decece112",
+      "file": "admirer.md",
+      "command": "sudo -l",
+      "note": "Stage 4 expansion (sudo-l (admirer.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.leads",
+        "host.notable_program"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "499b2fd300f9",
+      "file": "beep.md",
+      "command": "sudo -l",
+      "note": "Stage 4 expansion (sudo-l (beep.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "db9f2b9cd1e0",
+      "file": "apt.md",
+      "command": "secretsdump.py -hashes :d167c3238864b12f5f82feae86a7f798 'htb.local/APT$@htb.local'",
+      "note": "Stage 4 expansion (secretsdump (apt.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "560e9db8f87f",
+      "file": "bastion.md",
+      "command": "secretsdump.py -sam SAM -security SECURITY -system SYSTEM LOCAL",
+      "note": "Stage 4 expansion (secretsdump (bastion.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "credential.candidate",
+        "hash.ntlm",
+        "loot.sam"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "a62d3c34e976",
+      "file": "blackfield.md",
+      "command": "secretsdump.py -system system -ntds ntds.dit LOCAL",
+      "note": "Stage 4 expansion (secretsdump (blackfield.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.ntlm",
+        "credential.candidate",
+        "hash.krbtgt",
+        "loot.ntds",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "93790a202281",
+      "file": "absolute.md",
+      "command": "crackmapexec smb 10.10.11.181 --shares",
+      "note": "Stage 4 expansion (netexec/cme (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "b03eea2ebc8e",
+      "file": "absolute.md",
+      "command": "crackmapexec smb dc.absolute.htb -k -u d.klay -p 'Darkmoonsky248girl' --shares",
+      "note": "Stage 4 expansion (netexec/cme (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "smb.shares",
+        "smb.readable_share",
+        "smb.content_accessible",
+        "config.review",
+        "credential.available",
+        "smb.authenticated",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "18839b1c62d2",
+      "file": "absolute.md",
+      "command": "crackmapexec ldap 10.10.11.181 -u d.klay -p 'Darkmoonsky248girl' -k --users",
+      "note": "Stage 4 expansion (netexec/cme (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "host.hostname",
+        "ad.dc_candidate",
+        "smb.signing",
+        "smb.smbv1",
+        "smb.reachable",
+        "ldap.reachable",
+        "ad.user_list",
+        "credential.available",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "e6d08d567322",
+      "file": "rebound.md",
+      "command": "GetUserSPNs.py -no-preauth jjones -usersfile users -dc-host 10.10.11.231 rebound.htb/",
+      "note": "Stage 4 expansion (GetUserSPNs (rebound.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.tgs",
+        "credential.candidate",
+        "blocker.kerberos_spn"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "4173c489e12d",
+      "file": "blackfield.md",
+      "command": "for user in $(cat users); do GetNPUsers.py -no-pass -dc-ip 10.10.10.192 blackfield.local/$",
+      "note": "Stage 4 expansion (GetNPUsers (blackfield.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "2b93ab94725f",
+      "file": "forest.md",
+      "command": "for user in $(cat users); do GetNPUsers.py -no-pass -dc-ip 10.10.10.161 htb/${user} | grep",
+      "note": "Stage 4 expansion (GetNPUsers (forest.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "hash.asrep",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "f8e5fd625342",
+      "file": "absolute.md",
+      "command": "kerbrute userenum --dc dc.absolute.htb -d absolute.htb usernames",
+      "note": "Stage 4 expansion (kerbrute (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "cfddde7e59e2",
+      "file": "cerberus.md",
+      "command": "dig +short @10.10.11.205 cerberus.local",
+      "note": "Stage 4 expansion (other (cerberus.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "dns.a_record"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "cb72f5851e68",
+      "file": "darkzero.md",
+      "command": "proxychains dig +tcp +short @172.16.20.2 DC021UWhRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAwbEAYBAAAA.",
+      "note": "Stage 4 expansion (other (darkzero.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "dns.a_record"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "ecd35b5e590f",
+      "file": "absolute.md",
+      "command": "dig +noall +answer @10.10.11.181 absolute.htb",
+      "note": "Stage 4 expansion (other (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "dns.a_record"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "e5708fdce3fa",
+      "file": "absolute.md",
+      "command": "dig +noall +answer @10.10.11.181 dc.absolute.htb",
+      "note": "Stage 4 expansion (other (absolute.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.domain_known",
+        "ad.dc_candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "9a390b614bd2",
+      "file": "cronos.md",
+      "command": "dig axfr cronos.htb @10.10.10.13",
+      "note": "Stage 4 expansion (other (cronos.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [
+        "ad.domain_known",
+        "ad.dc_candidate",
+        "dns.zone"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows"
+      ]
+    },
+    {
+      "id": "c6531eace7d9",
+      "file": "heist.md",
+      "command": "rpcclient lookupnames rout3r",
+      "note": "Stage 4 expansion (rpcclient (heist.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "dns.a_record",
+        "dns.zone",
+        "ad.user_list",
+        "ad.domain_known"
+      ]
+    },
+    {
+      "id": "7968892b7497",
+      "file": "authority.md",
+      "command": "dig axfr authority.htb @10.10.11.222",
+      "note": "Stage 4 expansion (other (authority.md)): verified ground-truth floor and false-positive guards.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "dns.a_record",
+        "dns.zone",
+        "ad.user_list",
+        "ad.domain_known"
+      ]
+    }
+  ]
+}

@@ -15,6 +15,8 @@
   var _rendering = false;
   var _pending = null;
   var _lastRoute = null;   // to scroll to top only on a real route change, not in-place re-renders
+  var _lastRouteDef = null;
+  var GATED_ENG_ROUTES = ['targets', 'target', 'path', 'evidence', 'map', 'domain', 'creds', 'checklist', 'findings', 'history', 'scoreboard', 'report', 'graph'];
 
   function parseHash() {
     var h = (location.hash || '').replace(/^#\/?/, '');
@@ -36,12 +38,23 @@
     _rendering = true;
     try {
       var route = parseHash();
+      var isConfigured = !OBOL.store || typeof OBOL.store.isConfigured !== 'function' || OBOL.store.isConfigured();
+      if (!isConfigured && GATED_ENG_ROUTES.indexOf(route.name) >= 0 && _routes.home) {
+        try { location.replace('#/home'); } catch (e) {}
+        route = { name: 'home', args: [], query: '', raw: 'home' };
+        if (OBOL.util && OBOL.util.toast) OBOL.util.toast('Set up your engagement first to unlock operational views');
+      }
       var def = _routes[route.name] || _routes[_default];
       if (!def) return;
       if (def.ensure && !def._ensured) {
         try { await def.ensure(); def._ensured = true; }
         catch (e) { /* surfaced by the route's own render */ }
       }
+      if (_pending) return;
+      if (_lastRouteDef && _lastRouteDef !== def && typeof _lastRouteDef.unmount === 'function') {
+        try { _lastRouteDef.unmount(); } catch (e) {}
+      }
+      _lastRouteDef = def;
       // Single write into #view. The route's markup goes inside a FRESH per-render host (a
       // display:contents <div>, so it adds no box and the layout is exactly as if the route's section
       // were a direct child of #view). mounted() binds its delegated click/keydown handlers to THIS host,
@@ -62,7 +75,11 @@
       }
       // reflect active nav + expose the route name for layout (e.g. the full-bleed Learn front door)
       reflectNav(route.name);
+      if (OBOL.app && OBOL.app.renderSidebar) { try { OBOL.app.renderSidebar(); } catch (e) {} }
+      if (OBOL.credbar && OBOL.credbar.render) { try { OBOL.credbar.render(); } catch (e) {} }
+      if (OBOL.ctxbar && OBOL.ctxbar.render) { try { OBOL.ctxbar.render(); } catch (e) {} }
       try { document.documentElement.setAttribute('data-route', route.name); } catch (e) {}
+      if (OBOL.settings && OBOL.settings.syncHint) { try { OBOL.settings.syncHint(route.name); } catch (e) {} }
       // On a real route change (e.g. launch → coach), land at the top; leave scroll alone on the
       // in-place re-renders that happen after minting a fact or marking a move done.
       if (route.name !== _lastRoute) {

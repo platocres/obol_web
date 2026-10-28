@@ -1,5 +1,5 @@
 /*!
- * obol ui — util.js — tiny DOM/util helpers (no framework).
+ * obol ui - util.js - tiny DOM/util helpers (no framework).
  */
 (function (root) {
   'use strict';
@@ -20,11 +20,43 @@
     return m ? m[1] : s;
   }
 
-  function copy(text) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return fallbackCopy(text); });
-    }
-    return Promise.resolve(fallbackCopy(text));
+  function flashCopyBtn(btn) {
+    try {
+      var el = btn;
+      if (!el && typeof document !== 'undefined' && document.activeElement) {
+        var ae = document.activeElement;
+        if (ae.classList && (ae.classList.contains('btn-copy') || ae.hasAttribute('data-copy') || ae.hasAttribute('data-copyval'))) {
+          el = ae;
+        }
+      }
+      if (!el || !el.classList) return;
+      if (el._origCopyLabel == null) el._origCopyLabel = el.textContent;
+      el.textContent = 'Copied!';
+      el.classList.add('is-copied');
+      clearTimeout(el._copyTimer);
+      el._copyTimer = setTimeout(function () {
+        el.textContent = el._origCopyLabel || 'Copy';
+        el.classList.remove('is-copied');
+      }, 1500);
+    } catch (e) {}
+  }
+
+  function copy(text, btn) {
+    var str = String(text == null ? '' : text);
+    var p = (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText)
+      ? navigator.clipboard.writeText(str).then(function () { return true; }, function () { return fallbackCopy(str); })
+      : Promise.resolve(fallbackCopy(str));
+    return p.then(function (ok) {
+      if (ok) {
+        flashCopyBtn(btn);
+        var flat = str.replace(/\s+/g, ' ').trim();
+        var preview = flat.length > 48 ? (flat.slice(0, 48) + '...') : flat;
+        toast(preview ? ('Copied: ' + preview) : 'Copied to clipboard', 'ok');
+      } else {
+        toast('Copy failed', 'err');
+      }
+      return ok;
+    });
   }
   function fallbackCopy(text) {
     try {
@@ -38,6 +70,7 @@
   var _toastEl = null;
   function toast(msg, kind) {
     try {
+      if (typeof document === 'undefined' || !document.body) return;
       if (!_toastEl) {
         _toastEl = document.createElement('div');
         _toastEl.className = 'obol-toast';
@@ -48,7 +81,7 @@
       _toastEl.textContent = msg;
       _toastEl.className = 'obol-toast show' + (kind ? (' ' + kind) : '');
       clearTimeout(_toastEl._t);
-      _toastEl._t = setTimeout(function () { _toastEl.className = 'obol-toast'; }, 2200);
+      _toastEl._t = setTimeout(function () { _toastEl.className = 'obol-toast'; }, 2400);
     } catch (e) {}
   }
 
@@ -56,9 +89,9 @@
   // hyphen) while leaving intact (a) tokens already starting with a capital (acronyms/proper
   // casing like AS-REP, WinRM, NTDS, GTFOBins, BloodHound) and (b) literal tokens that carry a
   // path/command/config shape (a '/', '_' or '.'), so "/etc/passwd", "xp_cmdshell" and
-  // "no_root_squash" survive verbatim. Apostrophe-s is not capitalized ("host's" → "Host's").
-  // Security/AD acronyms and proper spellings kept in their canonical case (SMB, LDAP, DCSync, WinRM…),
-  // so a lowercased fact label ("smb authenticated") title-cases to "SMB Authenticated", not "Smb …".
+  // "no_root_squash" survive verbatim. Apostrophe-s is not capitalized ("host's" -> "Host's").
+  // Security/AD acronyms and proper spellings kept in their canonical case (SMB, LDAP, DCSync, WinRM),
+  // so a lowercased fact label ("smb authenticated") title-cases to "SMB Authenticated".
   var TC_WORDS = {
     smb: 'SMB', smbv1: 'SMBv1', smbv2: 'SMBv2', smbv3: 'SMBv3', ldap: 'LDAP', ldaps: 'LDAPS', ad: 'AD', dc: 'DC',
     dns: 'DNS', rdp: 'RDP', ntds: 'NTDS', ntlm: 'NTLM', uac: 'UAC', rid: 'RID', sid: 'SID', acl: 'ACL', acls: 'ACLs',
@@ -78,13 +111,13 @@
       if (!/[A-Za-z]/.test(w)) return w;
       var lw = w.toLowerCase();
       if (TC_WORDS[lw]) return TC_WORDS[lw];
-      if (!isPathPart && !isFirst && TC_SMALL[lw]) return lw;      // connector word (not first) → lowercase
+      if (!isPathPart && !isFirst && TC_SMALL[lw]) return lw;      // connector word (not first) -> lowercase
       if (/^[^A-Za-z]*[A-Z]/.test(w)) return w;                    // already starts capitalized (proper/acronym)
       return w.replace(/^([^A-Za-z]*)([a-z])/, function (_, pre, c) { return pre + c.toUpperCase(); });
     }
     return String(s == null ? '' : s).split(/(\s+|-)/).map(function (w) {
       if (/^\s+$/.test(w) || w === '-') return w;
-      if (/^\//.test(w) || /[_.]/.test(w)) return w;               // absolute path / command / config key → literal
+      if (/^\//.test(w) || /[_.]/.test(w)) return w;               // absolute path / command / config key -> literal
       var isFirst = seen === 0; seen++;
       if (w.indexOf('/') !== -1) return w.split(/(\/)/).map(function (p, i) { return p === '/' ? p : word(p, true, isFirst && i === 0); }).join('');
       return word(w, false, isFirst);

@@ -1,10 +1,8 @@
 /* The locate → capture loop: once obol has LOCATED a flag (a spider or a recursive search recorded
- * objective.flag_located with the file's exact path), the on-host capture step must FILL that real path, the
- * right user's Desktop, the platform's own flag name, instead of a guessed placeholder. Without a located
- * path: the ROOT/proof flag falls back to a profile-aware default (reliably Administrator's Desktop once you
- * are admin); the USER/local flag only defaults to an UNPRIVILEGED active user's own Desktop, and otherwise
- * stays UNFILLED so the capture gates behind "locate it first" (a privileged user is not the flag owner, so
- * a C:\Users\Administrator\Desktop\user.txt guess is wrong, the Forest failure). Generic data. */
+ * objective.flag_located with the file's exact path), the on-host and remote capture steps must FILL that real
+ * path, the right user's Desktop, and the platform's own flag name, instead of a guessed placeholder. Without
+ * a located path, both ROOT/proof and USER/local flag paths (and flag_smb_path_local) stay UNFILLED so capture
+ * steps strictly gate behind "locate it first" for all users (privileged and unprivileged alike). Generic data. */
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -38,14 +36,16 @@ function set(kinds, extra) {
   return s;
 }
 
-// 1. With LOCATED paths, steps 3-4 fill the exact files the spider found.
+// 1. With LOCATED paths, steps fill the exact files the spider found (including SMB relative path).
 const located = set(['credential.available', 'access.admin', 'os.windows', 'foothold.windows'], [
   F.makeFact({ kind: 'objective.flag_located', scope: 'host:10.0.0.5', value: { slot: 'root', name: 'root.txt', path: 'C:\\Users\\Administrator\\Desktop\\root.txt' }, source: 'nxc smb --spider' }),
   F.makeFact({ kind: 'objective.flag_located', scope: 'host:10.0.0.5', value: { slot: 'local', name: 'user.txt', path: 'C:\\Users\\svc-user\\Desktop\\user.txt' }, source: 'nxc smb --spider' }),
 ]);
 const lf = fillAll(located, { platform: 'htb' });
-ok(lf.some((r) => r === 'hostname; ipconfig; type C:\\Users\\svc-user\\Desktop\\user.txt'), 'STEP 3 fills the LOCATED local flag path (svc-user Desktop, user.txt)');
-ok(lf.some((r) => /type C:\\Users\\Administrator\\Desktop\\root\.txt\b/.test(r)), 'the root move fills the LOCATED root flag path (Administrator Desktop, root.txt)');
+ok(lf.some((r) => r === 'cmd /c "whoami & hostname & ipconfig & type C:\\Users\\svc-user\\Desktop\\user.txt"'), 'Universal on-host read fills the LOCATED local flag path with cmd /c whoami & hostname & ipconfig');
+ok(lf.some((r) => /get "svc-user\/Desktop\/user\.txt" user\.txt/.test(r)), 'SMB read fills the LOCATED share-relative flag_smb_path_local (svc-user/Desktop/user.txt)');
+ok(lf.some((r) => r === 'cmd /c "whoami & hostname & ipconfig & type C:\\Users\\Administrator\\Desktop\\root.txt"'), 'Universal root move fills the LOCATED root flag path with cmd /c whoami & hostname & ipconfig');
+ok(lf.some((r) => r === 'cmd /c "whoami & hostname & ipconfig & type C:\\Users\\svc-user\\Desktop\\user.txt & type C:\\Users\\Administrator\\Desktop\\root.txt"'), 'combined proof read fills both LOCATED local and root flag paths');
 ok(!lf.some((r) => /<user>/.test(r)), 'no <user> placeholder remains once the flags are located');
 
 // 2. Without a located path and PRIVILEGED (administrator): both ROOT and USER/local read steps stay
@@ -62,12 +62,16 @@ ok(oscp.some((r) => /-Include local\.txt,proof\.txt\b/.test(r)), 'OSCP locate co
 ok(oscp.some((r) => /type \{\{flag_path_root\}\}$/.test(r)), 'OSCP admin root-flag capture gates until located');
 ok(oscp.some((r) => /type \{\{flag_path_local\}\}$/.test(r)), 'OSCP admin user-flag capture also gates until located');
 
-// 4. An UNPRIVILEGED active user (you ARE that user) DOES default the local flag to their own Desktop, with
-// the profile name, because that is exactly where their user flag sits.
+// 4. An UNPRIVILEGED active user (bob) ALSO gates both local flag path and SMB flag path until located,
+// and fills them once objective.flag_located is recorded.
 const asBob = fillAll(set(['credential.available', 'foothold.windows', 'os.windows']), { platform: 'htb' }, 'bob');
-ok(asBob.some((r) => /type C:\\Users\\bob\\Desktop\\user\.txt$/.test(r)), 'an unprivileged user (bob) defaults the local flag to C:\\Users\\bob\\Desktop\\user.txt');
-const asBobOscp = fillAll(set(['credential.available', 'foothold.windows', 'os.windows']), { platform: 'oscp' }, 'bob');
-ok(asBobOscp.some((r) => /type C:\\Users\\bob\\Desktop\\local\.txt$/.test(r)), 'unprivileged OSCP local flag defaults to the user Desktop with local.txt');
+ok(asBob.some((r) => /type \{\{flag_path_local\}\}$/.test(r)), 'an unprivileged user (bob) without locate gates flag_path_local');
+ok(asBob.some((r) => /get "\{\{flag_smb_path_local\}\}"/.test(r)), 'an unprivileged user (bob) without locate gates flag_smb_path_local');
+const asBobLocated = fillAll(set(['credential.available', 'foothold.windows', 'os.windows'], [
+  F.makeFact({ kind: 'objective.flag_located', scope: 'host:10.0.0.5', value: { slot: 'local', name: 'local.txt', path: 'C:\\Users\\bob\\Desktop\\local.txt' }, source: 'nxc smb --spider' }),
+]), { platform: 'oscp' }, 'bob');
+ok(asBobLocated.some((r) => /type C:\\Users\\bob\\Desktop\\local\.txt$/.test(r)), 'unprivileged user (bob) with locate fills C:\\Users\\bob\\Desktop\\local.txt');
+ok(asBobLocated.some((r) => /get "bob\/Desktop\/local\.txt" local\.txt/.test(r)), 'unprivileged user (bob) with locate fills bob/Desktop/local.txt for smbclient');
 
 console.log(fail ? ('\nFLAG PATH FILL: ' + fail + ' FAILURES') : '\nFLAG PATH FILL: all passed');
 process.exit(fail ? 1 : 0);

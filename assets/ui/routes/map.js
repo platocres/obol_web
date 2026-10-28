@@ -24,6 +24,9 @@
     { cls: 'em-service', label: 'Service' },
     { cls: 'em-credential', label: 'Credential' },
     { cls: 'em-dc', label: 'Domain controller' },
+    { cls: 'em-highvalue', label: 'High-value' },
+    { cls: 'em-roastable', label: 'Roastable' },
+    { cls: 'em-attackpath', label: 'Attack path' },
   ];
 
   // Legend items double as filters: each is a checkbox that toggles nodes of that class on the map.
@@ -61,6 +64,10 @@
     // route renders twice (stub, then real), so binding on #view would stack the handlers and a
     // click would toggle an even number of times, netting to a no-op.
     var mount = ctx.mount.querySelector('.engmap-route') || ctx.mount;
+    var scroll = mount.querySelector('#em-scroll') || document.getElementById('em-scroll');
+    if (scroll && scroll.scrollWidth > scroll.clientWidth) {
+      scroll.scrollLeft = Math.max(0, Math.round((scroll.scrollWidth - scroll.clientWidth) / 2));
+    }
     U.on(mount, 'click', '.em-target', function (e, g) {
       var ip = g.getAttribute('data-ip');
       if (ip) OBOL.router.go('target/' + ip);

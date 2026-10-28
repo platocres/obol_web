@@ -13,7 +13,7 @@
   var U = OBOL.util;
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
 
-  var _overlay = null, _lastFocus = null;
+  var _overlay = null, _lastFocus = null, _boundStep = null;
 
   function routeOptions() {
     var eng = OBOL.store.active() || {};
@@ -35,7 +35,7 @@
       + '<textarea id="qp-text" class="qp-text" placeholder="Paste nmap, nxc, ffuf, secretsdump… output here" spellcheck="false" aria-label="Pasted output"></textarea>'
       + '<div id="qp-binding" class="qp-sub" role="status" aria-live="polite"></div>'
       + '<div class="qp-row"><label class="qp-route">Route facts to <select id="qp-route" aria-label="Route facts to">' + routeOptions() + '</select></label>'
-      + '<button type="button" class="btn-primary" id="qp-go">Mint facts</button></div>'
+      + '<button type="button" class="btn-primary" id="qp-go">Analyze &amp; Save Output</button></div>'
       + '<div class="qp-result" id="qp-result" role="status" aria-live="polite"></div>'
       + '</div>';
     // focus trap: keep Tab within the panel while the dialog is open
@@ -56,7 +56,12 @@
   function updateBinding() {
     if (!_overlay || !OBOL.ingest || !OBOL.ingest.preview) return;
     var text = _overlay.querySelector('#qp-text').value || '', route = _overlay.querySelector('#qp-route').value || 'auto';
-    var el = _overlay.querySelector('#qp-binding'), segments = OBOL.ingest.splitSession(text);
+    var el = _overlay.querySelector('#qp-binding');
+    if (!text.trim()) {
+      el.textContent = 'Paste terminal output below - OBOL will automatically detect the tool and target.';
+      return;
+    }
+    var segments = OBOL.ingest.splitSession(text);
     if (segments.length > 1) {
       el.textContent = segments.length + ' commands: ' + (route === 'auto' ? 'each result is associated with its own observed host and command.' : 'explicitly file all results under ' + route + '; original source hosts stay in the record.');
       return;
@@ -69,9 +74,17 @@
       + (preview.conflicts && preview.conflicts.length ? ' Context differs from the visible selection; check the pasted command and route.' : '');
   }
 
-  function open() {
+  function open(opts) {
     _lastFocus = document.activeElement;
+    _boundStep = (opts && typeof opts === 'object' && (opts.command || opts.actionId)) ? opts : null;
+    if (_boundStep && OBOL.ingest && typeof OBOL.ingest.setLastCopied === 'function') {
+      OBOL.ingest.setLastCopied(_boundStep.command || '', _boundStep.actionId || '', _boundStep.locus || 'remote', _boundStep.target || '');
+    }
     if (!_overlay) _overlay = build();
+    var titleEl = _overlay.querySelector('.qp-title');
+    if (titleEl) {
+      titleEl.textContent = (_boundStep && _boundStep.label) ? ('Paste Output · ' + _boundStep.label) : 'Paste evidence';
+    }
     var sel = _overlay.querySelector('#qp-route'); if (sel) sel.innerHTML = routeOptions();
     _overlay.querySelector('#qp-result').innerHTML = '';
     _overlay.querySelector('#qp-text').value = '';
@@ -80,6 +93,7 @@
     setTimeout(function () { var t = _overlay && _overlay.querySelector('#qp-text'); if (t) t.focus(); }, 30);
   }
   function close() {
+    _boundStep = null;
     if (_overlay) _overlay.classList.remove('open');
     try { if (_lastFocus && _lastFocus.focus) _lastFocus.focus(); } catch (e) {}
   }
@@ -89,8 +103,15 @@
   function rawPaste(text, route) {
     var eng = OBOL.store.active() || {};
     var known = (eng.targets || []).map(function (t) { return t.ip; }).filter(Boolean);
-    var binding = OBOL.ingest.preview({ text: text, scope: route && route !== 'auto' ? 'host:' + route : undefined, forceTarget: route && route !== 'auto' });
-    var tip = binding.target || '';
+    var binding = OBOL.ingest.preview({
+      text: text,
+      command: (_boundStep && _boundStep.command) || undefined,
+      actionId: (_boundStep && _boundStep.actionId) || undefined,
+      locus: (_boundStep && _boundStep.locus) || undefined,
+      scope: route && route !== 'auto' ? 'host:' + route : undefined,
+      forceTarget: route && route !== 'auto'
+    });
+    var tip = binding.target || (_boundStep && _boundStep.target) || '';
     if (tip && known.indexOf(tip) < 0) {
       OBOL.store.update(function (e) {
         e.targets = e.targets || [];
@@ -105,6 +126,9 @@
     }
     var rr = OBOL.ingest.run({
       text: text,
+      command: (_boundStep && _boundStep.command) || undefined,
+      actionId: (_boundStep && _boundStep.actionId) || undefined,
+      locus: (_boundStep && _boundStep.locus) || undefined,
       scope: tip ? ('host:' + tip) : undefined,
       forceTarget: route && route !== 'auto',
       source: 'paste'
@@ -141,20 +165,38 @@
         try { U.toast(r.workspaceSync.confirmed + ' confirmed · ' + r.workspaceSync.adopted + ' new file' + (r.workspaceSync.adopted === 1 ? '' : 's') + ' adopted'); } catch (e) {}
         return;
       }
+      var configured = !OBOL.store || typeof OBOL.store.isConfigured !== 'function' || OBOL.store.isConfigured();
       if (r.targetsImported && r.targetsImported.ok) {
         var ti = r.targetsImported;
-        resEl.innerHTML = '<div class="qp-ok"><b>Targets imported:</b> ' + (ti.added || 0) + ' added' + (ti.updated ? (', ' + ti.updated + ' updated') : '') + '. <a href="#/targets" data-qp-close>Open Targets -></a></div>';
+        var tgtDest = configured ? '#/targets' : '#/home';
+        var tgtLabel = configured ? 'Open Targets ->' : 'Finish Engagement Setup ->';
+        resEl.innerHTML = '<div class="qp-ok"><b>Targets imported:</b> ' + (ti.added || 0) + ' added' + (ti.updated ? (', ' + ti.updated + ' updated') : '') + '. <a href="' + tgtDest + '" data-qp-close>' + tgtLabel + '</a></div>';
         if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+        if (!configured && OBOL.router && OBOL.router.go) {
+          close();
+          OBOL.router.go('home');
+          try { U.toast((ti.added || 0) + ' target(s) staged - choose a Platform Profile to launch'); } catch (e) {}
+          return;
+        }
         if (OBOL.router) OBOL.router.render();
         try { U.toast((ti.added || 0) + ' target' + (ti.added === 1 ? '' : 's') + ' added'); } catch (e) {}
         return;
       }
       var hosts = r.hosts || [];
+      var evDest = configured ? '#/evidence' : '#/home';
+      var evLabel = configured ? 'Open Evidence ->' : 'Finish Engagement Setup ->';
+      var cockpitBtn = configured ? '<a class="btn-mini" href="#/path" data-qp-close style="margin-right:8px">Open Cockpit (Next Steps) -></a>' : '';
       resEl.innerHTML = OBOL.ingest.renderOutcome(r.outcome)
         + '<div class="qp-sub">' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
         + (hosts.length ? ', filed under ' + hosts.map(function (h) { return '<code>' + esc(h) + '</code>'; }).join(', ') : '')
-        + '.</div><a href="#/evidence" data-qp-close>Open Evidence -></a>';
+        + '.</div><div class="qp-actions">' + cockpitBtn + '<a href="' + evDest + '" data-qp-close>' + evLabel + '</a></div>';
       if (OBOL.app && OBOL.app.renderSidebar) OBOL.app.renderSidebar();
+      if (!configured && OBOL.router && OBOL.router.go) {
+        close();
+        OBOL.router.go('home');
+        try { U.toast('Output staged (' + r.added + ' fact' + (r.added === 1 ? '' : 's') + ') - choose a Platform Profile to launch'); } catch (e) {}
+        return;
+      }
       if (OBOL.router) OBOL.router.render();
       try { U.toast(OBOL.ingest.outcomeMessage(r)); } catch (e) {}
     });

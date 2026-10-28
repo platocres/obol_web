@@ -2,6 +2,8 @@
 
 > Read this before adding or re-ranking moves. It is the contract that keeps "what's my next move?"
 > correct as the pack grows, so correctness stops depending on running labs to find mis-ranked moves.
+> For the complete formal theory, causal frontier tiers, and mathematical scoring formulation, see
+> [../RANKING.md](../RANKING.md) (and [../INFERENCE.md](../INFERENCE.md) for the parser and inference engine).
 
 ## The one rule
 
@@ -14,7 +16,7 @@ Everything below exists to keep that rule true mechanically.
 
 ## The model (what's already here)
 
-Facts → moves → goals form an attack graph. Each move (`data/packs/*.json`, loaded as `OBOL.pack.Action`)
+Facts → moves → goals form an attack graph. Each move (`data/packs/*.json`, **355 moves across 19 packs**, loaded as `OBOL.pack.Action`)
 declares:
 
 - `requires_all` / `requires_any` — the facts that make it **eligible** (its in-edges).
@@ -36,10 +38,8 @@ declares:
 
 Two consumers of the graph:
 
-- **`nextActionsV2` / `rankActions`** (`assets/engine/pack.js`) — the coach's ranker. Orders eligible,
-  non-settled moves by: **tier** (recency: a move that *just* became possible is surfaced; speculative
-  moves are capped) → **score** (goal-distance progress + 1-step enablement + a **keystone** term, weighted
-  by reliability) → **priority** (hand-tuned, a tiebreak) → **locus** (remote-first) → id.
+- **`nextActionsV2` / `rankActions`** (`assets/engine/pack.js`, documented in full in [../RANKING.md](../RANKING.md)) — the Cockpit's 7-tier Causal Frontier & Bayesian Utility ranker (`Tier 5..-1` / `Tier 6..0`, with target-profile context in `assets/engine/context.js` and outcome dampening in `assets/engine/outcomes.js`). Orders eligible,
+  non-settled moves by: **tier** (7-tier Causal Frontier hierarchy `-1..5`: Terminal Objective Capture → Direct Exploitation & Material Conversion → Authenticated & Foothold Transitions → Newly Unlocked Causal Frontier → Standard Eligible → Speculative Gambles → Post-Goal Moot) → **stageRank** (`-1..4` within-tier structural sub-role) → **score** (pure graph utility over unachieved `activeGoals`: goal-distance progress + 1-step enablement + **keystone** breadth, weighted by reliability, with zero arbitrary stage-weight bonuses) → **priority** (hand-tuned tiebreak) → **house toolkit** (`nxc`) → **locus** (remote-first) → id.
   - **Keystone weighting** (gate-wiring-aware): `enable` rewards the single deepest door a move opens;
     `keystone` adds the *breadth* — how many currently-blocked moves its produced facts unblock, each
     goal-tempered — so a pivotal fact (a credential unblocking the authenticated surface) is favoured over a
@@ -53,9 +53,9 @@ Two consumers of the graph:
   (`v2ActionCost`) encode preference: evidenced step = 1, ordinary = 1.5, privilege shortcut = 8,
   speculative = 12, **plus a small locus surcharge so the route prefers Kali-side steps**.
 
-The coach, the hub's "Your Next Move", each hub/target card, and the Evidence summary all rank through one
+The Cockpit (`#/path`), the hub's "Your Next Move", each hub/target card, and the Evidence summary all rank through one
 shared function, **`OBOL.coach.rankFor(facts)`** (`assets/ui/routes/path.js`) — report-only checks excluded,
-frontier-ready first. If you add a surface that shows "next move", use `rankFor`; never re-implement ranking.
+frontier-ready first. If you add a surface that shows "next move", use `rankFor`; never re-implement ranking. (Note for developers and agents: **Cockpit** in the UI is named `coach` / `OBOL.coach` / `routes/path.js` in the codebase.)
 
 ## The three pillars that keep it sustainable
 
@@ -77,7 +77,7 @@ places sanely.
   interchangeable alternatives — there `nxc` legitimately sits at whatever step it runs.
 - **FAIL · NXC-COVERAGE** — a NetExec capability or protocol the `tb-nxc` toolbuilder teaches
   (`data/toolset.js`, the "teach" surface) that **no ranked move backs**, so it appears in teach but never
-  in Next Steps. Derived from the builder itself (every action's distinctive `--flag`/`-M module`, every
+  in the Cockpit. Derived from the builder itself (every action's distinctive `--flag`/`-M module`, every
   protocol), so it stays honest as the builder grows. Clear it by adding a move that uses that nxc
   capability (and a parser, if the output isn't already read). This is the teach↔moves parity the move set
   is meant to hold: anything we teach for our preferred tool, we also rank.
@@ -107,13 +107,13 @@ locus above score once promoted a speculative remote move). The pattern:
   a bespoke rule.
 - Preferences live in `v2ActionCost`/locus, not in a per-move number war.
 
-### 3. The golden-path corpus — `tests/engine/corpus/*.json`
+### 3. The golden-path corpus — `tests/engine/corpus/*.json` & live replay suites
 
 Real box kill-chains as **fact-timeline → expected next move** checkpoints, replayed by
-`tests/engine/corpus-smoke.js` (runs in the normal engine suite). This is the ground truth that turns
+`tests/engine/legacy/corpus-smoke.js` (and active stateful harnesses `tools/verify-replay-goldens.js`, `tools/verify-oscp-practice-exams.js`, `tools/ranker-sim.js`, `tests/engine/pack-lint.js`, and `tests/engine/study-lint.js`). This is the ground truth that turns
 "run 50 labs to find a ranking regression" into "run CI". **Adding a box is adding one JSON file — no code.**
 Schema and assertion keys (`top`, `topIn`, `present`, `absentTop`, `prep`) are documented at the top of
-`corpus-smoke.js`; prefer the loosest key that still pins the behaviour (`topIn` tolerates defensible
+`tests/engine/legacy/corpus-smoke.js`; prefer the loosest key that still pins the behaviour (`topIn` tolerates defensible
 co-leads). Seeded with Forest (full anon-LDAP → AS-REP → BloodHound → WriteDacl/DCSync chain) and a web
 standalone (exploit-gating). **Grow it: every box you walk, encode it.**
 
@@ -128,7 +128,7 @@ bidirectional test.** The pieces:
   switches the hand-written parsers don't. 100+ capabilities across smb/ldap/winrm/mssql/rdp/ftp/ssh/wmi/
   vnc/nfs. An `existing` entry defers to a hand-written parser; an `informational` entry is a recognized
   enumeration that mints no payoff; everything else carries an `extract(text, ws)` the driver runs.
-- **`tests/engine/nxc-switch-parsers.js`** — for EVERY catalog entry, pastes real nxc output and asserts
+- **`tests/engine/legacy/nxc-switch-parsers.js`** (and active `tools/verify-parser-corpus.js` + `tools/gap-report.js --verify`) — for EVERY catalog entry, pastes real nxc output and asserts
   success mints the declared fact (or no payoff, for informational) and denied/empty mints nothing. Every
   entry must have a sample or the test fails, so coverage can't silently drift.
 - **move-lint `NXC-UNCATALOGUED`** — fails CI if a move offers an `nxc` command whose protocol+switch/module
@@ -172,7 +172,7 @@ non-evidence, non-terminal fact is a dead-end that would pollute the ready list.
   the instant BloodHound reveals a path, `ad-acl-abuse` may sit at #1 for that render while `bloodyad-acl`
   is #2. Both co-lead; this is the "show me what just opened up" tier doing its job. Do not add a sort hack
   to fight it.
-- **Report checks are offered, never headlined.** Info-severity checks live in the coach's collapsed
+- **Report checks are offered, never headlined.** Info-severity checks live in the Cockpit's collapsed
   "Report Checks, for the writeup" group and are excluded from every "next move" surface.
 
 ## Running the guardrails
@@ -181,7 +181,9 @@ non-evidence, non-terminal fact is a dead-end that would pollute the ready list.
 node tools/build-packs.js           # regenerate the bundle after editing packs
 node tools/move-lint.js             # the move contract (add --check to fail on breach)
 node tools/gap-report.js --check    # decision-map graph truth (unreachable / hand-offs / parser drift)
-node tests/engine/corpus-smoke.js   # the golden-path box corpus (also runs in the engine suite)
+node tools/verify-replay-goldens.js # golden-path box replays (archived static runner: tests/engine/legacy/corpus-smoke.js)
+node tests/engine/pack-lint.js      # pack hygiene & move contract smoke
+node tests/engine/study-lint.js     # study fixture & hygiene smoke
 node tools/stamp-assets.js          # refresh cache-bust stamps after any asset edit
 ```
 

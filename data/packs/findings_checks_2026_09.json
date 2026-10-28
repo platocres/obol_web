@@ -402,7 +402,9 @@
       "requires_any": [
         "host.fqdn",
         "host.domain",
-        "host.hostname"
+        "host.hostname",
+        "dns.zone",
+        "dns.a_record"
       ],
       "produces": [
         "dns.takeover"
@@ -438,7 +440,9 @@
       "requires_all": [],
       "requires_any": [
         "ad.domain_known",
-        "host.domain"
+        "host.domain",
+        "dns.zone",
+        "dns.a_record"
       ],
       "produces": [
         "dns.email"
@@ -611,5 +615,6 @@
         }
       ]
     }
-  ]
+  ],
+  "id": "findings_checks_2026_09"
 }

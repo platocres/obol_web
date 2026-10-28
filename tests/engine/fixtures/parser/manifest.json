@@ -1436,7 +1436,8 @@
       ],
       "domain": "corp.local",
       "allow_default_forbidden_supported_kinds": [
-        "foothold.windows"
+        "foothold.windows",
+        "access.shell"
       ]
     },
     {

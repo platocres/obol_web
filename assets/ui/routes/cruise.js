@@ -57,8 +57,8 @@
 
   var STAGE1_RECON_IDS = {
     'nmap-quick': 1, 'nmap-full-tcp': 1, 'nmap-vuln-scripts': 1, 'nmap-udp-top': 1,
-    'recon-smb-anon': 1, 'smb-anon': 1, 'smb-shares': 1, 'ad-user-enum': 1,
-    'ad-anon-ldap-enum': 1, 'ldap-rootdse': 1, 'recon-dns': 1, 'recon-ftp': 1,
+    'recon-smb-anon': 1, 'smb-anon': 1, 'smb-shares': 1,
+    'ldap-rootdse': 1, 'recon-dns': 1, 'recon-ftp': 1,
     'ssh-banner': 1, 'recon-nfs': 1, 'recon-snmp': 1, 'check-web-headers': 1, 'web-dir-enum': 1,
   };
 
@@ -98,15 +98,15 @@
       + '    <span class="cr-mode-t">OSCP Exam Safe</span>'
       + '    <span class="cr-mode-pill">100% Exam-Legal</span>'
       + '  </div>'
-      + '  <span class="cr-mode-s">Chains multi-hypothesis enumeration, credential validation, offline hash cracking, and ./www/ staging. Checkpoints before shells or exploits.</span>'
+      + '  <span class="cr-mode-s">Batches safe multi-hypothesis enumeration, open-port credential validation, and ./www/ staging per stage. Checkpoints before active moves, shells, or exploits.</span>'
       + '</button>'
       + '<button type="button" class="cr-mode mode-lab' + (isLab ? ' is-on' : '') + '" data-cr-mode="lab" aria-pressed="' + (isLab ? 'true' : 'false') + '">'
       + '  <div class="cr-mode-head">'
       + '    <span class="cr-mode-dot"></span>'
-      + '    <span class="cr-mode-t">Lab Full Autopilot</span>'
-      + '    <span class="cr-mode-pill lab-pill">End-to-End Flags</span>'
+      + '    <span class="cr-mode-t">Lab Stage Autopilot</span>'
+      + '    <span class="cr-mode-pill lab-pill">Active + Auto-Crack</span>'
       + '  </div>'
-      + '  <span class="cr-mode-s">Automates the full kill-chain in labs: multi-hypothesis enum, auto-crack, active foothold/exploit execution, and remote local.txt + proof.txt capture.</span>'
+      + '  <span class="cr-mode-s">Stays within each stage while enabling active-tier enumeration, automatic offline rockyou cracking, and open-port credential validation in Stage 2.</span>'
       + '</button>'
       + '</div>';
   }
@@ -199,7 +199,7 @@
       + '  <span class="cr-cp-phase">' + esc(ph) + '</span>'
       + '  <div class="cr-cp-actions">'
       + '    <button type="button" class="cr-btn-neon neon-amber small cr-copy" data-copy="' + attr(cp.command) + '" data-copy-action="' + attr(a.id) + '" data-copy-locus="' + attr(OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus((a.commands || [])[cp.cmdIndex || 0]) : OBOL.pack.defaultCommandLocus(a)) + '">' + ic('copy') + 'Copy Command</button>'
-      + '    <a class="cr-btn-glass small" href="#/path" title="View full move breakdown in Next Steps">Open in Next Steps &rarr;</a>'
+      + '    <a class="cr-btn-glass small" href="#/path" title="View full move breakdown in Cockpit">Open in Cockpit &rarr;</a>'
       + '  </div>'
       + '</div>'
       + (a.proves ? ('<div class="cr-cp-why">' + esc(a.proves) + '</div>') : '')
@@ -611,6 +611,8 @@
 
   function setTargetScope(val) {
     var clean = String(val || '').trim();
+    if (/^https?:\/\//i.test(clean)) clean = clean.replace(/^https?:\/\//i, '').replace(/(?::\d+)?(?:\/.*)?$/, '').trim();
+    else if (!/^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(clean)) clean = clean.replace(/(?::\d+)?(?:\/.*)?$/, '').trim();
     if (!clean) { U.toast('Enter a target IP or CIDR subnet first.', 'err'); return; }
     _lastPaste = null;
     _selectedStage = null;

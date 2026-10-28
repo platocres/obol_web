@@ -37,6 +37,7 @@ function check(value, message) { if (!PROFILE) assert.ok(value, message); checks
     page.on('pageerror', e => errors.push(e.message));
     await page.addInitScript(() => {
       localStorage.setItem('obol.motion', 'off');
+      localStorage.setItem('obol.coins', 'off');
       window.__rafRuns = 0;
       const raf = window.requestAnimationFrame;
       window.requestAnimationFrame = fn => raf.call(window, ts => { window.__rafRuns++; fn(ts); });
@@ -47,6 +48,7 @@ function check(value, message) { if (!PROFILE) assert.ok(value, message); checks
       await OBOL.store.createEngagement('Idle and first credential regression');
       OBOL.store.update(e => { e.params={target:A}; e.activeTarget=A; e.targets=[{ip:A}]; });
       OBOL.store.addFacts(['target.configured','smb.reachable','port:445','os.windows','ad.dc_candidate'].map(kind => OBOL.facts.makeFact({kind,scope:'host:' + A})));
+      location.hash = '#/path';
       OBOL.router.render();
       await OBOL.ingest.ensureParsers();
     }, {A});
@@ -104,10 +106,10 @@ function check(value, message) { if (!PROFILE) assert.ok(value, message); checks
       await closed.press('Enter');
       await page.locator('.ns-card[data-action="' + id + '"] .ns-body').waitFor({state:'visible'});
       check(await page.locator('.ns-card[data-action="' + id + '"] .ns-cmd').count() > 0, 'Opening a deferred card by keyboard constructs its commands');
-      await page.locator('#ns-multiopen').check();
+      await page.locator('#ns-multiopen').click();
       await page.locator('.ns-card[data-body-deferred]:visible').first().press('Enter');
       check(await page.locator('.ns-card.selected').count() >= 2, 'Deferred commands support Keep Cards Open');
-      await page.locator('#ns-multiopen').uncheck();
+      await page.locator('#ns-multiopen').click();
     }
 
     if (process.env.OBOL_PROFILE_WORKSPACE) await page.evaluate(async data => { await OBOL.store.importData(data); OBOL.router.render(); }, JSON.parse(fs.readFileSync(process.env.OBOL_PROFILE_WORKSPACE,'utf8')));

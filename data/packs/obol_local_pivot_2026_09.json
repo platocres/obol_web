@@ -10,10 +10,10 @@
     {
       "id": "local-linux-interfaces",
       "title": "Enumerate Linux interfaces",
+      "phase": "escalate",
       "tool": "sshpass",
       "priority": 76,
       "requires_all": [
-        "credential.available",
         "foothold.linux"
       ],
       "os": [
@@ -23,12 +23,28 @@
         "scan.local.interfaces",
         "host.multihomed"
       ],
+      "settled_by": [
+        "scan.local.interfaces"
+      ],
       "hypothesis": "A Linux foothold can expose additional interfaces or subnets that may become pivot candidates.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "sshpass",
           "note": "Use the validated plaintext credential to run a non-interactive interface check over SSH.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip -o addr show"
+        },
+        {
+          "tool": "ip",
+          "locus": "onhost",
+          "run": "ip -br addr; ip addr",
+          "note": "On-target: list all network interfaces and IPv4/IPv6 addresses to spot a second internal NIC."
+        },
+        {
+          "tool": "ifconfig",
+          "locus": "onhost",
+          "run": "ifconfig -a || cat /proc/net/fib_trie",
+          "note": "On-target fallback when iproute2 is missing on minimal containers or legacy hosts."
         }
       ],
       "requires_any": []
@@ -36,12 +52,10 @@
     {
       "id": "local-linux-routes",
       "title": "Enumerate Linux routes",
+      "phase": "escalate",
       "tool": "sshpass",
       "priority": 75,
-      "requires_all": [
-        "credential.available",
-        "foothold.linux"
-      ],
+      "requires_all": [],
       "os": [
         "linux"
       ],
@@ -51,20 +65,36 @@
       "hypothesis": "Routes from a foothold identify adjacent networks worth validating before building a tunnel.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "sshpass",
           "note": "Collect route table evidence without claiming the route is reachable through a working pivot yet.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip route"
+        },
+        {
+          "tool": "ip",
+          "locus": "onhost",
+          "run": "ip route; ip -6 route",
+          "note": "On-target: display the kernel routing table to identify reachable internal subnets."
+        },
+        {
+          "tool": "netstat",
+          "locus": "onhost",
+          "run": "netstat -rn || route -n",
+          "note": "On-target legacy route table check."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "foothold.linux",
+        "scan.local.interfaces"
+      ]
     },
     {
       "id": "local-linux-neighbors",
       "title": "Enumerate Linux ARP neighbors",
+      "phase": "escalate",
       "tool": "sshpass",
       "priority": 70,
       "requires_all": [
-        "credential.available",
         "foothold.linux"
       ],
       "os": [
@@ -76,9 +106,16 @@
       "hypothesis": "Neighbor cache entries are weak but useful hints for hosts near the foothold.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "sshpass",
           "note": "Record observed neighbors as host-scoped hints only.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} ip neigh show"
+        },
+        {
+          "tool": "ip",
+          "locus": "onhost",
+          "run": "ip neigh; arp -a",
+          "note": "On-target: inspect the ARP/neighbor cache for live internal hosts this machine has recently talked to."
         }
       ],
       "requires_any": []
@@ -89,7 +126,6 @@
       "tool": "sshpass",
       "priority": 68,
       "requires_all": [
-        "credential.available",
         "foothold.linux"
       ],
       "os": [
@@ -101,9 +137,16 @@
       "hypothesis": "Resolver configuration can identify internal DNS infrastructure for follow-up enumeration.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "sshpass",
           "note": "Read resolver configuration through the existing non-interactive SSH channel.",
           "run": "sshpass -p {{password}} ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 {{user}}@{{target}} cat /etc/resolv.conf"
+        },
+        {
+          "tool": "cat",
+          "locus": "onhost",
+          "run": "cat /etc/resolv.conf /etc/hosts",
+          "note": "On-target: read DNS resolvers, search domains, and static host mappings."
         }
       ],
       "requires_any": []
@@ -111,12 +154,10 @@
     {
       "id": "local-windows-interfaces",
       "title": "Enumerate Windows interfaces",
+      "phase": "escalate",
       "tool": "nxc",
       "priority": 76,
-      "requires_all": [
-        "credential.available",
-        "winrm.authenticated"
-      ],
+      "requires_all": [],
       "os": [
         "windows"
       ],
@@ -124,25 +165,45 @@
         "scan.local.interfaces",
         "host.multihomed"
       ],
+      "settled_by": [
+        "scan.local.interfaces"
+      ],
       "hypothesis": "A Windows WinRM foothold can expose additional NICs, DNS servers, or subnets that may become pivot candidates.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "nxc",
           "note": "Use WinRM exec through NetExec so output is captured and parsed like every other run.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"ipconfig /all\""
+        },
+        {
+          "tool": "ipconfig",
+          "locus": "onhost",
+          "run": "ipconfig /all",
+          "note": "On-target (cmd.exe): list all adapters, IPs, DNS suffixes, and gateways."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": "powershell -ep bypass -c \"Get-NetIPConfiguration | Format-List\"",
+          "note": "On-target (PowerShell): structured adapter and gateway summary."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "foothold.windows",
+        "winrm.authenticated",
+        "access.shell",
+        "access.admin",
+        "access.system"
+      ]
     },
     {
       "id": "local-windows-routes",
       "title": "Enumerate Windows routes",
+      "phase": "escalate",
       "tool": "nxc",
       "priority": 75,
-      "requires_all": [
-        "credential.available",
-        "winrm.authenticated"
-      ],
+      "requires_all": [],
       "os": [
         "windows"
       ],
@@ -152,22 +213,40 @@
       "hypothesis": "The Windows route table can reveal internal subnets before any tunnel exists.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "nxc",
           "note": "Collect route evidence only; a route does not prove a working tunnel.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"route print\""
+        },
+        {
+          "tool": "route",
+          "locus": "onhost",
+          "run": "route print",
+          "note": "On-target (cmd.exe): print the IPv4 and IPv6 routing tables to spot internal subnets."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": "powershell -ep bypass -c \"Get-NetRoute -AddressFamily IPv4 | Where-Object {$_.NextHop -ne '0.0.0.0' -or $_.DestinationPrefix -match '^(10|172|192)\\.'} | Format-Table DestinationPrefix,NextHop,InterfaceAlias\"",
+          "note": "On-target (PowerShell): filter IPv4 routes to internal subnets and gateways."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "foothold.windows",
+        "winrm.authenticated",
+        "access.shell",
+        "access.admin",
+        "access.system",
+        "scan.local.interfaces"
+      ]
     },
     {
       "id": "local-windows-neighbors",
       "title": "Enumerate Windows ARP neighbors",
+      "phase": "escalate",
       "tool": "nxc",
       "priority": 70,
-      "requires_all": [
-        "credential.available",
-        "winrm.authenticated"
-      ],
+      "requires_all": [],
       "os": [
         "windows"
       ],
@@ -177,22 +256,38 @@
       "hypothesis": "ARP cache entries can identify nearby internal hosts to validate through a later tunnel.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "nxc",
           "note": "Record neighbor hints without treating them as discovered targets.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"arp -a\""
+        },
+        {
+          "tool": "arp",
+          "locus": "onhost",
+          "run": "arp -a",
+          "note": "On-target (cmd.exe): inspect the ARP table per interface for live internal neighbors."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": "powershell -ep bypass -c \"Get-NetNeighbor -AddressFamily IPv4 | Where-Object State -ne 'Unreachable' | Format-Table IPAddress,LinkLayerAddress,State,InterfaceAlias\"",
+          "note": "On-target (PowerShell): list active IPv4 neighbors."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "foothold.windows",
+        "winrm.authenticated",
+        "access.shell",
+        "access.admin",
+        "access.system"
+      ]
     },
     {
       "id": "local-windows-listeners",
       "title": "Enumerate Windows listening sockets",
       "tool": "nxc",
       "priority": 66,
-      "requires_all": [
-        "credential.available",
-        "winrm.authenticated"
-      ],
+      "requires_all": [],
       "os": [
         "windows"
       ],
@@ -202,12 +297,31 @@
       "hypothesis": "Listening sockets give local service context and can help pick tunnel/port-forward targets later.",
       "commands": [
         {
+          "locus": "remote",
           "tool": "nxc",
           "note": "Capture local listener evidence for later route-aware pivot planning.",
           "run": "nxc winrm {{target}} -u {{user}} -p {{password}} -x \"netstat -ano\""
+        },
+        {
+          "tool": "netstat",
+          "locus": "onhost",
+          "run": "netstat -ano | findstr LISTENING",
+          "note": "On-target (cmd.exe): list listening TCP ports and owning PIDs, looking for 127.0.0.1-only services to port-forward."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": "powershell -ep bypass -c \"Get-NetTCPConnection -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess | Sort-Object LocalPort\"",
+          "note": "On-target (PowerShell): structured list of listening TCP ports."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "foothold.windows",
+        "winrm.authenticated",
+        "access.shell",
+        "access.admin",
+        "access.system"
+      ]
     },
     {
       "id": "ligolo-tunnel-pivot",
@@ -235,8 +349,12 @@
         "tunnel.route",
         "pivot.active"
       ],
+      "deprioritize_when": [
+        "pivot.active",
+        "tunnel.route"
+      ],
       "priority": 92,
-      "phase": "pivot",
+      "phase": "escalate",
       "proves": "establishes a live routed TUN interface proxying raw TCP/UDP packets into target internal subnet",
       "does_not_prove": "compromise of hosts on internal subnet until subsequent enumeration and attacks succeed",
       "report": {
@@ -264,5 +382,6 @@
         }
       ]
     }
-  ]
+  ],
+  "id": "obol_local_pivot_2026_09"
 }

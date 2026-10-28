@@ -116,7 +116,7 @@
   // fed to the ranker as a NUDGE (the same modest, within-phase bonus the machine-type focus uses) - never an
   // override: a clearly evidence-driven #1 (a fresh keystone, the endgame cash-in) always stays #1.
   var WORKFLOWS = {
-    balanced: { name: 'Balanced (let the coach decide)', aliases: ['balanced', 'default', 'auto', 'none'], focus: [] },
+    balanced: { name: 'Balanced (let the Cockpit decide)', aliases: ['balanced', 'default', 'auto', 'none'], focus: [] },
     'flags-first': { name: 'Flags first, pivot last', aliases: ['flags-first', 'flags', 'flag-first', 'objective-first', 'admin-first'],
       focus: ['objective.', 'access.admin', 'access.system', 'access.root', 'privesc.'] },
     'pivot-aware': { name: 'Map the network early', aliases: ['pivot-aware', 'pivot', 'pivot-first', 'network-first', 'multihomed'],

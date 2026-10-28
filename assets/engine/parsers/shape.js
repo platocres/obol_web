@@ -25,12 +25,16 @@
 
   function _parse_shape(text, ws, source, facts) {
     text = String(text || '');
+    if (text.length > 10485760) text = text.slice(0, 10485760);
+    if (C._normalize_cr) text = C._normalize_cr(text);
+    if (C._strip_tmux_split) text = C._strip_tmux_split(text);
+    if (C._unwrap_kerberos_hashes) text = C._unwrap_kerberos_hashes(text);
     if (!text.trim()) return;
     var h = 'host:' + ws.target;
 
     // (1) A bare "N/tcp open service" port table (or gnmap / masscan / rustscan row), pasted without an
     //     nmap command line. The row pattern is anchored and excludes open|filtered.
-    if (!hasPrefix(facts, 'port:')) {
+    if (!hasPrefix(facts, 'port:') && /(?:\d\/(?:tcp|udp)\b|\bOpen\s+\S+:\d+|\d\/open\/)/i.test(text)) {
       var rowRe = /^[ \t]*(\d{1,5})\/(tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(\S+))?/i;
       var discRe = /Discovered open port (\d{1,5})\/(tcp|udp) on \S+/i;
       var rustRe = /^\s*Open\s+(?:\d{1,3}(?:\.\d{1,3}){3}|\[?[0-9a-fA-F:]+\]?):(\d{1,5})\s*$/i;
@@ -75,7 +79,8 @@
     //     command. The dispatcher gates its HTTP parsers on curl/whatweb/wget/etc., so a raw response
     //     saved to a file mints nothing. A status line or a Server header is an unambiguous web signal.
     var isNslookup = /^Server:[ \t]*\S+[ \t]*\r?\nAddress(?:es)?[ \t]*:/im.test(text);
-    if (!isNslookup && !hasKind(facts, 'http.reachable') && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text))) {
+    var isHttpShape = !isNslookup && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text));
+    if (isHttpShape && !hasKind(facts, 'http.reachable')) {
       _add(facts, mkFact('http.reachable', h, { via: 'shape' }, S, source));
       var servers = [];
       (text.match(/^(?:<\s*)?Server:[ \t]*(.+)$/gim) || []).forEach(function (l) {
@@ -85,7 +90,9 @@
       var webServers = servers.filter(function (hdr) { return !(C._isNonWebServerHeader && C._isNonWebServerHeader(hdr)); });
       if (webServers.length) _add(facts, mkFact('web.server', h, { headers: webServers.slice(0, 10), via: 'shape' }, S, source));
       if (!hasKind(facts, 'host.os_family') && C._add_os_from_text) {
-        C._add_os_from_text(text, ws, source, facts, 'shape', 'medium', true);
+        var hdrEndIdx = text.search(/\r?\n\r?\n|<html\b|<!doctype\b/i);
+        var httpHdrBlock = hdrEndIdx >= 0 ? text.slice(0, hdrEndIdx) : text.slice(0, 4096);
+        C._add_os_from_text(httpHdrBlock, ws, source, facts, 'shape', 'medium', true);
       }
     }
 
@@ -103,7 +110,7 @@
     if (text.indexOf('getting file ') >= 0 && !hasKind(facts, 'loot.files') && C._parse_share_inventory) {
       C._parse_share_inventory(text, ws, 'smbclient', source, facts);
     }
-    if ((text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) && !hasKind(facts, 'credential.candidate') && C._parse_gpp_artifacts) {
+    if ((text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) && !facts.some(function (f) { return f && (f.kind === 'loot.gpp' || (f.kind === 'credential.candidate' && f.value && (f.value.kind === 'gpp' || f.value.kind === 'gpp_cpassword'))); }) && C._parse_gpp_artifacts) {
       C._parse_gpp_artifacts(text, ws, source, facts);
     }
 
@@ -114,12 +121,12 @@
     }
 
     // (6) Raw SQLite database dump or table schema shape pasted without command
-    if (/(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
+    if ((text.indexOf('|') >= 0 || /SQLite format 3|CREATE TABLE\s+/i.test(text)) && /(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
       _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', via: 'shape' }, S, source));
     }
 
     // (7) Ping TTL heuristic: TTL 60..64 -> Linux os_hint, TTL 124..128 -> Windows os_hint (promote = false)
-    if (!hasKind(facts, 'host.os_family') && !hasKind(facts, 'host.os_hint') && C._add_os_observation) {
+    if (!hasKind(facts, 'host.os_family') && !hasKind(facts, 'host.os_hint') && C._add_os_observation && /ttl=/i.test(text)) {
       var mTtl = /\b\d+\s+bytes\s+from\s+\S+[^\r\n]{0,120}?\bttl=(\d{1,3})\b/i.exec(text) || /Reply from \S+:\s+bytes=\d+\s+time[=<]\S+\s+TTL=(\d{1,3})/i.exec(text);
       if (mTtl) {
         var ttl = parseInt(mTtl[1], 10);
@@ -132,45 +139,49 @@
     }
 
     // (8) Un-keyed OS / kernel / version shapes (uname -a, /proc/version, uname -r, /etc/os-release, lsb_release, ver, sudo -V, pkexec --version)
-    if (!hasKind(facts, 'host.kernel')) {
-      var mUname = C._UNAME_RE && C._UNAME_RE.exec(text);
-      var mProcVer = !mUname && /Linux version\s+([0-9][^\s]+)/i.exec(text);
-      var mBareKernel = !mUname && !mProcVer && /^\s*([2-6]\.\d+\.\d+-(?:[0-9A-Za-z.+_-]*(?:generic|amd64|i[3-6]86|arm64|el\d|kali|debian|ubuntu|arch|alpine)[0-9A-Za-z.+_-]*|\d+-[A-Za-z0-9.+_-]+))\s*$/m.exec(text);
-      if (mUname || mProcVer || mBareKernel) {
-        var kStr = mUname ? ((mUname.groups && mUname.groups.kernel) || mUname[2]) : (mProcVer ? mProcVer[1] : mBareKernel[1].trim());
-        var archStr = mUname ? ((mUname.groups && mUname.groups.arch) || mUname[3]) : '';
-        var kLine = (mUname ? mUname[0] : (mProcVer ? mProcVer[0] : mBareKernel[0])).trim();
-        _add(facts, mkFact('host.kernel', h, { kernel: kStr, via: 'shape' }, S, source));
-        if (archStr && !hasKind(facts, 'host.arch')) {
-          _add(facts, mkFact('host.arch', h, { arch: archStr, via: 'shape' }, S, source));
+    // Skip raw HTTP HTML bodies unless the HTTP response also proves RCE / LFI (e.g. uid=0(root) or root:x:0:0:).
+    var isWebRceShape = /uid=\d+\([A-Za-z0-9_.-]+\)|^root:[x*!]:0:0:/m.test(text);
+    if (!isHttpShape || isWebRceShape) {
+      if (!hasKind(facts, 'host.kernel')) {
+        var mUname = C._UNAME_RE && C._UNAME_RE.exec(text);
+        var mProcVer = !mUname && /Linux version\s+([0-9][^\s]+)/i.exec(text);
+        var mBareKernel = !mUname && !mProcVer && /^\s*([2-6]\.\d+\.\d+-(?:[0-9A-Za-z.+_-]*(?:generic|amd64|i[3-6]86|arm64|el\d|kali|debian|ubuntu|arch|alpine)[0-9A-Za-z.+_-]*|\d+-[A-Za-z0-9.+_-]+))\s*$/m.exec(text);
+        if (mUname || mProcVer || mBareKernel) {
+          var kStr = mUname ? ((mUname.groups && mUname.groups.kernel) || mUname[2]) : (mProcVer ? mProcVer[1] : mBareKernel[1].trim());
+          var archStr = mUname ? ((mUname.groups && mUname.groups.arch) || mUname[3]) : '';
+          var kLine = (mUname ? mUname[0] : (mProcVer ? mProcVer[0] : mBareKernel[0])).trim();
+          _add(facts, mkFact('host.kernel', h, { kernel: kStr, via: 'shape' }, S, source));
+          if (archStr && !hasKind(facts, 'host.arch')) {
+            _add(facts, mkFact('host.arch', h, { arch: archStr, via: 'shape' }, S, source));
+          }
+          if (C._add_os_observation) {
+            var kProd = C._os_product_from_label ? C._os_product_from_label(kLine, 'linux') : null;
+            C._add_os_observation(facts, ws, source, 'linux', kLine, 'high', 'uname', true, kProd);
+          }
+          var isRemoteSnmpOrScan = /\b(?:snmpwalk|snmp-check|onesixtyone|nmap)\b/i.test(source || '');
+          if (!isRemoteSnmpOrScan && C._check_linux_kernel_vulns) C._check_linux_kernel_vulns(kStr, ws, source, facts);
         }
-        if (C._add_os_observation) {
-          var kProd = C._os_product_from_label ? C._os_product_from_label(kLine, 'linux') : null;
-          C._add_os_observation(facts, ws, source, 'linux', kLine, 'high', 'uname', true, kProd);
+        var mWinVer = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(text);
+        if (mWinVer) {
+          var wVer = mWinVer[1].trim();
+          _add(facts, mkFact('host.kernel', h, { kernel: wVer, tool: 'ver', via: 'shape' }, S, source));
+          if (C._add_os_observation) {
+            C._add_os_observation(facts, ws, source, 'windows', mWinVer[0], 'high', 'ver', true, 'Windows ' + wVer);
+          }
         }
-        var isRemoteSnmpOrScan = /\b(?:snmpwalk|snmp-check|onesixtyone|nmap)\b/i.test(source || '');
-        if (!isRemoteSnmpOrScan && C._check_linux_kernel_vulns) C._check_linux_kernel_vulns(kStr, ws, source, facts);
       }
-      var mWinVer = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(text);
-      if (mWinVer) {
-        var wVer = mWinVer[1].trim();
-        _add(facts, mkFact('host.kernel', h, { kernel: wVer, tool: 'ver', via: 'shape' }, S, source));
-        if (C._add_os_observation) {
-          C._add_os_observation(facts, ws, source, 'windows', mWinVer[0], 'high', 'ver', true, 'Windows ' + wVer);
-        }
+      var mOsRel = /PRETTY_NAME\s*=\s*["']?([^"'\r\n]+)["']?/i.exec(text) || /Distributor ID:\s*(\S+)/i.exec(text);
+      if (mOsRel && C._add_os_observation) {
+        C._add_os_observation(facts, ws, source, 'linux', mOsRel[0], 'high', 'os-release', true, mOsRel[1].trim());
       }
-    }
-    var mOsRel = /PRETTY_NAME\s*=\s*["']?([^"'\r\n]+)["']?/i.exec(text) || /Distributor ID:\s*(\S+)/i.exec(text);
-    if (mOsRel && C._add_os_observation) {
-      C._add_os_observation(facts, ws, source, 'linux', mOsRel[0], 'high', 'os-release', true, mOsRel[1].trim());
-    }
-    var mSudoV = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.(?:8\.(?:[2-9]|[12]\d|3[01])|9\.[0-5](?:p1)?))\b/i.exec(text);
-    if (mSudoV && !hasKind(facts, 'vuln.baron_samedit')) {
-      _add(facts, mkFact('vuln.baron_samedit', h, { version: mSudoV[1], cve: 'CVE-2021-3156', via: 'shape', lead: true }, S, source));
-    }
-    var mPkexec = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(text);
-    if (mPkexec && !hasKind(facts, 'vuln.polkit')) {
-      _add(facts, mkFact('vuln.polkit', h, { version: mPkexec[1], cve: 'CVE-2021-4034', via: 'shape', lead: true }, S, source));
+      var mSudoV = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.(?:8\.(?:[2-9]|[12]\d|3[01])|9\.[0-5](?:p1)?))\b/i.exec(text);
+      if (mSudoV && !hasKind(facts, 'vuln.baron_samedit')) {
+        _add(facts, mkFact('vuln.baron_samedit', h, { version: mSudoV[1], cve: 'CVE-2021-3156', via: 'shape', lead: true }, S, source));
+      }
+      var mPkexec = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(text);
+      if (mPkexec && !hasKind(facts, 'vuln.polkit')) {
+        _add(facts, mkFact('vuln.polkit', h, { version: mPkexec[1], cve: 'CVE-2021-4034', via: 'shape', lead: true }, S, source));
+      }
     }
 
     _parse_family_resemblance(text, ws, source, facts);
@@ -178,6 +189,7 @@
 
   function _parse_family_resemblance(text, ws, source, facts) {
     text = String(text || '');
+    if (text.length > 10485760) text = text.slice(0, 10485760);
     if (!text.trim()) return;
     var h = 'host:' + ws.target;
     var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
@@ -185,8 +197,12 @@
 
     // 1. AD ACL / Object Control Family
     // Lines containing both an ACL right token and a target/principal identifier
-    if (!hasKind(facts, 'ad.acl_lead') && !hasKind(facts, 'ad.control_paths')) {
-      var aclRightRe = /\b(GenericAll|GenericWrite|WriteDacl|WriteOwner|ForceChangePassword|AddMember|AddSelf|AllExtendedRights|AddKeyCredentialLink)\b/i;
+    var isHttpResp = /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
+    var isKnownLinux = (ws && (ws.facts || ws.seedFacts) || []).some(function (f) {
+      return f && f.scope === h && (f.kind === 'foothold.linux' || (f.kind === 'host.os_family' && f.value && f.value.family === 'linux'));
+    });
+    if (!hasKind(facts, 'ad.acl_lead') && !hasKind(facts, 'ad.control_paths') && !isHttpResp && !isKnownLinux) {
+      var aclRightRe = /\b(GenericAll|GenericWrite|WriteDacl|WriteOwner|ForceChangePassword|AddMember|AddSelf|AllExtendedRights|AddKeyCredentialLink|ReadLAPSPassword|ReadGMSAPassword|WriteSPN|WriteProperty)\b/i;
       var aclPrincipalRe = /(?:CN=|DC=|@|(?<![a-zA-Z0-9._-])[a-zA-Z0-9._-]{1,64}\\[a-zA-Z0-9._-]{1,64}|\bDomain Admins\b|\bBackup Operators\b|\bDnsAdmins\b|\bUsers\b|\bComputers\b)/i;
       var matchedAclRight = '', matchedPrincipal = '';
       for (var i = 0; i < lines.length; i++) {
@@ -202,7 +218,7 @@
       }
       if (matchedAclRight) {
         _add(facts, mkFact('ad.acl_lead', domScope, { right: matchedAclRight, principal: matchedPrincipal, via: 'shape' }, S, source));
-        _add(facts, mkFact('ad.control_paths', domScope, { right: matchedAclRight, via: 'shape' }, S, source));
+
       }
     }
 
@@ -227,13 +243,13 @@
     // Output containing both an identity field and either a <service>/<host> SPN pattern or DONT_REQ_PREAUTH
     if (!hasKind(facts, 'ad.user_list')) {
       var idFieldRe = /(?:sAMAccountName|\bcn:|\bUser:)\s*[:=]\s*([A-Za-z0-9._-]+)/gi;
-      var spnRe = /\b(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB)\/[A-Za-z0-9._-]+/i;
+      var spnRe = /\b(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB)\/(?![0-9]+(?:\.[0-9]+)?\b)([A-Za-z0-9._-]*[A-Za-z][A-Za-z0-9._-]*)/i;
       var asrepRe = /(?:DONT_REQ_PREAUTH|UF_DONT_REQUIRE_PREAUTH|DoesNotRequirePreAuth\s*:\s*True)/i;
       if (spnRe.test(text) || asrepRe.test(text)) {
-        var foundUsers = [], mId;
+        var foundUsers = [], foundUsersSeen = Object.create(null), mId;
         while ((mId = idFieldRe.exec(text)) !== null) {
           var uName = mId[1];
-          if (uName && foundUsers.indexOf(uName) < 0 && !/\//.test(uName)) foundUsers.push(uName);
+          if (uName && !foundUsersSeen[uName] && !/\//.test(uName)) { foundUsersSeen[uName] = 1; foundUsers.push(uName); }
         }
         if (foundUsers.length) {
           _add(facts, mkFact('ad.user_list', domScope, { users: foundUsers, count: foundUsers.length, via: 'shape' }, S, source));
@@ -313,9 +329,12 @@
     { fact: 'vuln.node_serialize', re: /node-serialize|_\$\$ND_FUNC\$\$_/i, cve: 'CVE-2017-5941' },
     { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
   ];
+  var _VULN_SIGS_HINT_RE = /(?:CVE-\d{4}-|EDB-\d+|vsftpd|proftpd|mod_copy|samba|smbd|SMBGhost|BlueKeep|rdp-vuln|Shellshock|cgi-bin|mod_cgi|Heartbleed|Drupal|phpMyAdmin|MiniServ|Webmin|Usermin|OFBiz|Cacti|Zabbix|Splunk|Text4Shell|commons|FreeSWITCH|mod_event_socket|JDWP|Java Debug|Aerospike|Pico|screen-4\.5|Screen 4|Mouse|Solr|AChat|Nibbleblog|IIS|WebDAV|ScStoragePathFromUrl|ExplodingCan|PRTG|GitLab|October|HttpFileServer|HFS|rejetto|ColdFusion|CFIDE|Oracle TNS|TNSLSNR|1521\/tcp|H2 Database|h2-console|8082\/tcp|9092\/tcp|chkrootkit|10050\/tcp|MyFaces|ViewState|node-serialize|ND_FUNC|Gitea|cup of tea)/i;
   function _parse_vulnmatch(text, ws, source, facts) {
-    text = String(text || ''); if (!text.trim()) return;
-    var cleanText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
+    text = String(text || ''); if (!text.trim() || !_VULN_SIGS_HINT_RE.test(text)) return;
+    var cleanText = /\b(?:closed|filtered|unfiltered|open\|filtered)\b/i.test(text)
+      ? text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
+      : text;
     var h = 'host:' + ws.target;
     for (var i = 0; i < VULN_SIGS.length; i++) {
       var s = VULN_SIGS[i];

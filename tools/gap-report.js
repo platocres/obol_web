@@ -28,7 +28,7 @@ var A = PK.loadPacks(Object.keys(bundle).map(function (k) { return bundle[k]; })
 OBOL.packs = { actions: function () { return A; }, packData: function () { return bundle; } };
 req('data/tools-install.js'); req('data/study-fixtures.js'); req('assets/engine/study.js');
 req('assets/engine/parsers/common.js');
-['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
+['nmap', 'directory', 'creds', 'host', 'web', 'services', 'database', 'websource', 'findings', 'shape', 'pivot', 'dns', 'blockers', 'nxc-catalog', 'inference'].forEach(function (m) { req('assets/engine/parsers/' + m + '.js'); });
 req('assets/engine/parsers/index.js');
 req('data/decision-forks.js'); req('data/parser-signatures.js'); req('data/coverage-expected.js');
 req('assets/engine/decisionmap.js');
@@ -81,7 +81,9 @@ if (VERIFY || CHECK) {
     // data-driven parsers (e.g. blockers.js) declare the kind they emit in a `kind: 'blocker.*'` table
     // and mint it with mkFact(entry.kind, …); harvest just those so the drift check sees them without
     // sweeping up the kind: fields of ordinary extract-return objects.
-    (s.match(/\bkind:\s*'(?:blocker|advice)\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; }); (OBOL._nxcCatalog || []).forEach(function (c) { (c.produces || []).forEach(function (k) { srcKinds[k] = 1; }); });
+    (s.match(/\bkind:\s*'(?:blocker|advice)\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; });
+    (s.match(/\badd\('blocker\.[a-z0-9._]+'/g) || []).forEach(function (m) { srcKinds[m.replace(/.*'([^']+)'.*/, '$1')] = 1; });
+    (OBOL._nxcCatalog || []).forEach(function (c) { (c.produces || []).forEach(function (k) { srcKinds[k] = 1; }); });
   });
   // live corpus-minted kinds (parser fixtures exercise diverse real outputs)
   var minted = {};

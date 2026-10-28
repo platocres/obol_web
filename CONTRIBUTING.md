@@ -48,7 +48,12 @@ third-party code under a license incompatible with the above.
 
 - Keep changes focused, and match the surrounding code style.
 - The engine is pure and UI-independent; prefer adding logic there with a test in `tests/`.
-- Run the test suite before opening a pull request.
+- Run the test and verification suite before opening a pull request across all **19 JSON files** (`355 moves` in `data/packs/*.json`):
+  - `node tools/build-packs.js && node tools/gap-report.js --check && node tools/move-lint.js --check && node tools/lint-study.js --check`
+  - `node tools/gate-audit.js --check && node tools/flag-paths.js --check && node tools/field-notes-coverage.js --check`
+  - `node tools/verify-parser-corpus.js && node tools/verify-replay-goldens.js && node tools/verify-all-20-mined.js`
+  - `node tools/stamp-assets.js --check && node tests/engine/help-coverage.js`
+- **Terminology note (`Cockpit = coach / path` in code):** The primary operator workspace at `#/path` is called **Cockpit** in the UI and documentation (formerly *Coach* / *Next Steps*). In the codebase, its route module (`assets/ui/routes/path.js`), global namespace (`OBOL.coach`), and CSS selectors (`.coach-*`, `.ns-*`) retain their historical names for compatibility.
 
 ---
 

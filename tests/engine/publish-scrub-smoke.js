@@ -55,6 +55,8 @@ const { pathToFileURL } = require('url');
   // 4c) Template literals are left as code (never corrupted): a ${call(keyword)} survives intact.
   const tplOut = scrub('var t = `x ${build(derived)} y`;\n', 'a.js');
   check('template: ${build(derived)} preserved', /build\(derived\)/.test(tplOut));
+  const reOut = scrub('var re = /\\b(ported|derived)\\b/i; // (ported from old)\n', 'a.js');
+  check('regex literal: /(ported|derived)/ preserved while trailing comment is scrubbed', reOut.indexOf('/\\b(ported|derived)\\b/i') >= 0 && !/ported from old/.test(reOut));
 
   // 5) The scrubbed code sample carries no forbidden token.
   FORBIDDEN.forEach(([label, re]) => check('gate: no "' + label + '" survives', !re.test(outJs)));

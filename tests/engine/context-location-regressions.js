@@ -115,6 +115,9 @@ function fixture(id, commands) {
     'Selecting a local account preserves its stable material, type, and host binding');
   check(resolved.authRealm !== 'beta.local' && resolved.targetDomain === 'beta.local',
     'A target domain never replaces the selected local authentication identity');
+  const localNxc = O.command.fillTemplate('nxc smb {{target}} -u {{user}} -p {{password}} -d {{domain}}', resolved.facts, { params: resolved.params });
+  check(localNxc.includes('-d .') && !localNxc.includes('-d ' + B) && !localNxc.includes('-d beta.local'),
+    'A host-bound local credential fills -d . on nxc instead of the raw IPv4 targetBinding or AD domain');
   S.setActiveTarget(A); const before = S.resolvedContext().credentialId;
   S.selectCredential(localB.id, B);
   check(S.resolvedContext().credentialId === before && S.resolvedContext({ target: B }).credentialId === localB.id,

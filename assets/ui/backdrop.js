@@ -15,20 +15,32 @@
   var LS_MOTION = "obol.motion";
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
-  // obol skin (data-skin) → animation name. Unlisted / daylight → none (static base).
-  var SKIN_ANIM = { obol: "particles", htb: "particles", indigo: "particles", ghostwire: "matrix", amber: "crt", neon: "synthwave", daylight: null };
+  // obol skin (data-skin) → animation name. Default 'obol' uses static base so scrolling never contends with canvas repaints.
+  var SKIN_ANIM = { obol: null, htb: "particles", indigo: "particles", ghostwire: "matrix", amber: "crt", neon: "synthwave", daylight: null };
   function currentSkin() { try { return document.documentElement.getAttribute("data-skin") || "obol"; } catch (e) { return "obol"; } }
-  function wantedAnim() { var a = SKIN_ANIM[currentSkin()]; return a === undefined ? "particles" : a; }
+  function wantedAnim() { var a = SKIN_ANIM[currentSkin()]; return a === undefined ? null : a; }
 
   var reduceMq = (root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)")) || null;
   function osReduce() { return !!(reduceMq && reduceMq.matches); }
-  function motionLevel() { var v = lsGet(LS_MOTION); return (v === "full" || v === "reduced" || v === "off") ? v : "full"; }
-  function effectiveMotion() { var l = motionLevel(); return (osReduce() && l === "full") ? "reduced" : l; }
-  function reduceMotion() { return effectiveMotion() === "reduced"; }
+  function motionLevel() { return lsGet(LS_MOTION) === "off" ? "off" : "full"; }
+  function effectiveMotion() { return (osReduce() || motionLevel() === "off") ? "off" : "full"; }
+  function reduceMotion() { return effectiveMotion() !== "full"; }
 
   var canvas = null, ctx = null, rafId = 0, animName = null;
-  var lastFrame = 0, FRAME_MS = 1000 / 30, vw = 0, vh = 0, dpr = 1, mstate = null;
-  var idlePaused = false, idleTimer = 0, IDLE_MS = 12000, resizeTimer = 0;
+  var lastFrame = 0, FRAME_MS = 1000 / 24, vw = 0, vh = 0, dpr = 1, mstate = null;
+  var idlePaused = false, idleTimer = 0, IDLE_MS = 8000, resizeTimer = 0;
+  var scrollPaused = false, scrollTimer = 0;
+
+  function onScrollActivity() {
+    if (!animName) return;
+    scrollPaused = true;
+    pauseLoop();
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(function () {
+      scrollPaused = false;
+      if (animName && !document.hidden && effectiveMotion() === "full") markActive();
+    }, 350);
+  }
 
   function ensureCanvas() {
     if (canvas) return;
@@ -39,11 +51,11 @@
     sizeCanvas();
     root.addEventListener("resize", onResize, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);
-    var wake = function () { markActive(); };
-    document.addEventListener("pointermove", wake, { passive: true });
+    var wake = function () { if (!scrollPaused) markActive(); };
     document.addEventListener("pointerdown", wake, { passive: true });
     document.addEventListener("keydown", wake);
-    document.addEventListener("wheel", wake, { passive: true });
+    document.addEventListener("wheel", onScrollActivity, { passive: true });
+    root.addEventListener("scroll", onScrollActivity, { capture: true, passive: true });
     document.addEventListener("touchstart", wake, { passive: true });
     root.addEventListener("focus", wake);
     root.addEventListener("blur", pauseLoop);
@@ -51,17 +63,17 @@
   }
   function sizeCanvas() {
     if (!canvas) return;
-    dpr = Math.min(root.devicePixelRatio || 1, 1.5);
+    dpr = 1;
     vw = root.innerWidth; vh = root.innerHeight;
     canvas.width = Math.max(1, Math.round(vw * dpr)); canvas.height = Math.max(1, Math.round(vh * dpr));
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function onResize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(function () { sizeCanvas(); if (animName) initAnim(animName); if (animName && reduceMotion()) drawStatic(animName); }, 150); }
   function onVisibility() { if (document.hidden) pauseLoop(); else if (animName && !reduceMotion()) markActive(); }
-  function shouldAnimate() { return !!animName && !reduceMotion() && !document.hidden && hasFocus() && !idlePaused; }
+  function shouldAnimate() { return !!animName && !reduceMotion() && !document.hidden && hasFocus() && !idlePaused && !scrollPaused; }
   function hasFocus() { try { return document.hasFocus(); } catch (e) { return true; } }
   function pauseLoop() { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } }
-  function setIdleFlag(on) { try { if (on) document.documentElement.setAttribute("data-idle", "1"); else document.documentElement.removeAttribute("data-idle"); } catch (e) {} }
+  function setIdleFlag() {}
   function markActive() {
     if (effectiveMotion() !== "full") { clearTimeout(idleTimer); return; }
     idlePaused = false; setIdleFlag(false); clearTimeout(idleTimer);
@@ -95,8 +107,8 @@
       for (var i = 0; i < cols; i++) drops[i] = Math.random() * -40;
       mstate = { fontSize: fs, cols: cols, drops: drops, accent: cssVar("--accent", "#00ff66") };
     } else if (name === "particles") {
-      var n = Math.max(28, Math.min(70, Math.round(vw * vh / 26000))), nodes = [];
-      for (var p = 0; p < n; p++) nodes.push({ x: Math.random() * vw, y: Math.random() * vh, vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28, r: 0.8 + Math.random() * 1.7 });
+      var n = Math.max(20, Math.min(44, Math.round(vw * vh / 38000))), nodes = [];
+      for (var p = 0; p < n; p++) nodes.push({ x: Math.random() * vw, y: Math.random() * vh, vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28, r: 0.9 + Math.random() * 1.6 });
       mstate = { nodes: nodes, accent: cssVar("--accent", "#6366F1"), accent2: cssVar("--accent-2", "#818CF8") };
     } else if (name === "synthwave") {
       // palms lining the road: evenly-phased on both sides so several are always in frame,
@@ -141,8 +153,14 @@
         if (d < LINK) { ctx.strokeStyle = hexA(s.accent, 0.12 * (1 - d / LINK)); ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
       }
     }
-    for (var k = 0; k < nodes.length; k++) { var nn = nodes[k]; ctx.beginPath(); ctx.fillStyle = hexA(s.accent2, 0.85); ctx.shadowColor = s.accent2; ctx.shadowBlur = 8; ctx.arc(nn.x, nn.y, nn.r, 0, Math.PI * 2); ctx.fill(); }
-    ctx.shadowBlur = 0;
+    ctx.fillStyle = hexA(s.accent2, 0.2);
+    ctx.beginPath();
+    for (var h = 0; h < nodes.length; h++) { var nh = nodes[h]; ctx.moveTo(nh.x + nh.r * 2.2, nh.y); ctx.arc(nh.x, nh.y, nh.r * 2.2, 0, Math.PI * 2); }
+    ctx.fill();
+    ctx.fillStyle = hexA(s.accent2, 0.88);
+    ctx.beginPath();
+    for (var k = 0; k < nodes.length; k++) { var nn = nodes[k]; ctx.moveTo(nn.x + nn.r, nn.y); ctx.arc(nn.x, nn.y, nn.r, 0, Math.PI * 2); }
+    ctx.fill();
   }
   function drawCrt() {
     var s = mstate; if (!s) return; s.t += 1;
@@ -192,7 +210,7 @@
   function drawPalm(x, baseY, h, col, alpha) {
     if (h < 5) return;
     ctx.save(); ctx.globalAlpha = alpha; ctx.strokeStyle = col; ctx.lineCap = "round";
-    ctx.shadowColor = col; ctx.shadowBlur = Math.min(13, h * 0.07); ctx.lineWidth = Math.max(1, h * 0.03);
+    ctx.lineWidth = Math.max(1, h * 0.03);
     var topX = x + h * 0.07, topY = baseY - h;
     ctx.beginPath(); ctx.moveTo(x, baseY); ctx.quadraticCurveTo(x + h * 0.02, baseY - h * 0.5, topX, topY); ctx.stroke();
     var F = 7;
@@ -216,12 +234,12 @@
     var cw = w * 0.66;
     ctx.fillStyle = "#0b0714"; roundRectPath(cx - w / 2, y - h * 0.55, w, h * 0.55, 3); ctx.fill();
     ctx.fillStyle = "#0d0918"; roundRectPath(cx - cw / 2, y - h * 1.02, cw, h * 0.5, 3); ctx.fill();
-    ctx.shadowColor = "#ff2fb9"; ctx.shadowBlur = 10; ctx.strokeStyle = "rgba(255,47,185,0.9)"; ctx.lineWidth = Math.max(1, w * 0.012);
+    ctx.strokeStyle = "rgba(255,47,185,0.9)"; ctx.lineWidth = Math.max(1, w * 0.012);
     roundRectPath(cx - w / 2, y - h * 0.55, w, h * 0.55, 3); ctx.stroke();
     roundRectPath(cx - cw / 2, y - h * 1.02, cw, h * 0.5, 3); ctx.stroke();
-    ctx.shadowBlur = 0; ctx.fillStyle = "rgba(33,230,255,0.16)"; roundRectPath(cx - cw / 2 + w * 0.06, y - h * 0.96, cw - w * 0.12, h * 0.34, 2); ctx.fill();
-    ctx.shadowColor = "#ff2b5e"; ctx.shadowBlur = 14; ctx.fillStyle = "#ff2b5e"; ctx.fillRect(cx - w * 0.44, y - h * 0.34, w * 0.88, Math.max(2, h * 0.09));
-    ctx.shadowBlur = 0; ctx.fillStyle = "#0b0714"; ctx.fillRect(cx - w * 0.03, y - h * 0.35, w * 0.06, h * 0.11);
+    ctx.fillStyle = "rgba(33,230,255,0.16)"; roundRectPath(cx - cw / 2 + w * 0.06, y - h * 0.96, cw - w * 0.12, h * 0.34, 2); ctx.fill();
+    ctx.fillStyle = "#ff2b5e"; ctx.fillRect(cx - w * 0.44, y - h * 0.34, w * 0.88, Math.max(2, h * 0.09));
+    ctx.fillStyle = "#0b0714"; ctx.fillRect(cx - w * 0.03, y - h * 0.35, w * 0.06, h * 0.11);
     ctx.restore();
   }
   // The whole scene, shared by the live loop (t advances) and the reduced-motion still (t fixed).
@@ -232,8 +250,8 @@
     for (var st = 0; st < 60; st++) { var sx = (st * 137.5 + t * 0.15) % vw, sy = (st * 61.7) % horizon; ctx.fillStyle = "rgba(255,255,255," + (0.2 + (st % 5) * 0.12).toFixed(2) + ")"; ctx.fillRect(sx, sy, 1.4, 1.4); }
     drawRetroSun(cx, horizon, Math.min(vw, vh) * 0.17);
     ctx.fillStyle = "#0C0722"; ctx.fillRect(0, horizon, vw, vh - horizon); // ground (covers sun's lower half → clean waterline)
-    ctx.shadowColor = "#F92AAD"; ctx.shadowBlur = 18; ctx.strokeStyle = "#F92AAD"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, horizon); ctx.lineTo(vw, horizon); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#F92AAD"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, horizon); ctx.lineTo(vw, horizon); ctx.stroke();
     var spacing = 42, off = (t * 1.1) % spacing; ctx.lineWidth = 1.4;
     for (var yy = horizon + off; yy < vh; yy += spacing) { var a = (yy - horizon) / (vh - horizon); ctx.strokeStyle = "rgba(36,224,255," + (0.10 + a * 0.42).toFixed(3) + ")"; ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(vw, yy); ctx.stroke(); }
     ctx.strokeStyle = "rgba(249,42,173,0.42)";

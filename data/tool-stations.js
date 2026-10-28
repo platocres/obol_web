@@ -1,5 +1,5 @@
 /*!
- * obol data — tool-stations.js — SUBSTITUTE tools grouped by the JOB they do.
+ * obol data - tool-stations.js - SUBSTITUTE tools grouped by the JOB they do.
  *
  * A station answers "I want to do X" (discover web content, crack these hashes, scan ports) and lets
  * the student pick the engine, with one line on why each exists. Switching engine keeps the shared

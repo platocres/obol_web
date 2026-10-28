@@ -6,6 +6,7 @@
     {
       "id": "pivot-chisel-socks",
       "title": "Chisel Reverse SOCKS Tunnel",
+      "phase": "escalate",
       "hypothesis": "When the foothold can see an internal subnet, a reverse SOCKS proxy served by chisel routes your attacker-box tooling through the compromised host and onto that segment.",
       "tool": "chisel",
       "tools": [
@@ -43,6 +44,7 @@
     {
       "id": "pivot-ligolo",
       "title": "Ligolo-ng Tunnel + Route",
+      "phase": "escalate",
       "hypothesis": "ligolo-ng builds a TUN-interface pivot: once the agent connects back you add a route for the discovered subnet and internal hosts answer as if directly attached.",
       "tool": "ligolo-ng",
       "tools": [
@@ -52,13 +54,14 @@
       ],
       "requires_any": [
         "foothold.linux",
-        "foothold.windows",
         "access.shell",
-        "host.multihomed",
-        "scan.local.routes",
         "scan.local.neighbors"
       ],
       "produces": [
+        "tunnel.route"
+      ],
+      "deprioritize_when": [
+        "pivot.active",
         "tunnel.route"
       ],
       "priority": 62,
@@ -82,6 +85,7 @@
     {
       "id": "pivot-sshuttle",
       "title": "sshuttle Transparent Pivot",
+      "phase": "escalate",
       "hypothesis": "Given working SSH credentials on the foothold, sshuttle carries a whole subnet over that SSH session transparently, with no proxychains or client-side proxy setup.",
       "tool": "sshuttle",
       "tools": [
@@ -110,6 +114,7 @@
     {
       "id": "pivot-ssh-dynamic",
       "title": "SSH Dynamic Port-Forward (SOCKS)",
+      "phase": "escalate",
       "hypothesis": "`ssh -D` on its own stands up a SOCKS proxy through the foothold, the no-extra-tooling pivot whenever SSH credentials are already in hand.",
       "tool": "ssh",
       "tools": [
@@ -144,7 +149,9 @@
       ],
       "requires_any": [
         "tunnel.socks",
-        "tunnel.route"
+        "tunnel.route",
+        "tunnel.dns",
+        "pivot.active"
       ],
       "produces": [
         "ports.open"
@@ -162,13 +169,14 @@
         {
           "tool": "nmap",
           "run": "nmap -sV -Pn {{internal_host}}",
-          "note": "Routed tunnel (ligolo / sshuttle): the subnet is a real route, so nmap runs unmodified — no proxychains, and a normal -sV service scan works."
+          "note": "Routed tunnel (ligolo / sshuttle): the subnet is a real route, so nmap runs unmodified - no proxychains, and a normal -sV service scan works."
         }
       ]
     },
     {
       "id": "dns-tunnel",
       "title": "DNS Tunnel for Egress-Restricted Hosts",
+      "phase": "escalate",
       "hypothesis": "When a foothold can resolve DNS but every other outbound port is filtered, DNS itself becomes your transport. A DNS tunnel encodes data in queries to a domain whose authoritative server you control, giving a slow interactive channel or a tunnel for other tools when nothing else gets out. dnscat2 or iodine run a server on your box and a client on the target. Reach for it only when the faster transports (a reverse shell, an SSH tunnel) are blocked.",
       "tool": "dnscat2",
       "tools": [
@@ -222,6 +230,7 @@
     {
       "id": "pivot-ssh-portforward",
       "title": "SSH Local / Remote Port Forward (-L / -R)",
+      "phase": "escalate",
       "hypothesis": "When you only need one internal service rather than a whole subnet, a single SSH port forward is simpler and quieter than a SOCKS proxy. `ssh -L` binds a port on your box to an internal host:port reached from the foothold, so your tools connect to localhost. `ssh -R` does the reverse, exposing a port of your attacker box to the internal network, which lands a callback when the foothold cannot reach you directly. Both ride an existing SSH session, so no extra tooling touches the target.",
       "tool": "ssh",
       "tools": [
@@ -280,12 +289,12 @@
         {
           "tool": "nxc",
           "run": "nxc smb {{neighbor_hosts}}",
-          "note": "PREFERRED: sweep the neighbour IPs over SMB in one shot — it fingerprints OS/domain/signing and, once you add -u/-p, marks every host the credential opens. Pass a space-separated list or a targets file."
+          "note": "PREFERRED: sweep the neighbour IPs over SMB in one shot - it fingerprints OS/domain/signing and, once you add -u/-p, marks every host the credential opens. Pass a space-separated list or a targets file."
         },
         {
           "tool": "nmap",
           "run": "nmap -sV -Pn {{neighbor_hosts}}",
-          "note": "Full service scan of the same hosts. If they are only reachable through the pivot, prefix with proxychains (SOCKS tunnel) or run it after a routed tunnel is up — build one from the connectivity panel's tunnel wizard first."
+          "note": "Full service scan of the same hosts. If they are only reachable through the pivot, prefix with proxychains (SOCKS tunnel) or run it after a routed tunnel is up - build one from the connectivity panel's tunnel wizard first."
         },
         {
           "tool": "proxychains",
@@ -347,7 +356,7 @@
       "priority": 60,
       "autonomy": "approve",
       "proves": "the AD domain and its domain controllers, read from the internal resolver",
-      "does_not_prove": "a credential or any access, this is name resolution — the DCs it names still have to be attacked",
+      "does_not_prove": "a credential or any access, this is name resolution - the DCs it names still have to be attacked",
       "refs": [
         "https://www.thehacker.recipes/"
       ],
@@ -360,7 +369,7 @@
         {
           "tool": "dig",
           "run": "dig @{{dns_server}} AXFR {{domain}}",
-          "note": "A full zone transfer. Most resolvers refuse it, but a misconfigured one dumps every A record in the domain — an instant host inventory. If AXFR is refused you still have the SRV answers above."
+          "note": "A full zone transfer. Most resolvers refuse it, but a misconfigured one dumps every A record in the domain - an instant host inventory. If AXFR is refused you still have the SRV answers above."
         },
         {
           "tool": "nslookup",
@@ -369,5 +378,6 @@
         }
       ]
     }
-  ]
+  ],
+  "id": "pivoting_2026_09"
 }

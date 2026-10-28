@@ -151,6 +151,10 @@ function check(condition, message) { assert.ok(condition, message); count++; }
   }
   const unsafeCmd = O.command.fillCommand({ commands: [{ shell: 'cmd', run: 'echo {{user}}' }] }, set([]), { params: { user: '%PATH%!' } });
   check(unsafeCmd.blocked && !unsafeCmd.filled && unsafeCmd.errors.length, 'CMD values with expansion syntax are blocked with an explanation');
+  const unsafeCmdDelayed = O.command.fillCommand({ commands: [{ shell: 'cmd', run: 'echo {{user}}' }] }, set([]), { params: { user: '!PATH!' } });
+  check(unsafeCmdDelayed.blocked && !unsafeCmdDelayed.filled, 'CMD values with paired !VAR! delayed expansion syntax are blocked');
+  const safeCmdBang = O.command.fillCommand({ commands: [{ shell: 'cmd', run: 'echo {{password}}' }] }, set([]), { params: { password: 'Password123!' } });
+  check(!safeCmdBang.blocked && safeCmdBang.filled === 'echo "Password123!"', 'CMD values with a single ! (like Password123!) are allowed and quoted');
   check(O.command.fillTemplate('{{command}}', set([]), { extra: { command: 'id; whoami' } }) === 'id; whoami', 'Explicit command-expression tokens retain their syntax');
   check(O.command.fillTemplate('{{missing|{{domain}}}}', set([]), { params: { domain: 'alpha.local' } }) === 'alpha.local', 'Authored nested defaults resolve without recursively expanding discovered values');
 

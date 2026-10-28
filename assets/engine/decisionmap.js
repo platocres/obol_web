@@ -32,9 +32,13 @@
   function sigs() { return OBOL.PARSER_SIGNATURES || {}; }
   function expected() { return OBOL.COVERAGE_EXPECTED || {}; }
 
-  var _byId = null;
+  var _byId = null, _byIdCount = 0;
   function byId(id) {
-    if (!_byId) { _byId = {}; actions().forEach(function (a) { _byId[a.id] = a; }); }
+    var acts = actions();
+    if (!_byId || _byIdCount !== acts.length) {
+      _byId = {}; _byIdCount = acts.length;
+      acts.forEach(function (a) { _byId[a.id] = a; });
+    }
     return _byId[id] || null;
   }
   function reqSet(m) { return [].concat((m && m.requires_all) || [], (m && m.requires_any) || []); }
@@ -50,7 +54,7 @@
     { re: /^hash\./, to: 'offline-hash', label: 'you have a hash to crack' },
     { re: /^credential\.available$/, to: 'domain-cred', label: 'you have a usable credential' },
     { re: /^loot\.ntds$/, to: 'domain-cred', label: 'you dumped the domain (NTDS)' },
-    { re: /^access\.admin$|^access\.system$/, to: 'proof', label: 'you are admin / SYSTEM - capture proof' },
+    { re: /^access\.admin$|^access\.system$|^access\.root$/, to: 'proof', label: 'you are admin / SYSTEM - capture proof' },
     { re: /^tunnel\./, to: 'pivot', label: 'you can reach a deeper network - pivot' },
   ];
   function handoffFor(fact) {
@@ -96,7 +100,7 @@
     if (_parseCov && _parseCovFixtures === fxMap && _parseCovParser === parser && _parseCovActions === moves && _parseCovSignatures === signatures) return _parseCov;
     var out = {};
     moves.forEach(function (m) {
-      var fx = fxMap[m.id], prod = produces(m).filter(function (f) { return !/^advice\./.test(f) && !isActionIntent(f); });
+      var fx = fxMap[m.id], prod = produces(m).filter(function (f) { return !/^advice\./.test(f) && !isActionIntent(f) && !/\.reachable$/.test(f); });
       var declared = prod.filter(readable);
       var e = {id:m.id,produces:produces(m),minted:[],hit:[],selfRead:false,status:'nofixture',
         capabilityStatus:!prod.length ? 'noproduce' : declared.length === prod.length ? 'declared' : declared.length ? 'partial' : 'gap',
@@ -177,19 +181,24 @@
       if (parent && nodes[parent]) nodes[parent].children.push(id);
       else roots.push(id);
     });
-    return { key: ev.key, port: ev.port, proto: ev.proto, fam: ev.fam, label: ev.label, signal: ev.signal,
+    return { key: ev.key, port: ev.port, short: ev.short || ev.label, proto: ev.proto, fam: ev.fam, label: ev.label, signal: ev.signal,
       roots: roots, nodes: nodes, order: order };
   }
 
   // The ranked "spine": from the port's entry facts, ask the coach for its #1 next move repeatedly,
   // staying within the port's move set, so the map lights the path the coach would actually walk.
-  function spineFor(ev) {
+  function spineFor(ev, facts) {
     var PK = OBOL.pack, F = OBOL.facts;
     if (!PK || !PK.nextActionsV2 || !F) return [];
     var inSet = {}; (ev.moves || []).forEach(function (m) { inSet[m.id] = true; });
     var portNum = String(ev.port || '').split('/')[0];
     var have = ['target.configured', 'host.up', 'ports.open'];
     if (portNum) have.push('port:' + portNum);
+    if (facts && Array.isArray(facts.facts)) {
+      facts.facts.forEach(function (f) {
+        if (f && f.state === 'supported' && f.kind && have.indexOf(f.kind) < 0) have.push(f.kind);
+      });
+    }
     var spine = [], guard = 0, seen = {};
     while (guard++ < 24) {
       var fl = have.map(function (k, i) { return F.makeFact({ kind: k, scope: { target: '10.10.10.10' }, source: 'map', created_at: 1700000000000 + i * 1000 }); });
@@ -215,7 +224,7 @@
     var pcov = parserCoverage();
     var trees = portsOnly
       .filter(function (e) { return !want || want.indexOf(e.key) >= 0; })
-      .map(function (e) { var t = portTree(e, pcov); t.spine = spineFor(e); return t; });
+      .map(function (e) { var t = portTree(e, pcov); t.spine = spineFor(e, opts.facts); return t; });
     return {
       scan: { label: 'Port scan', signal: 'Every engagement opens the same way: sweep the target, then let each open port tell you what to try.' },
       ports: trees,

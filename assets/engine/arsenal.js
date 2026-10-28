@@ -107,23 +107,22 @@
       'obol_git(){ local url="$1" k="$2" bin="${3:-$2}" repo_dir;',
       '  repo_dir=$(basename "${url%.git}");',
       '  local bare="${bin%.py}";',
-      '  local d="$TOOLDIR/$repo_dir";',
-      '  if [ ! -d "$d" ]; then',
-      '    for cand in "/opt/$repo_dir" "$HOME/$repo_dir" "$HOME/git/$repo_dir" "/usr/local/src/$repo_dir" "/usr/share/$repo_dir"; do',
-      '      if [ -d "$cand" ]; then d="$cand"; break; fi',
-      '    done',
-      '  fi;',
-      '  if [ ! -d "$d" ]; then',
+      '  local d="" cand;',
+      '  for cand in "/opt/$repo_dir" "$HOME/$repo_dir" "$HOME/git/$repo_dir" "/usr/local/src/$repo_dir" "/usr/share/$repo_dir" "$TOOLDIR/$repo_dir" "$TOOLDIR/${repo_dir}-exploit"; do',
+      '    if [ -d "$cand" ] && [ -n "$(find "$cand" -maxdepth 3 -type f \\( -iname "${bare}.py" -o -iname "$bin" -o -iname "poc.py" -o -iname "exploit.py" -o -iname "zerologon_tester.py" \\) 2>/dev/null | head -n1)" ]; then d="$cand"; break; fi',
+      '  done;',
+      '  if [ -z "$d" ]; then',
       '    local found_py; found_py=$(find /opt "$HOME" /usr/local /usr/share -maxdepth 3 -type f \\( -iname "${bare}.py" -o -iname "$bin" \\) 2>/dev/null | grep -v "/\\.obol/" | grep -v "/\\.local/bin/" | head -n1);',
       '    if [ -n "$found_py" ]; then d=$(dirname "$found_py"); fi',
       '  fi;',
-      '  if [ -d "$d" ]; then skip "$k ($d)";',
+      '  if [ -n "$d" ] && [ -d "$d" ]; then skip "$k ($d)";',
       '  elif [ "$CHECK_ONLY" = "1" ]; then return;',
-      '  else say "git $k ($repo_dir)"; git clone --depth 1 "$url" "$d" >/dev/null 2>&1 || { check_rc $?; warn "clone $k failed"; return; }; fi;',
+      '  else d="$TOOLDIR/$repo_dir"; [ -d "$d" ] && d="$TOOLDIR/${repo_dir}-${bare}"; say "git $k ($repo_dir)"; git clone --depth 1 "$url" "$d" >/dev/null 2>&1 || { check_rc $?; warn "clone $k failed"; return; }; fi;',
       '  mkdir -p "$HOME/.local/bin";',
       '  local target_py; target_py=$(find "$d" -maxdepth 3 -type f -iname "${bare}.py" | head -n1);',
       '  [ -z "$target_py" ] && target_py=$(find "$d" -maxdepth 3 -type f -iname "$bin" | head -n1);',
       '  if [ -z "$target_py" ] && [ "$k" = "keepass-dump-masterkey" ]; then target_py=$(find "$d" -maxdepth 3 -type f -iname "poc.py" | head -n1); fi;',
+      '  if [ -z "$target_py" ] && [ "$k" = "smbghost-rce" ]; then target_py=$(find "$d" -maxdepth 3 -type f -iname "exploit.py" | head -n1); fi;',
       '  if [ -n "$target_py" ]; then',
       '    local actual_bn actual_bare;',
       '    actual_bn=$(basename "$target_py"); actual_bare="${actual_bn%.py}";',
@@ -131,7 +130,8 @@
       '    chmod +x "$HOME/.local/bin/$bare";',
       '    printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$target_py" > "$HOME/.local/bin/${bare}.py";',
       '    chmod +x "$HOME/.local/bin/${bare}.py";',
-      '    for sn in "$bin" "$actual_bn" "$actual_bare"; do',
+      '    for sn in "$k" "$bin" "$actual_bn" "$actual_bare"; do',
+      '      case "$sn" in poc|poc.py|exploit|exploit.py) continue ;; esac',
       '      [ -n "$sn" ] && [ ! -f "$HOME/.local/bin/$sn" ] && { printf \'#!/usr/bin/env bash\\nexec python3 "%s" "$@"\\n\' "$target_py" > "$HOME/.local/bin/$sn"; chmod +x "$HOME/.local/bin/$sn"; };',
       '    done;',
       '  fi;',
@@ -463,12 +463,14 @@
     out.push('        vl=v.lower(); want[vl]=1; order_list.append(vl)');
     out.push('        if not vl.endswith(".py"): want[vl+".py"]=1; order_list.append(vl+".py")');
     out.push('    if k=="keepass-dump-masterkey": want["poc.py"]=1; order_list.append("poc.py")');
+    out.push('    if k=="smbghost-rce": want["exploit.py"]=1; order_list.append("exploit.py")');
     out.push('    for dp, dns, fns in os.walk(d):');
     out.push('        for fn in fns:');
     out.push('            fl=fn.lower()');
     out.push('            if fl in want and fl not in scripts:');
     out.push('                scripts[fl]=os.path.join(dp, fn)');
     out.push('                if k=="keepass-dump-masterkey" and fl=="poc.py": scripts.setdefault("keepass_dump_masterkey.py", os.path.join(dp, fn))');
+    out.push('                if k=="smbghost-rce" and fl=="exploit.py": scripts.setdefault("smbghost_rce.py", os.path.join(dp, fn))');
     out.push('    for cand in order_list:');
     out.push('        if cand in scripts: found_script=scripts[cand]; break');
     out.push('    if found_script:');

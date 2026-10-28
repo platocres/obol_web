@@ -36,7 +36,7 @@
       : (info.lvl === 'privileged' ? '<span class="hb-next hb-next-done">Owned</span>' : '');
 
     var focusBtn = isFocused
-      ? '<span class="hb-focus-chip is-on" title="Active target for Coach &amp; Cruise">● Active</span>'
+      ? '<span class="hb-focus-chip is-on" title="Active target for Cockpit &amp; Cruise">● Active</span>'
       : '<button type="button" class="hb-focus-btn" data-focus-ip="' + U.attr(ip) + '" title="Set ' + U.attr(ip) + ' as active target">Focus</button>';
 
     var hasHostActs = (acts || []).some(function (a) { return a && (a.target === ip || a.scope === 'host:' + ip); });
@@ -44,6 +44,8 @@
     var apathPreview = flow
       ? '<details class="tgt-apath-preview"><summary>Attack Path Walked</summary><div class="tgt-apath-body">' + flow + '</div></details>'
       : '';
+    var prevIps = (info.t && Array.isArray(info.t.previousIps) && info.t.previousIps.length) ? info.t.previousIps : [];
+    var editDrawer = (OBOL.targets && OBOL.targets.renderEditDrawer) ? OBOL.targets.renderEditDrawer(ip) : '';
 
     return '<article class="hb-tcard tgt-card ws-clear-box hb-lvl-' + info.lvl + (isFocused ? ' is-focused' : '') + '" data-tid="' + esc(info.t.id) + '">'
       + '<div class="tgt-card-bar">'
@@ -51,14 +53,17 @@
       + '    <span class="hb-acc ' + b.cls + '">' + b.label + '</span>'
       + '    <a class="hb-tname-link" href="#/target/' + U.attr(ip) + '"><span class="hb-tname">' + esc(host || ip) + '</span>'
       +      (host ? '<span class="hb-tip">' + esc(ip) + '</span>' : '') + '</a>'
+      +      (prevIps.length ? '<span class="hb-prev-ip" title="Previous IP(s): ' + U.attr(prevIps.join(', ')) + '">was ' + esc(prevIps[prevIps.length - 1]) + '</span>' : '')
       + '  </div>'
       + '  <div class="tgt-card-actions">'
       +      focusBtn
+      + '    <button type="button" class="hb-focus-btn" data-edit-target="' + U.attr(ip) + '" title="Edit target or Re-IP after lab respawn">&#9998; Edit / Re-IP</button>'
       + '    <a class="hb-dossier-btn" href="#/target/' + U.attr(ip) + '">Target Dossier &rarr;</a>'
       + '    <button type="button" class="tcard-del" data-tid="' + esc(info.t.id) + '" title="Remove target" aria-label="Remove target ' + U.attr(ip) + '">&times;</button>'
       + '  </div>'
       + '</div>'
       + '<div class="hb-tcard-main tgt-main">'
+      +    editDrawer
       + '  <div class="tgt-meta">'
       + '    <div class="tgt-row"><span class="tgt-k">OS</span><span class="tgt-v' + (info.os ? '' : ' tgt-empty') + '">' + (info.os ? esc(info.os) : 'Not Fingerprinted Yet') + '</span></div>'
       + '    <div class="tgt-row"><span class="tgt-k">Domain</span><span class="tgt-v' + (dom ? '' : ' tgt-empty') + '">' + (dom ? esc(dom) : 'None Known Yet') + '</span></div>'
@@ -107,7 +112,7 @@
       ? '<div class="tgrid">' + filtered.map(function (info) { return dossierCard(info, activeTarget, acts); }).join('') + '</div>'
       : (targets.length
           ? '<div class="coach-empty">No targets match the current filter.</div>'
-          : '<div class="coach-empty">No Targets Yet. Add a target or paste an Nmap scan below and the coach immediately seeds recon moves.</div>');
+          : '<div class="coach-empty">No Targets Yet. Add a target or paste an Nmap scan below and the Cockpit immediately seeds recon moves.</div>');
     return { targets: targets, counts: counts, rowsHtml: rowsHtml };
   }
 
@@ -136,7 +141,7 @@
       + '<div class="targets-top-bar">'
       + '  <div>'
       + '    <h1 class="route-h1">Targets</h1>'
-      + '    <p class="route-sub">Full-scope target board for this engagement. Focus any host for Coach &amp; Cruise, or open its Target Dossier for scoped moves, flags, and attack-path graph.</p>'
+      + '    <p class="route-sub">Full-scope target board for this engagement. Focus any host for Cockpit &amp; Cruise, or open its Target Dossier for scoped moves, flags, and attack-path graph.</p>'
       + '  </div>'
       + '  <a class="cr-btn-glass small" href="#/home">&larr; Engagement Hub</a>'
       + '</div>'
@@ -178,13 +183,31 @@
       + '</section>';
   }
 
+  function sanitizeTargetVal(raw, allowCidr) {
+    var s = String(raw || '').trim();
+    if (/^https?:\/\//i.test(s)) {
+      return s.replace(/^https?:\/\//i, '').replace(/(?::\d+)?(?:\/.*)?$/, '').trim();
+    }
+    if (allowCidr && /^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(s)) return s;
+    return s.replace(/(?::\d+)?(?:\/.*)?$/, '').trim();
+  }
+
   function mounted(ctx) {
     var mount = ctx.mount;
 
+    U.on(mount, 'change', '#t-ip', function (e, t) {
+      var c = sanitizeTargetVal(t.value, true);
+      if (c !== t.value) t.value = c;
+    });
+    U.on(mount, 'change', '#t-host', function (e, t) {
+      var c = sanitizeTargetVal(t.value, false);
+      if (c !== t.value) t.value = c;
+    });
+
     var addBtn = document.getElementById('t-add');
     if (addBtn) addBtn.addEventListener('click', function () {
-      var ip = ((document.getElementById('t-ip') || {}).value || '').trim();
-      var host = ((document.getElementById('t-host') || {}).value || '').trim();
+      var ip = sanitizeTargetVal(((document.getElementById('t-ip') || {}).value || ''), true);
+      var host = sanitizeTargetVal(((document.getElementById('t-host') || {}).value || ''), false);
       if (!ip && !host) return;
       // If user entered a CIDR or space-separated pair in #t-ip and importBulk is available, support it seamlessly
       if (OBOL.targets && OBOL.targets.importBulk && (/\/\d{1,2}\b/.test(ip) || /\s/.test(ip))) {
@@ -218,7 +241,7 @@
       }
       OBOL.store.addFacts(newFacts, 'facts');
       OBOL.app.renderSidebar();
-      U.toast('Target added, coach updated');
+      U.toast('Target added, Cockpit updated');
       OBOL.router.render();
     });
 
@@ -286,6 +309,14 @@
       U.toast('Active target set to ' + ip);
       OBOL.router.render();
     });
+
+    U.on(mount, 'click', '.btn-copy', function (e, b) {
+      U.copy(b.getAttribute('data-copy')).then(function (ok) { U.toast(ok ? 'Command copied' : 'Copy failed', ok ? '' : 'err'); });
+    });
+
+    if (OBOL.targets && OBOL.targets.bindEditDrawer) {
+      OBOL.targets.bindEditDrawer(mount);
+    }
 
     U.on(mount, 'click', '.tcard-del', function (e, t) {
       var id = t.getAttribute('data-tid');

@@ -59,6 +59,9 @@
     var promoteWin = !hasLinuxOs;
     if (port === 21 || sl === 'ftp') _add(facts, mkFact('ftp.reachable', h, value, S, source));
     if (port === 22 || sl === 'ssh') _add(facts, mkFact('ssh.reachable', h, value, S, source));
+    if (port === 23 || sl === 'telnet') _add(facts, mkFact('telnet.reachable', h, value, S, source));
+    if ([512, 513, 514].indexOf(port) >= 0 || sl === 'exec' || sl === 'login' || sl === 'shell') _add(facts, mkFact('rservices.reachable', h, value, S, source));
+    if (port >= 6000 && port <= 6009 && (sl.indexOf('x11') >= 0 || port === 6000)) _add(facts, mkFact('x11.reachable', h, value, S, source));
     if ([25, 465, 587].indexOf(port) >= 0 || sl.indexOf('smtp') >= 0) {
       _add(facts, mkFact('smtp.reachable', h, value, S, source));
       _add(facts, mkFact('mail.reachable', h, value, S, source));
@@ -69,6 +72,8 @@
     if ([5900, 5901, 5902].indexOf(port) >= 0 || sl.indexOf('vnc') >= 0) {
       _add(facts, mkFact('vnc.reachable', h, value, S, source));
     }
+    if (port === 873 || sl.indexOf('rsync') >= 0) _add(facts, mkFact('rsync.reachable', h, value, S, source));
+    if (port === 2049 || sl.indexOf('nfs') >= 0) _add(facts, mkFact('nfs.reachable', h, value, S, source));
     if ([389, 636, 3268, 3269].indexOf(port) >= 0 || sl.indexOf('ldap') >= 0) _add(facts, mkFact('ldap.reachable', h, value, S, source));
     if ([445, 139].indexOf(port) >= 0 || sl === 'microsoft-ds' || sl === 'netbios-ssn') _add(facts, mkFact('smb.reachable', h, value, S, source));
     if (port === 88 || sl.indexOf('kerberos') >= 0) {
@@ -89,14 +94,18 @@
       _add(facts, mkFact('rdp.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'rdp'), 'medium', 'nmap', promoteWin);
     }
-    var isWinrmPort = [5985, 5986, 47001].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0;
+    var isHttpApiPort = port === 47001;
+    var isWinrmPort = !isHttpApiPort && ([5985, 5986].indexOf(port) >= 0 || sl.indexOf('wsman') >= 0 || sl.indexOf('winrm') >= 0);
+    if (isHttpApiPort) {
+      C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'httpapi'), 'medium', 'nmap', promoteWin);
+    }
     if (isWinrmPort) {
       _add(facts, mkFact('winrm.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'winrm'), 'medium', 'nmap', promoteWin);
     }
-    // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM, not a browsable web app, so it must not
+    // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM/HTTP.sys, not a browsable web app, so it must not
     // mint http.reachable (nmap labels it "http") or it would unlock the web-exploit moves on an AD box.
-    if (!isWinrmPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http')) _add(facts, mkFact('http.reachable', h, value, S, source));
+    if (!isWinrmPort && !isHttpApiPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http')) _add(facts, mkFact('http.reachable', h, value, S, source));
   }
   C._parse_service_reachability = _parse_service_reachability;
 
@@ -194,12 +203,14 @@
       reAll(/^\|\s*_?([^\s|][^\r\n]*)$/gim, tBlk).forEach(function (m) { tFiles.push(m[1].trim()); });
       if (tFiles.length) _add(facts, mkFact('loot.files', h, { files: tFiles, tool: 'nmap-tftp' }, S, source));
     }
+    var hasHttpReachable = facts.some(function (f) { return f && f.kind === 'http.reachable'; });
     var titles = [];
     reAll(C._NMAP_HTTP_TITLE_RE, text).forEach(function (m) {
       var t = m.groups.title.trim();
       if (!t) return;
       var tl = t.toLowerCase();
       if (tl.indexOf('did not follow redirect') === 0 || tl.indexOf("site doesn't have a title") === 0) return;
+      if (!hasHttpReachable && /^(?:not found|404 not found|bad request|400 bad request|service unavailable|503 service unavailable)$/i.test(tl)) return;
       titles.push(t);
     });
     if (titles.length) _add(facts, mkFact('web.title', h, { titles: C.uniqueSortedCI(titles).slice(0, 10) }, S, source));
@@ -250,9 +261,11 @@
     // Never fall back to text parsing of rejected XML or expand an external entity.
     if (/<!ENTITY/i.test(text) || /<!DOCTYPE[^>]*\[/i.test(text) || text.length > 8000000) return true;
     var block = _NMAPRUN_BLOCK_RE.exec(text);
-    if (!block) return true;
-    var xml = block[0], runAttrs = (/<nmaprun\b([^>]*)>/i.exec(xml) || [])[1];
-    var hosts = xml.match(/<host\b[^>]*>[\s\S]*?<\/host>/gi) || [];
+    var startIdx = block ? -1 : text.search(/<nmaprun\b/i);
+    var xml = block ? block[0] : (startIdx >= 0 ? text.slice(startIdx) : '');
+    if (!xml) return true;
+    var runAttrs = (/<nmaprun\b([^>]*)>/i.exec(xml) || [])[1];
+    var hosts = xml.match(/<host\b[^>]*>[\s\S]*?(?:<\/host>|$)/gi) || [];
     hosts.forEach(function (host) {
       var status = /<status\b([^>]*)>/i.exec(host);
       if (status && xmlAttr(status[1], 'state') === 'down') return;
@@ -319,7 +332,7 @@
       }
     }
     if (text.indexOf('<nmaprun') >= 0) {
-      var xmlPortRe = /<port\b([^>]*)>([\s\S]*?)<\/port>/gi, xpm;
+      var xmlPortRe = /<port\b([^>]*)>([\s\S]*?)(?:<\/port>|(?=<port\b|<\/ports>|<\/host>|$))/gi, xpm;
       while ((xpm = xmlPortRe.exec(text)) !== null) {
         var xProto = xmlAttr(xpm[1], 'protocol').toLowerCase(), xPort = parseInt(xmlAttr(xpm[1], 'portid'), 10), xBody = xpm[2];
         if (!/^(tcp|udp)$/.test(xProto) || !xPort || xPort > 65535 || !/<state\s+[^>]*?\bstate=["']open["']/i.test(xBody)) continue;
@@ -348,7 +361,7 @@
       if (latency) value.latency = latency[1];
       _add(facts, mkFact('host.up', h, value, S, source));
     }
-    var scanSeen = Object.keys(openPorts).length > 0 || /Host is up|Nmap done|Nmap scan report for|Status:\s*Up\b|<nmaprun\b/i.test(text);
+    var scanSeen = (Object.keys(openPorts).length > 0 || /Host is up|Nmap done|Nmap scan report for|Status:\s*Up\b|<nmaprun\b/i.test(text)) && !/\b0 hosts up\b|\bHost seems down\b/i.test(text);
     // Read the real flags where nmap prints them (the `-oN` header's "as:" line), and infer the
     // profile from CONTENT: service/version columns or NSE script output (`| line`) mean a version/
     // script scan ran, whatever command the paste was tagged with - so one paste advances the coach.
@@ -372,12 +385,15 @@
       var value = openPorts[k];
       summary.push(value.port);
       _add(facts, mkFact('port:' + value.port, h, value, S, source));
-      if (value.service) _add(facts, mkFact('service.' + _normalize_service(value.service), h, value, S, source));
+      if (value.service) {
+        var normSvc = (value.port === 47001 && /^(?:winrm|http|wsman)$/i.test(value.service)) ? 'httpapi' : _normalize_service(value.service);
+        _add(facts, mkFact('service.' + normSvc, h, value, S, source));
+      }
       _parse_service_reachability(value.port, value.protocol, value.service || '', ws, source, facts);
     });
     if (summary.length) {
       _add(facts, mkFact('ports.open', h, { ports: uniqSortedNums(summary) }, S, source));
-      if (cmdL.indexOf('proxychains') >= 0 || actionId === 'proxychains-nmap-tcp') {
+      if (cmdL.indexOf('proxychains') >= 0 || (ws && ws._hasProxychains) || actionId === 'proxychains-nmap-tcp') {
         _add(facts, mkFact('pivot.ports', h, { ports: uniqSortedNums(summary), via: 'proxychains' }, S, source));
       }
     }

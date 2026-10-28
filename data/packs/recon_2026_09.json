@@ -30,7 +30,8 @@
         "ad.user_list"
       ],
       "obsoleted_by": [
-        "blocker.smb_null_denied"
+        "blocker.smb_null_denied",
+        "blocker.samr_null_denied"
       ],
       "priority": 74,
       "phase": "enum",
@@ -155,7 +156,12 @@
         "port:53"
       ],
       "produces": [
-        "dns.zone"
+        "dns.zone",
+        "dns.a_record"
+      ],
+      "settled_by": [
+        "dns.zone",
+        "dns.a_record"
       ],
       "priority": 66,
       "phase": "recon",
@@ -394,9 +400,7 @@
       "os": [
         "linux"
       ],
-      "requires_all": [
-        "access.desktop"
-      ],
+      "requires_all": [],
       "produces": [
         "foothold.linux"
       ],
@@ -427,7 +431,10 @@
           "note": "TightVNC / UltraVNC password decryption: Decrypts DES-obfuscated VNC passwords recovered from registry or vncpwd configuration files."
         }
       ],
-      "requires_any": [],
+      "requires_any": [
+        "access.desktop",
+        "service.vnc"
+      ],
       "deprioritize_when": [
         "foothold.linux"
       ]
@@ -448,7 +455,9 @@
       "requires_any": [
         "port:25",
         "port:587",
-        "port:465"
+        "port:465",
+        "service.mail",
+        "smtp.open_relay"
       ],
       "produces": [
         "ad.user_list"
@@ -545,7 +554,8 @@
         "port:110",
         "port:143",
         "port:993",
-        "port:995"
+        "port:995",
+        "smtp.open_relay"
       ],
       "produces": [
         "service.mail",
@@ -592,9 +602,13 @@
         "xfreerdp",
         "nmap"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_any": [
         "rdp.reachable",
-        "port:3389"
+        "port:3389",
+        "host.rdp_enabled"
       ],
       "produces": [
         "rdp.reachable",
@@ -641,7 +655,7 @@
         },
         {
           "tool": "xfreerdp",
-          "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore",
+          "run": "xfreerdp /v:{{target}} /u:{{user}} /p:'{{password}}' +clipboard /dynamic-resolution /cert:ignore /tls:seclevel:0",
           "note": "Open the interactive session, this is where desktop access is actually taken (use /pth:{{nthash}} instead of /p for pass-the-hash)."
         }
       ],
@@ -1132,7 +1146,8 @@
       ],
       "produces": [
         "loot.material",
-        "x11.reachable"
+        "x11.reachable",
+        "x11.unauth"
       ],
       "priority": 46,
       "autonomy": "manual",
@@ -1178,7 +1193,8 @@
       ],
       "requires_any": [
         "port:6000",
-        "x11.reachable"
+        "x11.reachable",
+        "x11.unauth"
       ],
       "produces": [
         "credential.candidate"
@@ -1218,7 +1234,8 @@
         "curl"
       ],
       "requires_any": [
-        "port:21"
+        "port:21",
+        "ftp.anonymous_login"
       ],
       "produces": [
         "foothold.webshell"
@@ -1255,7 +1272,8 @@
       "deprioritize_when": [
         "foothold.webshell",
         "foothold.linux",
-        "foothold.windows"
+        "foothold.windows",
+        "ftp.anon_write"
       ]
     },
     {
@@ -1402,7 +1420,7 @@
         },
         {
           "tool": "nmap",
-          "run": "nmap -b anonymous:anonymous@{{target}} -p 1-1000 172.16.5.10",
+          "run": "nmap -b anonymous:anonymous@{{target}} -p 1-1000 {{internal_host|172.16.5.10}}",
           "note": "Let nmap run the whole bounce scan: -b is the FTP relay, the trailing host is the internal target.",
           "settled_by": [
             "ports.open",
@@ -1537,8 +1555,7 @@
       ],
       "requires_any": [
         "port:445",
-        "port:139",
-        "vuln.samba_usermap"
+        "port:139"
       ],
       "produces": [
         "foothold.linux",
@@ -1575,7 +1592,8 @@
       ],
       "requires_all": [],
       "deprioritize_when": [
-        "foothold.linux"
+        "foothold.linux",
+        "vuln.samba_usermap"
       ]
     },
     {
@@ -1817,7 +1835,7 @@
       "phase": "access",
       "requires_any": [
         "port:3000",
-        "vuln.aerospike"
+        "aerospike.reachable"
       ],
       "produces": [
         "foothold.linux"
@@ -1854,7 +1872,9 @@
       ],
       "requires_all": [],
       "deprioritize_when": [
-        "foothold.linux"
+        "foothold.linux",
+        "vuln.aerospike_udf",
+        "vuln.aerospike"
       ]
     },
     {
@@ -1968,7 +1988,7 @@
         "advice.hosts"
       ],
       "priority": 94,
-      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (box.htb, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works - and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
+      "hypothesis": "\"Could not resolve host\" means a tool was handed a name (app.acme.internal, dc01.corp.local) with nothing to resolve it. Map the name to the IP in /etc/hosts and everything that failed just works - and many web apps and all of Kerberos REQUIRE the name, not the IP, so this unblocks virtual hosts and TGT requests at the same time.",
       "proves": "nothing attack-wise; it makes name-addressed tools and vhosts reachable",
       "does_not_prove": "that the name is the only vhost; enumerate others once resolution works",
       "report": {
@@ -2159,7 +2179,6 @@
       "os": [],
       "phase": "recon",
       "requires_any": [
-        "port:443",
         "vuln.heartbleed"
       ],
       "produces": [
@@ -2196,7 +2215,10 @@
           "note": "Extracts credential candidates, SSH keys, and session material from the leaked memory dump."
         }
       ],
-      "requires_all": []
+      "requires_all": [],
+      "deprioritize_when": [
+        "credential.available"
+      ]
     },
     {
       "id": "samba-usermap-script-rce",
@@ -2212,9 +2234,7 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "vuln.samba_usermap",
-        "port:139",
-        "port:445"
+        "vuln.samba_usermap"
       ],
       "produces": [
         "foothold.linux",
@@ -2263,9 +2283,9 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "port:161",
         "service.snmp",
-        "snmp.community"
+        "snmp.community",
+        "snmp.info"
       ],
       "produces": [
         "credential.plaintext",
@@ -2292,6 +2312,72 @@
           "tool": "snmpbulkwalk",
           "run": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.5",
           "note": "Query hrSWRunParameters OID branch to dump command-line execution parameters leaking credentials."
+        }
+      ]
+    },
+    {
+      "id": "smbv1-vuln-verify",
+      "title": "SMBv1 Dialect MS17-010 & Vulnerability Verification",
+      "hypothesis": "Target negotiates or enables the legacy SMBv1 dialect (NT LM 0.12). SMBv1 is deprecated and frequently vulnerable to critical unauthenticated remote code execution flaws including MS17-010 (EternalBlue) and MS08-067.",
+      "tool": "nxc",
+      "tools": [
+        "nxc",
+        "nmap"
+      ],
+      "os": [
+        "windows",
+        "linux"
+      ],
+      "diagnostic": true,
+      "phase": "enum",
+      "requires_all": [],
+      "requires_any": [
+        "smb.smbv1"
+      ],
+      "produces": [
+        "smb.ms17_010"
+      ],
+      "settled_by": [
+        "smb.ms17_010",
+        "scan.nmap.vuln"
+      ],
+      "obsoleted_by": [
+        "smb.ms17_010",
+        "foothold.windows",
+        "foothold.linux"
+      ],
+      "deprioritize_when": [
+        "foothold.windows",
+        "foothold.linux",
+        "access.system"
+      ],
+      "priority": 84,
+      "proves": "whether the SMBv1-enabled target is vulnerable to MS17-010 (EternalBlue) or MS08-067 without sending crash-inducing exploit payloads",
+      "does_not_prove": "remote code execution until the vulnerability is exploited",
+      "report": {
+        "finding": "SMBv1 Dialect Enabled / MS17-010 Vulnerability Verification",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://www.netexec.wiki/smb-protocol"
+      ],
+      "commands": [
+        {
+          "tool": "nxc",
+          "run": "nxc smb {{target}} -u '' -p '' -M ms17-010",
+          "note": "Probe SMBv1 target with NetExec's safe ms17-010 check module to confirm if the host is missing the EternalBlue patch.",
+          "settled_by": [
+            "smb.ms17_010"
+          ]
+        },
+        {
+          "tool": "nmap",
+          "run": "nmap -Pn -p 445,139 --script smb-vuln-ms17-010,smb-vuln-ms08-067 {{target}}",
+          "note": "Run targeted Nmap SMB vulnerability NSE checks against the SMBv1 endpoint.",
+          "settled_by": [
+            "smb.ms17_010",
+            "scan.nmap.vuln"
+          ]
         }
       ]
     }

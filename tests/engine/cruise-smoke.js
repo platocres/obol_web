@@ -144,14 +144,20 @@ const rSynced = C.checkArsenalReadiness('recon', null, {
 ok(rSynced.synced === true && rSynced.stageReady.indexOf('nmap') >= 0 && rSynced.stageMissing.indexOf('ffuf') >= 0, 'checkArsenalReadiness identifies ready vs missing stage tools');
 
 const st1Exam = C.buildStageScript('recon', { mode: 'exam', params: { target: '10.10.10.5' }, facts: facts, pack: PACK });
+const st1Lab = C.buildStageScript('recon', { mode: 'lab', params: { target: '10.10.10.5' }, facts: facts, pack: PACK });
 ok(/Self-healing Loadout runtime preamble/.test(st1Exam), 'Stage 1 script embeds the self-healing Loadout runtime preamble');
 ok(!/OBOL-ARSENAL/.test(st1Exam), 'Stage 1 script does not dump noisy OBOL-ARSENAL inventory JSON');
 ok(!/\{\{[a-z]/i.test(st1Exam), 'Stage 1 script has no {{token}} leaks');
+ok(!/--rid-brute|asrep-roast|crack-hashes-|lab-auto-foothold|add groupMember|add dcsync/.test(st1Exam), 'Stage 1 Exam respects strict recon boundaries (no RID brute, roasting, cracking, or foothold)');
+ok(!/--rid-brute|asrep-roast|crack-hashes-|lab-auto-foothold|add groupMember|add dcsync/.test(st1Lab), 'Stage 1 Lab respects strict recon boundaries (no cross-stage foothold or group loops)');
 
 const st2Lab = C.buildStageScript('enum', { mode: 'lab', params: { target: '10.10.10.5', username: 'svc', password: 'pw' }, facts: credFacts, pack: PACK });
 ok(/Self-healing Loadout runtime preamble/.test(st2Lab), 'Stage 2 script embeds the self-healing Loadout runtime preamble');
 ok(!/OBOL-ARSENAL/.test(st2Lab), 'Stage 2 script does not dump noisy OBOL-ARSENAL inventory JSON');
 ok(!/\{\{[a-z]/i.test(st2Lab), 'Stage 2 script has no {{token}} leaks');
+ok(/PORTS="53,88,139,389,445,636,5985"/.test(st2Lab), 'Stage 2 script embeds proven open ports from ledger');
+ok(/if has_port 1433; then/.test(st2Lab) && !/for PROTO in smb winrm ldap mssql ssh rdp ftp/.test(st2Lab), 'Stage 2 credential validation is strictly gated per open port');
+ok(!/lab-auto-foothold|add groupMember|add dcsync/.test(st2Lab), 'Stage 2 Lab stays within Stage 2 (no cross-stage shell execution or hardcoded Forest group loops)');
 
 const st3Win = C.buildStageScript('foothold', { mode: 'lab', osFamily: 'windows', params: { target: '10.10.10.5', username: 'svc', password: 'pw' }, facts: credFacts, pack: PACK });
 const st4Win = C.buildStageScript('loot', { mode: 'lab', osFamily: 'windows', params: { target: '10.10.10.5', username: 'Administrator', nthash: '32693b11e6aa90eb43d32c72a07ceea6' }, facts: credFacts, pack: PACK });

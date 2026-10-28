@@ -302,6 +302,52 @@
       impact: 'Operating system command execution and arbitrary file access on {{target}} as the PostgreSQL service account.'
     },
 
+    'smb-ms17-010-smbghost': {
+      phase_label: 'Initial Access, SMB Remote Code Execution (MS17-010 / SMBGhost)',
+      explanation: 'The SMB service on {{target}} was missing critical kernel buffer-handling patches (MS17-010 EternalBlue or CVE-2020-0796 SMBGhost), permitting unauthenticated remote code execution in kernel context over TCP port 445.',
+      impact: 'Unauthenticated `NT AUTHORITY\\SYSTEM` code execution and full compromise of {{target}}.'
+    },
+    'ad-printnightmare-nopac-coercion': {
+      phase_label: 'Privilege Escalation, Active Directory RPC / Authentication Escalation (PrintNightmare / NoPac / Coercion)',
+      explanation: 'An Active Directory RPC or Kerberos authentication weakness on {{target}} in {{domain}} (such as PrintNightmare driver installation, sAMAccountName spoofing / NoPac, or NTLM authentication coercion via PetitPotam/PrinterBug) permitted privilege escalation to a Domain Controller or SYSTEM context.',
+      impact: 'Administrative or `NT AUTHORITY\\SYSTEM` compromise of {{target}} and potential full {{domain}} domain takeover.'
+    },
+    'ad-machine-account-quota-sid-history': {
+      phase_label: 'Privilege Escalation, Active Directory MachineAccountQuota / SID History / SCCM Abuse',
+      explanation: 'Directory or enterprise management configuration in {{domain}} on {{target}} permitted non-administrative principals to provision machine accounts (`ms-DS-MachineAccountQuota > 0`), leverage privileged `sIDHistory` claims, or request SCCM/MECM policy secrets, enabling privilege escalation across the domain.',
+      impact: 'Escalation to computer-account, local administrator, or domain-equivalent privileges within {{domain}}.'
+    },
+    'ftp-anonymous-access': {
+      phase_label: 'Initial Access, Anonymous FTP Access / Writable FTP Root',
+      explanation: 'The FTP server on {{target}} permitted unauthenticated (`anonymous`) login and exposed sensitive files or a writable directory tree mapped to an accessible service root.',
+      impact: 'Unauthenticated retrieval of configuration/credential files or remote code execution by uploading an executable payload.'
+    },
+    'smb-writable-or-sensitive-share': {
+      phase_label: 'Initial Access, Writable or Sensitive SMB Network Share Exposure',
+      explanation: 'A non-default SMB network share on {{target}} granted read or write permissions to unauthenticated or low-privileged users, exposing sensitive files, user profiles, or an executable staging directory.',
+      impact: 'Disclosure of stored credentials and configuration artifacts, or code execution via planted scripts/binaries.'
+    },
+    'domain-cached-credentials-mscache': {
+      phase_label: 'Credential Access, Domain Cached Credentials (MSCachev2 / DCC2) Recovery',
+      explanation: 'Administrative access to the local registry/LSASS hives on {{target}} exposed cached domain logon verifiers (`NL$KM` / MSCachev2) for {{subject}}, which were extracted for offline password recovery.',
+      impact: 'Offline recovery of domain user or administrator plaintext passwords for lateral movement in {{domain}}.'
+    },
+    'dns-zone-transfer-smtp-relay': {
+      phase_label: 'Initial Access, Unrestricted DNS Zone Transfer (AXFR) / Open Mail Relay',
+      explanation: 'The DNS or SMTP service on {{target}} permitted unrestricted zone transfers (`AXFR`) or unauthenticated mail relay, disclosing internal hostnames, virtual hosts, and network topology.',
+      impact: 'Enumeration of internal attack surface, virtual hosts, and service endpoints across {{domain}}.'
+    },
+    'exposed-sensitive-file': {
+      phase_label: 'Initial Access, Exposed Sensitive File / Backup Artifact',
+      explanation: 'The web server on {{target}} exposed a sensitive backup archive, configuration file, or administrative artifact over HTTP without authentication.',
+      impact: 'Disclosure of application source code, database credentials, or private keys leading to an authenticated foothold.'
+    },
+    'outdated-vulnerable-software': {
+      phase_label: 'Initial Access, Vulnerable / Outdated Service Version',
+      explanation: 'A network service or web application component on {{target}} ran an outdated software release matching a known public exploit, enabling unauthorized access or code execution.',
+      impact: 'Exploitation of a known software vulnerability to establish or elevate access on {{target}}.'
+    },
+
     // ---- Fallback ----
     '_default': {
       phase_label: '',

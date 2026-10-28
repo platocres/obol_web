@@ -1,26 +1,26 @@
 /*!
- * obol ui - routes/study.js - Study mode (milestone 1: the AD vertical slice).
+ * obol ui - routes/study.js - Study mode (Learn methodology, interactive command workbench, and by-port decision map).
  *
- * Left: the AD lane as a clickable, phase-grouped graph. Right: the selected node, in one of two
- * gears - WATCH (the derived conditional cell: what it is → prereqs → remote-first commands → real
- * sample output with the signal highlighted → proves/opens → common mistake) or YOUR TURN
- * (retrieval practice: a situation, multiple choice, a verdict on every answer, the cell as reward).
+ * Left: the active lane as a clickable, topically-grouped rail.
+ * Center: WATCH (Before -> During -> After flow with the Unified Interactive Command & Terminal Workbench,
+ * Switch & Argument Breakdown, and Next Move Command Previews) or YOUR TURN (retrieval practice).
+ * Right: Operator Field Guide (Playbook & Tactical Variations, Signal & False Positives, If It Fails / Blockers).
  *
- * All content comes from OBOL.study + OBOL.STUDY_FIXTURES. No hand-authored
- * lessons live here - this file is rendering + interaction only.
+ * All content comes from OBOL.study + OBOL.STUDY_FIXTURES.
  */
 (function (root) {
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
   var U = OBOL.util;
 
-  var _view = 'map';             // 'map' (pick a lane) | 'graph' (all lanes) | 'node' (study one step)
+  var _view = 'map';             // 'map' (pick a lane) | 'atlas' (all lanes) | 'ports' | 'sim' | 'node' (study one step)
   var _from = 'map';             // where a node was opened from, so "back" returns there
   var _gear = 'watch';           // 'watch' | 'practice'
   var _sel = 'asrep-roast';      // selected lane node
   var _autolane = false;         // Watch: auto-advance through the whole chain
   var _autoplay = false;         // start the replay as soon as the next node mounts (chain mode)
-  var _rpToken = null;           // cancel token for the running replay's timers
+  var _rpToken = null;
+  var _rpIo = null;           // cancel token for the running replay's timers
   var _atlasPath = [];           // Atlas: the custom path being drawn (ordered node ids)
   var _scenario = null;          // Atlas: the active fixed scenario key (null = free-draw)
   var _az = null;                // Atlas pan/zoom state {tx,ty,k}; null = fit on mount
@@ -31,7 +31,7 @@
   var _evOpen = null;            // by-port: evidence-card key -> true when that card is expanded (persisted)
   function evOpen() { if (_evOpen) return _evOpen; _evOpen = {}; try { var s = localStorage.getItem('obol.evOpen'); if (s) _evOpen = JSON.parse(s) || {}; } catch (e) {} return _evOpen; }
   function evSave() { try { localStorage.setItem('obol.evOpen', JSON.stringify(_evOpen || {})); } catch (e) {} }
-  var _evMode = 'cards';          // by-port: 'cards' (the ordered-move cards) | 'map' (the derived LTR decision forest)
+  var _evMode = 'cards';         // by-port: 'cards' (the ordered-move cards) | 'map' (the derived LTR decision forest)
   try { var _em = localStorage.getItem('obol.evMode'); if (_em === 'map' || _em === 'cards') _evMode = _em; } catch (e) {}
   var _atlasQuery = '';          // Atlas: current search text (dims non-matching steps)
   var _whyOverride = {};         // node: moveId -> true when the learner asked to show the reasoning anyway
@@ -39,8 +39,12 @@
   var _recapPath = {};           // "how you got here": moveId -> selected lead-up path key
   var _rpSeen = {};              // Watch: moveId -> already auto-played once (so it plays on first scroll-in, not again)
   var _benchSel = {};            // field-notes bench: moveId -> selected technique index
-  var _railScroll = null;        // node view: rail (.study-graph) scrollTop to restore after a re-render, so clicking a step keeps your place in the list
-  var _railNodeSeen = null;      // node view: the move we last scrolled the rail to (so we only auto-scroll on a genuine arrival, not every in-place re-render)
+  var _wbCmdIdx = {};            // unified workbench: moveId -> selected command index into cell.commands
+  var _wbStage = {};             // unified workbench: moveId -> selected hub stage key ('all' or stage.key)
+  var _wbStepIdx = {};           // unified workbench: moveId + ':' + cmdIdx -> selected step index in multi-step pipeline
+  var _fgTab = {};               // operator field guide: moveId -> 'playbook' | 'signal' | 'blockers'
+  var _railScroll = null;        // node view: rail (.study-graph) scrollTop to restore after a re-render
+  var _railNodeSeen = null;      // node view: the move we last scrolled the rail to
   var _benchTok = null;          // field-notes bench: cancel token for the running demo animation
   var _simKey = null;            // cold-box sim: active scenario key (null = pick one)
   var _simStep = 0;              // cold-box sim: current step index
@@ -48,9 +52,8 @@
 
   function esc(s) { return U.esc(String(s == null ? '' : s)); }
   function study() { return OBOL.study; }
-  // raw fact kind → the human phrase the packs already carry (ad.user_list → "a domain user list")
   function human(k) { try { return (OBOL.pack && OBOL.pack.friendly) ? OBOL.pack.friendly(k) : k; } catch (e) { return k; } }
-  // Title Case for short label phrases: keep acronyms (HTTP, SMB, RID), lowercase minor words unless first.
+
   var SMALL_WORDS = { a: 1, an: 1, the: 1, and: 1, or: 1, but: 1, nor: 1, of: 1, to: 1, in: 1, on: 1, at: 1, by: 1, for: 1, with: 1, from: 1, via: 1, per: 1, vs: 1 };
   function titleCase(str) {
     var first = true;
@@ -59,9 +62,9 @@
       var isFirst = first; first = false;
       return tok.split('-').map(function (part, pi) {
         if (!part) return part;
-        if (/^[A-Z0-9][A-Z0-9.]*$/.test(part) && part.length >= 2) return part;   // acronym, keep as-is
+        if (/^[A-Z0-9][A-Z0-9.]*$/.test(part) && part.length >= 2) return part;
         var lower = part.toLowerCase();
-        if (!isFirst && pi === 0 && SMALL_WORDS[lower]) return lower;              // minor word, not first
+        if (!isFirst && pi === 0 && SMALL_WORDS[lower]) return lower;
         return part.charAt(0).toUpperCase() + part.slice(1);
       }).join('-');
     }).join('');
@@ -69,7 +72,6 @@
   function factChips(list, cls) {
     return (list || []).map(function (x) { return '<button type="button" class="study-chip study-chip-fact ' + (cls || '') + '" data-fact="' + U.attr(x) + '" title="What produces ' + U.attr(human(x)) + ', and what it unlocks">' + esc(titleCase(human(x))) + '</button>'; }).join('');
   }
-  // wrap code-ish fragments in prose as real <code> (backticked spans, $hashes, fact.kinds, CONSTANTS)
   function codeify(s) {
     var out = esc(String(s == null ? '' : s));
     out = out.replace(/`([^`]+)`/g, '<code class="study-ic">$1</code>');
@@ -83,7 +85,15 @@
   function locusGlyph(label) { return label === 'REMOTE' ? OBOL.ic('box') : (label === 'OFFLINE' ? OBOL.ic('disk') : OBOL.ic('host')); }
 
   function laneKeyOf(moveId) { var e = study().laneEntry(moveId); return e ? e.laneKey : 'ad'; }
-  function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key }; }
+  function laneMeta(key) { var ls = study().lanes(); for (var i = 0; i < ls.length; i++) if (ls[i].key === key) return ls[i]; return { name: key, short: key }; }
+
+  function detectPromptFor(cmdStr, toolName, whereHint, osHint) {
+    if (study().detectPrompt) return study().detectPrompt(cmdStr, toolName, whereHint, osHint);
+    return whereHint === 'host' ? 'target$' : 'kali$';
+  }
+  function isHostPrompt(pr, whereHint) {
+    return whereHint === 'host' || (pr && pr !== 'kali$');
+  }
 
   // ---- left: the current lane (or custom path) as a rail --------------------------------------
   function masteryGlyph(id) {
@@ -108,11 +118,8 @@
     } else {
       var lk2 = laneKeyOf(_sel), lane = study().lane(lk2);
       header = laneMeta(lk2).name + ' · click a step';
-      // group the lane's steps by TOPICAL category so related moves sit together (all the SQL in one
-      // place), each a single contiguous section. A move with no category falls back to its stage.
       var groups = [], gmap = {};
       lane.forEach(function (n) { var p = n.category || n.phase || 'Steps'; if (!gmap[p]) { gmap[p] = []; groups.push(p); } gmap[p].push(n); });
-      // order: curated topical categories first (engine CATEGORY_ORDER), then any stage fallbacks.
       var ORDER = (study().CATEGORY_ORDER || []).concat(['Recon', 'Enumeration', 'Web', 'Foothold', 'Credentials', 'Escalate', 'Lateral', 'Active Directory', 'Persistence', 'Loot', 'Proof', 'Steps']);
       groups.sort(function (a, b) {
         var ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
@@ -142,55 +149,46 @@
   function chips(list, cls) {
     return (list || []).map(function (x) { return '<span class="study-chip ' + (cls || '') + '">' + esc(x) + '</span>'; }).join('');
   }
-  function commandBlock(cmd) {
-    return '<div class="study-cmd ' + locusClass(cmd.rank) + '">'
-      + '<div class="study-cmd-h"><span class="study-loc">' + locusGlyph(cmd.locus) + ' ' + esc(cmd.locus) + '</span>'
-      + '<span class="study-cmd-tool">' + esc(cmd.tool) + '</span>'
-      + '<span class="study-cmd-tag">' + esc(cmd.tag) + '</span></div>'
-      + '<pre class="study-cmd-run">' + esc(cmd.run) + '</pre>'
-      + (cmd.note ? '<div class="study-cmd-why">↳ ' + codeify(cmd.note) + '</div>' : '')
-      + '</div>';
+  function benchParams() {
+    try { var eng = OBOL.store && OBOL.store.active && OBOL.store.active(); var p = (eng && eng.params) || {}; return p; } catch (e) { return {}; }
   }
-  function outputBlock(output) {
-    if (!output || !output.text) return '';
-    var sig = output.signal || '';
-    var lines = output.text.split('\n').map(function (ln) {
-      var hot = sig && ln.indexOf(sig) >= 0;
-      return '<span class="study-ln' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</span>';
-    }).join('');
-    return '<div class="study-term">' + lines + '</div>'
-      + (output.teach ? '<div class="study-annot"><span class="study-ar">↳</span><div>' + esc(output.teach) + '</div></div>' : '');
+  function benchFill(str) {
+    var p = benchParams(), out = String(str == null ? '' : str), tgt = p.target || p.rhost;
+    if (tgt) out = out.replace(/<target>/g, tgt);
+    if (p.lhost) out = out.replace(/<lhost>/g, p.lhost);
+    if (p.domain) out = out.replace(/<domain>/g, p.domain);
+    return out;
   }
-  // ---- the replay player (the star of Watch): one remote-first command runs, output streams, the
-  // signal lights up, the facts it mints pop. Markup only - the controller lives in mounted(). ----
-  function replayPlayer(rp) {
-    if (!rp) return '';
-    var idle = rp.hasOutput
-      ? 'Watch <b>' + esc(rp.tool) + '</b> run against the target and the result land, the way it would on a real box. It plays as you scroll here; press <b>Replay</b> to see it again.'
-      : 'Watch <b>' + esc(rp.tool) + '</b> run. <span class="rp-nosample">A captured sample of this step’s output is still being written, so you’ll see the command and what it proves.</span>';
-    var recap = recapBlock();
-    // the facts this move mints are static truth, so show them at rest; Play re-animates them.
-    var factsInit = (rp.proves && rp.proves.length)
-      ? '<span class="rp-facts-l">New facts in hand</span>' + rp.proves.map(function (f) { return '<span class="study-chip proof">+ ' + esc(titleCase(human(f))) + '</span>'; }).join('')
-      : '';
-    return '<div class="study-replay" data-move="' + U.attr(rp.id) + '">'
-      + '<div class="study-replay-bar"><span class="study-replay-title">▶ Watch it run</span>'
-      + '<span class="study-replay-loc">' + locusGlyph(rp.locus) + ' ' + esc(rp.locus) + ' · ' + esc(rp.tool) + '</span></div>'
-      + recap
-      + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
-      + '<div class="study-replay-facts" id="rp-facts" aria-live="polite">' + factsInit + '</div>'
-      + '<div class="study-replay-ctrl">'
-      + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
-      + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
-      + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
-      + (recap
-          ? ''
-          : '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>')
-      + '<span class="study-rp-prog"></span>'
-      + '</div></div>';
+  function benchLive() { var p = benchParams(); return !!(p.target || p.rhost); }
+
+  function renderCmdTokens(cmdObj, fallbackStr, toolName) {
+    var toks = (cmdObj && cmdObj.tokens && cmdObj.tokens.length)
+      ? cmdObj.tokens
+      : (study().tokenizeCmd ? study().tokenizeCmd(fallbackStr || (cmdObj && cmdObj.run) || '', toolName || (cmdObj && cmdObj.tool) || '') : []);
+    if (!toks || !toks.length) return esc(benchFill(fallbackStr || (cmdObj && cmdObj.run) || ''));
+    return toks.map(function (t) {
+      return '<span class="wb-tok wb-tok-' + esc(t.role || 'arg') + '">' + esc(benchFill(t.text)) + '</span>';
+    }).join(' ');
   }
 
-  // ---- "Run it from" toggle: remote (your box) vs on the target (after a shell) -----------------
+  function commandBlock(cmd, activeIdx) {
+    var isSel = (activeIdx != null && cmd.cmdIdx != null && String(cmd.cmdIdx) === String(activeIdx));
+    var idxAttr = cmd.cmdIdx != null ? ' data-wb-idx="' + U.attr(String(cmd.cmdIdx)) + '"' : '';
+    var pr = cmd.prompt || detectPromptFor(cmd.run, cmd.tool, cmd.rank === 2 ? 'host' : 'local');
+    var dispTool = cmd.label ? (cmd.label + ' · ' + (cmd.toolsLabel || cmd.tool)) : cmd.tool;
+    var copyTxt = cmd.fullChainRun || cmd.run || '';
+    return '<div class="study-cmd ' + locusClass(cmd.rank) + (isSel ? ' active-variant' : '') + '"' + idxAttr + '>'
+      + '<div class="study-cmd-h"><span class="study-loc">' + locusGlyph(cmd.locus) + ' ' + esc(cmd.locus) + '</span>'
+      + '<span class="study-cmd-tool">' + esc(dispTool) + '</span>'
+      + '<span class="study-cmd-tag">' + esc(cmd.tag) + '</span>'
+      + (cmd.cmdIdx != null ? '<button type="button" class="study-cmd-load' + (isSel ? ' on' : '') + '" data-wb-idx="' + U.attr(String(cmd.cmdIdx)) + '">' + (isSel ? '● Active in Workbench' : 'Load in Workbench') + '</button>' : '')
+      + '<button type="button" class="study-cmd-copy" data-wb-copy="' + U.attr(benchFill(copyTxt)) + '">Copy</button>'
+      + '</div>'
+      + '<pre class="study-cmd-run"><span class="study-cmd-pr' + (isHostPrompt(pr, cmd.rank === 2 ? 'host' : 'local') ? ' host' : '') + '">' + esc(pr) + '</span> ' + renderCmdTokens(cmd, cmd.run, cmd.tool) + '</pre>'
+      + (cmd.note ? '<div class="study-cmd-why">↳ ' + codeify(benchFill(cmd.note)) + '</div>' : '')
+      + '</div>';
+  }
+
   function osForMove(cell) {
     var lk = cell.laneKey || laneKeyOf(cell.id);
     if (lk === 'windows' || lk === 'ad') return 'windows';
@@ -201,45 +199,265 @@
   }
   function connectCmd(os) {
     return os === 'windows'
-      ? { tool: 'evil-winrm', run: "evil-winrm -i 10.10.10.10 -u <user> -p '<password>'", note: 'Open an interactive shell on the box over WinRM (5985), then run the command below in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 }
-      : { tool: 'ssh', run: 'ssh <user>@10.10.10.10', note: 'Open an interactive shell on the box, then run the command below in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 };
+      ? { tool: 'evil-winrm', run: "evil-winrm -i 10.10.10.10 -u <user> -p '<password>'", prompt: 'kali$', note: 'Open an interactive shell on the box over WinRM (5985), then run the on-target command in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 }
+      : { tool: 'ssh', run: 'ssh <user>@10.10.10.10', prompt: 'kali$', note: 'Open an interactive shell on the box, then run the on-target command in that shell.', locus: 'ON-TARGET', tag: 'Connect First', rank: 2 };
   }
-  // One honest pane when a move runs only one way (no misleading toggle, no bare shell handed out as "the move").
-  function singleWay(label, kind, note, cmds) {
-    var glyph = kind === 'onhost' ? OBOL.ic('host') : OBOL.ic('box');
-    return '<div class="study-runways"><div class="rw-head"><span class="rw-label">Run it from</span>'
-      + '<span class="rw-single">' + glyph + ' ' + esc(label) + '</span></div>'
-      + '<div class="rw-pane">' + note + cmds.map(commandBlock).join('') + '</div></div>';
+
+  function switchBreakdownHtml(switches, stepLabel) {
+    var sw = switches || [];
+    if (!sw.length) return '';
+    var cards = sw.map(function (s) {
+      var role = s.role || 'flag';
+      return '<div class="wb-sw-card role-' + esc(role) + '">'
+        + '<div class="wb-sw-top"><code class="wb-sw-tok">' + esc(benchFill(s.token)) + '</code>'
+        + '<span class="wb-sw-badge role-' + esc(role) + '">' + esc(s.roleLabel || role) + '</span></div>'
+        + '<div class="wb-sw-desc">' + esc(s.desc || '') + '</div>'
+        + '</div>';
+    }).join('');
+    return '<div class="wb-switches-wrap">'
+      + '<div class="wb-switches-head"><span class="wb-sw-title">Switch &amp; Argument Breakdown' + (stepLabel ? ' · ' + esc(stepLabel) : '') + '</span>'
+      + '<span class="wb-sw-sub">Every flag, target, and parameter in the active command</span></div>'
+      + '<div class="wb-switches">' + cards + '</div>'
+      + '</div>';
   }
-  function runWaysPanel(cell) {
+
+  function resolveActiveCmd(cell) {
+    var cmds = (cell && cell.commands) || [];
+    if (!cmds.length) return { activeCmd: null, activeIdx: 0, stageCmds: [], curStage: 'all' };
+    var curStage = (cell.hub && _wbStage[cell.id]) ? _wbStage[cell.id] : 'all';
+    var stageCmds = (curStage === 'all' || !cell.hub)
+      ? cmds
+      : cmds.filter(function (c) { return c.stage === curStage; });
+    if (!stageCmds.length) stageCmds = cmds;
+
+    var selIdx = _wbCmdIdx[cell.id];
+    var activeCmd = null;
+    if (selIdx != null) {
+      for (var i = 0; i < cmds.length; i++) {
+        if (String(cmds[i].cmdIdx) === String(selIdx) || i === selIdx) {
+          activeCmd = cmds[i];
+          break;
+        }
+      }
+    }
+    if (activeCmd && curStage !== 'all' && stageCmds.indexOf(activeCmd) === -1) {
+      activeCmd = stageCmds[0];
+    }
+    if (!activeCmd) activeCmd = stageCmds[0] || cmds[0];
+    var activeIdx = activeCmd ? (activeCmd.cmdIdx != null ? activeCmd.cmdIdx : 0) : 0;
+    return { activeCmd: activeCmd, activeIdx: activeIdx, stageCmds: stageCmds, curStage: curStage };
+  }
+
+  // ---- Unified Interactive Command & Terminal Workbench (Center Column) -------------------------
+  function workbenchPanel(cell) {
     var cmds = cell.commands || [];
-    if (!cmds.length) return '';
-    var remote = cmds.filter(function (c) { return c.rank === 0 || c.rank === 1; });   // your box: remote + offline
-    var onhost = cmds.filter(function (c) { return c.rank === 2; });                    // on the target
-    // Remote-only move (recon / remote enumeration / offline cracking): there is no on-target version.
-    if (remote.length && !onhost.length) {
-      var rnote = (cell.locus === 'F' || cell.locus === 'I')
-        ? '<div class="rw-when"><b>From your own box (Kali).</b> You stage the tool on Kali and run it against the target, the way the replay above shows.</div>'
-        : '<div class="rw-when"><b>From your own box (Kali).</b> This is a remote move: you run it over the network before you hold any shell. There is nothing to run on the target itself, which is the whole point of recon, it is how you find the way in.</div>';
-      return singleWay('Your box (Kali)', 'remote', rnote, remote);
+    var remote = cmds.filter(function (c) { return c.rank === 0 || c.rank === 1; });
+    var onhost = cmds.filter(function (c) { return c.rank === 2; });
+    var resolved = resolveActiveCmd(cell);
+    var activeCmd = resolved.activeCmd;
+    var activeIdx = resolved.activeIdx;
+    var stageCmds = resolved.stageCmds;
+    var curStage = resolved.curStage;
+    var activeLocus = (activeCmd && activeCmd.rank === 2) ? 'onhost' : 'remote';
+    if (!remote.length && onhost.length) activeLocus = 'onhost';
+
+    var rp = study().replayFor(cell.id, activeIdx, activeCmd ? activeCmd.rawRun : undefined);
+    if (!rp) return '';
+
+    // Locus toggle or single-locus badge in the workbench header
+    var locusHead = '';
+    if (remote.length && onhost.length) {
+      locusHead = '<div class="rw-head">'
+        + '<span class="rw-label">Run it from</span>'
+        + '<button type="button" class="rw-tab' + (activeLocus === 'remote' ? ' on' : '') + '" data-runway="remote">' + OBOL.ic('box') + ' Your box · Remote <span class="rw-n">' + remote.length + '</span></button>'
+        + '<button type="button" class="rw-tab' + (activeLocus === 'onhost' ? ' on' : '') + '" data-runway="onhost">' + OBOL.ic('host') + ' On the target · Shell <span class="rw-n">' + onhost.length + '</span></button>'
+        + '</div>';
+    } else if (remote.length) {
+      locusHead = '<div class="rw-head"><span class="rw-label">Run it from</span>'
+        + '<span class="rw-single">' + OBOL.ic('box') + ' Your box (Kali · Remote)</span></div>';
+    } else if (onhost.length) {
+      locusHead = '<div class="rw-head"><span class="rw-label">Run it from</span>'
+        + '<span class="rw-single">' + OBOL.ic('host') + ' On the target (Foothold Shell)</span></div>';
     }
-    // Host-only move: you must be on the box first, then run it there.
-    if (!remote.length && onhost.length) {
-      var hnote = '<div class="rw-when"><b>On the target, once you have a foothold.</b> This reads or changes state that only lives on the box, so get a shell first, then run it in that shell.</div>';
-      return singleWay('On the target', 'onhost', hnote, [connectCmd(osForMove(cell))].concat(onhost));
+
+    // Hub Stage Filter Bar (for Multi-Stage Tool Hubs like NetExec & Scenario Umbrellas like ADCS)
+    var hubBar = '';
+    if (cell.hub && cell.hub.stages && cell.hub.stages.length) {
+      var stageBtns = '<button type="button" class="wb-stage-btn' + (curStage === 'all' ? ' on' : '') + '" data-wb-stage="all">'
+        + '<span class="wb-st-t">All Stages <span class="wb-st-n">' + cmds.length + '</span></span>'
+        + '<span class="wb-st-sub">Full workflow</span></button>';
+      cell.hub.stages.forEach(function (st) {
+        var count = cmds.filter(function (c) { return c.stage === st.key; }).length;
+        if (!count) return;
+        stageBtns += '<button type="button" class="wb-stage-btn' + (curStage === st.key ? ' on' : '') + '" data-wb-stage="' + U.attr(st.key) + '">'
+          + '<span class="wb-st-t">' + esc(st.label) + ' <span class="wb-st-n">' + count + '</span></span>'
+          + (st.prereq ? '<span class="wb-st-sub">Needs: ' + esc(st.prereq) + '</span>' : '')
+          + '</button>';
+      });
+      hubBar = '<div class="wb-hub-bar">'
+        + (cell.hub.lead ? '<div class="wb-hub-lead">' + codeify(cell.hub.lead) + '</div>' : '')
+        + '<div class="wb-stage-list" role="tablist">' + stageBtns + '</div>'
+        + '</div>';
     }
-    // Genuine either/or: the same outcome two ways. Show the toggle and teach the tradeoff.
-    var conn = connectCmd(osForMove(cell));
-    var remoteWhen = '<div class="rw-when"><b>When:</b> This is the default. It is fast, puts nothing on the box, and needs no shell. Reach for it first.</div>';
-    var hostWhen = '<div class="rw-when"><b>When:</b> Go on the target for interactive or multi-step tools, when the remote wrapper mangles your quoting, when you need a real terminal, or when the remote attempt simply fails. It is more steps and more footprint, so it is the second choice, not the first.</div>';
-    var remotePane = remoteWhen + remote.map(commandBlock).join('');
-    var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn) + '</div>' + onhost.map(commandBlock).join('');
-    return '<div class="study-runways">'
-      + '<div class="rw-head"><span class="rw-label">Run it from</span>'
-      + '<button type="button" class="rw-tab on" data-runway="remote">' + OBOL.ic('box') + ' Your box <span class="rw-n">' + remote.length + '</span></button>'
-      + '<button type="button" class="rw-tab" data-runway="onhost">' + OBOL.ic('host') + ' On the target <span class="rw-n">' + onhost.length + '</span></button></div>'
-      + '<div class="rw-pane" data-pane="remote">' + remotePane + '</div>'
-      + '<div class="rw-pane" data-pane="onhost" hidden>' + hostPane + '</div>'
+
+    // Approach & Tool Combination selector cards (never identical mystery-meat buttons)
+    var variantTabs = '';
+    if (cmds.length > 1) {
+      variantTabs = '<div class="wb-variants">'
+        + '<div class="wb-var-head"><span class="wb-var-l">Approach &amp; Tool Combination (' + stageCmds.length + ')</span>'
+        + '<span class="wb-var-hint">Pick a single-tool or multi-tool pipeline to compare syntax, flags, and output</span></div>'
+        + '<div class="wb-var-grid">'
+        + stageCmds.map(function (c, idx) {
+            var cIdx = c.cmdIdx != null ? c.cmdIdx : idx;
+            var isOn = String(cIdx) === String(activeIdx);
+            var stepCount = (c.steps && c.steps.length > 1) ? c.steps.length : 0;
+            var toolsTxt = c.toolsLabel || c.tool || '';
+            var locShort = c.rank === 2 ? 'On-Target' : 'Remote';
+            return '<button type="button" class="wb-var-pill' + (isOn ? ' on' : '') + ' ' + locusClass(c.rank) + '" data-wb-idx="' + U.attr(String(cIdx)) + '">'
+              + '<span class="wb-vp-top">'
+              + '<span class="wb-vp-num">' + (idx + 1) + '</span>'
+              + '<span class="wb-vp-label">' + esc(c.label || c.tool) + '</span>'
+              + '</span>'
+              + '<span class="wb-vp-sub">'
+              + '<span class="wb-vp-tool">' + esc(toolsTxt) + '</span>'
+              + (stepCount ? '<span class="wb-vp-chain">' + stepCount + '-step chain</span>' : '')
+              + '<span class="wb-vp-tag">' + esc(c.tag || locShort) + '</span>'
+              + '</span>'
+              + '</button>';
+          }).join('')
+        + '</div></div>';
+    }
+
+    // Active Approach Context Banner (Scenario Prerequisite, When to Pick, & Dedicated Goal Module Link)
+    var approachCtx = '';
+    if (activeCmd && (activeCmd.label || activeCmd.prereqNote || activeCmd.when || activeCmd.deepLink)) {
+      // deepLink is authored as { id, title } (STUDY_APPROACHES); tolerate a bare move-id string too
+      var dlId = activeCmd.deepLink ? (typeof activeCmd.deepLink === 'object' ? activeCmd.deepLink.id : activeCmd.deepLink) : '';
+      var dlTitle = (activeCmd.deepLink && typeof activeCmd.deepLink === 'object' && activeCmd.deepLink.title) || '';
+      var dlMove = dlId ? study().cellFor(dlId) : null;
+      // a deepLink whose target is not a real move would open a blank/stale node page, so only offer it when the module exists
+      if (!dlMove) dlId = '';
+      approachCtx = '<div class="wb-approach-ctx">'
+        + '<div class="wb-actx-top">'
+        + '<span class="wb-actx-title">' + esc(activeCmd.label || activeCmd.tool) + '</span>'
+        + (activeCmd.toolsLabel ? '<span class="wb-actx-tools">' + esc(activeCmd.toolsLabel) + '</span>' : '')
+        + (activeCmd.prereqNote ? '<span class="wb-prereq-pill">Requires: ' + esc(activeCmd.prereqNote) + '</span>' : '')
+        + (dlId ? '<button type="button" class="wb-deeplink" data-goto="' + U.attr(dlId) + '" title="Open dedicated Goal Module to compare all tools and alternatives for this goal">Dedicated Goal Module: ' + esc(dlMove ? dlMove.title : (dlTitle || dlId)) + ' -&gt;</button>' : '')
+        + '</div>'
+        + (activeCmd.when ? '<div class="wb-actx-when">' + codeify(benchFill(activeCmd.when)) + '</div>' : '')
+        + '</div>';
+    }
+
+    var activeRun = (activeCmd && activeCmd.run) || rp.command || '';
+    var activeTool = (activeCmd && (activeCmd.toolsLabel || activeCmd.tool)) || rp.tool || '';
+    var activePrompt = (activeCmd && activeCmd.prompt) || rp.prompt || detectPromptFor(activeRun, activeTool, activeLocus === 'onhost' ? 'host' : 'local', osForMove(cell));
+
+    var stepKey = cell.id + ':' + activeIdx;
+    var activeSteps = (activeCmd && activeCmd.steps && activeCmd.steps.length > 1) ? activeCmd.steps : null;
+    var selStepIdx = _wbStepIdx[stepKey] || 0;
+    if (activeSteps && selStepIdx >= activeSteps.length) selStepIdx = 0;
+    var inspectedStep = activeSteps ? (activeSteps[selStepIdx] || activeSteps[0]) : null;
+    var activeSwitches = (inspectedStep && inspectedStep.switches && inspectedStep.switches.length)
+      ? inspectedStep.switches
+      : ((activeCmd && activeCmd.switches && activeCmd.switches.length) ? activeCmd.switches : (rp.switches || []));
+    var switchStepLabel = inspectedStep ? ('Step ' + (selStepIdx + 1) + ': ' + (inspectedStep.title || inspectedStep.tool || '')) : '';
+
+    var cmdBarBody = '';
+    if (activeSteps) {
+      cmdBarBody = '<div class="wb-pipeline">'
+        + activeSteps.map(function (st, si) {
+            var isInspected = si === selStepIdx;
+            var stWhere = st.where || 'local';
+            var stPrompt = st.prompt || detectPromptFor(st.command, st.tool, stWhere, osForMove(cell));
+            var stHost = isHostPrompt(stPrompt, stWhere);
+            var stLocLabel = stHost ? 'ON-TARGET (SHELL)' : 'YOUR BOX (KALI)';
+            return '<div class="wb-pipe-step' + (isInspected ? ' active-step' : '') + '">'
+              + '<div class="wb-ps-head">'
+              + '<span class="wb-ps-badge">Step ' + (si + 1) + ' of ' + activeSteps.length + '</span>'
+              + '<span class="wb-ps-title">' + esc(st.title || st.tool || ('Step ' + (si + 1))) + '</span>'
+              + (st.tool ? '<span class="wb-ps-tool">' + esc(st.tool) + '</span>' : '')
+              + '<span class="wb-ps-loc' + (stHost ? ' host' : '') + '">' + esc(stLocLabel) + '</span>'
+              + '<div class="wb-ps-acts">'
+              + '<button type="button" class="wb-ps-inspect' + (isInspected ? ' on' : '') + '" data-wb-step="' + si + '" data-wb-step-key="' + U.attr(stepKey) + '">' + (isInspected ? '● Inspecting Flags' : 'Inspect Flags') + '</button>'
+              + '<button type="button" class="wb-act-btn" data-wb-copy="' + U.attr(benchFill(st.command)) + '">Copy Step</button>'
+              + '</div></div>'
+              + '<div class="' + (isInspected ? 'wb-cmdbar-code ' : '') + 'wb-ps-code">'
+              + '<span class="' + (isInspected ? 'wb-prompt ' : '') + 'wb-ps-prompt' + (stHost ? ' host' : '') + '">' + esc(stPrompt) + '</span> '
+              + '<span class="' + (isInspected ? 'wb-tokens ' : '') + 'wb-ps-tokens">' + renderCmdTokens(st, st.command, st.tool) + '</span>'
+              + '</div>'
+              + (st.teach ? '<div class="wb-ps-teach">↳ ' + codeify(benchFill(st.teach)) + '</div>' : '')
+              + '</div>';
+          }).join('<div class="wb-pipe-arrow">↓ feeds into next step</div>')
+        + '</div>';
+    } else {
+      cmdBarBody = '<div class="wb-cmdbar-code"><span class="wb-prompt' + (isHostPrompt(activePrompt, activeLocus === 'onhost' ? 'host' : 'local') ? ' host' : '') + '">' + esc(activePrompt) + '</span> '
+        + '<span class="wb-tokens">' + renderCmdTokens(activeCmd, activeRun, activeTool) + '</span></div>'
+        + (activeCmd && activeCmd.note ? '<div class="wb-cmdbar-note">↳ ' + codeify(benchFill(activeCmd.note)) + '</div>' : '');
+    }
+
+    var fullCopyCmd = (activeCmd && activeCmd.fullChainRun) || activeRun;
+    var activeCmdBar = '<div class="wb-cmdbar">'
+      + '<div class="wb-cmdbar-top">'
+      + '<span class="wb-cmdbar-loc ' + locusClass(activeCmd ? activeCmd.rank : 0) + '">' + locusGlyph(activeCmd ? activeCmd.locus : rp.locus) + ' ' + esc(activeCmd ? activeCmd.locus : rp.locus) + ' · ' + esc(activeTool) + (activeCmd && activeCmd.tag ? ' (' + esc(activeCmd.tag) + ')' : '') + '</span>'
+      + '<div class="wb-cmdbar-actions">'
+      + '<button type="button" class="wb-act-btn" data-wb-copy="' + U.attr(benchFill(fullCopyCmd)) + '">' + (activeSteps ? 'Copy Full Pipeline (' + activeSteps.length + ' Steps)' : 'Copy Command') + '</button>'
+      + (rp.hasOutput ? '<button type="button" class="wb-act-btn wb-act-coach" data-wb-ingest title="Send this sample output to OBOL Cockpit to see what facts it mints">Send Sample to Cockpit -&gt;</button>' : '')
+      + '</div></div>'
+      + cmdBarBody
+      + '</div>';
+
+    var idle = rp.hasOutput
+      ? 'Watch <b>' + esc(activeCmd && activeCmd.label ? activeCmd.label : activeTool) + '</b> run and the output stream in, with the key signal line highlighted.'
+      : 'Watch <b>' + esc(activeCmd && activeCmd.label ? activeCmd.label : activeTool) + '</b> run. <span class="rp-nosample">See the command breakdown above and what this step proves below.</span>';
+    var factsInit = (rp.proves && rp.proves.length)
+      ? '<span class="rp-facts-l">New facts in hand</span>' + rp.proves.map(function (f) { return '<span class="study-chip proof">+ ' + esc(titleCase(human(f))) + '</span>'; }).join('')
+      : '';
+
+    // Runways reference panes (keeps .study-runways, .rw-pane[data-pane="remote"|"onhost"], .rw-connect, and .study-cmd intact)
+    var runwaysBody = '';
+    if (cmds.length) {
+      var conn = connectCmd(osForMove(cell));
+      if (remote.length && !onhost.length) {
+        var rnote = (cell.locus === 'F' || cell.locus === 'I')
+          ? '<div class="rw-when"><b>From your own box (Kali).</b> You stage the tool on Kali and run it against the target.</div>'
+          : '<div class="rw-when"><b>From your own box (Kali).</b> This is a remote move: you run it over the network from Kali before or without needing a target shell.</div>';
+        runwaysBody = '<div class="rw-pane" data-pane="remote">' + rnote + remote.map(function (c) { return commandBlock(c, activeIdx); }).join('') + '</div>';
+      } else if (!remote.length && onhost.length) {
+        var hnote = '<div class="rw-when"><b>On the target, once you have a foothold.</b> This reads or changes state that only lives on the box, so open a shell first, then run it in that shell.</div>';
+        runwaysBody = '<div class="rw-pane" data-pane="onhost">' + hnote + '<div class="rw-connect">' + commandBlock(conn, -1) + '</div>' + onhost.map(function (c) { return commandBlock(c, activeIdx); }).join('') + '</div>';
+      } else {
+        var remoteWhen = '<div class="rw-when"><b>From Your Box (Remote):</b> Fast, leaves zero artifacts on disk, and needs no interactive shell. Reach for it first.</div>';
+        var hostWhen = '<div class="rw-when"><b>On the Target (Shell):</b> Use when you already hold an interactive shell, when WinRM/SMB remote wrappers mangle quoting, or when running local enumeration binaries.</div>';
+        var remotePane = remoteWhen + remote.map(function (c) { return commandBlock(c, activeIdx); }).join('');
+        var hostPane = hostWhen + '<div class="rw-connect">' + commandBlock(conn, -1) + '</div>' + onhost.map(function (c) { return commandBlock(c, activeIdx); }).join('');
+        runwaysBody = '<div class="rw-pane" data-pane="remote"' + (activeLocus === 'remote' ? '' : ' hidden') + '>' + remotePane + '</div>'
+          + '<div class="rw-pane" data-pane="onhost"' + (activeLocus === 'onhost' ? '' : ' hidden') + '>' + hostPane + '</div>';
+      }
+    }
+
+    return '<div class="study-workbench study-replay study-runways" data-move="' + U.attr(rp.id) + '" data-cmd-idx="' + U.attr(String(activeIdx)) + '">'
+      + '<div class="study-replay-bar wb-header">'
+      + '<span class="study-replay-title">▶ Interactive Command &amp; Terminal Workbench</span>'
+      + (rp.multi ? '<span class="wb-multi-badge">' + OBOL.ic('branch') + ' ' + (rp.steps ? rp.steps.length + '-Step Pipeline' : 'Multi-Step Sequence') + '</span>' : '')
+      + locusHead
+      + '</div>'
+      + hubBar
+      + variantTabs
+      + approachCtx
+      + activeCmdBar
+      + switchBreakdownHtml(activeSwitches, switchStepLabel)
+      + '<div class="wb-term-wrap">'
+      + '<div class="wb-term-head"><span class="wb-term-title">Emulated Terminal Replay' + (activeCmd && activeCmd.label ? ' · ' + esc(activeCmd.label) : '') + '</span><span class="study-replay-loc">' + locusGlyph(activeCmd ? activeCmd.locus : rp.locus) + ' ' + esc(activePrompt) + ' · ' + esc(activeTool) + '</span></div>'
+      + '<div class="study-replay-term" id="rp-term"><div class="rp-idle">' + idle + '</div></div>'
+      + '<div class="study-replay-facts" id="rp-facts" aria-live="polite">' + factsInit + '</div>'
+      + '<div class="study-replay-ctrl">'
+      + '<button type="button" class="study-rp-btn primary" data-rp="play">▶ Play</button>'
+      + (rp.hasOutput ? '<button type="button" class="study-rp-btn" data-rp="skip">⏭ Skip to result</button>' : '')
+      + '<button type="button" class="study-rp-btn" data-rp="restart">↺ Replay</button>'
+      + '<button type="button" class="study-rp-btn study-rp-auto' + (_autolane ? ' on' : '') + '" data-rp="autolane">' + (_autolane ? '⏹ Stop auto-play' : '⏭ Auto-play the whole path') + '</button>'
+      + '<span class="study-rp-prog"></span>'
+      + '</div></div>'
+      + (runwaysBody ? '<details class="wb-allcmds" open><summary class="wb-allcmds-sum">All Command Variants &amp; Locus Details (' + cmds.length + ')</summary>' + runwaysBody + '</details>' : '')
       + '</div>';
   }
 
@@ -257,18 +475,15 @@
     return '<div class="study-scope ' + s.level + '"><span class="study-scope-i">' + (s.level === 'destructive' ? OBOL.ic('stop') : OBOL.ic('sound')) + '</span>'
       + '<div><b>' + lab + '.</b> ' + esc(s.note) + ' On the exam, scope is the rule: do not nuke what you do not have to.</div></div>';
   }
-  // the always-on reasoning: why this move applies now, and why it matters (fades once mastered)
+
   function whyPanel(cell) {
     if (!study().showWhy(cell.id) && !_whyOverride[cell.id]) {
       return '<button type="button" class="study-why-show" data-why-show>Show the reasoning</button>';
     }
-    // Hand-written teaching note when one is authored for this move: what it is really for, what it
-    // buys you, when to reach for it, when to skip it. This is the part that should actually teach.
     var authored = study().whyNow(cell.id);
     if (authored) {
       return '<div class="study-why"><div class="study-why-h">Why this, why now</div><p>' + codeify(authored) + '</p></div>';
     }
-    // Fallback until a move has an authored note: name the prereq → outcome link plainly.
     var proves = (cell.proves || [])[0];
     var needs = cell.prereqFacts.length
       ? 'you are holding ' + cell.prereqFacts.map(function (f) { return '<b>' + esc(human(f)) + '</b>'; }).join(', ')
@@ -278,30 +493,13 @@
     return '<div class="study-why"><div class="study-why-h">Why this, why now</div>'
       + '<p>You reach for this because ' + needs + ', and ' + turns + mattersBit + '.</p></div>';
   }
-  // Learn shows realistic placeholders; the moment an engagement is live, the same demo fills in the
-  // operator's real target (and more), so the lesson maps straight onto the box they are stuck on.
-  function benchParams() {
-    try { var eng = OBOL.store && OBOL.store.active && OBOL.store.active(); var p = (eng && eng.params) || {}; return p; } catch (e) { return {}; }
-  }
-  function benchFill(str) {
-    var p = benchParams(), out = String(str == null ? '' : str), tgt = p.target || p.rhost;
-    if (tgt) out = out.replace(/<target>/g, tgt);
-    if (p.lhost) out = out.replace(/<lhost>/g, p.lhost);
-    if (p.domain) out = out.replace(/<domain>/g, p.domain);
-    return out;
-  }
-  function benchLive() { var p = benchParams(); return !!(p.target || p.rhost); }
 
-  // ---- "How you got here": the plausible lead-up to the current move --------------------------
-  // Composed from an authored recon lead-up (fills the gap back to the scan) plus the causal
-  // ancestors the fact graph derives. Each prior step is condensed to its command + the one output
-  // line that unlocked the next move. The current move stays below, full and highlighted.
-  var RECAP_COLORS = ['#4FC3F7', '#B088FF', '#FF9E5E', '#4DD6C1', '#FF8FB8'];  // cyan, violet, amber, teal, pink
-  // normalize an authored lead-up into one or more named paths (a plausible route each)
+  // ---- "Before This Move: How you got here" ----------------------------------------------------
+  var RECAP_COLORS = ['#4FC3F7', '#B088FF', '#FF9E5E', '#4DD6C1', '#FF8FB8'];
   function leadupPaths(moveId) {
     var raw = study().leadupFor(moveId); if (!raw) return [];
-    if (raw[0] && raw[0].steps) return raw;                       // already a set of named paths
-    return [{ key: 'default', label: '', steps: raw }];           // a single unnamed path
+    if (raw[0] && raw[0].steps) return raw;
+    return [{ key: 'default', label: '', steps: raw }];
   }
   function chosenPath(moveId) {
     var paths = leadupPaths(moveId); if (!paths.length) return null;
@@ -309,28 +507,25 @@
     return paths.filter(function (p) { return p.key === sel; })[0] || paths[0];
   }
   function recapSteps(moveId) {
-    // the chosen authored route is the complete "how you got here"; we do not append the raw pathTo
-    // ancestor closure, which duplicates what a hand-authored lead-up already walks through.
     var out = [];
     var cp = chosenPath(moveId);
     if (cp) cp.steps.forEach(function (s) {
-      out.push({ title: s.title || (s.tool || 'Recon'), where: s.where || 'local', cmd: s.cmd || '', sig: s.sig || '', teach: s.teach || '' });
+      out.push({ title: s.title || (s.tool || 'Recon'), tool: s.tool || '', where: s.where || 'local', cmd: s.cmd || '', sig: s.sig || '', teach: s.teach || '' });
     });
     return out;
   }
   function recapBlock() {
-    // prototype scope: only show the recap where we have authored a clean lead-up (file-upload).
-    // pathTo ancestors exist for many moves but the raw transitive closure is noisy, so we do not
-    // surface it until each entry point's lead-up is curated. See recapSteps for the composition.
     if (!study().leadupFor(_sel)) return '';
     var steps = recapSteps(_sel); if (!steps.length) return '';
     var cur = study().cellFor(_sel);
     var paths = leadupPaths(_sel), cp = chosenPath(_sel);
     var rows = steps.map(function (s, i) {
+      var pr = detectPromptFor(s.cmd, s.tool, s.where);
+      var hostLike = isHostPrompt(pr, s.where);
       return '<div class="recap-step" data-recap="' + i + '">'
         + '<div class="recap-top"><span class="recap-n">' + (i + 1) + '</span><span class="recap-title">' + esc(s.title) + '</span>'
-        + '<span class="recap-where">' + (s.where === 'host' ? 'On the Target' : 'Your Box') + '</span></div>'
-        + '<div class="recap-cmd"><span class="recap-prompt' + (s.where === 'host' ? ' host' : '') + '">' + (s.where === 'host' ? 'target$' : 'kali$') + '</span> ' + esc(benchFill(s.cmd)) + '</div>'
+        + '<span class="recap-where">' + (hostLike ? 'On the Target' : 'Your Box') + '</span></div>'
+        + '<div class="recap-cmd"><span class="recap-prompt' + (hostLike ? ' host' : '') + '">' + esc(pr) + '</span> ' + esc(benchFill(s.cmd)) + '</div>'
         + (s.sig ? '<div class="recap-sig">' + esc(benchFill(s.sig)) + '</div>' : '')
         + (s.teach ? '<div class="recap-cap">↳ ' + codeify(benchFill(s.teach)) + '</div>' : '')
         + '</div>';
@@ -348,7 +543,7 @@
     return '<div class="study-recap' + (open ? '' : ' collapsed') + '" id="study-recap">'
       + '<button type="button" class="recap-h" data-recap-toggle aria-expanded="' + (open ? 'true' : 'false') + '">'
       + '<span class="recap-chev">' + (open ? '▾' : '▸') + '</span>'
-      + '<span class="recap-h-t">How you got here</span>'
+      + '<span class="recap-h-t">Before This Move: How you got here</span>'
       + (open ? '' : '<span class="recap-count">' + steps.length + ' steps that led here</span>')
       + '<span class="recap-showbtn">' + (open ? 'Hide ▴' : 'Show ▾') + '</span>'
       + '</button>'
@@ -360,22 +555,13 @@
   }
   function recapOpen() { try { return localStorage.getItem('obol.study-recap') === 'open'; } catch (e) { return false; } }
   function setRecapOpen(v) { try { localStorage.setItem('obol.study-recap', v ? 'open' : 'closed'); } catch (e) {} }
-  // "How to actually do it": the field notes. When a move's techniques carry runnable demos, this is a
-  // two-pane lab bench, a technique index on the left, a live terminal on the right that plays the real
-  // request and response for the one you pick. Moves with text-only notes fall back to a simple list.
+
+  // ---- Right-Hand Operator Field Guide (Playbook, Signal & False Positives, If It Fails) -------
   function hasDemoBench(id) { var h = study().howTo(id); return !!(h && h.items.some(function (it) { return it.demo && it.demo.length; })); }
-  // inline field notes: ONLY the text-only case (no demos). Demo benches live in their own column.
-  function howPanel(cell) {
-    var h = study().howTo(cell.id); if (!h || hasDemoBench(cell.id)) return '';
-    var items = h.items.map(function (it) {
-      return '<div class="howto-item"><div class="howto-t">' + esc(it.t) + '</div><div class="howto-d">' + codeify(it.d) + '</div></div>';
-    }).join('');
-    return '<div class="study-howto"><div class="study-howto-h">Field notes: how to actually do it</div>'
-      + (h.lead ? '<p class="howto-lead">' + codeify(h.lead) + '</p>' : '')
-      + '<div class="howto-list">' + items + '</div></div>';
-  }
-  // the lab bench body: a technique index + the live terminal for the selected one
+  function hasFieldGuide(id) { return !!(study().howTo(id) || study().signalTell(id) || (study().blockersFor && study().blockersFor(id).length)); }
+
   function benchBody(h, moveId) {
+    if (!h || !h.items || !h.items.length) return '<p class="howto-lead">No tactical variations recorded for this step.</p>';
     var sel = _benchSel[moveId] || 0; if (sel >= h.items.length) sel = 0;
     var list = h.items.map(function (it, i) {
       return '<button type="button" class="bench-item' + (i === sel ? ' on' : '') + '" data-bench="' + i + '">'
@@ -385,25 +571,122 @@
       + '<div class="bench"><div class="bench-list">' + list + '</div>'
       + '<div class="bench-main" id="bench-main">' + benchMain(h.items, sel) + '</div></div>';
   }
-  // the field-notes bench as its own column: a titled panel that is always present beside the lesson
+
+  function fgSignalPane(cell) {
+    var resolved = resolveActiveCmd(cell);
+    var activeCmd = resolved.activeCmd;
+    var t = study().signalTell(cell.id);
+    var body = (activeCmd && activeCmd.teach) || (t && (t.teach || t.gist)) || '';
+    var sig = (activeCmd && activeCmd.signal) || (cell.output && cell.output.signal) || (t && t.signal) || '';
+    var s = study().scopeSafety(cell.id);
+    var h = '<div class="fg-pane fg-signal-pane">';
+    if (activeCmd && activeCmd.label) {
+      h += '<div class="fg-card fg-card-active"><div class="fg-card-h">Active Approach: ' + esc(activeCmd.label) + '</div>'
+        + (activeCmd.when ? '<p class="fg-card-p">' + codeify(benchFill(activeCmd.when)) + '</p>' : '')
+        + '</div>';
+    }
+    if (activeCmd && activeCmd.steps && activeCmd.steps.length > 1) {
+      h += '<div class="fg-card fg-card-sig"><div class="fg-card-h">Pipeline Step Signals (' + activeCmd.steps.length + ' Steps)</div>'
+        + activeCmd.steps.map(function (st, si) {
+            return '<div class="fg-step-sig"><div class="fg-ss-top"><b>Step ' + (si + 1) + ':</b> ' + esc(st.title || st.tool || '') + '</div>'
+              + (st.sig ? '<pre class="fg-sig-code">' + esc(benchFill(st.sig)) + '</pre>' : '')
+              + (st.teach ? '<p class="fg-card-p">' + codeify(benchFill(st.teach)) + '</p>' : '')
+              + '</div>';
+          }).join('')
+        + '</div>';
+    } else {
+      if (sig) {
+        h += '<div class="fg-card fg-card-sig"><div class="fg-card-h">Key Signal Line to Spot</div>'
+          + '<pre class="fg-sig-code">' + esc(benchFill(sig)) + '</pre></div>';
+      }
+      if (body) {
+        h += '<div class="fg-card fg-card-tell"><div class="fg-card-h">Reading the Result</div>'
+          + '<p class="fg-card-p">' + codeify(benchFill(body)) + '</p></div>';
+      }
+    }
+    if (cell.rulesOut) {
+      h += '<div class="fg-card fg-card-trap"><div class="fg-card-h">⚠ False Positives &amp; What This Does NOT Prove</div>'
+        + '<p class="fg-card-p">' + codeify(cell.rulesOut) + '</p></div>';
+    }
+    if (s && s.note) {
+      h += '<div class="fg-card fg-card-scope"><div class="fg-card-h">OpSec &amp; Exam Scope Profile (' + esc(s.level || 'safe') + ')</div>'
+        + '<p class="fg-card-p">' + esc(s.note) + '</p></div>';
+    }
+    h += '</div>';
+    return h;
+  }
+
+  function fgBlockersPane(cell) {
+    var list = (cell.blockers && cell.blockers.length) ? cell.blockers : (study().blockersFor ? study().blockersFor(cell.id) : []);
+    if (!list.length) {
+      return '<div class="fg-pane"><p class="howto-lead">No common blockers recorded for this move.</p></div>';
+    }
+    var cards = list.map(function (b) {
+      var fixCmd = b.fixCmd || b.code || '';
+      var errBadge = b.error ? '<span class="fg-blk-err">' + esc(b.error) + '</span>' : '';
+      var bodyP = b.body ? '<p class="fg-blk-why">' + codeify(b.body) + '</p>' : '';
+      return '<div class="fg-blocker-card">'
+        + '<div class="fg-blk-top">' + errBadge
+        + '<span class="fg-blk-title">' + esc(b.title) + '</span></div>'
+        + (b.why ? '<p class="fg-blk-why">' + codeify(b.why) + '</p>' : '')
+        + bodyP
+        + (fixCmd ? '<div class="fg-blk-fix"><div class="fg-blk-fix-h"><span>Suggested Fix / Bypass Command</span><button type="button" class="study-cmd-copy" data-wb-copy="' + U.attr(benchFill(fixCmd)) + '">Copy</button></div><pre class="fg-blk-cmd">' + esc(benchFill(fixCmd)) + '</pre></div>' : '')
+        + '</div>';
+    }).join('');
+    return '<div class="fg-pane fg-blockers-pane">'
+      + '<p class="howto-lead">When this move fails in a lab or exam, match the error string below to recover or pivot cleanly:</p>'
+      + cards
+      + '</div>';
+  }
+
   function howColumn() {
-    var h = study().howTo(_sel); if (!h || !hasDemoBench(_sel)) return '';
+    var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
+    if (!cell) return '';
+    var resolved = resolveActiveCmd(cell);
+    var activeCmd = resolved.activeCmd;
+    var h = study().howTo(_sel);
+    var blockers = (cell.blockers && cell.blockers.length) ? cell.blockers : (study().blockersFor ? study().blockersFor(_sel) : []);
+    var tab = _fgTab[_sel] || 'playbook';
     var live = benchLive();
     var badge = live
       ? '<span class="bench-live">● filled from your engagement</span>'
       : '<span class="bench-live off">Example values, these fill in once you start an engagement</span>';
+    var syncCard = '';
+    if (activeCmd) {
+      var activeSig = activeCmd.signal || (cell.output && cell.output.signal) || '';
+      var activeRead = activeCmd.teach || activeCmd.when || '';
+      syncCard = '<div class="fg-active-sync">'
+        + '<div class="fg-as-top"><span class="fg-as-k">Synced with Workbench</span>'
+        + '<span class="fg-as-t">' + esc(activeCmd.label || activeCmd.tool) + '</span></div>'
+        + (activeSig ? '<div class="fg-as-sig"><span class="fg-as-sl">Signal:</span> <code>' + esc(benchFill(activeSig)) + '</code></div>' : '')
+        + (activeRead ? '<div class="fg-as-read">' + codeify(benchFill(activeRead)) + '</div>' : '')
+        + '</div>';
+    }
+    var tabsHtml = '<div class="fg-tabs" role="tablist">'
+      + '<button type="button" class="fg-tab' + (tab === 'playbook' ? ' on' : '') + '" data-fg-tab="playbook">Playbook &amp; Variations</button>'
+      + '<button type="button" class="fg-tab' + (tab === 'signal' ? ' on' : '') + '" data-fg-tab="signal">Signal &amp; Traps</button>'
+      + '<button type="button" class="fg-tab' + (tab === 'blockers' ? ' on' : '') + '" data-fg-tab="blockers">If It Fails (' + blockers.length + ')</button>'
+      + '</div>';
+    var bodyHtml = '';
+    if (tab === 'signal') bodyHtml = fgSignalPane(cell);
+    else if (tab === 'blockers') bodyHtml = fgBlockersPane(cell);
+    else bodyHtml = benchBody(h, _sel);
+
     return '<div class="study-benchcol">'
       + '<div class="study-panel benchpanel study-bench">'
-      + '<div class="benchcol-h"><span class="benchcol-title">Field notes: how to actually do it</span></div>'
-      + badge + benchBody(h, _sel) + '</div>'
+      + '<div class="benchcol-h"><span class="benchcol-title">Operator Field Guide: how to actually do it</span></div>'
+      + badge
+      + syncCard
+      + tabsHtml
+      + '<div class="fg-body">' + bodyHtml + '</div>'
+      + '</div>'
       + '</div>';
   }
+
   function benchMain(items, i) {
     var it = items[i]; if (!it) return '';
     var hasDemo = it.demo && it.demo.length;
     var h = '<div class="bench-tech"><div class="bench-t">' + esc(it.t) + '</div><div class="bench-d">' + codeify(it.d) + '</div></div>';
-    // A playable technique gets the live terminal + Play/Replay. A concept with no single command
-    // (e.g. "beat filters and CSP") gets its guidance instead of a Play button that would do nothing.
     if (hasDemo) {
       h += '<div class="bench-term" id="bench-term">' + benchTermStatic(it.demo) + '</div>'
         + '<div class="bench-ctrl"><button type="button" class="study-rp-btn primary" data-bench-play>▶ Play</button>'
@@ -415,21 +698,25 @@
   function benchTermStatic(demo) {
     return (demo || []).map(function (s) {
       var sig = benchFill(s.sig || '');
+      var runStr = benchFill(s.run);
+      var pr = detectPromptFor(runStr, '', '');
       var out = benchFill(s.out).split('\n').map(function (ln) {
         var hot = sig && ln.indexOf(sig) >= 0;
         return '<span class="bench-ln' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</span>';
       }).join('');
-      return '<span class="bench-ln bench-cmd">kali$ ' + esc(benchFill(s.run)) + '</span>' + out;
+      return '<span class="bench-ln bench-cmd">' + esc(pr) + ' ' + esc(runStr) + '</span>' + out;
     }).join('');
   }
   function cancelBench() { if (_benchTok) { _benchTok.cancelled = true; _benchTok = null; } }
-  // animate the selected technique's demo: type each command, stream its output, light the signal line
   function playBenchTerm(mount, demo) {
     cancelBench();
     var term = mount.querySelector('#bench-term'); if (!term) return;
     var tok = { cancelled: false }; _benchTok = tok;
     term.innerHTML = '';
-    var steps = (demo || []).map(function (s) { return { cmd: benchFill(s.run), out: benchFill(s.out), sig: benchFill(s.sig || '') }; });
+    var steps = (demo || []).map(function (s) {
+      var r = benchFill(s.run);
+      return { cmd: r, prompt: detectPromptFor(r, '', ''), out: benchFill(s.out), sig: benchFill(s.sig || '') };
+    });
     var si = 0;
     function nextStep() {
       if (tok.cancelled || si >= steps.length) return;
@@ -438,7 +725,7 @@
       var ci = 0;
       (function type() {
         if (tok.cancelled) return;
-        if (ci <= s.cmd.length) { cmdEl.textContent = 'kali$ ' + s.cmd.slice(0, ci); ci++; setTimeout(type, 11); return; }
+        if (ci <= s.cmd.length) { cmdEl.textContent = s.prompt + ' ' + s.cmd.slice(0, ci); ci++; setTimeout(type, 11); return; }
         var lines = s.out.split('\n'), li = 0;
         (function emit() {
           if (tok.cancelled) return;
@@ -453,16 +740,18 @@
     }
     nextStep();
   }
-  // reading the result: what the highlighted signal line actually tells you
+
   function signalTellBlock(cell) {
-    if (!cell.output || !cell.output.text) return '';
-    var t = study().signalTell(cell.id); if (!t) return '';
-    // Prefer the hand-written teaching note pinned to this move's captured output; the derived gist is the fallback.
-    var body = t.teach || t.gist; if (!body) return '';
-    return '<div class="study-tell"><div class="study-tell-h">Reading the result</div>'
-      + '<p>' + codeify(body) + '</p></div>';
+    var resolved = resolveActiveCmd(cell);
+    var activeCmd = resolved.activeCmd;
+    var t = study().signalTell(cell.id);
+    var body = (activeCmd && activeCmd.teach) || (t && (t.teach || t.gist)) || '';
+    if (!body) return '';
+    var title = (activeCmd && activeCmd.label) ? ('Reading the result · ' + activeCmd.label) : 'Reading the result';
+    return '<div class="study-tell"><div class="study-tell-h">' + esc(title) + '</div>'
+      + '<p>' + codeify(benchFill(body)) + '</p></div>';
   }
-  // "Why this, not that?" - the tool-selection decisions attached to this move
+
   function decisionPanel(cell) {
     var ds = study().decisionFor(cell.id); if (!ds.length) return '';
     return ds.map(function (d) {
@@ -478,7 +767,6 @@
     }).join('');
   }
 
-  // fact popover: one fact made first-class. What produces it, and what it then unlocks.
   function showFactPop(mount, fact) {
     var el = mount.querySelector('#study-factpop'); if (!el) return;
     var info = study().factInfo(fact);
@@ -496,12 +784,29 @@
     el.hidden = false;
   }
 
-  // ---- right: WATCH (replay up top, derived reference below) -----------------------------------
+  function nextPreviewsHtml(cell) {
+    var list = (cell.nextPreviews && cell.nextPreviews.length) ? cell.nextPreviews : (study().nextPreviewFor ? study().nextPreviewFor(cell.id) : []);
+    if (!list || !list.length) return '';
+    return '<div class="study-next-previews">'
+      + '<div class="snp-head">Next Move Command Preview</div>'
+      + '<div class="snp-grid">'
+      + list.map(function (np) {
+          return '<div class="snp-card">'
+            + '<div class="snp-top">'
+            + '<button type="button" class="snp-title" data-goto="' + U.attr(np.id) + '">' + esc(np.title) + ' →</button>'
+            + (np.when ? '<span class="snp-when">' + esc(np.when) + '</span>' : '')
+            + '</div>'
+            + (np.cmd ? '<pre class="snp-cmd"><span class="snp-pr">' + esc(np.prompt || 'kali$') + '</span> ' + esc(benchFill(np.cmd)) + '</pre>' : '')
+            + '</div>';
+        }).join('')
+      + '</div></div>';
+  }
+
+  // ---- Center Column: WATCH (Before -> During -> After Flow) -----------------------------------
   function cellPanel() {
     var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
     if (!cell) return '<div class="study-panel"><p class="study-sub">This step is not available in this build.</p></div>';
-    var rp = study().replayFor(_sel);
-    var h = '<div class="study-panel">';
+    var h = '<div class="study-panel study-center-col">';
     h += '<div class="study-cell-h"><h2 class="study-cell-title">' + esc(cell.title) + '</h2>'
       + (cell.phase ? '<span class="study-badge b-phase">' + esc(cell.phase) + '</span>' : '')
       + (cell.scope ? '<span class="study-badge b-scope">' + esc(cell.scope === 'oscp' ? 'OSCP core' : cell.scope) + '</span>' : '')
@@ -510,45 +815,42 @@
       + '</div>';
     if (cell.whatItIs) h += '<p class="study-cell-sub">' + codeify(cell.whatItIs) + '</p>';
 
+    // 1. WHY THIS MOVE
     h += whyPanel(cell);
 
+    // 2. BEFORE THIS MOVE (Starting From + How You Got Here)
     h += '<div class="study-startfrom"><span class="study-sf-l">Starting from</span> '
       + (cell.prereqFacts.length ? factChips(cell.prereqFacts, 'proven') : '<span class="study-dim">nothing. This is an opening move.</span>')
       + (cell.producedBy.length ? '<span class="study-via">you would have run ' + cell.producedBy.slice(0, 2).map(function (x) { return '<b>' + esc(x.title) + '</b>'; }).join(', ') + '</span>' : '')
       + '</div>';
+    h += recapBlock();
 
-    // the replay
-    h += replayPlayer(rp);
+    // 3. DURING THIS MOVE (Unified Interactive Command & Terminal Workbench)
+    h += workbenchPanel(cell);
 
-    // reading the highlighted result line
+    // Reading the highlighted result line
     h += signalTellBlock(cell);
 
-    // Run-it-from toggle: the same move, two ways, remotely from your box or on the target after a shell.
-    h += runWaysPanel(cell);
-
-    // which tool, when: tradeoff decisions over moves that reach the same outcome
+    // Tool selection tradeoffs
     h += decisionPanel(cell);
 
-    // field notes: the techniques and bypasses that make the move actually land
-    h += howPanel(cell);
-
-    h += '<div class="study-seg study-outcome"><div class="study-seg-l">What you walk away with <span class="study-seg-note">and the moves it unlocks</span></div>'
+    // 4. AFTER THIS MOVE (What You Walk Away With + Unlocks Next + Concrete Command Previews)
+    h += '<div class="study-seg study-outcome"><div class="study-seg-l">After This Move: What you walk away with <span class="study-seg-note">and the moves it unlocks</span></div>'
       + '<div class="study-flow">' + factChips(cell.proves, 'proof')
       + (cell.opens.length ? '<span class="study-arr">unlocks</span>' + cell.opens.slice(0, 4).map(function (x) { return '<button type="button" class="study-chip study-next" data-goto="' + U.attr(x.id) + '">' + esc(x.title) + ' →</button>'; }).join('') : '')
-      + '</div></div>';
+      + '</div>'
+      + nextPreviewsHtml(cell)
+      + '</div>';
 
-    // scope-safety callout (when NOT to fire)
+    // 5. WATCH OUT & SCOPE SAFETY
     h += scopeCallout(cell.id);
-
     if (cell.rulesOut) h += '<div class="study-mistake"><span class="study-mi">⚠</span><div><b>Watch out:</b> ' + codeify(cell.rulesOut) + '</div></div>';
 
     h += '</div>';
     return h;
   }
 
-  // ---- right: YOUR TURN (practice) ------------------------------------------------------------
-  // Two question types, the same muscle: read a situation and decide ("what to do next"), or read raw
-  // output and name what it proves ("reading the output"). Diagnosis is the purest signal-recognition.
+  // ---- YOUR TURN (practice) -------------------------------------------------------------------
   function nextMovePanel() {
     var q = study().practiceFor(_sel, _pathMode && _path.length ? _path : null);
     if (!q) return '<div class="study-scn"><p>No practice for this step yet.</p></div>';
@@ -592,28 +894,7 @@
     return h + '</div>';
   }
 
-  // ---- the MAP (Learn landing): pick a lane, pick a step, or head to setup / an engagement --------
-  function pathStrip(lane) {
-    return '<div class="study-path">' + lane.map(function (n, i) {
-      return (i ? '<span class="study-path-arr">→</span>' : '')
-        + '<button type="button" class="study-path-node" data-open="' + U.attr(n.id) + '">'
-        + '<span class="study-path-ph">' + esc(n.phase) + '</span>'
-        + '<span class="study-path-t">' + esc(n.title) + '</span></button>';
-    }).join('') + '</div>';
-  }
-  function door(href, glyph, title, desc) {
-    return '<a class="study-door" href="' + href + '"><span class="study-door-g">' + glyph + '</span>'
-      + '<span class="study-door-t">' + esc(title) + '</span><span class="study-door-d">' + esc(desc) + '</span></a>';
-  }
   // ---- the Learn landing's building blocks -----------------------------------------------------
-  // The three promoted entries (cold box / atlas / by-port). Each carries the canonical single
-  // trigger attribute the rest of the route (and the smoke test) expects: data-sim / data-graph /
-  // data-ports live here and nowhere else, so a click selector stays unambiguous.
-  // One card renderer for every entry in the top action bar, so the six cards share one visual
-  // style (coloured accent, icon tile, kicker, title, description, CTA). o.trig gives a button its
-  // single canonical trigger attribute (data-sim / data-graph / data-decision / data-ports live
-  // here and nowhere else, so the click selectors stay unambiguous); o.href makes it a link instead.
-  // o.icon is ready HTML - a geometric glyph or an OBOL.ic() SVG (both render at the tile font size).
   function barCard(o) {
     var isLink = !!o.href;
     var open = isLink ? '<a class="sl-way ' + o.mod + '" href="' + o.href + '">'
@@ -626,15 +907,12 @@
       + '<span class="sl-way-go">' + esc(o.go) + ' →</span>'
       + close;
   }
-  // the progress tile pinned to the hero's top-right corner: the big studied/total, opens where you left off.
   function heroProg(contId, studied, total) {
     return '<button type="button" class="sl-hero-prog" data-open="' + U.attr(contId) + '">'
       + '<span class="sl-hp-g">' + studied + '<span class="sl-hp-tot">/' + total + '</span></span>'
       + '<span class="sl-hp-t">' + (studied ? 'Continue Where You Left Off' : 'Your Progress') + '</span>'
       + '<span class="sl-hp-d">' + (studied ? (studied + ' step' + (studied === 1 ? '' : 's') + ' studied · resume →') : 'Pick a lane and your progress tracks here.') + '</span></button>';
   }
-  // a curated by-port card for the landing, derived from the same evidence index the full by-port
-  // view uses, so its counts/signals never drift. Clicking opens the by-port view with it expanded.
   function slPortCard(e) {
     var fam = e.fam || 'recon', n = e.moves.length;
     return '<button type="button" class="sl-pcard sl-fam-' + esc(fam) + '" data-port-open="' + U.attr(e.key) + '">'
@@ -648,63 +926,33 @@
       + '<span class="sl-adot" aria-hidden="true"></span><span class="sl-at">' + esc(e.label) + '</span></button>';
   }
 
-  // ---- the Learn landing: a wide two-column dashboard (methodology leads, by-port equal-second) --
   var SL_CURATED_PORTS = ['p80', 'p135', 'p88', 'p389', 'p22', 'p21', 'p3306', 'p1433', 'p53', 'p161', 'p3389', 'p5985'];
-  // A gentle, dismissible two-doors welcome for first-time visitors (first-run routes here). It is
-  // inline, not a modal, so nothing traps focus; it is remembered once dismissed or a door is chosen.
-  function welcomed() { try { return !!localStorage.getItem('obol.welcomed'); } catch (e) { return false; } }
-  function welcomeBanner() {
-    if (welcomed()) return '';
-    return '<div class="study-welcome" role="region" aria-label="Welcome to OBOL">'
-      + '<button type="button" class="study-welcome-x" data-welcome-dismiss aria-label="Dismiss welcome">×</button>'
-      + '<div class="study-welcome-h">Welcome to OBOL</div>'
-      + '<p class="study-welcome-p">A calm companion for learning offensive security, at your own pace, your own way. Where would you like to start?</p>'
-      + '<div class="study-welcome-doors">'
-      + '<button type="button" class="study-welcome-door sw-learn" data-welcome-dismiss>'
-      + '<span class="sw-ic">' + OBOL.ic('spark') + '</span>'
-      + '<span class="sw-t">I am new to this</span>'
-      + '<span class="sw-d">Learn the methodology step by step, with a why for every move. No box required.</span></button>'
-      + '<button type="button" class="study-welcome-door sw-eng" data-welcome-go>'
-      + '<span class="sw-ic">' + OBOL.ic('crosshair') + '</span>'
-      + '<span class="sw-t">I am working a real box</span>'
-      + '<span class="sw-d">Start an engagement and let the coach track your next move from what you find.</span></button>'
-      + '</div></div>';
-  }
 
   function mapView() {
     var ls = study().lanes();
     var totalSteps = ls.reduce(function (a, L) { return a + L.count; }, 0);
-    // overall progress + where "continue" should jump (the lane with the most studied steps)
     var studiedTotal = 0, contId = (ls[0] || {}).firstId || '', best = 0;
     ls.forEach(function (L) { var pr = study().laneProgress(L.key); studiedTotal += pr.studied; if (pr.studied > best) { best = pr.studied; contId = L.firstId; } });
-    // by-port column, from the same evidence index the full by-port view projects
     var ev = study().evidence(), byKey = {};
     ev.forEach(function (e) { byKey[e.key] = e; });
     var ports = SL_CURATED_PORTS.map(function (k) { return byKey[k]; }).filter(Boolean);
     var access = ev.filter(function (e) { return e.tier === 'access'; });
 
     var h = '<section class="study-route study-map">';
-    h += welcomeBanner();
     h += '<div class="study-hero sl-hero">'
       + '<div class="sl-hero-main"><span class="sl-tag">Learn at your own pace, your own way</span>'
       + '<h1 class="study-hero-h">Learn the methodology</h1>'
       + '<p class="study-hero-p">OBOL teaches offensive security as a decision graph: <b>know what to do, and why, from what you\'ve found.</b> '
-      + 'Start from a structured path, from a port you just scanned, or drop into a live box, whatever fits how you learn.</p></div>'
+      + 'Start from a structured path, from a port you just scanned, or drop into a live box. Brand new or setting up a lab? Visit <a href="#/start">Start Here</a>.</p></div>'
       + heroProg(contId, studiedTotal, totalSteps)
       + '</div>';
-    // one unified action bar: six matching cards (three ways to start, the decision graph, and the
-    // set-up / engagement entries). Each has a colour, an icon, a kicker, and a CTA.
     h += '<div class="sl-bar">'
       + barCard({ trig: 'data-sim', mod: 'sl-way-cold', icon: OBOL.ic('play'), kick: 'Guided Simulation', title: 'Run a Cold Box', desc: 'Start from an IP and nothing else. Read each result, choose the next move, and watch the box fall one step at a time.', go: 'Start a Run' })
       + barCard({ trig: 'data-graph', mod: 'sl-way-atlas', icon: OBOL.ic('graph'), kick: 'The Whole Map', title: 'Walk the Attack Graph', desc: 'Every move in one graph, wired by what unlocks what. Pan, zoom, and trace end-to-end paths, or light up a ready-made scenario.', go: 'Open the Atlas' })
       + barCard({ trig: 'data-decision', mod: 'sl-way-decision', icon: OBOL.ic('branch'), kick: 'Why Each Move', title: 'Walk the Decision Tree', desc: 'Every move as a decision: what unlocks it, what it proves, what it rules out. Follow the branches from an open port to the whole path.', go: 'Open the Map' })
       + barCard({ trig: 'data-ports', mod: 'sl-way-port', icon: OBOL.ic('ports'), kick: 'Start from a Scan', title: 'Browse by Open Port', desc: 'You scanned; these ports are open. Pick the one in front of you and get the exact, ordered moves it unlocks.', go: 'Full By-Port View' })
-      + barCard({ href: '#/loadout', mod: 'sl-way-setup', icon: OBOL.ic('gear'), kick: 'Your Machine', title: 'Set Up Your Box', desc: 'Install the toolset so the commands you learn match your own machine.', go: 'Install Tools' })
-      + barCard({ href: '#/home', mod: 'sl-way-engage', icon: OBOL.ic('crosshair'), kick: 'Track a Box', title: 'Start an Engagement', desc: 'Working a real box? Track it: paste output, get your next move.', go: 'Start Tracking' })
       + '</div>';
-    // the two-column dashboard
     h += '<div class="sl-dash">';
-    // one methodology lane card
     function laneCard(L) {
       var pr = study().laneProgress(L.key), pct = pr.total ? Math.round(pr.studied / pr.total * 100) : 0;
       return '<button type="button" class="study-lane-card active lane-' + L.key + '" data-open="' + U.attr(L.firstId) + '">'
@@ -713,15 +961,19 @@
         + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:' + pct + '%"></span></div>'
         + '<span class="study-lane-go">' + (pr.studied ? pr.studied + ' / ' + pr.total + ' studied · continue →' : 'Start the path →') + '</span></div></button>';
     }
-    // left: methodology (leads). Active Directory + Databases stay grouped as the last adjacent pair,
-    // kept in the natural grid flow (no full-width divider) so the card grid reads continuously.
+    function simLaneCard() {
+      var scs = study().scenarios() || [];
+      return '<button type="button" class="study-lane-card lane-sim" data-sim-card>'
+        + '<div class="study-lane-name"><span class="sln-t">Cold-Box Exam Scenarios</span><span class="study-lane-badge">' + scs.length + ' chains</span></div>'
+        + '<div class="study-lane-desc">Step through end-to-end multi-stage attack chains from a bare IP to root/SYSTEM under realistic exam conditions.</div>'
+        + '<div class="study-lane-foot"><div class="study-lane-bar"><span style="width:100%"></span></div>'
+        + '<span class="study-lane-go">Run a Cold-Box Scenario →</span></div></button>';
+    }
     var GROUP = { ad: 1, database: 1 };
     var methodLanes = ls.filter(function (L) { return !GROUP[L.key]; }).concat(ls.filter(function (L) { return GROUP[L.key]; }));
     h += '<section class="sl-col sl-col-method" aria-label="Learn by methodology">'
       + '<div class="sl-col-h"><h2 class="sl-col-t">By Methodology</h2><span class="sl-col-count">' + ls.length + ' Lanes · ' + totalSteps + ' Steps</span></div>'
-      + '<div class="study-lanes">' + methodLanes.map(laneCard).join('') + '</div></section>';
-    // right: by open port (equal-second). No separate button: the bar's "Browse by Open Port" entry
-    // already opens this view, which carries its own Cards / Decision-map toggle.
+      + '<div class="study-lanes">' + methodLanes.map(laneCard).join('') + simLaneCard() + '</div></section>';
     h += '<section class="sl-col sl-col-port" aria-label="Learn by open port">'
       + '<div class="sl-col-h"><h2 class="sl-col-t">By Open Port</h2><span class="sl-col-count">What You Scanned</span></div>'
       + '<div class="sl-ports">' + ports.map(slPortCard).join('') + '</div>';
@@ -729,22 +981,17 @@
       h += '<div class="sl-access-h">Once You\'re In, What You\'re Holding</div>'
         + '<div class="sl-access">' + access.map(slAccessCard).join('') + '</div>';
     }
-    h += '</section></div>'; // .sl-col-port + .sl-dash
+    h += '</section></div>';
     return h + '</section>';
   }
 
-  // ---- the BY-EVIDENCE view: what is in front of you (a port, a shell, a hash) and what it unlocks.
-  // Two tiers: open ports first (how you actually start), then "once you are in" evidence. Each entry
-  // is an ordered mini-lane, so it reads with the same flow as the methodology lanes.
+  // ---- the BY-EVIDENCE view -------------------------------------------------------------------
   var FAM_LABEL = { recon: 'recon', web: 'web', db: 'database', ad: 'AD / Windows', remote: 'remote access', file: 'file share', mail: 'mail', access: 'post-foothold' };
-  // one move = a numbered, lane-coloured pill the learner can open
   function evMovePill(m, i, mk) {
     var studied = (mk[m.id] || {}).studied ? ' done' : '';
     return '<li class="port-move-li"><button type="button" class="port-move lane-' + m.laneKey + studied + '" data-open="' + U.attr(m.id) + '">'
       + '<span class="pm-n" aria-hidden="true">' + i + '</span><span class="pm-t">' + esc(m.title) + '</span></button></li>';
   }
-  // moves block: a plain numbered list, or (for a mega-card) grouped under its rail sub-categories,
-  // numbered continuously so the order still reads as one sequence. No connector arrows.
   function evMovesBlock(e, mk) {
     var moves = e.moves;
     if (moves.length <= 8) {
@@ -758,7 +1005,6 @@
         + g.items.map(function (m) { n += 1; return evMovePill(m, n, mk); }).join('') + '</ol></div>';
     }).join('');
   }
-  // one evidence card: collapsed by default (service + what-you-leverage overview), expands to its moves.
   function evidenceCard(e, mk, open) {
     var isPort = e.tier === 'ports';
     var n = e.moves.length;
@@ -772,7 +1018,7 @@
     var body = open
       ? '<div class="port-body"><p class="port-sig">' + esc(e.signal) + '</p>' + evMovesBlock(e, mk) + '</div>'
       : '<p class="port-sig port-sig-collapsed">' + esc(e.signal) + '</p>';
-    return '<div class="port-card' + (e.key === 'scan' ? ' port-scan' : '') + (isPort ? '' : ' ev-access') + (open ? ' open' : '') + '">'
+    return '<div class="port-card' + (e.key === 'scan' ? ' port-scan' : '') + (isPort ? '' : ' ev-access') + (e.fam ? ' port-fam-' + esc(e.fam) : '') + (open ? ' open' : '') + '">'
       + head + body + '</div>';
   }
   function portsView() {
@@ -793,9 +1039,8 @@
       + '<p class="study-hero-p">This is how you actually operate. You scan, and a list of open ports comes back. Each one is a signal: it tells you what the box runs and which moves it opens. '
       + 'Pick the port in front of you, read what it means, and open it for the ordered moves it unlocks. Once you are in, the signal changes to what you are holding, a shell, a hash, a credential.</p></div>';
     if (isMap) {
-      h += '<p class="ev-map-lede">The whole forest, derived from the same move graph and ranker that drive Next Steps, so it can never contradict the coach. '
-        + 'It opens zoomed out on the full mass; scroll or use the controls to zoom, drag to pan, click a port to fold its branches, and click a move to open it. '
-        + 'The lit path is the coach’s ranked spine. Flip the lens to <i>Parser cover</i> to see, in plain language, what OBOL reads at each step, and where it reads nothing.</p>';
+      h += '<p class="ev-map-lede">The whole decision forest, derived from the same move graph and ranker that drive the Cockpit, so it can never contradict the Cockpit. '
+        + 'Use the port &amp; service chips below to isolate any service tree, scroll or use the controls to zoom, drag to pan, click + / - on a node to expand or fold its branches, and click any move to open its interactive workbench.</p>';
       h += '<div id="port-decision-map" class="dt-mount" role="region" aria-label="By-port decision map"></div>';
       return h + '</section>';
     }
@@ -806,12 +1051,7 @@
     return h + '</section>';
   }
 
-  // ---- the full methodology graph: every lane, every step, pickable ---------------------------
-  // Layout: each lane is a horizontal *band*. Its steps wrap across up to MAXC columns so a 48-step
-  // lane like AD reads as a compact block of rows instead of one 12,000px line. A band can be folded
-  // shut (its steps collapse to a dot strip) so you can hide lanes you're not working. Everything is
-  // derived from study().atlas(); positions are computed once in atlasLayout() and shared by the SVG,
-  // the edges, the path-line and the minimap.
+  // ---- the full methodology graph (Atlas) -----------------------------------------------------
   var MAXC = 8, NW = 172, NH = 46, CGAP = 18, RGAP = 20, LEFT = 118, TOP = 10, BANDHEAD = 28, BANDGAP = 16;
   function atlasLayout() {
     var A = study().atlas();
@@ -837,16 +1077,12 @@
     var p1 = pos[a], p2 = pos[b]; if (!p1 || !p2) return '';
     if (cross) { var sx = p1.cx, sy = (p2.cy > p1.cy ? p1.y + NH : p1.y), ex = p2.cx, ey = (p2.cy > p1.cy ? p2.y : p2.y + NH); return 'M' + sx + ',' + sy + ' C' + sx + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ((sy + ey) / 2) + ' ' + ex + ',' + ey; }
     if (p1.lr === p2.lr && p2.x > p1.x) { var x1 = p1.x + NW, y1 = p1.cy, x2 = p2.x, y2 = p2.cy, mx = (x1 + x2) / 2; return 'M' + x1 + ',' + y1 + ' C' + mx + ',' + y1 + ' ' + mx + ',' + y2 + ' ' + x2 + ',' + y2; }
-    // a step that wraps to the next row: drop out of the bottom and curve back up to the row start
     var bx = p1.cx, by = p1.y + NH, tx = p2.cx, ty = p2.y, my = (by + ty) / 2;
     return 'M' + bx + ',' + by + ' C' + bx + ',' + my + ' ' + tx + ',' + my + ' ' + tx + ',' + ty;
   }
 
-  // category → short colour slug for the scenario chips
   var SCEN_SLUG = { 'Recon': 'recon', 'Web to Shell': 'web', 'Cloud': 'cloud', 'Privilege Escalation': 'privesc', 'Active Directory': 'ad', 'Databases': 'database', 'Lateral & Pivot': 'pivot' };
   function catSlug(c) { return SCEN_SLUG[c] || 'recon'; }
-  // the Atlas "common scenarios" menu: end-to-end paths grouped by category, colour-coded, each a chip
-  // you toggle to light up its steps (and then "Study this path" to walk it as one guided replay).
   function scenariosBar() {
     var all = study().scenarios(), cats = study().scenarioCats(), byCat = {};
     all.forEach(function (s) { (byCat[s.cat] = byCat[s.cat] || []).push(s); });
@@ -887,7 +1123,6 @@
         + '<text class="atlas-lanelabel lane-' + b.key + '" x="30" y="' + (b.top + 19) + '">' + esc(b.short) + '</text>'
         + '<text class="ab-count" x="' + (LY.W - 20) + '" y="' + (b.top + 19) + '">' + prog.studied + '/' + b.count + '</text>';
       if (b.collapsed) {
-        // folded: a strip of dots so the lane's size and progress still read at a glance
         var dots = b.nodes.map(function (n, i) { var mk = (study().mastery()[n.id] || {}); var cls = mk.correct ? ' done' : (mk.studied ? ' seen' : ''); return '<circle class="ab-dot' + cls + '" cx="' + (118 + i * 11) + '" cy="' + (b.top + 15) + '" r="3.2"/>'; }).join('');
         label += dots;
       }
@@ -899,7 +1134,7 @@
       + '<div class="study-crumb"><b>Study</b> · Atlas <span class="study-map-path-note">drag to pan · scroll to zoom · click a step to add it to a path · click a lane title to fold it</span></div>'
       + '<div class="atlas-ctrl">'
       + '<input type="search" class="atlas-search" id="atlas-search" placeholder="Search steps…" value="' + U.attr(_atlasQuery) + '" autocomplete="off" spellcheck="false">'
-      + '<button type="button" class="study-rp-btn" data-az="out">−</button>'
+      + '<button type="button" class="study-rp-btn" data-az="out">-</button>'
       + '<button type="button" class="study-rp-btn" data-az="reset">fit</button>'
       + '<button type="button" class="study-rp-btn" data-az="in">+</button></div></div>'
       + scenariosBar()
@@ -910,7 +1145,7 @@
       + '<path class="atlas-pathline" id="atlas-pathline" d=""/>'
       + '<g class="atlas-nodes">' + nodeSvg + '</g></g></svg>'
       + '<div class="atlas-minimap" id="atlas-minimap"><svg id="atlas-mini-svg" class="atlas-mini-svg"></svg><div class="atlas-mini-vp" id="atlas-mini-vp"></div></div>'
-      + '<div class="atlas-empty" id="atlas-empty" hidden>No step matches “<span id="atlas-empty-q"></span>”.</div>'
+      + '<div class="atlas-empty" id="atlas-empty" hidden>No step matches "<span id="atlas-empty-q"></span>".</div>'
       + '<div class="atlas-hovercard" id="atlas-hovercard" hidden></div>'
       + '</div>'
       + '<div class="atlas-tray" id="atlas-tray"></div>'
@@ -924,7 +1159,7 @@
   }
   function nodeView() {
     var right = _gear === 'practice' ? practicePanel() : cellPanel();
-    var bench = (_gear !== 'practice' && hasDemoBench(_sel)) ? howColumn() : '';
+    var bench = (_gear !== 'practice' && hasFieldGuide(_sel)) ? howColumn() : '';
     var colsCls = 'study-cols' + (bench ? ' has-bench' : '');
     return '<section class="study-route' + (bench ? ' has-bench' : '') + '">'
       + '<div class="study-top">'
@@ -941,14 +1176,11 @@
   }
 
   // ---- COLD BOX: a guided, scaffolded playthrough of a scenario -------------------------------
-  // Start from an IP and nothing else. Each step shows the real captured output of one move, then
-  // asks which move comes next. The scaffolding (the "tell" that explains the output) shows while a
-  // step is unmastered and whenever an answer is wrong, then fades once the move is mastered.
   function simTerm(rp) {
     if (!rp || !rp.steps || !rp.steps.length) return '<div class="study-term sim-term"><span class="study-ln">No captured output for this step yet.</span></div>';
     var sig = rp.signal || '';
     var body = rp.steps.map(function (s) {
-      var prompt = s.where === 'host' ? 'target$' : 'kali$';
+      var prompt = s.prompt || detectPromptFor(s.command, '', s.where);
       var cmd = '<span class="study-ln sim-cmd">' + esc(prompt + ' ' + (s.command || '')) + '</span>';
       var out = (s.outputLines || []).map(function (ln) {
         var hot = sig && ln.indexOf(sig) >= 0;
@@ -1025,20 +1257,52 @@
     return h;
   }
 
+  var TOPIC_TO_LANE = {
+    'recon': 'recon',
+    'web': 'web', 'web-exploitation': 'web',
+    'checks': 'checks',
+    'ad': 'ad', 'active-directory': 'ad',
+    'creds': 'creds', 'cracking': 'creds', 'password-cracking': 'creds',
+    'linux': 'linux', 'linux-privesc': 'linux',
+    'windows': 'windows', 'windows-privesc': 'windows',
+    'database': 'database', 'db': 'database',
+    'shells': 'shells',
+    'pivot': 'pivot', 'pivoting': 'pivot',
+    'proof': 'proof'
+  };
   var _lastAppliedArg = '';
+  var _leftStudy = false;
   function render(ctx) {
-    var arg = (ctx && ctx.args && ctx.args[0]) || '';
-    if (arg && arg !== _lastAppliedArg && study().cellFor(arg)) { _lastAppliedArg = arg; _sel = arg; _view = 'node'; _pathMode = false; _path = []; }
-    else if (!arg) { _lastAppliedArg = ''; }
+    var arg0 = (ctx && ctx.args && ctx.args[0]) || '';
+    var arg1 = (ctx && ctx.args && ctx.args[1]) || '';
+    var fullArg = arg1 ? (arg0 + '/' + arg1) : arg0;
+    // _leftStudy: re-entering the route (even with the SAME #/study/<id> hash as last time) must re-apply the
+    // deep link, otherwise an in-app drill (e.g. a Dedicated Goal Module link) leaves a stale node showing.
+    var reEntered = _leftStudy; _leftStudy = false;
+    var topicSlug = (arg0 === 'topic' && arg1) ? arg1 : (TOPIC_TO_LANE[arg0] && !study().cellFor(arg0) ? arg0 : '');
+    if (topicSlug && TOPIC_TO_LANE[topicSlug] && (fullArg !== _lastAppliedArg || reEntered)) {
+      var targetLane = TOPIC_TO_LANE[topicSlug];
+      var ls = study().lanes();
+      for (var i = 0; i < ls.length; i++) {
+        if (ls[i].key === targetLane && ls[i].firstId) {
+          _lastAppliedArg = fullArg;
+          _sel = ls[i].firstId;
+          _view = 'node';
+          _pathMode = false;
+          _path = [];
+          break;
+        }
+      }
+    } else if (arg0 && (arg0 !== _lastAppliedArg || reEntered) && study().cellFor(arg0)) {
+      _lastAppliedArg = arg0; _sel = arg0; _view = 'node'; _pathMode = false; _path = [];
+    } else if (!arg0 && _lastAppliedArg) {
+      _lastAppliedArg = ''; _view = 'map';
+    }
     return _view === 'map' ? mapView() : (_view === 'atlas' ? atlasView() : (_view === 'ports' ? portsView() : (_view === 'sim' ? simView() : nodeView())));
   }
 
   // ---- replay controller ----------------------------------------------------------------------
-  // The replay walks rp.steps in order. A multi-step fixture (a tunnel set up on both your box and the
-  // target) gets a "on your box (Kali)" / "on the target" header before each step's prompt, so the
-  // learner always sees WHERE each command runs and in what order. The prompt itself (kali$ / target$)
-  // also reflects the locus.
-  function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } }
+  function cancelReplay() { if (_rpToken) { _rpToken.cancelled = true; _rpToken = null; } if (_rpIo) { _rpIo.disconnect(); _rpIo = null; } }
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('hashchange', function () {
       if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') {
@@ -1046,10 +1310,6 @@
       }
     });
   }
-  // Honour reduced motion for UNINITIATED replay (scroll-in / chaining): OS setting or the
-  // motion pref set to reduced/off. An explicit Play/Replay click always animates, since
-  // the person asked for it. Under reduced motion auto-play still shows the full result, just
-  // without the typing animation, so nothing is lost.
   function reducedMotion() {
     try {
       var m = (typeof OBOL !== 'undefined' && OBOL.store) ? (OBOL.store.pref('motion') || localStorage.getItem('obol.motion')) : localStorage.getItem('obol.motion');
@@ -1057,27 +1317,47 @@
     } catch (e) {}
     try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
   }
-  function stepHeader(where) {
+  function stepHeader(where, stepTitle, stepIdx, stepTotal) {
+    var cleanTitle = String(stepTitle || '').replace(/^Step\s+\d+\s*(?:\([^)]+\))?\s*:\s*/i, '');
+    var extra = cleanTitle ? (' · <span class="rp-step-title">Step ' + ((stepIdx || 0) + 1) + '/' + (stepTotal || 1) + ': ' + esc(cleanTitle) + '</span>') : '';
     return where === 'host'
-      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">' + OBOL.ic('host') + '</span> on the target, the compromised host</div>'
-      : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">' + OBOL.ic('box') + '</span> on your box (Kali)</div>';
+      ? '<div class="rp-step-h rp-host"><span class="rp-where-glyph">' + OBOL.ic('host') + '</span> on the target, the compromised host' + extra + '</div>'
+      : '<div class="rp-step-h rp-local"><span class="rp-where-glyph">' + OBOL.ic('box') + '</span> on your box (Kali)' + extra + '</div>';
   }
-  function promptFor(where) { return where === 'host' ? 'target$' : 'kali$'; }
+  function promptFor(where, cmdStr, toolName) {
+    return detectPromptFor(cmdStr || '', toolName || '', where);
+  }
+  function currentReplayForPlayer(player) {
+    var moveId = player.getAttribute('data-move') || _sel;
+    var cmdIdxAttr = player.getAttribute('data-cmd-idx');
+    var cmdIdx = (cmdIdxAttr != null && cmdIdxAttr !== '')
+      ? (/^\d+$/.test(cmdIdxAttr) ? +cmdIdxAttr : cmdIdxAttr)
+      : _wbCmdIdx[moveId];
+    var cell = study().cellFor(moveId);
+    var activeCmd = null;
+    if (cell && cell.commands && cmdIdx != null) {
+      for (var i = 0; i < cell.commands.length; i++) {
+        if (String(cell.commands[i].cmdIdx) === String(cmdIdx) || i === cmdIdx) { activeCmd = cell.commands[i]; break; }
+      }
+    }
+    return study().replayFor(moveId, cmdIdx, activeCmd ? activeCmd.rawRun : undefined);
+  }
   function runReplay(mount, instant) {
     cancelReplay();
     var player = mount.querySelector('.study-replay'); if (!player) return;
-    var rp = study().replayFor(player.getAttribute('data-move')); if (!rp) return;
+    var rp = currentReplayForPlayer(player); if (!rp) return;
+    _rpSeen[rp.id] = true;
     var term = mount.querySelector('#rp-term'), facts = mount.querySelector('#rp-facts'), prog = mount.querySelector('.study-rp-prog');
     if (!term) return;
     var token = { cancelled: false }; _rpToken = token;
     term.innerHTML = ''; if (facts) facts.innerHTML = '';
     var seq = (_pathMode && _path.length) ? _path.slice() : study().lane(laneKeyOf(rp.id)).map(function (x) { return x.id; });
     var idx = seq.indexOf(rp.id);
-    if (prog) prog.textContent = 'move ' + (idx + 1) + ' / ' + seq.length + (rp.multi ? ' · ' + rp.steps.length + ' setup steps' : '');
-    var steps = rp.steps && rp.steps.length ? rp.steps : [{ where: 'local', command: rp.command, outputLines: rp.outputLines }];
+    if (prog) prog.textContent = 'move ' + (idx + 1) + ' / ' + seq.length + (rp.multi ? ' · ' + rp.steps.length + ' steps' : '');
+    var steps = rp.steps && rp.steps.length ? rp.steps : [{ where: 'local', prompt: rp.prompt, command: rp.command, outputLines: rp.outputLines, sig: rp.signal, teach: rp.teach }];
     var multi = steps.length > 1;
     function popFacts(delay) {
-      study().markStudied(rp.id, 'studied');   // watching a move through counts as having studied it
+      study().markStudied(rp.id, 'studied');
       if (facts && (rp.proves || []).length) setTimeout(function () {
         if (token.cancelled || !facts) return;
         if (OBOL.router && OBOL.router.current && OBOL.router.current().name !== 'study') { cancelReplay(); return; }
@@ -1098,28 +1378,33 @@
         _sel = nextId; _autoplay = true; OBOL.router.render();
       }, delay + (rp.proves.length * 260) + 1400);
     }
-    function lineHtml(ln) {
-      var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
+    function stepLineHtml(ln, stepSig, stepTeach) {
+      var sig = stepSig || rp.signal || '';
+      var teach = stepTeach || rp.teach || '';
+      var hot = (sig && ln.indexOf(sig) >= 0) || (rp.signal && ln.indexOf(rp.signal) >= 0);
       return '<div class="rp-line rp-out' + (hot ? ' hot' : '') + '">' + esc(ln || ' ') + '</div>'
-        + (hot && rp.teach ? '<div class="rp-cap">← ' + codeify(rp.teach) + '</div>' : '');
+        + (hot && teach ? '<div class="rp-cap">← ' + codeify(teach) + '</div>' : '');
     }
     if (instant) {
-      var html = steps.map(function (s) {
-        var head = multi ? stepHeader(s.where) : '';
-        var cmdLine = '<div class="rp-line rp-cmd"><span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> ' + esc(s.command) + '</div>';
-        return head + cmdLine + (s.outputLines || []).map(lineHtml).join('');
+      var html = steps.map(function (s, sIdx) {
+        var head = multi ? stepHeader(s.where, s.title, sIdx, steps.length) : '';
+        var pr = s.prompt || promptFor(s.where, s.command, s.tool || rp.tool);
+        var hostCls = isHostPrompt(pr, s.where) ? ' host' : '';
+        var cmdLine = '<div class="rp-line rp-cmd"><span class="rp-prompt' + hostCls + '">' + esc(pr) + '</span> ' + esc(s.command) + '</div>';
+        return head + cmdLine + (s.outputLines || []).map(function (ln) { return stepLineHtml(ln, s.sig, s.teach); }).join('');
       }).join('');
-      term.innerHTML = html; term.scrollTop = term.scrollHeight; popFacts(200); return;
+      term.innerHTML = html; term.scrollTop = 0; popFacts(200); return;
     }
-    // animated: type each step's command, stream its output, then move to the next step
     var si = 0;
     (function nextStep() {
       if (token.cancelled) return;
       if (si >= steps.length) { popFacts(300); return; }
       var s = steps[si];
-      if (multi) { var h = document.createElement('div'); h.innerHTML = stepHeader(s.where); term.appendChild(h.firstChild); term.scrollTop = term.scrollHeight; }
+      if (multi) { var h = document.createElement('div'); h.innerHTML = stepHeader(s.where, s.title, si, steps.length); term.appendChild(h.firstChild); term.scrollTop = term.scrollHeight; }
+      var pr = s.prompt || promptFor(s.where, s.command, s.tool || rp.tool);
+      var hostCls = isHostPrompt(pr, s.where) ? ' host' : '';
       var promptLine = document.createElement('div'); promptLine.className = 'rp-line rp-cmd';
-      promptLine.innerHTML = '<span class="rp-prompt' + (s.where === 'host' ? ' host' : '') + '">' + promptFor(s.where) + '</span> <span class="rp-typed"></span><span class="rp-cursor">▋</span>';
+      promptLine.innerHTML = '<span class="rp-prompt' + hostCls + '">' + esc(pr) + '</span> <span class="rp-typed"></span><span class="rp-cursor">▋</span>';
       term.appendChild(promptLine); term.scrollTop = term.scrollHeight;
       var typed = promptLine.querySelector('.rp-typed'), cmd = s.command || '', ci = 0;
       (function typeCmd() {
@@ -1132,14 +1417,16 @@
           si++; setTimeout(nextStep, 500); return;
         }
         var i = 0;
+        var stepSig = s.sig || rp.signal || '';
+        var stepTeach = s.teach || rp.teach || '';
         (function nextLine() {
           if (token.cancelled) return;
           if (i >= lines.length) { si++; setTimeout(nextStep, multi ? 650 : 300); return; }
           var ln = lines[i], el = document.createElement('div');
-          var hot = rp.signal && ln.indexOf(rp.signal) >= 0;
+          var hot = (stepSig && ln.indexOf(stepSig) >= 0) || (rp.signal && ln.indexOf(rp.signal) >= 0);
           el.className = 'rp-line rp-out' + (hot ? ' hot' : ''); el.textContent = ln || ' ';
           term.appendChild(el); term.scrollTop = term.scrollHeight;
-          if (hot && rp.teach) { var cap = document.createElement('div'); cap.className = 'rp-cap'; cap.innerHTML = '← ' + codeify(rp.teach); term.appendChild(cap); term.scrollTop = term.scrollHeight; }
+          if (hot && stepTeach) { var cap = document.createElement('div'); cap.className = 'rp-cap'; cap.innerHTML = '← ' + codeify(stepTeach); term.appendChild(cap); term.scrollTop = term.scrollHeight; }
           i++; setTimeout(nextLine, hot ? 1100 : 220);
         })();
       })();
@@ -1155,7 +1442,6 @@
     return pts.length < 2 ? '' : 'M' + pts.join(' L');
   }
   function scenName(key) { var s = study().scenario(key); return s ? s.name : ''; }
-  // a plain-language read-out of what (if anything) is wrong with the drawn path
   function pathWarnings() {
     if (_atlasPath.length < 2) return '';
     var v = study().validatePath(_atlasPath); if (v.ok) return '';
@@ -1189,7 +1475,6 @@
     syncScen(mount);
     atlasTray(mount);
   }
-  // dim every step that doesn't match the search; returns the first matching node's id (for centring)
   function applyQuery(mount) {
     var q = _atlasQuery.trim().toLowerCase(), first = null, nMatch = 0;
     Array.prototype.forEach.call(mount.querySelectorAll('.atlas-node'), function (g) {
@@ -1232,8 +1517,6 @@
     stage.addEventListener('pointermove', function (e) { if (!down) return; var dx = e.clientX - down.x, dy = e.clientY - down.y; if (Math.abs(dx) + Math.abs(dy) > 4) moved = true; _az.tx = down.tx + dx; _az.ty = down.ty + dy; apply(); });
     stage.addEventListener('pointerup', function () { var wasMoved = moved, g = down && down.node; down = null; if (wasMoved || !g) return; var id = g.getAttribute('data-anode'), i = _atlasPath.indexOf(id); if (i >= 0) _atlasPath.splice(i, 1); else _atlasPath.push(id); _scenario = null; atlasSelection(mount); });
     stage.addEventListener('wheel', function (e) { e.preventDefault(); var r = stage.getBoundingClientRect(); zoomAround(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
-    // hover card: the atlas labels are clipped for uniformity, so hovering a step shows its full title,
-    // what it is, and what it proves, so a learner can tell what they are about to pick.
     var hover = mount.querySelector('#atlas-hovercard');
     function showHover(g, e) {
       if (!hover) return;
@@ -1256,16 +1539,12 @@
       if (g) showHover(g, e); else if (hover && !hover.hidden) hover.hidden = true;
     });
     stage.addEventListener('pointerleave', function () { if (hover) hover.hidden = true; });
-    // minimap: click to recentre the stage on that point
     if (mini) mini.addEventListener('click', function (e) { var r = mini.getBoundingClientRect(), sr = stage.getBoundingClientRect(); var cx = (e.clientX - r.left) / miniK, cy = (e.clientY - r.top) / miniK; _az.tx = sr.width / 2 - cx * _az.k; _az.ty = sr.height / 2 - cy * _az.k; apply(); });
     U.on(mount, 'click', '[data-az]', function (e, t) { var a = t.getAttribute('data-az'); if (a === 'in' || a === 'out') { var r = stage.getBoundingClientRect(); zoomAround(r.width / 2, r.height / 2, a === 'in' ? 1.2 : 0.83); } else fit(); });
     U.on(mount, 'click', '[data-atlas="clear"]', function () { _atlasPath = []; _scenario = null; atlasSelection(mount); });
     U.on(mount, 'click', '[data-atlas="study"]', function () { if (!_atlasPath.length) return; _path = _atlasPath.slice(); _pathName = _scenario ? scenName(_scenario) : 'Your custom path'; _pathMode = true; _from = 'atlas'; _sel = _path[0]; _view = 'node'; OBOL.router.render(); });
-    // fold / unfold a lane band (full re-render - the whole layout reflows around it; the pan/zoom persists)
     U.on(mount, 'click', '[data-band]', function (e, t) { var k = t.getAttribute('data-band'); _collapsed[k] = !_collapsed[k]; OBOL.router.render(); });
-    // search: dim non-matches, centre the first hit
     U.on(mount, 'input', '#atlas-search', function (e, t) { _atlasQuery = t.value || ''; var first = applyQuery(mount); if (first) centerOn(first); });
-    // toggle a fixed scenario on/off (loads its steps as the path)
     U.on(mount, 'click', '[data-scen]', function (e, t) {
       var key = t.getAttribute('data-scen');
       if (key === _scenario) { _scenario = null; _atlasPath = []; }
@@ -1277,58 +1556,47 @@
   function mounted(ctx) {
     var mount = ctx.mount;
     cancelReplay(); cancelBench();
-    // Delegated click handlers are registered ONCE per mount element.
     wireStudyClicks(mount);
-    // ---- per-render setup (runs every render) ----
-    // keep your place in the step rail across a re-render: restore the scroll you clicked from, or,
-    // when arriving on a different step (a jump from the map/atlas), bring the active step into view.
     if (_view === 'node') {
       var railEl = mount.querySelector('.study-graph');
       if (railEl) {
         var wantTop = _railScroll; _railScroll = null;
         var sawNode = _railNodeSeen; _railNodeSeen = _sel;
-        // defer a frame: a freshly-built rail has no scrollHeight yet, so setting scrollTop now clamps to 0
         var applyRail = function () {
           if (!railEl.isConnected) return;
           if (wantTop != null) { railEl.scrollTop = wantTop; }
           else if (_sel !== sawNode) { var actEl = railEl.querySelector('.study-gnode.active'); if (actEl && actEl.scrollIntoView) { try { actEl.scrollIntoView({ block: 'nearest' }); } catch (e) { actEl.scrollIntoView(); } } }
-          // same move, in-place re-render (gear/recap toggle): leave the rail exactly where the learner left it
         };
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(applyRail); else applyRail();
       }
     } else { _railNodeSeen = null; }
-    // auto-start when a chain step mounts
     if (_view === 'node' && _gear === 'watch' && _autoplay) { _autoplay = false; var rm0 = reducedMotion(); setTimeout(function () { runReplay(mount, rm0); }, rm0 ? 0 : 250); }
-    // otherwise, play the run once it scrolls into view; a re-render after that shows the result at rest
     else if (_view === 'node' && _gear === 'watch') {
       var rpEl = mount.querySelector('.study-replay');
       if (rpEl) {
         var selAt = _sel;
-        if (_rpSeen[selAt]) { runReplay(mount, true); }                 // already watched: show the finished result
-        else if (reducedMotion()) { _rpSeen[selAt] = true; runReplay(mount, true); }  // reduced motion: show the result at rest, no typing
+        if (_rpSeen[selAt]) { runReplay(mount, true); }
+        else if (reducedMotion()) { _rpSeen[selAt] = true; runReplay(mount, true); }
         else if (typeof IntersectionObserver !== 'undefined') {
           var io = new IntersectionObserver(function (ents) {
             for (var i = 0; i < ents.length; i++) {
               if (!ents[i].isIntersecting) continue;
               io.disconnect();
-              if (_sel !== selAt) return;                               // navigated away before it came into view
+              _rpIo = null;
+              if (_sel !== selAt || _rpSeen[selAt]) return;
               _rpSeen[selAt] = true; runReplay(mount, false);
               return;
             }
           }, { threshold: 0.3 });
+          _rpIo = io;
           io.observe(rpEl);
         } else { _rpSeen[selAt] = true; runReplay(mount, false); }
       }
     }
-    // the Atlas: pan / zoom / semantic LOD / draw a custom path
     if (_view === 'atlas') setTimeout(function () { wireAtlas(mount); }, 30);
-    // the by-port decision map: the derived LTR forest (lazy - the engine + renderer load on demand)
     if (_view === 'ports' && _evMode === 'map') setTimeout(function () { wirePortMap(mount); }, 30);
   }
 
-  // Mount the derived decision forest into the by-port view. The engine (OBOL.decisionMap) and the
-  // renderer (OBOL.decisionTreeView) plus their data files are lazy-loaded; if they are not ready yet,
-  // show a quiet "building" note and let lazy.js fire a re-render when the group arrives.
   function wirePortMap(mount) {
     var el = mount.querySelector('#port-decision-map'); if (!el) return;
     if (!(OBOL.decisionTreeView && OBOL.decisionMap && OBOL.PARSER_SIGNATURES)) {
@@ -1343,8 +1611,6 @@
     });
   }
 
-  // All delegated click handlers for the study route. Bound once (see mounted); they read current
-  // state from module vars and query the current DOM through the stable mount element.
   function wireStudyClicks(mount) {
     if (!mount || mount._studyWired || mount.__studyWired) return;
     mount._studyWired = true;
@@ -1356,14 +1622,20 @@
       });
     }
 
-    // "How you got here": collapsible context, collapsed by default
-    // welcome two-doors: remember the choice, then stay on Learn or start an engagement
     onStudy('[data-welcome-dismiss]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.render(); });
     onStudy('[data-welcome-go]', function () { try { localStorage.setItem('obol.welcomed', '1'); } catch (e) {} OBOL.router.go('home'); });
     onStudy('[data-recap-toggle]', function () { setRecapOpen(!recapOpen()); OBOL.router.render(); });
-    // switch which plausible lead-up route is shown
     onStudy('[data-recap-path]', function (e, t) { _recapPath[_sel] = t.getAttribute('data-recap-path'); OBOL.router.render(); });
-    // field-notes bench: pick a technique (plays its demo), or replay the current one
+
+    // Operator Field Guide tab switch ('playbook' | 'signal' | 'blockers')
+    onStudy('[data-fg-tab]', function (e, t) {
+      var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null;
+      _fgTab[_sel] = t.getAttribute('data-fg-tab') || 'playbook';
+      _rpSeen[_sel] = true;
+      OBOL.router.render();
+    });
+
+    // Field-notes bench: pick a technique (plays its demo), or replay the current one
     onStudy('[data-bench]', function (e, t) {
       var i = +t.getAttribute('data-bench'), h = study().howTo(_sel); if (!h) return;
       _benchSel[_sel] = i;
@@ -1374,19 +1646,87 @@
       var h = study().howTo(_sel); if (!h) return; var i = _benchSel[_sel] || 0;
       playBenchTerm(mount, (h.items[i] || {}).demo);
     });
-    // map/graph: open a lane/step → node view (remember where we came from)
+
+    // Workbench stage filter (for Multi-Stage Tool Hubs & Scenario Umbrellas)
+    onStudy('[data-wb-stage]', function (e, t) {
+      var st = t.getAttribute('data-wb-stage') || 'all';
+      var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null;
+      _wbStage[_sel] = st;
+      var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
+      if (cell && cell.commands) {
+        var stageCmds = st === 'all' ? cell.commands : cell.commands.filter(function (c) { return c.stage === st; });
+        if (stageCmds.length && stageCmds[0].cmdIdx != null) {
+          _wbCmdIdx[_sel] = stageCmds[0].cmdIdx;
+        }
+      }
+      _rpSeen[_sel] = true;
+      OBOL.router.render();
+    });
+
+    // Workbench multi-step pipeline flag inspector selection
+    onStudy('[data-wb-step]', function (e, t) {
+      if (e.target && e.target.closest && e.target.closest('[data-wb-copy]')) return;
+      var stepIdx = +t.getAttribute('data-wb-step');
+      if (isNaN(stepIdx) || stepIdx < 0) return;
+      var key = t.getAttribute('data-wb-step-key') || (_sel + ':0');
+      var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null;
+      _wbStepIdx[key] = stepIdx;
+      _rpSeen[_sel] = true;
+      OBOL.router.render();
+    });
+
+    // Workbench command variant selection
+    onStudy('[data-wb-idx]', function (e, t) {
+      if (e.target && e.target.closest && e.target.closest('[data-wb-copy]')) return;
+      var raw = t.getAttribute('data-wb-idx');
+      if (raw == null || raw === '') return;
+      var idx = /^\d+$/.test(raw) ? +raw : raw;
+      var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null;
+      _wbCmdIdx[_sel] = idx;
+      _rpSeen[_sel] = true;
+      OBOL.router.render();
+    });
+
+    // Copy command from workbench or blocker fix
+    onStudy('[data-wb-copy]', function (e, t) {
+      e.stopPropagation();
+      var txt = t.getAttribute('data-wb-copy') || '';
+      if (!txt) return;
+      if (U && U.copy) U.copy(txt, t);
+      else if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).catch(function () {});
+        var orig = t.textContent; t.textContent = 'Copied!';
+        setTimeout(function () { t.textContent = orig; }, 1200);
+      }
+    });
+
+    // Send sample output to Coach sandbox
+    onStudy('[data-wb-ingest]', function (e, t) {
+      var player = mount.querySelector('.study-replay');
+      var rp = player ? currentReplayForPlayer(player) : study().replayFor(_sel);
+      if (!rp || !rp.outputLines || !rp.outputLines.length) return;
+      var sampleOut = rp.outputLines.join('\n');
+      var sampleCmd = rp.command || '';
+      if (OBOL.ingest && OBOL.ingest.run) {
+        Promise.resolve(OBOL.ingest.ensureParsers ? OBOL.ingest.ensureParsers() : true).then(function () {
+          OBOL.ingest.run(sampleOut, { command: sampleCmd, actionId: _sel, source: 'study-sandbox' });
+          t.textContent = '✓ Sent to Cockpit!';
+          setTimeout(function () { OBOL.router.go('path'); }, 450);
+        });
+      } else if (OBOL.quickpaste && OBOL.quickpaste.open) {
+        OBOL.quickpaste.open(sampleOut);
+      }
+    });
+
+    // map/graph: open a lane/step -> node view
     onStudy('[data-open]', function (e, t) { _from = (_view === 'atlas' ? 'atlas' : (_view === 'ports' ? 'ports' : 'map')); _sel = t.getAttribute('data-open'); _view = 'node'; OBOL.router.render(); });
     onStudy('[data-back]', function () { _view = _from; OBOL.router.render(); });
     onStudy('[data-back-map]', function () { _view = 'map'; OBOL.router.render(); });
     onStudy('[data-graph]', function () { _view = 'atlas'; OBOL.router.render(); });
     onStudy('[data-ports]', function () { _view = 'ports'; OBOL.router.render(); });
-    // Walk The Decision Graph: open the by-port view straight into its Decision-map mode (the forest).
     onStudy('[data-decision]', function () { _view = 'ports'; _evMode = 'map'; try { localStorage.setItem('obol.evMode', 'map'); } catch (e) {} OBOL.router.render(); });
-    // landing "more" links - distinct from the single data-graph/data-ports triggers above so a
-    // click selector stays unambiguous (the smoke test clicks [data-graph]/[data-ports] directly).
     onStudy('[data-go-atlas]', function () { _view = 'atlas'; OBOL.router.render(); });
     onStudy('[data-go-ports]', function () { _view = 'ports'; OBOL.router.render(); });
-    // a landing by-port/access card: open the full by-port view (cards mode) with that card expanded.
     onStudy('[data-port-open]', function (e, t) {
       var k = t.getAttribute('data-port-open');
       _view = 'ports'; _evMode = 'cards';
@@ -1396,10 +1736,8 @@
     });
     onStudy('[data-ev-toggle]', function (e, t) { var k = t.getAttribute('data-ev-toggle'); var o = evOpen(); o[k] = !o[k]; evSave(); OBOL.router.render(); });
     onStudy('[data-ev-all]', function (e, t) { var open = t.getAttribute('data-ev-all') === 'open'; var o = evOpen(); study().evidence().forEach(function (x) { o[x.key] = open; }); evSave(); OBOL.router.render(); });
-    // by-port: flip between the ordered-move cards and the derived LTR decision forest
     onStudy('[data-ev-mode]', function (e, t) { _evMode = t.getAttribute('data-ev-mode') === 'map' ? 'map' : 'cards'; try { localStorage.setItem('obol.evMode', _evMode); } catch (x) {} OBOL.router.render(); });
-    onStudy('[data-sim]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
-    // cold-box simulation: pick a scenario, answer each "what next", advance
+    onStudy('[data-sim], [data-sim-card]', function () { _view = 'sim'; _simKey = null; _simStep = 0; _simState = {}; OBOL.router.render(); });
     onStudy('[data-sim-start]', function (e, t) { _simKey = t.getAttribute('data-sim-start'); _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
     onStudy('[data-sim-exit]', function () { _simKey = null; _simStep = 0; _simState = {}; _view = 'sim'; OBOL.router.render(); });
     onStudy('[data-sim-restart]', function () { _simStep = 0; _simState = {}; OBOL.router.render(); });
@@ -1410,39 +1748,44 @@
       if (correct) { var sim = study().simFor(_simKey); if (sim && sim.steps[_simStep]) study().markStudied(sim.steps[_simStep].id, 'correct'); }
       OBOL.router.render();
     });
-    // node select + "opens →" jumps + goto chips → re-render
     onStudy('[data-node]', function (e, t) { var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null; _sel = t.getAttribute('data-node'); OBOL.router.render(); });
-    // Scope to Learn: this handler is delegated on the shared #view, which outlives the route, so it
-    // must ignore [data-goto] clicks that belong to another route (e.g. Stuck?'s interview buttons,
-    // which carry data-goto as a step name, not a Learn node id).
-    onStudy('[data-goto]', function (e, t) { if (_view === 'sim') _from = 'map'; _sel = t.getAttribute('data-goto'); _view = 'node'; OBOL.router.render(); });
-    // gear toggle → re-render
+    onStudy('[data-goto]', function (e, t) { var gid = t.getAttribute('data-goto'); if (!gid || !study().cellFor(gid)) return; if (_view === 'sim') _from = 'map'; _sel = gid; _view = 'node'; OBOL.router.render(); });
     onStudy('[data-gear]', function (e, t) { _gear = t.getAttribute('data-gear'); OBOL.router.render(); });
-    // "Run it from" toggle: remote (your box) vs on the target - local DOM swap, no re-render
+
+    // "Run it from" toggle: switches both the active command/terminal/switches AND reveals the matching pane
     onStudy('[data-runway]', function (e, t) {
+      cancelReplay();
       var way = t.getAttribute('data-runway');
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-tab'), function (b) { b.classList.toggle('on', b.getAttribute('data-runway') === way); });
       Array.prototype.forEach.call(mount.querySelectorAll('.rw-pane'), function (p) { p.hidden = p.getAttribute('data-pane') !== way; });
+      var cell = study().cellFor(_sel, { profile: (OBOL.arsenal && OBOL.arsenal.profileGet && OBOL.arsenal.profileGet()) || null });
+      if (cell && cell.commands) {
+        var match = cell.commands.filter(function (c) { return way === 'onhost' ? c.rank === 2 : (c.rank === 0 || c.rank === 1); })[0];
+        if (match && match.cmdIdx != null) {
+          var g = mount.querySelector('.study-graph'); _railScroll = g ? g.scrollTop : null;
+          _wbCmdIdx[_sel] = match.cmdIdx;
+          if (_wbStage[_sel] && _wbStage[_sel] !== 'all' && match.stage && match.stage !== _wbStage[_sel]) {
+            _wbStage[_sel] = 'all';
+          }
+          _rpSeen[_sel] = true;
+          OBOL.router.render();
+        }
+      }
     });
-    // reveal the reasoning for this move (overrides the faded-once-mastered default)
+
     onStudy('[data-why-show]', function () { _whyOverride[_sel] = true; OBOL.router.render(); });
-    // cycle how much reasoning to show: auto -> always -> off
     onStudy('[data-coach-cycle]', function () { var p = study().coachPref(); study().setCoachPref(p === 'auto' ? 'always' : (p === 'always' ? 'off' : 'auto')); OBOL.router.render(); });
-    // a fact chip is first-class: tap it to see what produces it and what it unlocks
     onStudy('[data-fact]', function (e, t) { showFactPop(mount, t.getAttribute('data-fact')); });
     onStudy('[data-factpop-close]', function () { var p = mount.querySelector('#study-factpop'); if (p) p.hidden = true; });
-    // replay controls
     onStudy('[data-rp="play"]', function () { runReplay(mount, false); });
     onStudy('[data-rp="restart"]', function () { runReplay(mount, false); });
     onStudy('[data-rp="skip"]', function () { runReplay(mount, true); });
     onStudy('[data-rp="autolane"]', function () {
       _autolane = !_autolane;
-      if (_autolane) { _autoplay = true; OBOL.router.render(); }   // start chaining from here
-      else { cancelReplay(); OBOL.router.render(); }                // stop instantly, one click
+      if (_autolane) { _autoplay = true; OBOL.router.render(); }
+      else { cancelReplay(); OBOL.router.render(); }
     });
-    // practice: switch between "what to do next" and "reading the output"
     onStudy('[data-pmode]', function (e, t) { _practiceMode = t.getAttribute('data-pmode'); OBOL.router.render(); });
-    // diagnosis: read the output, name what it proves
     onStudy('.study-dx-choice', function (e, t) {
       var correct = t.getAttribute('data-correct') === '1';
       Array.prototype.forEach.call(mount.querySelectorAll('.study-dx-choice'), function (c) { c.classList.remove('ok', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
@@ -1455,9 +1798,8 @@
           + '<div>' + (why ? codeify(why.getAttribute('data-why') || '') : '') + '</div>';
       }
     });
-    // practice: answer a choice (local DOM update, keeps the answered state)
     onStudy('.study-choice', function (e, t) {
-      if (t.classList.contains('study-dx-choice')) return; // handled above
+      if (t.classList.contains('study-dx-choice')) return;
       var verdict = t.getAttribute('data-verdict'), coach = t.getAttribute('data-coach') || '', missing = t.getAttribute('data-missing') || '';
       Array.prototype.forEach.call(mount.querySelectorAll('.study-choice'), function (c) { c.classList.remove('ok', 'alt', 'bad', 'dimmed'); if (c !== t) c.classList.add('dimmed'); });
       t.classList.add(verdict === 'correct' ? 'ok' : (verdict === 'alt' ? 'alt' : 'bad'));
@@ -1473,16 +1815,14 @@
           + (verdict === 'correct' ? '<button type="button" class="study-reveal-btn">See how it plays out ↓</button>' : '');
       }
     });
-    // reveal the worked cell on a correct answer
     onStudy('.study-reveal-btn', function (e, t) {
       var slot = mount.querySelector('#study-reveal-slot'); if (!slot) return;
       var save = _gear; _gear = 'watch'; var cellHtml = cellPanel(); _gear = save;
-      // strip the outer panel wrapper so it nests cleanly
-      slot.innerHTML = '<div class="study-reveal">' + cellHtml.replace(/^<div class="study-panel">/, '').replace(/<\/div>$/, '') + '</div>';
+      slot.innerHTML = '<div class="study-reveal">' + cellHtml.replace(/^<div class="study-panel[^"]*">/, '').replace(/<\/div>$/, '') + '</div>';
       t.style.display = 'none';
     });
   }
 
   OBOL.routes = OBOL.routes || {};
-  OBOL.routes.study = { render: render, mounted: mounted };
+  OBOL.routes.study = { render: render, mounted: mounted, unmount: function () { cancelReplay(); cancelBench(); _leftStudy = true; } };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

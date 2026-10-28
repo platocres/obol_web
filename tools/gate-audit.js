@@ -21,6 +21,8 @@
  *   FAIL · NO-GATE     a move with no requires at all — always eligible, so it can surface on an empty box.
  *   FAIL · PHASE-EFFECT  a recon/enum move that produces a foothold/privilege (mis-phased; it would be
  *                      ranked as mere recon while handing you access).
+ *   FAIL · PREMATURE-SETTLE  a move that settles on its own gates + ambient credentials before running.
+ *   FAIL · TWIN-GATE-ASYMMETRY  twin moves in the same phase/transition with divergent gate sets.
  *   INFO · BARE-RECON-PAYOFF  a move that can fire from bare recon (all req_all are env, a req_any is env)
  *                      AND produces a payoff. With a vuln. or service. option this is the INTENDED
  *                      offer-at-port/promote-on-evidence pattern (capped by the ranker). With ONLY a bare
@@ -62,7 +64,30 @@ function prodSink(k) { if (GOAL[k]) return 'GOAL'; if (consumers[k]) return cons
 function firesFromBareRecon(a) { var all = a.requires_all || [], any = a.requires_any || []; if (!all.every(isEnv)) return false; return any.length === 0 || any.some(isEnv); }
 var PAYOFF = /^(foothold\.|access\.|loot\.ntds|credential\.(available|plaintext))/;
 
-var deadGate = [], noGate = [], phaseEffect = [], bareReconIntended = [], bareReconSpeculative = [];
+var deadGate = [], noGate = [], phaseEffect = [], prematureSettle = [], twinAsymmetry = [], bareReconIntended = [], bareReconSpeculative = [];
+var rawById = {};
+raw.forEach(function (a) { rawById[a.id] = a; });
+
+var TWIN_PAIRS = [
+  ['ad-legacy-enum', 'ad-psdotnet-enum'],
+  ['manual-sqli-exploitation', 'sqlmap-automation'],
+  ['azure-imds', 'gcp-metadata'],
+  ['http-request-smuggling', 'prototype-pollution'],
+  ['ssrf', 'xxe'],
+  ['access-db-export', 'ole-macro-analysis'],
+  ['weak-service-permissions', 'windows-service-dacl-abuse']
+];
+TWIN_PAIRS.forEach(function (pair) {
+  var a = rawById[pair[0]], b = rawById[pair[1]];
+  if (!a || !b) return;
+  var aAll = (a.requires_all || []).slice().sort().join(',');
+  var bAll = (b.requires_all || []).slice().sort().join(',');
+  var aAny = (a.requires_any || []).slice().sort().join(',');
+  var bAny = (b.requires_any || []).slice().sort().join(',');
+  if (aAll !== bAll || aAny !== bAny) {
+    twinAsymmetry.push(pair[0] + ' vs ' + pair[1] + ' (all=[' + aAll + '] vs [' + bAll + '], any=[' + aAny + '] vs [' + bAny + '])');
+  }
+});
 
 raw.forEach(function (a) {
   var all = a.requires_all || [], any = a.requires_any || [], prod = a.produces || [];
@@ -77,6 +102,25 @@ raw.forEach(function (a) {
   all.concat(any).forEach(function (k) { if (gateSource(k) === 'NONE') deadGate.push(a.id + '  dead gate: ' + k + (any.indexOf(k) >= 0 && any.length > 1 ? ' (one of ' + any.length + ' OR-options)' : ' (sole/required)')); });
   if (!all.length && !any.length) noGate.push(a.id + ' [' + packOf[a.id] + ']');
   if ((phase === 'recon' || phase === 'enum') && prod.some(function (k) { return /^(foothold\.|access\.(?!desktop$)|loot\.ntds)/.test(k); })) phaseEffect.push(a.id + ' phase=' + phase + ' produces ' + prod.join(','));
+  if (a.id !== 'validate-credential' && prod.length && PK.Action && OBOL.facts) {
+    var act = new PK.Action(a);
+    var branches = any.length ? any : [null];
+    for (var bi = 0; bi < branches.length; bi++) {
+      var b = branches[bi];
+      var seedKinds = {};
+      all.forEach(function (k) { seedKinds[k] = 1; });
+      if (b) seedKinds[b] = 1;
+      seedKinds['credential.available'] = 1;
+      seedKinds['credential.plaintext'] = 1;
+      var fset = new OBOL.facts.FactSet(Object.keys(seedKinds).map(function (k) {
+        return OBOL.facts.makeFact({ kind: k, value: { note: 'audit' }, source: 'audit', state: OBOL.facts.ProofState.SUPPORTED });
+      }));
+      if (act.settled(fset)) {
+        prematureSettle.push(a.id + ' [' + packOf[a.id] + ']' + (b ? ' (via ' + b + ')' : ''));
+        break;
+      }
+    }
+  }
   if (firesFromBareRecon(a) && prod.some(function (k) { return PAYOFF.test(k); })) {
     var lead = any.some(function (k) { return /^(vuln\.|service\.)/.test(k); });
     var line = a.id + ' [' + packOf[a.id] + '] any=[' + any.join(',') + ']';
@@ -91,10 +135,12 @@ console.log('OBOL gate audit — ' + raw.length + ' moves');
 section('FAIL · DEAD-GATE — a gate fact nothing mints (env/move/parser)', deadGate);
 section('FAIL · NO-GATE — move with no requires (always eligible)', noGate);
 section('FAIL · PHASE-EFFECT — recon/enum move producing a foothold/privilege', phaseEffect);
+section('FAIL · PREMATURE-SETTLE — move settles on its own gates + ambient credentials before running', prematureSettle);
+section('FAIL · TWIN-GATE-ASYMMETRY — twin moves with divergent gate sets', twinAsymmetry);
 section('INFO · BARE-RECON-PAYOFF (intended: has a vuln./service. promote option, capped till then)', bareReconIntended);
 section('INFO · BARE-RECON-PAYOFF (pure speculation: only a bare port/http option — review for a tech/vuln lead)', bareReconSpeculative);
 
-var failCount = deadGate.length + noGate.length + phaseEffect.length;
+var failCount = deadGate.length + noGate.length + phaseEffect.length + prematureSettle.length + twinAsymmetry.length;
 console.log('\n' + raw.length + ' moves · ' + failCount + ' FAIL · ' + (bareReconIntended.length + bareReconSpeculative.length) + ' bare-recon-payoff (advisory)');
 if (CHECK && failCount) { console.error('GATE AUDIT FAIL: ' + failCount + ' gate fault(s).'); process.exit(1); }
 if (CHECK) console.log('GATE AUDIT OK: no dead gates, no ungated moves, no mis-phased payoffs.');

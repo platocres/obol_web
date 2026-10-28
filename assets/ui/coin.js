@@ -1,25 +1,21 @@
 /*!
- * obol ui — coin.js — the coin-burst effect.
- * An *obol* is the coin paid to Charon — obol's namesake — so when you beat the box (a foothold,
+ * obol ui - coin.js - the coin-burst effect.
+ * An *obol* is the coin paid to Charon - obol's namesake - so when you beat the box (a foothold,
  * privilege escalation, a captured flag) gold coins burst across the screen. Self-contained,
  * presentation-only: it shares no app state, draws on its own fixed pointer-events:none <canvas>
- * above the page, honours prefers-reduced-motion, pauses when the tab is hidden, and can be turned
- * off. It celebrates only GENUINE PROOF — bursts fire on the same proof-bound fact kinds the coach
- * reads, minted by the conservative parsers, never on noise. Exposes window.obolCoins + OBOL.coins;
- * store.js calls burstForFactKinds() with the kinds of facts just added.
+ * above the page, pauses when the tab is hidden, and has its own independent toggle (Coin bursts:
+ * on/off) so it still fires when background motion effects are turned off. It celebrates only
+ * GENUINE PROOF - bursts fire on the same proof-bound fact kinds the coach reads, minted by the
+ * conservative parsers, never on noise. Exposes window.obolCoins + OBOL.coins; store.js calls
+ * burstForFactKinds() with the kinds of facts just added.
  */
 (function (root) {
   "use strict";
   var OBOL = root.OBOL = root.OBOL || {};
 
-  var LS_COINS = "obol.coins", LS_MOTION = "obol.motion";
+  var LS_COINS = "obol.coins";
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-
-  var reduceMq = (root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)")) || null;
-  function reduceMotion() { return !!(reduceMq && reduceMq.matches); }
-  function motionLevel() { var v = lsGet(LS_MOTION); return (v === "reduced" || v === "off") ? v : "full"; }
-  function fullMotion() { return motionLevel() === "full" && !reduceMotion(); }
 
   // ── the honest milestone table (every key is a proof fact obol can mint) ──
   var MILESTONES = {
@@ -82,7 +78,7 @@
     if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   function spawn(m) {
-    if (!enabled() || !fullMotion() || document.hidden) return;
+    if (!enabled() || document.hidden) return;
     ensureCanvas();
     var n = Math.min(28, m.coins * (m.tier === "jackpot" ? 2 : 1));
     var ox = vw / 2, oy = vh * 0.34, big = m.tier === "jackpot" || m.tier === "pwned";
@@ -100,7 +96,7 @@
   var GRAV = 0.28, DRAG = 0.99;
   function loop() {
     rafId = 0; if (document.hidden) return;
-    if (!enabled() || !fullMotion()) { stopEffects(); return; }
+    if (!enabled()) { stopEffects(); return; }
     ctx.clearRect(0, 0, vw, vh);
     var alive = [];
     for (var i = 0; i < particles.length; i++) {
@@ -139,6 +135,7 @@
     clearTimeout(bannerTimer); bannerTimer = setTimeout(function () { if (bannerEl) bannerEl.style.opacity = "0"; }, 1400);
   }
   function sparkleBurst(label) {
+    if (!enabled() || document.hidden) return;
     ensureCanvas();
     var ox = vw / 2, oy = vh * 0.34;
     for (var s = 0; s < 26; s++) particles.push({ kind: "spark", x: ox + (Math.random() - 0.5) * 120, y: oy + (Math.random() - 0.5) * 70,
@@ -147,7 +144,7 @@
     if (!rafId) rafId = requestAnimationFrame(loop);
   }
 
-  // ── "Level Up!" — the privilege-escalation flourish ──
+  // ── "Level Up!" - the privilege-escalation flourish ──
   var ESCALATION = { "access.admin": "admin", "access.root": "root", "access.system": "SYSTEM" };
   function escalationWin(kinds) {
     for (var i = 0; i < (kinds || []).length; i++) { var head = String(kinds[i]).split("(")[0].trim(); if (ESCALATION[head]) return ESCALATION[head]; }
@@ -155,7 +152,7 @@
   }
   var levelEl = null, levelTimer = 0;
   function levelUp(label) {
-    if (!enabled() || !fullMotion()) return;
+    if (!enabled() || document.hidden) return;
     if (!levelEl) {
       levelEl = document.createElement("div"); levelEl.id = "obolcoin-levelup"; levelEl.setAttribute("aria-live", "polite");
       levelEl.style.cssText = "position:fixed;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);z-index:10001;pointer-events:none;" +
@@ -179,17 +176,17 @@
     if (bannerEl) bannerEl.style.opacity = "0";
     if (levelEl) levelEl.style.opacity = "0";
   }
-  function updateMotion() { if (!enabled() || !fullMotion()) stopEffects(); }
+  function updateMotion() { if (!enabled()) stopEffects(); }
   function burst(tierOrKind, label) {
-    if (!enabled() || !fullMotion()) return;
+    if (!enabled()) return;
     var m = (tierOrKind && tierOrKind.tier) ? tierOrKind : (milestoneFor(tierOrKind) || { tier: tierOrKind || "foothold", label: label || "pwned", coins: 8 });
     spawn(m);
   }
   // store.js calls this with the kinds of facts just minted (an evidence paste / BH ingest).
   function burstForFactKinds(kinds) {
-    if (!enabled() || !fullMotion() || !kinds || !kinds.length) return;
+    if (!enabled() || !kinds || !kinds.length) return;
     var lvl = escalationWin(kinds);
-    if (lvl && fullMotion()) levelUp(lvl);
+    if (lvl) levelUp(lvl);
     var m = bestMilestone(kinds);
     if (m) { spawn(m); return; }
     if (kinds.some(isLoot)) sparkleBurst("loot found");
@@ -197,7 +194,7 @@
 
   var api = {
     burst: burst, burstForFactKinds: burstForFactKinds, levelUp: levelUp,
-    enabled: enabled, setEnabled: function (on) { lsSet(LS_COINS, on ? "1" : "0"); updateMotion(); }, updateMotion:updateMotion, milestoneFor: milestoneFor
+    enabled: enabled, setEnabled: function (on) { lsSet(LS_COINS, on ? "1" : "0"); updateMotion(); }, updateMotion: updateMotion, milestoneFor: milestoneFor
   };
   root.obolCoins = api; OBOL.coins = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

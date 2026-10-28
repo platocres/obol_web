@@ -14,7 +14,8 @@
       ],
       "requires_any": [
         "service.mysql",
-        "port:3306"
+        "port:3306",
+        "db.creds"
       ],
       "produces": [
         "db.session"
@@ -50,9 +51,7 @@
       "tools": [
         "mysql"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "produces": [
         "loot.material"
       ],
@@ -70,7 +69,10 @@
           "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' {{database}}"
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "db.session",
+        "db.creds"
+      ]
     },
     {
       "id": "mssql-login",
@@ -85,7 +87,9 @@
       ],
       "requires_any": [
         "service.ms-sql-s",
-        "port:1433"
+        "port:1433",
+        "db.creds",
+        "mssql.authenticated"
       ],
       "produces": [
         "db.session"
@@ -156,13 +160,12 @@
       "os": [
         "windows"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "requires_any": [
+        "db.session",
+        "mssql.authenticated",
         "mssql.sysadmin",
-        "service.ms-sql-s",
-        "port:1433"
+        "db.admin"
       ],
       "produces": [
         "foothold.windows"
@@ -204,7 +207,8 @@
       ],
       "requires_any": [
         "service.postgresql",
-        "port:5432"
+        "port:5432",
+        "db.creds"
       ],
       "produces": [
         "db.session"
@@ -236,12 +240,10 @@
       "os": [
         "linux"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "requires_any": [
-        "service.postgresql",
-        "port:5432"
+        "db.session",
+        "db.admin"
       ],
       "produces": [
         "foothold.linux"
@@ -282,7 +284,8 @@
       ],
       "requires_any": [
         "port:6379",
-        "service.redis"
+        "service.redis",
+        "redis.unauth"
       ],
       "produces": [
         "config.review",
@@ -323,7 +326,8 @@
       ],
       "requires_any": [
         "port:27017",
-        "service.mongodb"
+        "service.mongodb",
+        "mongo.unauth"
       ],
       "produces": [
         "loot.material"
@@ -376,7 +380,8 @@
       ],
       "requires_any": [
         "port:1521",
-        "service.oracle-tns"
+        "service.oracle-tns",
+        "db.creds"
       ],
       "produces": [
         "db.session"
@@ -429,12 +434,10 @@
       "os": [
         "linux"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "requires_any": [
-        "port:1521",
-        "service.oracle-tns"
+        "db.session",
+        "db.admin"
       ],
       "produces": [
         "foothold.linux"
@@ -570,7 +573,8 @@
       ],
       "requires_any": [
         "port:11211",
-        "service.memcached"
+        "service.memcached",
+        "memcached.open"
       ],
       "produces": [
         "loot.material"
@@ -619,13 +623,13 @@
       "os": [
         "windows"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "requires_any": [
+        "db.session",
+        "mssql.authenticated",
         "mssql.sysadmin",
-        "service.ms-sql-s",
-        "port:1433"
+        "db.linked_server",
+        "mssql.linked_servers"
       ],
       "produces": [
         "foothold.windows"
@@ -677,12 +681,10 @@
       "tools": [
         "mysql"
       ],
-      "requires_all": [
-        "db.session"
-      ],
+      "requires_all": [],
       "requires_any": [
-        "service.mysql",
-        "port:3306"
+        "db.session",
+        "db.admin"
       ],
       "produces": [
         "foothold.webshell"
@@ -789,7 +791,8 @@
       "phase": "access",
       "requires_any": [
         "port:6379",
-        "service.redis"
+        "service.redis",
+        "redis.unauth"
       ],
       "produces": [
         "foothold.linux"
@@ -835,9 +838,8 @@
       "os": [],
       "phase": "access",
       "requires_any": [
-        "http.reachable",
-        "web.tech",
-        "web.nosqli_confirmed"
+        "web.nosqli_confirmed",
+        "vuln.nosqli"
       ],
       "produces": [
         "credential.available",
@@ -932,7 +934,7 @@
       "requires_all": [],
       "requires_any": [
         "vuln.oracle_tns",
-        "port:1521"
+        "db.admin"
       ],
       "produces": [
         "access.system",
@@ -983,7 +985,7 @@
       "requires_any": [
         "vuln.aerospike",
         "vuln.aerospike_udf",
-        "port:3000"
+        "service.aerospike"
       ],
       "produces": [
         "foothold.linux",
@@ -1064,5 +1066,6 @@
         }
       ]
     }
-  ]
+  ],
+  "id": "database_2026_09"
 }

@@ -142,9 +142,13 @@ function isText(rel) { return TEXT_EXT.has(path.extname(rel).toLowerCase()); }
 // deletion rule can never eat an identifier like a variable named `derived`. So deletion rules run inside
 // comments and single/double-quoted strings, never on bare code or template literals (which embed ${code}).
 // Renames (product name, donor -> origin) are consistent substitutions tagged codeSafe and stay global.
-const JS_SPAN = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g;
+const JS_SPAN = /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/(?![/*])(?:\\.|\[(?:\\.|[^\]\\])*\]|[^/\\\r\n])+\/[dgimsuvy]*/g;
 function scrubProse(text, re, rep) {
-  return text.replace(JS_SPAN, (span) => (span.charCodeAt(0) === 96 ? span : span.replace(re, rep)));
+  return text.replace(JS_SPAN, (span) => {
+    const c0 = span.charCodeAt(0), c1 = span.charCodeAt(1);
+    if (c0 === 96 || (c0 === 47 && c1 !== 47 && c1 !== 42)) return span;
+    return span.replace(re, rep);
+  });
 }
 function scrub(text, rel = '') {
   let s = text;
@@ -170,9 +174,9 @@ const tracked = execFileSync('git', ['-C', REPO, 'ls-files'], { encoding: 'utf8'
 rmrf(STAGE); ensureDir(STAGE);
 let copied = 0, scrubbed = 0, denied = 0, overrode = 0;
 for (const rel of tracked) {
-  if (isDenied(rel)) { denied++; continue; }
   const ovr = path.join(OVERRIDES, rel);
   const useOverride = fs.existsSync(ovr);
+  if (!useOverride && isDenied(rel)) { denied++; continue; }
   const src = useOverride ? ovr : path.join(REPO, rel), dst = path.join(STAGE, rel);
   if (useOverride) overrode++;
   ensureDir(path.dirname(dst));
@@ -188,8 +192,8 @@ for (const rel of tracked) {
 
 // 4) regenerate bundle + stamps from the scrubbed sources so everything is internally consistent
 function run(cmd, args) { execFileSync(cmd, args, { cwd: STAGE, stdio: 'pipe' }); }
-try { run('node', ['tools/build-packs.js']); } catch (e) { console.error('build-packs failed in staging:', e.message); }
-try { run('node', ['tools/stamp-assets.js']); } catch (e) { console.error('stamp-assets failed in staging:', e.message); }
+try { run('node', ['tools/build-packs.js']); } catch (e) { console.error('build-packs failed in staging:', e.message); process.exit(1); }
+try { run('node', ['tools/stamp-assets.js']); } catch (e) { console.error('stamp-assets failed in staging:', e.message); process.exit(1); }
 
 // 4b) lean the published tree: drop the build/test inputs now that the bundles are generated. The
 // browser never loads these; the app is index.html + assets + data/*.js bundles + screenshots.

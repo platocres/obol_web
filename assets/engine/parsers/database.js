@@ -11,7 +11,8 @@
 
   var _MSSQL_WHOAMI_RE = /\bnt (?:service|authority)\\[\w$.-]+|(?<![A-Za-z]:\\)\b(?![A-Za-z]:\\)[A-Za-z0-9_.-]{2,32}\\[A-Za-z0-9_.$-]{2,32}\s*$|uid=\d+\(/im;
   var _DB_ACCESS_DENIED_RE = /access denied|authentication failed|login failed|permission denied|ERROR 1045|can't connect to|connection refused|could not connect to server|timeout expired|login failed for user|ERROR 200[235]|FATAL:\s+password authentication failed|ORA-01017/i;
-  var _DB_HASH_ROW_RE = /\b(?<user>[A-Za-z0-9_.@-]{2,64})\b(?:\s*[|:]\s*[A-Za-z0-9_.%:-]+)?\s*[|:]\s*(?<hash>\$2[aby]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:P|H|1|5|6|y|apr1)\$[^\s|]+|\*[0-9A-Fa-f]{40}|(?:0x)?[a-fA-F0-9]{32,128})\b/;
+  var _DB_HASH_ROW_RE = /\b(?<user>[A-Za-z0-9_.@-]{2,64})\b(?:[ \t]*[|:\t][ \t]*[^\s|:\t\r\n][^\r\n|:\t]{0,160}){0,6}?[ \t]*[|:\t][ \t]*(?<hash>\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:P|H|S|1|5|6|y|apr1)\$[^\s|\t]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|\t]+|\*[0-9A-Fa-f]{40}|(?:0x)?[a-fA-F0-9]{32,128})\b/;
+  var _DB_HASH_REV_ROW_RE = /(?<hash>\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:P|H|S|1|5|6|y|apr1)\$[^\s|\t:]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|\t:]+|\*[0-9A-Fa-f]{40})(?:[ \t]*[|:\t][ \t]*[^\s|:\t\r\n][^\r\n|:\t]{0,160}){0,5}?[ \t]*[|:\t][ \t]*(?<user>[A-Za-z0-9_.@-]{2,48})\b/;
   var _XP_CMDSHELL_DENIED_RE = /The EXECUTE permission was denied|Configuration option 'xp_cmdshell' does not exist|SQL Server blocked access to procedure/i;
 
   function _db_tool(low) {
@@ -19,6 +20,24 @@
     var tools = ['mssqlclient', 'sqlcmd', 'mysql', 'psql', 'pymongo', 'mongosh', 'mongo', 'redis-cli', 'sqlite3', 'sqlite', 'odat', 'sqlplus'];
     for (var i = 0; i < tools.length; i++) if (low.indexOf(tools[i]) >= 0) return tools[i];
     return 'database';
+  }
+
+  // Pull the values out of a single-column result listing (the shape SHOW DATABASES / SHOW TABLES
+  // prints). Two forms appear in the wild: the boxed ASCII grid an interactive client draws
+  // (| value |, one column, no interior pipe), and the bare newline-separated list a one-shot
+  // `mysql -e 'show tables'` prints (a header line then one identifier per line). Separator rules
+  // and client chatter (Query OK, "Database changed", completion hints) are dropped.
+  function _db_listing_names(text) {
+    var names = [], m, re = /^\s*\|\s*([^|\r\n]+?)\s*\|\s*$/gm;
+    while ((m = re.exec(text)) !== null) names.push(m[1].trim());
+    if (names.length) return names;
+    text.split(/\r?\n/).forEach(function (ln) {
+      var t = ln.trim();
+      if (!t || /^[-+]+$/.test(t)) return;
+      if (/\b(?:Query OK|rows? in set|Warning|Reading table information|Database changed|turn off this feature|Empty set|Bye|Aborted|Ctrl-C)\b/i.test(t)) return;
+      if (/^[A-Za-z0-9_$][A-Za-z0-9_$.-]*$/.test(t)) names.push(t);
+    });
+    return names;
   }
 
   function _parse_database_output(text, ws, command, source, facts) {
@@ -43,7 +62,14 @@
           }
           C._add_os_observation(facts, ws, source, 'windows', 'xp_cmdshell command execution (' + ident + ')', 'high', 'mssql', true);
         }
+      } else if (/^\s*Directory of\s+[A-Za-z]:\\/im.test(text) || /Volume Serial Number is\s+[0-9A-F]{4}-[0-9A-F]{4}/i.test(text)) {
+        var toolName2 = nxcMssql ? 'nxc' : 'mssqlclient';
+        _add(facts, mkFact('foothold.windows', h, { service: 'mssql', method: 'xp_cmdshell', identity: 'mssql', tool: toolName2 }, S, source));
+        C._add_os_observation(facts, ws, source, 'windows', 'xp_cmdshell dir output', 'high', 'mssql', true);
       }
+    }
+    if (/\b(?:CONTROL\s+SERVER|IMPERSONATE\s+ANY\s+LOGIN)\b/i.test(text) || /^\s*SYS\s+DBA\s+YES\b/im.test(text)) {
+      _add(facts, mkFact('db.admin', h, { tool: _db_tool(low), detail: 'elevated database server privilege confirmed' }, S, source));
     }
 
     if (/\bSRV_NAME\b|\bsp_linkedservers\b|\benum_links\b/i.test(text + '\n' + command)) {
@@ -60,18 +86,20 @@
     }
 
     var hashes = [], seen = {};
-    if (['password', 'hash', 'users', 'user', 'partners', 'accounts', 'credential', 'sqlite', 'authentication_string'].some(function (k) { return (text + '\n' + low).toLowerCase().indexOf(k) >= 0; }) || /^\s*\d+\|[^|\r\n]+\|\$(?:2[aby]|1|5|6|y|P|H|apr1)\$/im.test(text)) {
-      reAll(_DB_HASH_ROW_RE, text).forEach(function (m) {
-        var hsh = m.groups.hash;
+    if (['password', 'hash', 'users', 'user', 'partners', 'accounts', 'credential', 'sqlite', 'authentication_string', 'pass', 'person'].some(function (k) { return (text + '\n' + low).toLowerCase().indexOf(k) >= 0; }) || /^\s*\d+\|[^|\r\n]+\|\$(?:2[abxy]|1|5|6|y|P|H|S|apr1)\$/im.test(text) || /pbkdf2_sha(?:1|256|512)\$\d+\$/i.test(text)) {
+      reAll(_DB_HASH_ROW_RE, text).concat(reAll(_DB_HASH_REV_ROW_RE, text)).forEach(function (m) {
+        var hsh = m.groups.hash, usr = m.groups.user;
+        if (!usr || /^(?:null|true|false|\d+)$/i.test(usr)) return;
+        if (/^[0-9a-fA-F]{32,128}$/.test(hsh) && /(?:uuid|guid|session|token|_id|commit|checksum|sha1|sha256|md5|serial|ssl_|binlog)/i.test(usr)) return;
         if (seen[hsh.toLowerCase()] || hsh.toLowerCase() === 'password' || hsh.toLowerCase() === 'email') return;
         seen[hsh.toLowerCase()] = true;
-        hashes.push({ user: m.groups.user, hash: hsh });
+        hashes.push({ user: usr, hash: hsh });
       });
     }
     if (hashes.length) {
-      _add(facts, mkFact('loot.material', h, { kind: 'db_hashes', entries: hashes.slice(0, 50), count: hashes.length, via: 'database', tool: _db_tool(low) }, S, source));
-      _add(facts, mkFact('db.hashes', h, { entries: hashes.slice(0, 50), count: hashes.length, tool: _db_tool(low) }, S, source));
-      hashes.slice(0, 20).forEach(function (entry) {
+      _add(facts, mkFact('loot.material', h, { kind: 'db_hashes', entries: hashes.slice(0, 5000), count: hashes.length, via: 'database', tool: _db_tool(low) }, S, source));
+      _add(facts, mkFact('db.hashes', h, { entries: hashes.slice(0, 5000), count: hashes.length, tool: _db_tool(low) }, S, source));
+      hashes.slice(0, 5000).forEach(function (entry) {
         _add(facts, mkFact('credential.candidate', h, { kind: 'database_hash', user: entry.user, hash: entry.hash, via: 'database' }, S, source));
       });
     }
@@ -81,6 +109,48 @@
       if (!denied && text.toLowerCase().indexOf('noauth') < 0) {
         _add(facts, mkFact('config.review', h, { kind: 'unauthenticated_redis', service: 'redis', detail: 'redis responded to INFO/KEYS without authentication' }, S, source));
         _add(facts, mkFact('redis.unauth', h, { port: 6379, tool: 'redis-cli' }, S, source));
+      }
+    }
+
+    // Interactive schema enumeration: SHOW DATABASES / SHOW TABLES print the database or table
+    // inventory, the map of what to loot next. parser-signatures already declares the database parser
+    // emits db.databases/db.tables (the sqlmap, mongo, and nxc-mssql paths mint them); this fills the
+    // same kinds for the interactive mysql/mariadb/mssql/psql session, which previously minted nothing
+    // from a bare `show tables;`/`show databases;` in a sub-shell. Gated on the command verb so a
+    // multi-column select or describe grid (interior pipes, different intent) never enters here.
+    var showDb = /\bshow\s+(?:databases|schemas)\b/i.test(low)
+      || /\bselect\s+name\s+from\s+(?:master\.\s*)?(?:sys\.\s*)?databases\b/i.test(low + '\n' + text)
+      || /(?:^|\n)\s*(?:mysql|MariaDB\s*\[[^\]]*\]|SQL(?:\s*\([^)]*\))?|postgres=#?)\s*>\s*show\s+(?:databases|schemas)\b/i.test(text);
+    var showTbl = /\bshow\s+tables\b/i.test(low)
+      || /(?:^|\n)\s*(?:mysql|MariaDB\s*\[[^\]]*\]|SQL(?:\s*\([^)]*\))?|postgres=#?)\s*>\s*show\s+tables\b/i.test(text)
+      || /^\s*\|\s*Tables_in_[^|\r\n]+\|\s*$/im.test(text);
+    if (showDb || showTbl) {
+      if (showDb && showTbl) {
+        var dbNames = [], tblNames = [], curKind = 'db';
+        text.split(/\r?\n/).forEach(function (ln) {
+          if (/\bshow\s+(?:databases|schemas)\b|^\s*\|\s*(?:Database|schema_name)\s*\|\s*$/i.test(ln)) { curKind = 'db'; return; }
+          if (/\bshow\s+tables\b|^\s*\|\s*Tables_in_[^|\r\n]+\|\s*$/i.test(ln)) { curKind = 'tbl'; return; }
+          var pm = /^\s*\|\s*([^|\r\n]+?)\s*\|\s*$/.exec(ln);
+          var nm = pm ? pm[1].trim() : '';
+          if (!nm) return;
+          var lo = nm.toLowerCase();
+          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || /^tables_in_/i.test(nm)) return;
+          var bucket = curKind === 'tbl' ? tblNames : dbNames;
+          if (bucket.indexOf(nm) < 0) bucket.push(nm);
+        });
+        if (dbNames.length) _add(facts, mkFact('db.databases', h, { tool: _db_tool(low), databases: dbNames.slice(0, 500), count: dbNames.length }, S, source));
+        if (tblNames.length) _add(facts, mkFact('db.tables', h, { tool: _db_tool(low), tables: tblNames.slice(0, 500), count: tblNames.length }, S, source));
+      } else {
+        var listNames = [];
+        _db_listing_names(text).forEach(function (nm) {
+          var lo = nm.toLowerCase();
+          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || /^tables_in_/i.test(nm)) return;
+          if (listNames.indexOf(nm) < 0) listNames.push(nm);
+        });
+        if (listNames.length) {
+          if (showDb) _add(facts, mkFact('db.databases', h, { tool: _db_tool(low), databases: listNames.slice(0, 500), count: listNames.length }, S, source));
+          else _add(facts, mkFact('db.tables', h, { tool: _db_tool(low), tables: listNames.slice(0, 500), count: listNames.length }, S, source));
+        }
       }
     }
 
@@ -108,7 +178,17 @@
       }
       else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(text) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
       else if (isRedisHit && tlow.indexOf('noauth') < 0) svc = 'redis';
-      if (svc) _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));
+      if (svc) {
+        _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));
+        if (svc === 'mssql') {
+          _add(facts, mkFact('mssql.authenticated', h, { service: 'mssql', tool: _db_tool(low) }, S, source));
+          _add(facts, mkFact('credential.validated', h, { service: 'mssql', tool: _db_tool(low), outcome: 'accepted' }, S, source));
+          if (/\bSQL\s*\([^)]*\bdbo@master\)|(?:^|[\s/\\])sa(?::|@|\s+dbo@)/i.test(text + '\n' + (command || '')) || /\(Pwn3d!\)|\bsysadmin\b|\bCONTROL\s+SERVER\b/i.test(text)) {
+            _add(facts, mkFact('mssql.sysadmin', h, { service: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
+            _add(facts, mkFact('db.admin', h, { engine: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
+          }
+        }
+      }
     }
   }
   C._parse_database_output = _parse_database_output;

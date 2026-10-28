@@ -108,24 +108,110 @@
     'smb.signing': 'SMB Signing Configuration',
     'smb.smbv1': 'SMBv1 Dialect Support',
     'smb.null_session': 'SMB Null Session',
+    'smb.guest_session': 'SMB Guest Session',
     'smb.shares': 'Enumerated SMB Shares',
     'smb.readable_share': 'Readable SMB Share',
     'smb.writable_share': 'Writable SMB Share',
+    'ftp.anonymous': 'Anonymous FTP Access',
+    'ftp.writable': 'Writable FTP Directory',
+    'dns.zone_transfer': 'DNS Zone Transfer (AXFR)',
+    'smtp.open_relay': 'SMTP Open Mail Relay',
     'ad.user_list': 'Enumerated Domain Accounts',
     'ad.anonymous_bind': 'Anonymous LDAP Bind',
+    'ad.acl_lead': 'Writable Active Directory Objects',
+    'ad.acl_paths': 'Outbound Active Directory ACL Paths',
+    'ad.acl_abuse': 'Active Directory ACL Abuse',
     'ad.control_paths': 'Active Directory Object Control Path',
     'ad.domain_control': 'Domain Replication / Control Rights',
+    'ad.dcsync_granted': 'DCSync Replication Rights Granted',
+    'ad.dcsync_principals': 'Principals with DCSync Rights',
     'ad.group_joined': 'Privileged Group Membership Added',
     'ad.cert_templates': 'ADCS Vulnerable Certificate Template',
+    'ad.esc_templates': 'Vulnerable ADCS Certificate Templates',
     'ad.asrep_roastable': 'AS-REP Roastable Accounts',
     'ad.kerberoastable': 'Kerberoastable Accounts',
-    'ad.dcsync_principals': 'Principals with DCSync Rights',
     'ad.unconstrained_delegation': 'Unconstrained Delegation Hosts',
+    'ad.delegation_unconstrained': 'Unconstrained Kerberos Delegation',
+    'ad.delegation_constrained': 'Constrained Kerberos Delegation',
+    'ad.rbcd': 'Resource-Based Constrained Delegation (RBCD)',
+    'ad.shadow_credentials': 'Shadow Credentials (msDS-KeyCredentialLink)',
+    'ad.laps_readable': 'Readable LAPS Local Administrator Password',
+    'ad.gmsa_readable': 'Readable gMSA Service Account Password',
+    'ad.gpo_control': 'Group Policy Object (GPO) Write Control',
+    'ad.gpo_modify': 'Modified Group Policy Object (GPO)',
+    'ad.gpo_link': 'Group Policy Object (GPO) Link Abuse',
+    'ad.coerced_auth': 'Coerced NTLM / Kerberos Authentication',
+    'ad.zerologon': 'Netlogon Elevation of Privilege (Zerologon)',
+    'ad.sid_history': 'SID History Injection Vector',
+    'ad.computer_added': 'Machine Account Added to Domain',
     'ad.high_value': 'High-Value Domain Principals',
-    'ad.esc_templates': 'Vulnerable ADCS Certificate Templates',
+    'adcs.vulnerable': 'Vulnerable ADCS Enrollment Endpoint',
+    'adcs.web_enrollment': 'ADCS Web Enrollment (ESC8)',
     'web.content_map': 'Discovered Web Endpoints',
     'web.tech': 'Web Technology Fingerprint',
     'web.vhosts': 'Discovered Virtual Hosts',
+    'web.sqli': 'SQL Injection Vulnerability',
+    'web.lfi': 'Local File Inclusion / Path Traversal',
+    'web.rce': 'Web Remote Code Execution',
+    'web.upload': 'Unrestricted File Upload',
+    'web.ssti': 'Server-Side Template Injection (SSTI)',
+    'web.ssrf': 'Server-Side Request Forgery (SSRF)',
+    'web.xxe': 'XML External Entity (XXE) Injection',
+    'web.exposed_artifact': 'Exposed Sensitive Web Artifact',
+    'web.cms_detected': 'Detected Content Management System',
+    'web.cms_vuln': 'Vulnerable CMS Plugin / Theme',
+    'web.fingerprint.tomcat': 'Apache Tomcat Management Interface',
+    'web.fingerprint.jenkins': 'Jenkins Automation Server',
+    'db.creds': 'Extracted Database Credentials',
+    'db.hashes': 'Extracted Database Password Hashes',
+    'db.xp_cmdshell': 'MSSQL xp_cmdshell Command Execution',
+    'db.linked_server': 'MSSQL Linked Server Trust',
+    'db.file_read': 'Database Arbitrary File Read',
+    'db.file_write': 'Database Arbitrary File Write',
+    'db.udf_exec': 'Database UDF Command Execution',
+    'mssql.sysadmin': 'MSSQL sysadmin Privilege',
+    'mssql.linked_servers': 'MSSQL Linked Servers Enumerated',
+    'mssql.impersonate': 'MSSQL Login Impersonation Rights',
+    'redis.unauth': 'Unauthenticated Redis Access',
+    'mongo.unauth': 'Unauthenticated MongoDB Access',
+    'memcached.open': 'Unauthenticated Memcached Access',
+    'x11.unauth': 'Unauthenticated X11 Display Server',
+    'privesc.sudo_rights': 'Permitted Sudo Execution Rights',
+    'privesc.sudo': 'Permitted Sudo Execution Rights',
+    'privesc.suid_candidate': 'Privilege-Escalating SUID Binary',
+    'privesc.suid': 'Privilege-Escalating SUID Binary',
+    'privesc.capability': 'Linux File Capability Escalation Vector',
+    'privesc.capabilities': 'Linux File Capability Escalation Vector',
+    'privesc.writable_etc': 'Writable /etc/passwd or /etc/shadow',
+    'privesc.cron_candidate': 'Writable Scheduled Cron Job',
+    'privesc.docker_group': 'Docker / LXD Privileged Group Membership',
+    'privesc.windows_privilege': 'Abusable Windows Token Privilege',
+    'privesc.service_misconfig': 'Windows Service Binary / ACL Misconfiguration',
+    'privesc.unquoted_service': 'Unquoted Windows Service Path',
+    'privesc.always_install_elevated': 'AlwaysInstallElevated Registry Policy',
+    'privesc.stored_credentials': 'Stored Local Credentials / Autologon',
+    'privesc.autologon': 'Windows Winlogon AutoAdminLogon Credentials',
+    'privesc.uac_bypass': 'Windows UAC Bypass Vector',
+    'privesc.kernel_exploit': 'Local Kernel Privilege Escalation Vector',
+    'loot.ntds': 'Extracted Active Directory NTDS.dit Secrets',
+    'loot.sam': 'Extracted Local SAM Password Hashes',
+    'loot.lsass': 'Extracted LSASS Process Credentials',
+    'loot.dpapi': 'Decrypted DPAPI Credential Material',
+    'loot.shadow': 'Extracted /etc/shadow Password Hashes',
+    'loot.ssh_key': 'Recovered Private SSH Key',
+    'loot.keepass': 'Recovered KeePass Password Database',
+    'loot.keepass_dump': 'Recovered KeePass Password Database',
+    'loot.gpp_cpassword': 'Group Policy Preferences cpassword Decrypted',
+    'loot.history_creds': 'Credentials Recovered from Shell History',
+    'cloud.credential': 'Cloud / Metadata Service Credential',
+    'sccm.naa_creds': 'SCCM Network Access Account Credentials',
+    'sccm.pxe_boot': 'SCCM PXE Boot Media Credentials',
+    'vuln.ms17_010': 'MS17-010 (EternalBlue) SMB Vulnerability',
+    'vuln.smbghost': 'CVE-2020-0796 (SMBGhost) Vulnerability',
+    'vuln.printnightmare': 'PrintNightmare (CVE-2021-1675 / CVE-2021-34527)',
+    'vuln.nopac': 'sAMAccountName Spoofing / noPac (CVE-2021-42278/42287)',
+    'vuln.petitpotam': 'PetitPotam EFSRPC Authentication Coercion',
+    'vuln.cve_candidate': 'Confirmed Vulnerable Software / CVE Candidate',
   };
 
   function friendly(kind) {
@@ -1252,6 +1338,46 @@
         }
       }
     }
+    if (!cmd) {
+      var nxcMatch = out && out.match(/^(SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+\d{1,3}(?:\.\d{1,3}){3}/im);
+      if (row.file) {
+        cmd = '# attached: ' + row.file;
+      } else if (out && /Nmap scan report for|<nmaprun\b|^\s*\d+\/(?:tcp|udp)\s+open\b/im.test(out)) {
+        cmd = 'nmap (pasted output)'; tool = 'nmap';
+      } else if (nxcMatch) {
+        cmd = 'nxc ' + nxcMatch[1].toLowerCase() + ' (pasted output)'; tool = 'nxc';
+      } else if (out && /Certipy|Certificate Authorities|Template Name\s*:/i.test(out)) {
+        cmd = 'certipy (pasted output)'; tool = 'certipy';
+      } else if (out && /\$krb5asrep\$/i.test(out)) {
+        cmd = 'GetNPUsers.py (pasted output)'; tool = 'GetNPUsers.py';
+      } else if (out && /\$krb5tgs\$/i.test(out)) {
+        cmd = 'GetUserSPNs.py (pasted output)'; tool = 'GetUserSPNs.py';
+      } else if (out && /^\S+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/m.test(out)) {
+        cmd = 'impacket-secretsdump (pasted output)'; tool = 'impacket-secretsdump';
+      } else if (out && /distinguishedName:[\s\S]{0,2000}?(?:WRITE|CREATE_CHILD|GenericAll|WriteDacl)/i.test(out)) {
+        cmd = 'bloodyAD (pasted output)'; tool = 'bloodyAD';
+      } else if (out && /User\s+\S+\s+may run the following commands|\(ALL\s*(?::\s*ALL)?\)\s*(?:NOPASSWD\s*:)?/i.test(out)) {
+        cmd = 'sudo -l'; tool = 'sudo';
+      } else if (out && /^-rwsr-[xs-]/m.test(out)) {
+        cmd = 'find / -perm -4000 (pasted output)'; tool = 'find';
+      } else if (out && /cap_[a-z_]+\+[eip]+/i.test(out)) {
+        cmd = 'getcap -r / (pasted output)'; tool = 'getcap';
+      } else if (out && /SeImpersonatePrivilege|SeBackupPrivilege|SeRestorePrivilege|SeDebugPrivilege/i.test(out)) {
+        cmd = 'whoami /priv'; tool = 'whoami';
+      } else if (out && /uid=\d+\([^)]+\)\s+gid=\d+/i.test(out)) {
+        cmd = 'id'; tool = 'id';
+      } else if (tool && tool !== 'paste' && tool !== 'manual' && tool !== 'tool') {
+        cmd = tool + ' (pasted output)';
+      } else if (row.dispatch && row.dispatch !== 'paste' && row.dispatch !== 'manual' && row.dispatch !== 'universal') {
+        var disp = String(row.dispatch).replace(/^(?:inference:|shape:)/, '').replace(/_+$/, '');
+        cmd = disp + ' (pasted output)';
+        if (!tool || tool === 'paste') tool = disp.split(/\s+/)[0];
+      } else if (row.action_id && row.action_id !== 'operator-ingest') {
+        cmd = String(row.action_id) + ' (pasted output)';
+      } else if (out && out.trim() && Array.isArray(row.produced) && row.produced.length) {
+        cmd = 'pasted terminal output';
+      }
+    }
     if (cmd === row.command && tool === row.tool) return row;
     return Object.assign({}, row, { command: cmd, tool: tool });
   }
@@ -1376,6 +1502,15 @@
         proof: hostProof(host, tfacts, screensRaw, includeSecrets),
         findings: sortedT.map(function (f) {
           var evSrc = f.source || 'manual/seeded workspace evidence';
+          if (!evSrc || evSrc === 'paste' || evSrc === 'session' || evSrc === 'shape') {
+            for (var ai0 = 0; ai0 < activities.length; ai0++) {
+              var act0 = activities[ai0];
+              if (actMatchesHost(act0, host, isSingleTargetRun) && (act0.produced || []).indexOf(f.kind) >= 0 && act0.command) {
+                evSrc = act0.command;
+                break;
+              }
+            }
+          }
           if (/^for\s+\w+\s+in\b/i.test(evSrc) === false && /get\s+writable/i.test(evSrc) && (f.kind === 'ad.group_joined' || f.kind === 'ad.control_paths')) {
             for (var ai = 0; ai < activities.length; ai++) {
               if (/add\s+groupMember/i.test(activities[ai].command || '')) { evSrc = activities[ai].command; break; }
@@ -1563,6 +1698,7 @@
       proofCount: allProofs.length,
       proof_candidates: scanManualProof(activities, factset, secrets, targetsOut),
       activities: activities,
+      hideUnreached: !!opts.hideUnreached,
       _secrets: secrets,
       _moveMap: moveMap,
     };
@@ -1661,10 +1797,10 @@
   var FULL_PRIV_LEVELS = ['Administrator / SYSTEM', 'root'];
   var LINUX_OS_HINTS = ['linux', 'unix', 'debian', 'ubuntu', 'centos', 'bsd', 'kali', 'redhat', 'red hat', 'fedora', 'alpine', 'gentoo', 'arch'];
   var WIN_OS_HINTS = ['windows', 'win32', 'win64', 'microsoft', 'server 20'];
-  var NON_COMMAND_PREFIXES = ['operator-', 'asserted', 'target added', 'fingerprint match', 'findings catalog', 'version match', 'seeded', 'ingested', 'manual entry', 'attested', 'observed', 'manual/seeded'];
+  var NON_COMMAND_PREFIXES = ['operator-', 'asserted', 'target added', 'fingerprint match', 'findings catalog', 'version match', 'seeded', 'ingested', 'manual entry', 'attested', 'observed', 'manual/seeded', 'paste', 'session', 'shape', 'inference', 'pasted terminal output'];
   var REPORT_NOISE_PREFIXES = ['port:', 'service.', 'scan.', 'blocker.'];
   var REPORT_NOISE_KINDS = { 'host.up': 1, 'host.os_hint': 1, 'target.configured': 1, 'ad.graph.collected': 1, 'ports.open': 1, 'proof.captured': 1 };
-  var DETAIL_SKIP_KEYS = { tool: 1, protocol: 1, flags: 1, method: 1, profile: 1, cached: 1, guided: 1 };
+  var DETAIL_SKIP_KEYS = { tool: 1, protocol: 1, flags: 1, method: 1, profile: 1, cached: 1, guided: 1, via: 1, inferred: 1, confidence: 1, origin: 1, raw: 1, source: 1, credentialId: 1, credentialFingerprint: 1, shape: 1, lead: 1 };
   var WALKTHROUGH_SKIP_KINDS = {
     'host.hostname': 1, 'host.domain': 1, 'host.fqdn': 1, 'host.os_family': 1, 'host.os_hint': 1, 'host.up': 1,
     'host.kernel': 1, 'ports.open': 1, 'proof.captured': 1, 'access.desktop': 1,
@@ -1746,13 +1882,13 @@
   // always render with the Kali prompt even after a foothold is proven.
   var KALI_TOOL_RE = /^(?:sudo\s+)?(?:nmap|rustscan|masscan|naabu|netexec|nxc|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|impacket[\w.-]*|Get(?:NPUsers|UserSPNs)[\w.]*|secretsdump[\w.]*|evil-winrm|ffuf|feroxbuster|gobuster|wfuzz|nikto|whatweb|sqlmap|hydra|john|hashcat|responder|bloodhound[\w.-]*|sharphound[\w.-]*|dig|snmpwalk|msfvenom|msfconsole|searchsploit|ssh|scp|ftp|curl|wget|nc|ncat|socat)\b/i;
   // Post-exploitation commands typically executed *inside a shell on the target*.
-  var ON_TARGET_RE = /^(?:sudo(?:\s+-\w+\b|\s+\S+)?|whoami\b|id\b|hostname\b|uname\b|groups\b|pwd\b|cat\s+\S|type\s+\S|more\s+\S|systeminfo\b|ipconfig\b|ifconfig\b|ip\s+a(?:ddr)?\b|arp\b|route\b|net\s+(?:user|localgroup|group|use|share|session)\b|getcap\b|crontab\b|find\s+\/|ss\b|netstat\b|tasklist\b|ps\s|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|ls\b|ll\b|dir\b|cd\s|history\b|su\b|python[0-9]?\s+-c|script\s+-qc|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b)/i;
+  var ON_TARGET_RE = /^(?:sudo(?:\s+-\w+\b|\s+\S+)?|cmd\s+\/c\b|whoami\b|id\b|hostname\b|uname\b|groups\b|pwd\b|cat\s+\S|type\s+\S|more\s+\S|systeminfo\b|ipconfig\b|ifconfig\b|ip\s+a(?:ddr)?\b|arp\b|route\b|net\s+(?:user|localgroup|group|use|share|session)\b|getcap\b|crontab\b|find\s+\/|ss\b|netstat\b|tasklist\b|ps\s|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|ls\b|ll\b|dir\b|cd\s|history\b|su\b|python[0-9]?\s+-c|script\s+-qc|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b)/i;
   function runsOnTarget(cmd) {
     var c = String(cmd || '').trim();
     if (!c || KALI_TOOL_RE.test(c)) return false;
     return ON_TARGET_RE.test(c);
   }
-  var WIN_CMD_RE = /^(?:type\s|dir\b|systeminfo\b|ipconfig\b|net\s|tasklist\b|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b|whoami\s+\/)/i;
+  var WIN_CMD_RE = /^(?:cmd\s+\/c\b|type\s|dir\b|systeminfo\b|ipconfig\b|net\s|tasklist\b|reg\s+query\b|wmic\b|schtasks\b|sc\s+query\b|powershell\b|gwmi\b|get-\w|cmdkey\b|klist\b|whoami\s+\/)/i;
 
   // Learn the compromised-shell identity for a host from its proven access facts + the transcript
   // (the first whoami/id output reveals the shell user; nothing is invented if the output is absent).
@@ -2036,19 +2172,24 @@
       ];
     }
     if (profile.id !== 'oscp') return [H('Methodology', 2), P(GENERIC_METHODOLOGY)];
-    return [
+    var mBlocks = [
       H('Methodology', 2), P(OSCP_METHODOLOGY),
       H('Information Gathering', 3),
       P('The information-gathering phase established the scope of the engagement and the live, in-scope systems. Testing was confined to the authorized hosts and networks; no activity was performed outside the authorized scope. The in-scope systems were: ' + scopeLine + '.'),
       H('Service Enumeration', 3),
       P('Each in-scope host was enumerated for exposed TCP/UDP services, and every service was fingerprinted and assessed against known weaknesses. The open ports and services found on each host, and the commands that discovered them, are documented per host below.'),
-      H('Penetration', 3),
-      P('The penetration phase focused on gaining access to the in-scope systems. During this engagement, ' + owned + ' of ' + total + ' system(s) were successfully compromised. The vulnerability exploited, the steps to reproduce, and the proof captured are documented per host below.'),
-      H('Maintaining Access', 3),
-      P('OBOL does not plant persistence or backdoors: no persistent user accounts, scheduled tasks, services, or implants were left behind to maintain access. Access was re-established, when needed, by re-running the documented steps against the recorded credentials and vectors.'),
-      H('House Cleaning', 3),
-      P('All temporary artifacts and privilege-escalation changes made during exploitation were tracked for cleanup. Temporary files staged during testing were removed or documented in the Working Directory appendix so the environment can be restored cleanly.'),
     ];
+    if (!ctx.hideUnreached || owned > 0) {
+      mBlocks.push(
+        H('Penetration', 3),
+        P('The penetration phase focused on gaining access to the in-scope systems. During this engagement, ' + owned + ' of ' + total + ' system(s) were successfully compromised. The vulnerability exploited, the steps to reproduce, and the proof captured are documented per host below.'),
+        H('Maintaining Access', 3),
+        P('OBOL does not plant persistence or backdoors: no persistent user accounts, scheduled tasks, services, or implants were left behind to maintain access. Access was re-established, when needed, by re-running the documented steps against the recorded credentials and vectors.'),
+        H('House Cleaning', 3),
+        P('All temporary artifacts and privilege-escalation changes made during exploitation were tracked for cleanup. Temporary files staged during testing were removed or documented in the Working Directory appendix so the environment can be restored cleanly.')
+      );
+    }
+    return mBlocks;
   }
 
   // -- high-level summary --
@@ -2064,23 +2205,31 @@
         if (uj && !fallbackUser) fallbackUser = String(uj).replace(/^.*\\/, '');
       }
     }
+    var entailedFoothold = '';
     for (i = 0; i < (t.findings || []).length; i++) {
       f = t.findings[i]; kind = f.kind || '';
       if (kind.indexOf('foothold.') === 0 || kind.indexOf('access.shell') === 0) {
         val = (f.value && typeof f.value === 'object') ? f.value : {};
         var user = val.user || val.username || val.identity || '';
+        if (val.via === 'causal_entailment') {
+          if (!entailedFoothold) entailedFoothold = 'interactive shell' + ((user || fallbackUser) ? ' as `' + (user || fallbackUser) + '`' : '');
+          continue;
+        }
         var ev = (f.evidence || '').trim();
-        var tool = (ev && looksLikeCommand(ev)) ? ev.split(/\s+/)[0] : '';
-        var isOnTargetCmd = tool && (runsOnTarget(ev) || /^(?:Get-|Set-|New-|Invoke-|Remove-|Start-|Stop-|Select-|Where-|ForEach-)/i.test(tool));
-        var phrase = (!isOnTargetCmd && tool) ? tool : (val.via || val.tool || (val.service === 'winrm' || kind === 'winrm.authenticated' ? 'evil-winrm' : (val.service === 'ssh' ? 'ssh' : 'interactive shell')));
-        if (!user && ev && !isOnTargetCmd) {
-          var um = /\s-u\s+['"]?([^'"\s]+)['"]?/i.exec(ev);
+        var cleanEv = ev.replace(/\s*\(pasted output\)$/i, '').trim();
+        var tool = (cleanEv && looksLikeCommand(cleanEv)) ? cleanEv.split(/\s+/)[0] : '';
+        var isOnTargetCmd = tool && (runsOnTarget(cleanEv) || /^(?:Get-|Set-|New-|Invoke-|Remove-|Start-|Stop-|Select-|Where-|ForEach-)/i.test(tool));
+        var cleanVia = (val.via && val.via !== 'shape' && val.via !== 'inference' && val.via !== 'causal_entailment') ? val.via : '';
+        var phrase = (!isOnTargetCmd && tool) ? tool : (cleanVia || val.tool || (val.service === 'winrm' || kind === 'winrm.authenticated' ? 'evil-winrm' : (val.service === 'ssh' ? 'ssh' : 'interactive shell')));
+        if (!user && cleanEv && !isOnTargetCmd) {
+          var um = /\s-u\s+['"]?([^'"\s]+)['"]?/i.exec(cleanEv);
           if (um && um[1] && um[1] !== '""' && um[1] !== "''") user = um[1];
         }
         if (!user) user = fallbackUser;
         return phrase + (user ? ' as `' + user + '`' : '');
       }
     }
+    if (entailedFoothold) return entailedFoothold;
     for (i = 0; i < (t.findings || []).length; i++) {
       f = t.findings[i]; kind = f.kind || '';
       if (kind === 'credential.validated' || /^(smb|ldap|winrm|ssh|rdp)\.authenticated$/.test(kind)) {
@@ -2187,8 +2336,6 @@
     'Deploy logging and monitoring to detect and respond to the exploitation techniques demonstrated in this report.',
   ];
   function recommendations(ctx) {
-    var blocks = [H('Recommendations', 2)];
-    blocks.push(P('The remediation steps below address the issues identified during this assessment. Prioritising the higher-severity items will most reduce risk to the in-scope systems; per-finding technical detail appears in the walkthrough.'));
     var seen = {}, recs = [];
     ((ctx.findings || {}).targets || []).forEach(function (t) {
       (t.findings || []).forEach(function (f) {
@@ -2196,7 +2343,12 @@
         if (rem && !seen[rem]) { seen[rem] = 1; recs.push(rem); }
       });
     });
-    if (!recs.length) recs = STANDARD_RECOMMENDATIONS.slice();
+    if (!recs.length) {
+      if (ctx && ctx.hideUnreached) return [];
+      recs = STANDARD_RECOMMENDATIONS.slice();
+    }
+    var blocks = [H('Recommendations', 2)];
+    blocks.push(P('The remediation steps below address the issues identified during this assessment. Prioritising the higher-severity items will most reduce risk to the in-scope systems; per-finding technical detail appears in the walkthrough.'));
     blocks.push(UL(recs));
     return blocks;
   }
@@ -2310,6 +2462,7 @@
   function findingPhaseOverrides(findings) {
     var override = {};
     (findings || []).forEach(function (f) {
+      if (isPassiveHygieneFinding(f)) return;
       var phase = findingIsPrivesc(f) ? 'privesc' : 'initial';
       (f.trigger_kinds || []).forEach(function (kind) { if (!(kind in override)) override[kind] = phase; });
     });
@@ -2321,6 +2474,7 @@
     if (REPORT_NOISE_PREFIXES.some(function (p) { return kind.indexOf(p) === 0; })) return true;
     if (kind === 'credential.validation') return true;
     var val = f.value;
+    if (val && typeof val === 'object' && val.via === 'causal_entailment') return true;
     if (val && typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length
       && Object.keys(val).every(function (k) { var v = val[k]; return v === '' || v == null || (Array.isArray(v) && !v.length) || (typeof v === 'object' && v && !Object.keys(v).length) || v === false; })) return true;
     return false;
@@ -2391,17 +2545,32 @@
     if (/^(?:sudo\s+)?(?:nmap|rustscan|masscan|naabu)\b/i.test(c)) {
       return 'Conducted port and service enumeration against ' + h + ' using `' + c + '` to identify exposed network interfaces and software banners.';
     }
-    if (/^(?:gobuster|feroxbuster|ffuf|wfuzz|nikto|whatweb)\b/i.test(c)) {
-      return 'Enumerated web application directories and endpoints on ' + h + ' via `' + c + '`.';
+    if (/^(?:gobuster|feroxbuster|ffuf|wfuzz|nikto|whatweb|wpscan|nuclei)\b/i.test(c)) {
+      return 'Enumerated web application directories, endpoints, and vulnerabilities on ' + h + ' via `' + c + '`.';
+    }
+    if (/^sqlmap\b/i.test(c)) {
+      return 'Tested and exploited SQL injection parameters on ' + h + ' using `' + c + '`.';
     }
     if (/^(?:hashcat|john)\b/i.test(c)) {
       return 'Performed offline password cracking against the captured credential hash using `' + c + '`.';
+    }
+    if (/^kerbrute\b/i.test(c)) {
+      return 'Enumerated valid Active Directory principals and tested Kerberos authentication against ' + h + ' via `' + c + '`.';
     }
     if (/GetNPUsers|--asreproast\b|asrep/i.test(c)) {
       return 'Queried the Key Distribution Center (KDC) on ' + h + ' for accounts with Kerberos pre-authentication disabled (AS-REP Roasting) via `' + c + '`.';
     }
     if (/GetUserSPNs|--kerberoasting\b|kerberoast/i.test(c)) {
       return 'Requested Kerberos TGS service tickets for SPN-enabled service accounts on ' + h + ' via `' + c + '`.';
+    }
+    if (/(?:impacket-)?getST(?:\.py)?\b|(?:impacket-)?rbcd(?:\.py)?\b/i.test(c)) {
+      return 'Abused Kerberos constrained or resource-based constrained delegation (S4U2Self/S4U2Proxy) against ' + h + ' using `' + c + '`.';
+    }
+    if (/(?:impacket-)?ticketer(?:\.py)?\b/i.test(c)) {
+      return 'Forged a Kerberos Golden or Silver Ticket for ' + h + ' using `' + c + '`.';
+    }
+    if (/(?:impacket-)?addcomputer(?:\.py)?\b/i.test(c)) {
+      return 'Provisioned an attacker-controlled machine account in Active Directory on ' + h + ' using `' + c + '`.';
     }
     if (/^(?:enum4linux[\w-]*|rpcclient)\b/i.test(c)) {
       if (/\s-p\s+\S+/i.test(c) && !/\s-p\s+(?:""|'')/i.test(c)) {
@@ -2452,6 +2621,27 @@
     if (/secretsdump/i.test(c)) {
       return 'Extracted local SAM/LSA secrets or domain NTDS.dit credential material from ' + h + ' using `' + c + '`.';
     }
+    if (/^(?:(?:impacket-)?mssqlclient(?:\.py)?|mysql|psql|redis-cli|mongosh|mongo)\b/i.test(c)) {
+      return 'Interacted with the database service on ' + h + ' to enumerate schemas, extract credentials, or execute commands via `' + c + '`.';
+    }
+    if (/^(?:(?:sudo\s+)?responder|(?:impacket-)?ntlmrelayx(?:\.py)?|petitpotam(?:\.py)?|coercer(?:\.py)?|printerbug(?:\.py)?)\b/i.test(c)) {
+      return 'Performed network authentication coercion, poisoning, or NTLM relaying against ' + h + ' via `' + c + '`.';
+    }
+    if (/^(?:chisel|ligolo[\w-]*|sshuttle)\b/i.test(c)) {
+      return 'Established an internal network tunnel or pivot route through ' + h + ' using `' + c + '`.';
+    }
+    if (/^(?:snmpwalk|onesixtyone)\b/i.test(c)) {
+      return 'Queried SNMP management information base (MIB) OIDs and system strings on ' + h + ' using `' + c + '`.';
+    }
+    if (/^(?:dig|dnsrecon|nslookup)\b/i.test(c)) {
+      return 'Queried DNS records and zone data on ' + h + ' using `' + c + '`.';
+    }
+    if (/^ftp\b/i.test(c)) {
+      return 'Connected to the FTP service on ' + h + ' to inspect and retrieve accessible files using `' + c + '`.';
+    }
+    if (/^(?:showmount|mount)\b/i.test(c)) {
+      return 'Enumerated or mounted exported NFS shares on ' + h + ' using `' + c + '`.';
+    }
     if (/^(?:evil-winrm|ssh|sshpass|xfreerdp|impacket-(?:psexec|wmiexec|smbexec|atexec)|psexec\.py|wmiexec\.py)\b/i.test(c)) {
       if (/(?:local|proof|user|root)\.txt/i.test(c)) {
         return 'Authenticated to ' + h + ' and retrieved the target proof flag using `' + c + '`.';
@@ -2483,7 +2673,7 @@
     facts.slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); }).forEach(function (f) {
       var ev = (f.evidence || '').trim();
       if (!ev || seen.indexOf(ev) !== -1 || !looksLikeCommand(ev)) return;
-      if (isEnumPhase && /^(?:evil-winrm|type\s|cat\s|Get-ChildItem|Get-Content|whoami|hostname|ipconfig|ifconfig|for\s+\w+\s+in\b.*bloodyAD|bloodyAD\b.*add\s|impacket-secretsdump|secretsdump|hashcat|john)\b/i.test(ev)) {
+      if (isEnumPhase && /^(?:evil-winrm|cmd\s+\/c\b|type\s|cat\s|Get-ChildItem|Get-Content|whoami|hostname|ipconfig|ifconfig|for\s+\w+\s+in\b.*bloodyAD|bloodyAD\b.*add\s|impacket-secretsdump|secretsdump|hashcat|john)\b/i.test(ev)) {
         return;
       }
       seen.push(ev);
@@ -2603,6 +2793,11 @@
   }
   function genericVulnBlock(t, phase, phaseFacts, findings) {
     var host = t.host;
+    if (!phaseFacts.length && (!findings || !findings.length)) {
+      return [P(phase === 'initial'
+        ? ('_No initial-access activity or findings were recorded for `' + host + '`._')
+        : ('_No privilege-escalation activity or findings were recorded for `' + host + '`._'))];
+    }
     var finding = findings.length ? findings[0] : null;
     var writeup = (finding && finding.writeup) || {};
     var users = {}; phaseFacts.forEach(function (f) { if (f.value && typeof f.value === 'object' && f.value.user) users[f.value.user] = 1; });
@@ -2683,7 +2878,7 @@
         });
         var winPath = /\\|C:/i.test(pf.path || pf.block);
         var fPath = pf.path || (slot === 'root' ? (winPath ? 'C:\\Users\\Administrator\\Desktop\\root.txt' : '/root/proof.txt') : (winPath ? 'C:\\Users\\Public\\local.txt' : 'local.txt'));
-        var synthCmd = winPath ? ('whoami; hostname; ipconfig; type "' + fPath + '"') : ('whoami; hostname; ip a; cat "' + fPath + '"');
+        var synthCmd = winPath ? ('cmd /c "whoami & hostname & ipconfig & type ' + fPath + '"') : ('whoami; hostname; ip a; cat "' + fPath + '"');
         best = { command: synthCmd, output: cleanLines.join('\n').trim(), hasId: true };
       }
     }
@@ -2745,10 +2940,14 @@
 
   function perMachine(ctx, profile) {
     var targets = ctx.targets || [];
-    if (!targets.length) { return [H('Per-Machine Walkthrough', 2), P('No targets recorded.')]; }
+    if (!targets.length) {
+      if (ctx && ctx.hideUnreached) return [];
+      return [H('Per-Machine Walkthrough', 2), P('No targets recorded.')];
+    }
     var blocks = [PB(), H('Per-Machine Walkthrough', 2)];
     var includeSecrets = !!(ctx.meta && ctx.meta.include_secrets);
     var noFlagsProfile = !!(profile && profile.no_flags);
+    var hideUn = !!(ctx && ctx.hideUnreached);
     targets.forEach(function (t, idx) {
       var host = t.host, label = t.label || host;
       if (idx > 0) blocks.push(PB());
@@ -2774,14 +2973,7 @@
       var showFlagsForHost = !noFlagsProfile || ((t.flags || []).length > 0);
       var renderedCmds = {};
 
-      blocks.push(H('Service Enumeration', 4));
-      if ((t.open_ports || []).length) {
-        blocks.push(P('Port scanning and service fingerprinting against `' + host + '` identified ' + t.open_ports.length + ' open service(s):'));
-        blocks.push(TBL(['Server IP Address', 'Ports Open'], [[host, t.open_ports.join(', ')]]));
-      }
       var enumLines = findingLines(phases.enum);
-      if (enumLines.length) blocks.push(UL(enumLines));
-      else if (!(t.open_ports || []).length) blocks.push(P('_No service-enumeration facts recorded for this host._'));
       var enumCmds = phaseCommands(phases.enum, true);
       if (!enumCmds.length) {
         (ctx.timeline || ctx.activities || []).forEach(function (a) {
@@ -2791,52 +2983,89 @@
           }
         });
       }
-      if (enumCmds.length) {
-        blocks.push(P('**Nmap Scan Results / Enumeration Commands:**'));
-        blocks.push(CODE(enumCmds.join('\n')));
-        var hasCatalogWalk = findings.some(function (f) { return f.from_catalog && f.writeup && f.writeup.description && (f.evidence_cmds || []).length; });
-        if (hasCatalogWalk) {
-          var actOutMap = {};
-          (ctx.timeline || ctx.activities || []).forEach(function (a) {
-            var ac = (a.command || '').trim();
-            if (ac && (a.stdout || '').trim() && !actOutMap[ac]) actOutMap[ac] = a.stdout;
-          });
-          var shownEnumTerms = 0;
-          enumCmds.forEach(function (ec) {
-            if (shownEnumTerms < 2 && actOutMap[ec] && /^(?:sudo\s+)?(?:nmap|enum4linux)/i.test(ec)) {
-              shownEnumTerms++;
-              renderedCmds[ec] = 1;
-              blocks.push(TERM({ command: ec, output: actOutMap[ec] }));
-            }
-          });
+      var enumShots = screenshotBlocks(ctx, 'service_enum', host, 'Nmap Scan Results');
+      var initShots = screenshotBlocks(ctx, 'initial_access', host, 'Initial foothold on ' + host);
+      var privShots = screenshotBlocks(ctx, 'privesc', host, 'Privilege escalation on ' + host);
+      var cmdShots = screenshotBlocks(ctx, 'commands', host, 'Command output');
+
+      var activeInitialFindings = initialFindings.filter(function (f) { return !isPassiveHygieneFinding(f); });
+      var localFlagRow = flagForSlot(t, 'local');
+      var rootFlagRow = flagForSlot(t, 'root');
+      var hostHasLocalProof = !!(localFlagRow.rawFlag || localFlagRow.flag || proofShotsForSlot(t, 'local').length > 0 || proofRenderImages(ctx, host, 'local', '').length > 0);
+      var hostHasRootProof = !!(rootFlagRow.rawFlag || rootFlagRow.flag || proofShotsForSlot(t, 'root').length > 0 || proofRenderImages(ctx, host, 'root', '').length > 0);
+
+      var hostHasEnum = (t.open_ports || []).length > 0 || enumLines.length > 0 || enumCmds.length > 0 || enumShots.length > 0;
+      var hostHasInit = phases.initial.length > 0 || activeInitialFindings.length > 0 || initShots.length > 0 || hostHasLocalProof;
+      var hostHasPriv = phases.privesc.length > 0 || privescFindings.length > 0 || privShots.length > 0;
+      var hostHasPost = hostHasRootProof || (noFlagsProfile && isFullPriv(oscpPriv(t)));
+
+      if (!hideUn || hostHasEnum) {
+        blocks.push(H('Service Enumeration', 4));
+        if ((t.open_ports || []).length) {
+          blocks.push(P('Port scanning and service fingerprinting against `' + host + '` identified ' + t.open_ports.length + ' open service(s):'));
+          blocks.push(TBL(['Server IP Address', 'Ports Open'], [[host, t.open_ports.join(', ')]]));
+        }
+        if (enumLines.length) blocks.push(UL(enumLines));
+        else if (!(t.open_ports || []).length) blocks.push(P('_No service-enumeration facts recorded for this host._'));
+        if (enumCmds.length) {
+          blocks.push(P('**Nmap Scan Results / Enumeration Commands:**'));
+          blocks.push(CODE(enumCmds.join('\n')));
+          var hasCatalogWalk = findings.some(function (f) { return f.from_catalog && f.writeup && f.writeup.description && (f.evidence_cmds || []).length; });
+          if (hasCatalogWalk) {
+            var actOutMap = {};
+            (ctx.timeline || ctx.activities || []).forEach(function (a) {
+              var ac = (a.command || '').trim();
+              if (ac && (a.stdout || '').trim() && !actOutMap[ac]) actOutMap[ac] = a.stdout;
+            });
+            var shownEnumTerms = 0;
+            enumCmds.forEach(function (ec) {
+              if (shownEnumTerms < 2 && actOutMap[ec] && /^(?:sudo\s+)?(?:nmap|enum4linux)/i.test(ec)) {
+                shownEnumTerms++;
+                renderedCmds[ec] = 1;
+                blocks.push(TERM({ command: ec, output: actOutMap[ec] }));
+              }
+            });
+          }
+        }
+        blocks = blocks.concat(enumShots);
+      }
+
+      if (!hideUn || hostHasInit) {
+        blocks.push(H('Initial Access', 4));
+        blocks = blocks.concat(vulnBlock(t, 'initial', phases.initial, hideUn ? activeInitialFindings : initialFindings, renderedCmds));
+        var initUser = '';
+        for (var i = 0; i < phases.initial.length; i++) { if (phases.initial[i].value && typeof phases.initial[i].value === 'object' && phases.initial[i].value.user) { initUser = phases.initial[i].value.user; break; } }
+        var footholdCap = 'Initial foothold on ' + host + (initUser ? ' as ' + initUser : '');
+        blocks = blocks.concat(screenshotBlocks(ctx, 'initial_access', host, footholdCap));
+        if (showFlagsForHost && (!hideUn || hostHasLocalProof)) {
+          blocks = blocks.concat(proofScreenshotBlocks(t, 'local', ctx, host, 'local.txt Proof Screenshot', renderedCmds));
+          blocks = blocks.concat(flagContentsBlock(t, 'local', includeSecrets, 'local.txt Contents'));
         }
       }
-      blocks = blocks.concat(screenshotBlocks(ctx, 'service_enum', host, 'Nmap Scan Results'));
 
-      blocks.push(H('Initial Access', 4));
-      blocks = blocks.concat(vulnBlock(t, 'initial', phases.initial, initialFindings, renderedCmds));
-      var initUser = '';
-      for (var i = 0; i < phases.initial.length; i++) { if (phases.initial[i].value && typeof phases.initial[i].value === 'object' && phases.initial[i].value.user) { initUser = phases.initial[i].value.user; break; } }
-      var footholdCap = 'Initial foothold on ' + host + (initUser ? ' as ' + initUser : '');
-      blocks = blocks.concat(screenshotBlocks(ctx, 'initial_access', host, footholdCap));
-      if (showFlagsForHost) {
-        blocks = blocks.concat(proofScreenshotBlocks(t, 'local', ctx, host, 'local.txt Proof Screenshot', renderedCmds));
-        blocks = blocks.concat(flagContentsBlock(t, 'local', includeSecrets, 'local.txt Contents'));
+      if (!hideUn || hostHasPriv) {
+        blocks.push(H('Privilege Escalation', 4));
+        blocks = blocks.concat(vulnBlock(t, 'privesc', phases.privesc, privescFindings, renderedCmds));
+        blocks = blocks.concat(privShots);
       }
 
-      blocks.push(H('Privilege Escalation', 4));
-      blocks = blocks.concat(vulnBlock(t, 'privesc', phases.privesc, privescFindings, renderedCmds));
-      blocks = blocks.concat(screenshotBlocks(ctx, 'privesc', host, 'Privilege escalation on ' + host));
-
-      blocks.push(H('Post-Exploitation / Proof', 4));
-      if (showFlagsForHost) {
-        blocks = blocks.concat(proofScreenshotBlocks(t, 'root', ctx, host, 'proof.txt Proof Screenshot', renderedCmds));
-        blocks = blocks.concat(flagContentsBlock(t, 'root', includeSecrets, 'proof.txt Contents'));
-      } else {
-        blocks.push(P('Post-exploitation on `' + host + '` reached **' + oscpPriv(t) + '** access. Below is the command transcript demonstrating operational control and objective completion.'));
+      if (!hideUn || hostHasPost) {
+        blocks.push(H('Post-Exploitation / Proof', 4));
+        if (showFlagsForHost) {
+          blocks = blocks.concat(proofScreenshotBlocks(t, 'root', ctx, host, 'proof.txt Proof Screenshot', renderedCmds));
+          blocks = blocks.concat(flagContentsBlock(t, 'root', includeSecrets, 'proof.txt Contents'));
+        } else {
+          blocks.push(P('Post-exploitation on `' + host + '` reached **' + oscpPriv(t) + '** access. Below is the command transcript demonstrating operational control and objective completion.'));
+        }
       }
-      blocks = blocks.concat(screenshotBlocks(ctx, 'commands', host, 'Command output'));
-      blocks = blocks.concat(hostTranscript(ctx, host, renderedCmds));   // verbatim pasted terminal for this host
+
+      blocks = blocks.concat(cmdShots);
+      var transcriptBlocks = hostTranscript(ctx, host, renderedCmds);
+      blocks = blocks.concat(transcriptBlocks);
+
+      if (hideUn && !hostHasEnum && !hostHasInit && !hostHasPriv && !hostHasPost && !cmdShots.length && !transcriptBlocks.length) {
+        blocks.push(P('_No enumeration or exploitation activity has been recorded for `' + host + '` yet._'));
+      }
     });
     return blocks;
   }
@@ -2882,11 +3111,30 @@
       if (/\bset\s+object\b.*dcsync/i.test(c)) return 'AD WriteDacl / DCSync Grant';
       return 'AD ACL Abuse';
     }
+    if (/^certipy\b/i.test(c)) return 'ADCS Enumeration / Exploitation';
+    if (/(?:impacket-)?getST(?:\.py)?\b|(?:impacket-)?rbcd(?:\.py)?\b/i.test(c)) return 'Kerberos Delegation Abuse';
+    if (/(?:impacket-)?ticketer(?:\.py)?\b/i.test(c)) return 'Kerberos Ticket Forgery';
+    if (/(?:impacket-)?addcomputer(?:\.py)?\b/i.test(c)) return 'Machine Account Provisioning';
+    if (/dacledit/i.test(c)) return 'AD DACL Modification';
+    if (/^kerbrute\b/i.test(c)) return 'Kerberos Principal Enumeration';
+    if (/^(?:ldapsearch|bloodhound[\w.-]*|sharphound[\w.-]*)\b/i.test(c)) return 'LDAP / BloodHound Enumeration';
+    if (/^(?:nxc|netexec|crackmapexec|cme)\s+ldap\b/i.test(c)) return 'LDAP Enumeration';
+    if (/^(?:gobuster|feroxbuster|ffuf|wfuzz|nikto|whatweb|wpscan|nuclei)\b/i.test(c)) return 'Web Content & Vuln Discovery';
+    if (/^sqlmap\b/i.test(c)) return 'SQL Injection Exploitation';
+    if (/^(?:(?:impacket-)?mssqlclient(?:\.py)?|mysql|psql|redis-cli|mongosh|mongo)\b/i.test(c)) return 'Database Enumeration / Execution';
+    if (/^(?:(?:sudo\s+)?responder|(?:impacket-)?ntlmrelayx(?:\.py)?|petitpotam(?:\.py)?|coercer(?:\.py)?|printerbug(?:\.py)?)\b/i.test(c)) return 'Auth Coercion / NTLM Relay';
+    if (/^(?:chisel|ligolo[\w-]*|sshuttle)\b/i.test(c)) return 'Network Pivoting / Tunneling';
+    if (/^(?:snmpwalk|onesixtyone)\b/i.test(c)) return 'SNMP Enumeration';
+    if (/^(?:dig|dnsrecon|nslookup)\b/i.test(c)) return 'DNS Enumeration / Zone Transfer';
+    if (/^ftp\b/i.test(c)) return 'FTP Access / File Retrieval';
+    if (/^(?:showmount|mount)\b/i.test(c)) return 'NFS Share Enumeration / Mount';
     if (/secretsdump/i.test(c)) return 'DCSync / Credential Dump';
-    if (/^(?:evil-winrm|ssh|psexec|wmiexec)\b/i.test(c)) {
+    if (/^(?:evil-winrm|ssh|sshpass|xfreerdp|impacket-(?:psexec|wmiexec|smbexec|atexec)|psexec(?:\.py)?|wmiexec(?:\.py)?)\b/i.test(c)) {
       if (/\s-H\s|\s--hashes\b/i.test(c)) return 'Pass-the-Hash Shell';
       return 'Interactive Remote Shell';
     }
+    if (/^(?:sudo\s+-l|find\s+\/|getcap\b|.*linpeas|.*winpeas|whoami\s+\/priv|systeminfo\b)/i.test(c)) return 'Local Privilege Enumeration';
+    if (/^sudo\b/i.test(c)) return 'Sudo Privilege Escalation';
     if (/(?:local|proof|user|root)\.txt/i.test(c)) return 'Objective Proof Capture';
     return 'Enumeration / Execution';
   }
@@ -2959,7 +3207,7 @@
     });
   }
   function proofSection(ctx) {
-    var blocks = [H('Proof of Access', 2)];
+    var blocks = [PB(), H('Proof of Access', 2)];
     var a = ctx.proof || {};
     if (a.readiness_line) blocks.push(CALL('**Report readiness:** ' + a.readiness_line, 'note'));
     var anyItem = false;
@@ -2972,7 +3220,10 @@
     });
     var shots = screenshotBlocks(ctx, 'proof', '');
     if (shots.length) { anyItem = true; blocks.push(H('Additional proof screenshots', 3)); blocks = blocks.concat(shots); }
-    if (!anyItem) blocks.push(CALL('No proof flags captured yet.', 'gap'));
+    if (!anyItem) {
+      if (ctx && ctx.hideUnreached) return [];
+      blocks.push(CALL('No proof flags captured yet.', 'gap'));
+    }
     return blocks;
   }
 
@@ -3011,6 +3262,7 @@
   function riskOverview(ctx) {
     var counts = ctx.severity_counts || {};
     var rows = SEV_ORDER.filter(function (s) { return counts[s]; }).map(function (s) { return [s.charAt(0).toUpperCase() + s.slice(1), String(counts[s]) ]; });
+    if (!rows.length && ctx && ctx.hideUnreached) return [];
     return [H('Risk Overview', 2), TBL(['Severity', 'Count'], rows.length ? rows : [['None', '0']])];
   }
   function findingsCatalog(ctx, remediation) {
@@ -3020,7 +3272,11 @@
     var items = [];
     (fctx.targets || []).forEach(function (t) { (t.findings || []).forEach(function (f) { items.push(Object.assign({}, f, { host: t.label || t.host })); }); });
     items.sort(function (a, b) { return (rank[a.severity] != null ? rank[a.severity] : 9) - (rank[b.severity] != null ? rank[b.severity] : 9) || String(a.title).localeCompare(String(b.title)); });
-    if (!items.length) { blocks.push(P('No catalogued findings.')); return blocks; }
+    if (!items.length) {
+      if (ctx && ctx.hideUnreached) return [];
+      blocks.push(P('No catalogued findings.'));
+      return blocks;
+    }
     items.forEach(function (f) {
       blocks.push(H('[' + String(f.severity || 'info').toUpperCase() + '] ' + (f.title || ''), 3));
       var pairs = [['Host', f.host || ''], ['Severity', capFirst(f.severity || 'info')]];
@@ -3097,6 +3353,7 @@
   }
 
   function appendix(ctx, profile) {
+    var hideUn = !!(ctx && ctx.hideUnreached);
     var blocks = [PB(), H('Appendix: Key Commands & Evidence', 2)];
     var seen = {}, rows = [];
     var sortedTimeline = (ctx.timeline || []).slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
@@ -3114,18 +3371,21 @@
       blocks.push(H('Evidence', 3));
       blocks.push(UL(ev.map(function (e) { return '`' + (e.stored || e.id) + '` - ' + (e.caption || e.phase || e.kind || 'evidence'); })));
     }
-    blocks = blocks.concat(screenshotBlocks(ctx, 'appendix', '', 'Appendix evidence'));
-    blocks = blocks.concat(workspaceAppendix(ctx));
-    if (!profile || !profile.no_flags) {
+    var appShots = screenshotBlocks(ctx, 'appendix', '', 'Appendix evidence');
+    var wsBlocks = workspaceAppendix(ctx);
+    blocks = blocks.concat(appShots);
+    blocks = blocks.concat(wsBlocks);
+    if ((!profile || !profile.no_flags) && (!hideUn || (ctx.proofCount || 0) > 0)) {
       blocks = blocks.concat(proofAndLocalTable(ctx));
     }
-    if (profile && profile.id === 'oscp') {
-      var usedMsf = (ctx.timeline || []).some(function (r) { var c = (r.command || '').toLowerCase(); return c.indexOf('metasploit') !== -1 || c.indexOf('meterpreter') !== -1 || c.indexOf('msfconsole') !== -1; });
+    var usedMsf = (ctx.timeline || []).some(function (r) { var c = (r.command || '').toLowerCase(); return c.indexOf('metasploit') !== -1 || c.indexOf('meterpreter') !== -1 || c.indexOf('msfconsole') !== -1; });
+    if (profile && profile.id === 'oscp' && (!hideUn || compromisedTargets(ctx).length > 0 || usedMsf)) {
       blocks.push(H('Appendix: Metasploit / Meterpreter Usage', 3));
       blocks.push(P(usedMsf ? 'Metasploit/Meterpreter was used on the machine(s) noted in the walkthrough.' : 'N/A, Metasploit/Meterpreter was not used during this engagement.'));
       blocks.push(H('Appendix: Completed Buffer Overflow Code', 3));
       blocks.push(P('N/A, no buffer-overflow exploit was developed or used during this engagement.'));
     }
+    if (hideUn && blocks.length <= 2) return [];
     return blocks;
   }
 
@@ -3231,8 +3491,35 @@
     appendix: function (ctx, p) { return appendix(ctx, p); },
   };
 
+  function hasAnyEngagementEvidence(ctx) {
+    if (!ctx) return false;
+    if ((ctx.activities || []).length > 0 || (ctx.timeline || []).length > 0) return true;
+    if ((ctx.proofs || []).length > 0 || (ctx.proofCount || 0) > 0) return true;
+    if ((ctx.evidence || []).some(function (e) { return e.include !== false; })) return true;
+    var fTargets = (ctx.findings && ctx.findings.targets) || [];
+    if (fTargets.some(function (t) { return (t.findings || []).length > 0; })) return true;
+    var targets = ctx.targets || [];
+    if (targets.some(function (t) {
+      return (t.open_ports || []).length > 0
+        || (t.flags || []).length > 0
+        || cleanFindings(t.findings || []).length > 0;
+    })) return true;
+    var notes = ctx.notes || {};
+    if (Object.keys(notes).some(function (k) {
+      var n = notes[k] || {};
+      return String(n.summary || '').trim() || String(n.steps || '').trim();
+    })) return true;
+    if (ctx.meta && String(ctx.meta.exec_summary || '').trim()) return true;
+    return false;
+  }
+
   function document(profileName, ctx) {
     var prof = resolve(profileName, ctx);
+    if (ctx && ctx.hideUnreached && !hasAnyEngagementEvidence(ctx)) {
+      var coverBlocks = cover(ctx, prof).filter(function (b) { return !b || (b.t !== 'pagebreak' && b.t !== 'page_break'); });
+      coverBlocks.push(CALL('**No engagement evidence recorded yet.** As you paste terminal output, enumerate services, and capture findings or flags in the Workbench, each report section (High-Level Summary, Methodology, Per-Machine Walkthrough, and Proof of Access) will populate automatically from your evidence ledger. Uncheck **Hide Unreached** in the toolbar above to preview the full template skeleton.', 'note'));
+      return coverBlocks;
+    }
     var blocks = [];
     prof.sections.forEach(function (sid) {
       var builder = SECTION_BUILDERS[sid];

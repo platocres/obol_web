@@ -1,13 +1,13 @@
 /*!
- * obol data — coverage-expected.js — OBOL.COVERAGE_EXPECTED
+ * obol data - coverage-expected.js - OBOL.COVERAGE_EXPECTED
  *
  * The per-port EXPECTED-COVERAGE oracle: for each by-port Evidence card, the techniques an OSCP operator
  * would expect to find, each mapped to the move id(s) that represent it. This is the ONLY place a human
- * "ideal" is written down, and it is deliberately NOT a drawn tree — just a checklist (see
+ * "ideal" is written down, and it is deliberately NOT a drawn tree - just a checklist (see
  * docs/DECISION-MAP.md). The decision map / gap report diffs the derived per-port moves against this
  * list: a technique whose `moves` are all absent is a COVERAGE GAP (a technique we should teach but no
  * move represents). `moves: []` is how you record a known-missing technique on purpose, so it shows up
- * red until someone adds the move — then it clears itself. Keep entries honest: only list a move id here
+ * red until someone adds the move - then it clears itself. Keep entries honest: only list a move id here
  * if that move genuinely covers the technique.
  *
  * Keyed by Evidence card key: the open-port cards (p21, p80, …) AND the post-foothold access cards

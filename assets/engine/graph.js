@@ -27,9 +27,7 @@
 
   // Compute the forward-path model. include_all shows the whole methodology DAG.
   function buildGraphModel(facts, pack, includeAll) {
-    var live = {};
-    OBOL.pack.nextActions(facts, pack).forEach(function (a) { live[a.id] = true; });
-    var nodes = [], edges = [], seen = {};
+    var nodes = [], edges = [], seen = {}, edgeSeen = {};
 
     function factNode(kind) {
       var id = nid('f_' + kind);
@@ -37,21 +35,70 @@
         seen[id] = true;
         nodes.push({ id: id, type: 'fact', label: techniqueForKind(kind) || friendly(kind), kind: kind,
           technique: techniqueForKind(kind) || '',
-          state: facts.has(kind) ? 'proven' : 'future', phase: P.phaseOfKind(kind) });
+          state: facts.has(kind) ? 'proven' : 'future', phase: /^(?:objective|proof)\./.test(kind) ? 'loot' : P.phaseOfKind(kind) });
       }
       return id;
     }
 
-    pack.forEach(function (a) {
-      var done = a.settled(facts);
-      if (!(done || live[a.id] || includeAll)) return;
-      var state = done ? 'done' : (live[a.id] ? 'next' : 'locked');
-      var anid = nid('a_' + a.id);
-      nodes.push({ id: anid, type: 'action', label: a.title, action_id: a.id, state: state, phase: P.phaseOfAction(a) });
-      a.requires_all.concat(a.requires_any).forEach(function (k) {
-        if (includeAll || facts.has(k)) edges.push({ from: factNode(k), to: anid });
+    function addEdge(from, to) {
+      var key = from + '->' + to;
+      if (edgeSeen[key]) return;
+      edgeSeen[key] = true;
+      edges.push({ from: from, to: to });
+    }
+
+    var actionsToRender = pack;
+    if (!includeAll) {
+      var rankMap = {};
+      if (root.OBOL && root.OBOL.pack && typeof root.OBOL.pack.rankActions === 'function') {
+        try {
+          var rankedList = root.OBOL.pack.rankActions(facts, pack) || [];
+          rankedList.forEach(function (ra, idx) { if (ra && ra.id) rankMap[ra.id] = idx; });
+        } catch (e) {}
+      }
+      var nextByPhase = {};
+      var keptIds = {};
+      pack.forEach(function (a, origIdx) {
+        var elig = a.eligible(facts);
+        var done = elig && a.settled(facts);
+        var next = !done && elig && !a.obsolete(facts);
+        if (done) { keptIds[a.id] = true; return; }
+        if (!next) return;
+        var actPhase = (a.produces || []).some(function (k) { return /^(?:objective|proof)\./.test(k); }) ? 'loot' : P.phaseOfAction(a);
+        var reqs = (a.requires_all || []).concat(a.requires_any || []);
+        var hasProvenNonInfra = reqs.some(function (k) { return k !== 'target.configured' && facts.has(k); });
+        var rIdx = (a.id in rankMap) ? rankMap[a.id] : (1000 + origIdx);
+        (nextByPhase[actPhase] = nextByPhase[actPhase] || []).push({ a: a, proven: hasProvenNonInfra ? 0 : 1, rIdx: rIdx });
       });
-      a.produces.forEach(function (k) { edges.push({ from: anid, to: factNode(k) }); });
+      Object.keys(nextByPhase).forEach(function (ph) {
+        var list = nextByPhase[ph];
+        list.sort(function (x, y) { return (x.proven - y.proven) || (x.rIdx - y.rIdx); });
+        list.slice(0, 8).forEach(function (item) { keptIds[item.a.id] = true; });
+      });
+      actionsToRender = pack.filter(function (a) { return !!keptIds[a.id]; });
+    }
+
+    actionsToRender.forEach(function (a) {
+      var elig = a.eligible(facts);
+      var done = elig && a.settled(facts);
+      var next = !done && elig && !a.obsolete(facts);
+      if (!(done || next || includeAll)) return;
+      var state = done ? 'done' : (next ? 'next' : 'locked');
+      var anid = nid('a_' + a.id);
+      var actPhase = (a.produces || []).some(function (k) { return /^(?:objective|proof)\./.test(k); }) ? 'loot' : P.phaseOfAction(a);
+      nodes.push({ id: anid, type: 'action', label: a.title, action_id: a.id, state: state, phase: actPhase });
+      var reqs = a.requires_all.concat(a.requires_any);
+      reqs.forEach(function (k) {
+        if (includeAll || facts.has(k)) addEdge(factNode(k), anid);
+      });
+      if (a.credential_probe) {
+        var anyDirect = a.requires_any.some(function (k) { return facts.has(k); });
+        if (!anyDirect && (includeAll || facts.has('credential.available') || facts.has('loot.ntds'))) {
+          var credKind = facts.has('loot.ntds') ? 'loot.ntds' : 'credential.available';
+          addEdge(factNode(credKind), anid);
+        }
+      }
+      a.produces.forEach(function (k) { addEdge(anid, factNode(k)); });
     });
 
     return { phases: P.PHASES.slice(), nodes: nodes, edges: edges };
@@ -71,7 +118,10 @@
   function buildGraphSvg(facts, pack, includeAll) {
     var model = buildGraphModel(facts, pack, includeAll);
     var byPhase = {}; P.PHASES.forEach(function (p) { byPhase[p] = []; });
-    model.nodes.forEach(function (n) { (byPhase[n.phase] = byPhase[n.phase] || []).push(n); });
+    model.nodes.forEach(function (n) {
+      var col = (n.phase in byPhase) ? n.phase : (n.phase === 'lateral' ? 'escalate' : P.DEFAULT_PHASE);
+      (byPhase[col] = byPhase[col] || []).push(n);
+    });
     var cols = P.PHASES.filter(function (p) { return byPhase[p] && byPhase[p].length; });
     if (!cols.length) {
       return '<svg viewBox="0 0 320 60" width="320" height="60" xmlns="http://www.w3.org/2000/svg">'
@@ -128,9 +178,30 @@
     }
     return null;
   }
+  function firstRunnableCommand(a, facts, opts) {
+    if (!a) return '';
+    var cmds = (a.commands && a.commands.length) ? a.commands : (a.command ? [{ run: a.command }] : []);
+    if (!cmds.length) return '';
+    var firstUnblocked = '';
+    for (var i = 0; i < cmds.length; i++) {
+      try {
+        var f = OBOL.command.fillCommand(a, facts, opts || {}, i);
+        var rendered = f.filled || f.run || '';
+        if (f.blocked) continue;
+        if (!firstUnblocked) firstUnblocked = rendered;
+        if (rendered && !/\{\{[^}]+\}\}/.test(rendered)) return rendered;
+      } catch (e) {}
+    }
+    if (firstUnblocked) return firstUnblocked;
+    try {
+      var f0 = OBOL.command.fillCommand(a, facts, opts || {}, 0);
+      return f0.filled || f0.run || '';
+    } catch (e2) {
+      return (cmds[0] && cmds[0].run) || a.command || '';
+    }
+  }
   function actionCommand(a, facts, opts) {
-    try { var f = OBOL.command.fillCommand(a, facts, opts || {}, 0); return f.filled || f.run || ''; }
-    catch (e) { return (a.commands && a.commands[0] && a.commands[0].run) || a.command || ''; }
+    return firstRunnableCommand(a, facts, opts);
   }
   function stripTokens(s) {
     return String(s || '').replace(/\{\{subject\}\}/g, 'the affected account').replace(/\{\{domain\}\}/g, 'the domain')
@@ -172,5 +243,11 @@
     return info;
   }
 
-  OBOL.graph = { buildGraphModel: buildGraphModel, buildGraphSvg: buildGraphSvg, buildNodeInfo: buildNodeInfo, techniqueForKind: techniqueForKind };
+  OBOL.graph = {
+    buildGraphModel: buildGraphModel,
+    buildGraphSvg: buildGraphSvg,
+    buildNodeInfo: buildNodeInfo,
+    techniqueForKind: techniqueForKind,
+    firstRunnableCommand: firstRunnableCommand
+  };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

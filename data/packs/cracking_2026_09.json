@@ -16,7 +16,9 @@
       "requires_any": [
         "loot.material",
         "credential.candidate",
-        "db.tables"
+        "db.tables",
+        "hash.crackable",
+        "db.hashes"
       ],
       "produces": [
         "hash.type"
@@ -105,6 +107,12 @@
       "produces": [
         "credential.candidate"
       ],
+      "deprioritize_when": [
+        "credential.available",
+        "loot.ntds",
+        "access.admin",
+        "access.system"
+      ],
       "priority": 74,
       "autonomy": "auto",
       "proves": "the plaintext password recovered from a kerberoast hash (a candidate credential)",
@@ -150,6 +158,12 @@
       "produces": [
         "credential.candidate"
       ],
+      "deprioritize_when": [
+        "credential.available",
+        "loot.ntds",
+        "access.admin",
+        "access.system"
+      ],
       "priority": 74,
       "autonomy": "auto",
       "proves": "the plaintext recovered from an AS-REP hash (a candidate credential)",
@@ -182,7 +196,9 @@
         "hash.type",
         "hash.candidate",
         "hash.ike_psk",
-        "hash.sntp"
+        "hash.sntp",
+        "hash.crackable",
+        "db.hashes"
       ],
       "produces": [
         "credential.available"
@@ -254,7 +270,9 @@
         "loot.material",
         "hash.type",
         "hash.candidate",
-        "hash.ike_psk"
+        "hash.ike_psk",
+        "hash.crackable",
+        "db.hashes"
       ],
       "produces": [
         "credential.candidate"
@@ -432,6 +450,9 @@
       "tools": [
         "hydra"
       ],
+      "os": [
+        "windows"
+      ],
       "requires_any": [
         "ad.user_list",
         "web.users"
@@ -469,10 +490,11 @@
         "hashcat",
         "john"
       ],
-      "os": [],
-      "requires_all": [
-        "hash.mscache"
+      "os": [
+        "windows",
+        "linux"
       ],
+      "requires_all": [],
       "produces": [
         "credential.available",
         "credential.candidate"
@@ -491,11 +513,76 @@
       "commands": [
         {
           "tool": "hashcat",
-          "run": "hashcat -m 2100 dcc2.hash /usr/share/wordlists/rockyou.txt",
+          "run": "hashcat -m 2100 {{hashfile}} {{wordlist}}",
           "note": "Mode 2100 = DCC2 / MS-Cache v2."
+        },
+        {
+          "tool": "john",
+          "run": "john --format=mscash2 {{hashfile}} --wordlist={{wordlist}}",
+          "note": "John the Ripper MS-Cache v2 (DCC2) offline dictionary cracking."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "hash.mscache",
+        "hash.mscache2"
+      ]
+    },
+    {
+      "id": "crack-modular-hash",
+      "transition": "crack",
+      "title": "Crack Extracted Modular & Application Hashes (bcrypt / sha512crypt / md5crypt / DCC2)",
+      "phase": "creds",
+      "hypothesis": "Modular crypt hashes ($2a$/$2b$/$2y$ bcrypt, $6$ sha512crypt, $1$ md5crypt, $DCC2$ domain cached credentials) extracted from web databases, config files, or backups can be cracked offline with John the Ripper or Hashcat using wordlists and mutation rules to recover reusable plaintext passwords.",
+      "tool": "john",
+      "tools": [
+        "john",
+        "hashcat"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "hash.crackable",
+        "db.hashes"
+      ],
+      "produces": [
+        "credential.available",
+        "credential.plaintext"
+      ],
+      "settled_by": [
+        "credential.available",
+        "credential.plaintext"
+      ],
+      "priority": 78,
+      "autonomy": "auto",
+      "proves": "recovers cleartext passwords from extracted modular application or database password hashes",
+      "does_not_prove": "host or service authentication until the recovered plaintext is tested against SSH, SMB, WinRM, or web login",
+      "report": {
+        "finding": "Weak Password Hash Cracked Offline",
+        "severity": "high"
+      },
+      "refs": [
+        "https://hashcat.net/wiki/doku.php?id=example_hashes"
+      ],
+      "commands": [
+        {
+          "tool": "john",
+          "run": "john --wordlist={{wordlist}} {{hashfile}} && john --show {{hashfile}}",
+          "note": "PREFERRED: John auto-detects modular crypt prefixes ($2y$ bcrypt, $6$ sha512crypt, $1$ md5crypt) and prints cracked passwords."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 3200 {{hashfile}} {{wordlist}} -r /usr/share/hashcat/rules/best64.rule --force",
+          "note": "Hashcat mode 3200 (bcrypt $2a$/$2b$/$2y$) with best64 mutation rules for web application database hashes."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 1800 {{hashfile}} {{wordlist}} --force",
+          "note": "Hashcat mode 1800 (sha512crypt $6$) for Linux shadow and modular crypt hashes."
+        }
+      ]
     },
     {
       "id": "vnc-decrypt",
@@ -648,5 +735,6 @@
       ],
       "requires_all": []
     }
-  ]
+  ],
+  "id": "cracking_2026_09"
 }

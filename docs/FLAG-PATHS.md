@@ -10,7 +10,7 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 | `21` FTP | ✅ | ✅ | ✅ | — |
 | `22` SSH | ✅ | ✅ | ✅ | — |
 | `23` Telnet | ✅ | ✅ | ✅ | — |
-| `25/110/143` SMTP, POP3, IMAP | ✅ | ✅ | ✅ | — |
+| `25/110/143/465/587/993/995` SMTP, POP3, IMAP | ✅ | ✅ | ✅ | — |
 | `53` DNS | ✅ | ✅ | ✅ | — |
 | `69` TFTP | ✅ | ✅ | ✅ | — |
 | `79` Finger | ✅ | ✅ | ✅ | — |
@@ -22,21 +22,26 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 | `389/636/3268` LDAP, Global Catalog | ✅ | ✅ | ✅ | ✅ |
 | `500` IKE, IPsec VPN | ✅ | ✅ | ✅ | — |
 | `512/513/514` r-services (rexec, rlogin, rsh) | ✅ | ✅ | ✅ | — |
+| `623` IPMI BMC (RAKP) | ✅ | ✅ | ✅ | — |
 | `873` rsync | ✅ | ✅ | ✅ | — |
 | `1433` MSSQL | ✅ | ✅ | ✅ | — |
 | `1521` Oracle TNS | ✅ | ✅ | ✅ | — |
 | `3306` MySQL, MariaDB | ✅ | ✅ | ✅ | — |
 | `3389` RDP | ✅ | ✅ | ✅ | — |
+| `3690` Subversion (svnserve) | ✅ | ✅ | ✅ | — |
 | `5432` PostgreSQL | ✅ | ✅ | ✅ | — |
-| `5900` VNC | ✅ | ✅ | ✅ | — |
+| `5800/5900/5901` VNC | ✅ | ✅ | ✅ | — |
 | `5985/5986` WinRM | ✅ | ✅ | ✅ | — |
 | `6000` X11 | ✅ | ✅ | ✅ | — |
 | `6379` Redis | ✅ | ✅ | ✅ | — |
+| `6667/6697` IRC (UnrealIRCd) | ✅ | ✅ | ✅ | — |
 | `1099` Java RMI | ✅ | ✅ | ✅ | — |
 | `8009` AJP (Tomcat) | ✅ | ✅ | ✅ | — |
-| `8080` HTTP-alt (Tomcat, Jenkins) | ✅ | ✅ | ✅ | — |
+| `8080/8443/8082` HTTP-alt (Tomcat, Jenkins, JBoss) | ✅ | ✅ | ✅ | — |
+| `8089/8000` Splunkd Management & UI | ✅ | ✅ | ✅ | — |
 | `10000/20000` Webmin, Usermin | ✅ | ✅ | ✅ | — |
-| `9200` Elasticsearch | ✅ | ✅ | ✅ | — |
+| `10050/10051` Zabbix Agent & Server | ✅ | ✅ | ✅ | — |
+| `9200/5984/9042` Elasticsearch, CouchDB, Cassandra | ✅ | ✅ | ✅ | — |
 | `11211` Memcached | ✅ | ✅ | ✅ | — |
 | `27017` MongoDB | ✅ | ✅ | ✅ | — |
 | `1978` WiFi Mouse Server | ✅ | ✅ | ✅ | — |
@@ -66,7 +71,7 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **User flag:** Log In Over Telnet → Capture the User Flag (Linux)
 - **Root/Admin:** Log In Over Telnet → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
-### `25/110/143` — SMTP, POP3, IMAP
+### `25/110/143/465/587/993/995` — SMTP, POP3, IMAP
 - **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
 - **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
 - **Root/Admin:** POP3 / IMAP Enumeration → DCSync → Own the Domain, Pass-the-Hash as Administrator → WSUS Abuse
@@ -129,6 +134,11 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **User flag:** Log In via r-services (rlogin/rsh) → Capture the User Flag (Linux)
 - **Root/Admin:** Log In via r-services (rlogin/rsh)
 
+### `623` — IPMI BMC (RAKP)
+- **Foothold:** IPMI BMC Cipher Suite 0 Bypass and Hash Extraction → Authenticated Remote Execution
+- **User flag:** IPMI BMC Cipher Suite 0 Bypass and Hash Extraction → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** IPMI BMC Cipher Suite 0 Bypass and Hash Extraction → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+
 ### `873` — rsync
 - **Foothold:** Rsync Writable Module to Shell
 - **User flag:** Rsync Writable Module to Shell → Capture the User Flag (Linux)
@@ -141,25 +151,30 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 
 ### `1521` — Oracle TNS
 - **Foothold:** Oracle TNS Enumeration & Login → Oracle to Command Execution
-- **User flag:** Oracle Database TNS ODAT DBMS_SCHEDULER Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Oracle Database TNS ODAT DBMS_SCHEDULER Execution
+- **User flag:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Capture the User Flag (Linux)
+- **Root/Admin:** Oracle TNS Enumeration & Login → Oracle to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
 ### `3306` — MySQL, MariaDB
-- **Foothold:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
-- **User flag:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** MySQL / MariaDB Login → MSSQL xp_cmdshell Command Execution
+- **User flag:** MySQL / MariaDB Login → MSSQL xp_cmdshell Command Execution → Capture the User Flag (Windows)
+- **Root/Admin:** MySQL / MariaDB Login → MSSQL xp_cmdshell Command Execution → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `3389` — RDP
 - **Foothold:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)
 - **User flag:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708) → Capture the User Flag (Windows)
 - **Root/Admin:** BlueKeep RDP Pre-Auth RCE (CVE-2019-0708)
 
+### `3690` — Subversion (svnserve)
+- **Foothold:** Exposed .svn Directory → JWT Attacks → HTTP Request Smuggling Authentication Bypass and Siphoning → Authenticated Remote Execution
+- **User flag:** Exposed .svn Directory → JWT Attacks → HTTP Request Smuggling Authentication Bypass and Siphoning → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Exposed .svn Directory → JWT Attacks → HTTP Request Smuggling Authentication Bypass and Siphoning → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+
 ### `5432` — PostgreSQL
 - **Foothold:** PostgreSQL Login → PostgreSQL to Command Execution
 - **User flag:** PostgreSQL Login → PostgreSQL to Command Execution → Capture the User Flag (Linux)
 - **Root/Admin:** PostgreSQL Login → PostgreSQL to Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
-### `5900` — VNC
+### `5800/5900/5901` — VNC
 - **Foothold:** VNC Enumeration → VNC Desktop to Shell
 - **User flag:** VNC Enumeration → VNC Desktop to Shell → Capture the User Flag (Linux)
 - **Root/Admin:** VNC Enumeration → VNC Desktop to Shell → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
@@ -179,18 +194,28 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **User flag:** Redis Rogue Server Master Replication RCE → Capture the User Flag (Linux)
 - **Root/Admin:** Redis Rogue Server Master Replication RCE → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
 
+### `6667/6697` — IRC (UnrealIRCd)
+- **Foothold:** UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075)
+- **User flag:** UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075) → Capture the User Flag (Linux)
+- **Root/Admin:** UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075) → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
+
 ### `1099` — Java RMI
-- **Foothold:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
-- **User flag:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Windows.old / Registry-Hive Secret Dump → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `8009` — AJP (Tomcat)
 - **Foothold:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution
 - **User flag:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → Capture the User Flag (Windows)
 - **Root/Admin:** Tomcat AJP Ghostcat (CVE-2020-1938) → Extract SAM/SYSTEM from Backup VHD Images → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
-### `8080` — HTTP-alt (Tomcat, Jenkins)
-- **Foothold:** Jenkins Exploitation
+### `8080/8443/8082` — HTTP-alt (Tomcat, Jenkins, JBoss)
+- **Foothold:** H2 Database Web Console SQL Query Java Alias RCE
+- **User flag:** H2 Database Web Console SQL Query Java Alias RCE → Capture the User Flag (Linux)
+- **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
+
+### `8089/8000` — Splunkd Management & UI
+- **Foothold:** JDWP Java Debug Port RCE
 - **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
 - **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
@@ -199,20 +224,25 @@ Every by-port entry point, proven by the engine's own reachability to each miles
 - **User flag:** Jenkins Exploitation → Capture the User Flag (Windows)
 - **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
-### `9200` — Elasticsearch
+### `10050/10051` — Zabbix Agent & Server
+- **Foothold:** Zabbix Agent system.run Remote Command Execution
+- **User flag:** Zabbix Agent system.run Remote Command Execution → Capture the User Flag (Linux)
+- **Root/Admin:** Zabbix Agent system.run Remote Command Execution → Process Monitoring (pspy) → Cron Job Abuse and Tar Wildcards
+
+### `9200/5984/9042` — Elasticsearch, CouchDB, Cassandra
 - **Foothold:** Elasticsearch to Command Execution
 - **User flag:** Elasticsearch to Command Execution → Capture the User Flag (Linux)
 - **Root/Admin:** Jenkins Exploitation → Missing-Patch Exploit Suggestions (wesng) → Windows Missing-Patch / Kernel LPE
 
 ### `11211` — Memcached
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `27017` — MongoDB
-- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
-- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
-- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
+- **Foothold:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution
+- **User flag:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → Capture the User Flag (Windows)
+- **Root/Admin:** Nmap Focused UDP Check → SNMP Enumeration → Local Privilege Escalation Enumeration (Windows) → Windows.old / Registry-Hive Secret Dump → Exposed SQLite Database Table Extraction and Credential Recovery → Password Spraying (Careful) → Authenticated Remote Execution → PowerView Enumeration (from a Windows Foothold) → DnsAdmins Server-Level DLL Injection
 
 ### `1978` — WiFi Mouse Server
 - **Foothold:** Jenkins Exploitation

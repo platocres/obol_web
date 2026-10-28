@@ -90,7 +90,7 @@
         return '<option value="' + U.attr(ip) + '">' + esc(ip) + (t.hostname && t.ip ? (' · ' + t.hostname) : '') + '</option>';
       }).join('');
     return '<details class="ev-import"><summary>Import A Full Session <span class="ev-import-tag">Catch Up On The Whole Box</span></summary>'
-      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. OBOL splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the coach jumps straight to your real frontier.</p>'
+      + '<p class="ev-hint">Already deep into a box? Paste (or attach) your <strong>entire terminal</strong> from this run, every command and its output. OBOL splits it into per-command segments, orders them by time, skips duplicates, and mints facts from all of them at once, so the Cockpit jumps straight to your real frontier.</p>'
       + '<textarea id="ev-imp-text" class="ev-textarea" placeholder="Paste your whole session, many commands and all their output. OBOL finds each command by its prompt line." spellcheck="false"></textarea>'
       + '<label class="ev-imp-route"><span>Route Facts To</span><select id="ev-imp-target" class="ev-cmd">' + tOpts + '</select></label>'
       + '<div class="ev-hint ev-imp-route-hint">Auto-route reads the target IP from each command (<code>nxc smb 10.0.0.5</code>, <code>--host 10.0.0.5</code>…) and files its facts under that host, your VPN/<code>tun0</code> address is never treated as a target. New hosts you touch are added automatically. Pick a specific target to force everything onto one host.</div>'
@@ -168,7 +168,7 @@
     var fixCards = renderFixCards(facts);
     return '<section class="evidence">'
       + '<h1 class="route-h1">Evidence</h1>'
-      + '<p class="route-sub">Paste your <strong>whole terminal</strong>, the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the coach recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
+      + '<p class="route-sub">Paste your <strong>whole terminal</strong>, the command you ran <em>and</em> its full output. Conservative parsers mint only proven facts (nothing is inferred that the output doesn\'t show), the Cockpit recomputes, and the raw command+output is kept as verbatim evidence for your report.</p>'
       + fixCards
       + pinBlock
       + '<div class="ev-paste">'
@@ -190,7 +190,7 @@
       + importSection()
       + shotsSection()
       + '<details class="ev-manual"><summary>Add A Fact Manually</summary>'
-      + '<p class="ev-hint">Pick what you\'ve confirmed and the coach advances, use this when you did something OBOL\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
+      + '<p class="ev-hint">Pick what you\'ve confirmed and the Cockpit advances, use this when you did something OBOL\'s parsers can\'t read (a manual exploit, an unsupported tool).</p>'
       + '<div id="ev-factpick" class="fact-pick"></div>'
       + '</details>'
       + '</section>';
@@ -242,7 +242,7 @@
         + (r.facts.length ? '<details class="ev-factraw"><summary>Recorded observation details</summary><ul class="ev-factlist">'
           + r.facts.map(function (f) { return '<li class="' + esc(f.state) + '"><code>' + esc(f.kind) + '</code> <span class="ev-fscope">' + esc(f.scope) + '</span></li>'; }).join('')
           + '</ul></details>' : '')
-        + '<a class="btn-primary" href="#/path">See Updated Coach →</a>';
+        + '<a class="btn-primary" href="#/path">See Updated Cockpit →</a>';
     }
     U.toast(OBOL.ingest.outcomeMessage(r));
   }
@@ -325,10 +325,11 @@
     if (resEl) {
       resEl.innerHTML = OBOL.ingest.renderOutcome(r.outcome)
         + '<div class="ev-hint">Imported ' + r.imported + ' command' + (r.imported === 1 ? '' : 's')
+        + (r.hosts && r.hosts.length ? ' across ' + r.hosts.length + ' host' + (r.hosts.length === 1 ? '' : 's') : '')
         + '; ' + r.added + ' new fact' + (r.added === 1 ? '' : 's')
         + (r.dupes ? '; ' + r.dupes + ' duplicate capture' + (r.dupes === 1 ? '' : 's') + ' skipped' : '') + '.</div>'
         + (r.outcomes && r.outcomes.length > 1 ? '<details><summary>Outcomes by command</summary>' + r.outcomes.map(function (o) { return OBOL.ingest.renderOutcome(o); }).join('') + '</details>' : '')
-        + '<a class="btn-primary" href="#/path">See Updated Coach →</a>';
+        + '<a class="btn-primary" href="#/path">See Updated Cockpit →</a>';
     }
     U.toast(OBOL.ingest.outcomeMessage(r));
   }

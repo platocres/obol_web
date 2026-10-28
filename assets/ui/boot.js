@@ -39,6 +39,8 @@
   function renderSidebar() {
     var eng = OBOL.store.active();
     if (!eng) return;
+    var configured = !OBOL.store || typeof OBOL.store.isConfigured !== 'function' || OBOL.store.isConfigured(eng);
+    try { document.documentElement.setAttribute('data-eng-configured', configured ? '1' : '0'); } catch (e) {}
     var params = eng.params || {};
 
     // engagement picker
@@ -136,7 +138,13 @@
 
     // engagement switch / new
     var engSel = document.getElementById('eng-select');
-    if (engSel) engSel.addEventListener('change', function () { OBOL.store.setActive(engSel.value).then(function () { OBOL.router.render(); }); });
+    if (engSel) engSel.addEventListener('change', function () {
+      OBOL.store.setActive(engSel.value).then(function () {
+        renderSidebar();
+        if (OBOL.store.isConfigured && !OBOL.store.isConfigured()) OBOL.router.go('home');
+        else OBOL.router.render();
+      });
+    });
     var engNew = document.getElementById('eng-new');
     if (engNew) engNew.addEventListener('click', function () {
       // The full new-run setup (platform profile, machine type, scope, Kali working directory) lives
@@ -158,24 +166,50 @@
     });
 
     // params (input -> store)
+    function sanitizeParamValue(key, raw) {
+      var v = String(raw == null ? '' : raw);
+      if (key === 'target') {
+        return v.trim().replace(/^https?:\/\//i, '').replace(/(?::\d+)?(?:\/.*)?$/, '').trim();
+      }
+      if (key === 'lhost') {
+        return v.trim().replace(/\/\d{1,2}$/, '').trim();
+      }
+      return v;
+    }
     var paramsEl = document.getElementById('params');
     if (paramsEl) paramsEl.addEventListener('input', function (e) {
       var t = e.target.closest('[data-param]'); if (!t) return;
-      var key = t.getAttribute('data-param'), val = t.value;
+      var key = t.getAttribute('data-param'), val = sanitizeParamValue(key, t.value);
       OBOL.store.update(function (eng) {
         eng.params = eng.params || {};
         eng.params[key] = val;
         if (key === 'target') eng.activeTarget = val ? String(val).trim() : null;
       }, 'params');
     });
-    // target switcher (dropdown) -> set active target + re-rank
+    // target switcher (dropdown) or committed [data-param] edit -> sync global chrome + active route
     if (paramsEl) paramsEl.addEventListener('change', function (e) {
+      var pInput = e.target.closest('[data-param]');
+      if (pInput) {
+        var pKey = pInput.getAttribute('data-param');
+        var pVal = sanitizeParamValue(pKey, pInput.value);
+        if (pVal !== pInput.value) pInput.value = pVal;
+        OBOL.store.update(function (eng) {
+          eng.params = eng.params || {};
+          eng.params[pKey] = pVal;
+          if (pKey === 'target') eng.activeTarget = pVal ? String(pVal).trim() : null;
+        }, 'params');
+        if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
+        renderSidebar();
+        if (OBOL.router && OBOL.router.render) OBOL.router.render();
+        return;
+      }
       var sel = e.target.closest('.param-target-switch'); if (!sel) return;
       if (OBOL.store.setActiveTarget) {
         OBOL.store.setActiveTarget(sel.value);
       } else {
         OBOL.store.update(function (eng) { eng.params = eng.params || {}; eng.params.target = sel.value; eng.activeTarget = sel.value || null; }, 'params');
       }
+      if (OBOL.ctxbar && OBOL.ctxbar.render) OBOL.ctxbar.render();
       renderSidebar(); OBOL.router.render();
     });
 
@@ -203,8 +237,12 @@
 
     // (skin/motion/opacity live in the bottom-right settings panel — see settings.js)
 
-    // re-render sidebar whenever state changes
-    OBOL.store.onChange(function () { renderSidebar(); });
+    // re-render sidebar whenever state that affects sidebar inputs/creds/facts changes
+    var SIDEBAR_SKIP_REASONS = { playbook: 1, checklist: 1, ws: 1 };
+    OBOL.store.onChange(function (reason) {
+      if (reason && SIDEBAR_SKIP_REASONS[reason]) return;
+      renderSidebar();
+    });
   }
 
   function registerRoutes() {
@@ -216,10 +254,10 @@
     // Lazy routes (tools, domain, checklist, report, graph) register themselves when loaded.
     if (OBOL.lazy) OBOL.lazy.registerLazyRoutes(R);
     // First-run routing: a brand-new visitor (no synced Loadout AND no engagement work yet) lands on
-    // Learn — the teaching front door (pick a path, set up a box, or start an engagement from there).
-    // Anyone who has synced a box or started an engagement lands on Engagements as before. A specific
-    // hash in the URL always wins over this default.
-    R.setDefault(isFirstRun() ? 'study' : 'home');
+    // Start Here - the onramp front door (place yourself, set up a practice box, find where to practice,
+    // then into Learn or an engagement). Anyone who has synced a box or started an engagement lands on
+    // Engagements as before. A specific hash in the URL always wins over this default.
+    R.setDefault(isFirstRun() ? 'start' : 'home');
   }
 
   function isFirstRun() {

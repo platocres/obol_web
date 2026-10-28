@@ -272,8 +272,10 @@
   function activityTarget(a) { return a.target || (/^host:/.test(a.scope || '') ? a.scope.slice(5) : ''); }
   function migrateChecklist(eng) {
     eng.checklist = eng.checklist || {};
+    var hadLegacyKey = false;
     Object.keys(eng.checklist).forEach(function (id) {
       if (id.charAt(0) === '[') return;
+      hadLegacyKey = true;
       var hosts = {};
       (eng.activities || []).forEach(function (a) {
         if ((a.action_id || a.actionId) === id && activityTarget(a)) hosts[activityTarget(a)] = true;
@@ -287,8 +289,9 @@
       if (!eng.checklist[key]) eng.checklist[key] = state;
       delete eng.checklist[id];
     });
+    var runLegacyCheck = eng.checklistVersion !== 2 || hadLegacyKey;
     eng.checklistVersion = 2;
-    if (OBOL.context) Object.keys(eng.checklist).forEach(function(key) {
+    if (runLegacyCheck && OBOL.context) Object.keys(eng.checklist).forEach(function(key) {
       if (!/^empty(?::|$)/.test(String(eng.checklist[key]))) return;
       var pair; try { pair = JSON.parse(key); } catch (e) { return; }
       var supported = (eng.activities || []).some(function(a) { return activityTarget(a) === pair[0] && (a.action_id || a.actionId) === pair[1] && a.outcome && a.outcome.retireMove; });
@@ -474,10 +477,16 @@
     active() { return _mem.engagements[_activeId] || null; },
     activeId() { return _activeId; },
     // One source of truth for how a run's name is shown. An unnamed draft, or a legacy placeholder
-    // name from before this change, reads as "No Run Yet" everywhere (chip, selector, library).
+    // name from before this change, reads as "Set Up Engagement..." everywhere (chip, selector, library).
     runLabel(eng) {
       var n = eng && eng.name != null ? String(eng.name).trim() : '';
-      return (!n || /^(untitled run|new engagement)$/i.test(n)) ? 'No Run Yet' : n;
+      return (!n || /^(untitled run|new engagement|no run yet|set up engagement\.{0,3})$/i.test(n)) ? 'Set Up Engagement...' : n;
+    },
+    isConfigured(eng) {
+      var e = eng === undefined ? this.active() : eng;
+      if (!e) return false;
+      var n = e.name != null ? String(e.name).trim() : '';
+      return !!n && !/^(untitled run|new engagement|no run yet|set up engagement\.{0,3})$/i.test(n);
     },
     async setActive(id) {
       if (_mem.engagements[id]) {
@@ -636,6 +645,257 @@
         }
       }, 'active-target');
     },
+    // In-place Target Edit & Atomic Re-IP Migration:
+    // Updates IP, hostname, domain, OS (and optional LHOST) for a target. When the IP changes
+    // (e.g., lab instance respawned on a new address), migrates all scoped facts, checklist progress,
+    // credentials, context selections, screenshots, and Run Log activities (rewriting commands to the
+    // new IP while preserving originalCommand and keeping raw stdout untouched).
+    editTarget(oldIpOrId, patch) {
+      patch = patch || {};
+      var eng = this.active();
+      if (!eng) return { ok: false, error: 'No active engagement' };
+      var key = String(oldIpOrId || '').trim();
+      if (!key) return { ok: false, error: 'Missing target identifier' };
+
+      function replaceIpExact(str, fromIp, toIp) {
+        if (!str || !fromIp || !toIp || fromIp === toIp) return str;
+        var escIp = String(fromIp).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var re = new RegExp('(^|[^0-9.])' + escIp + '(?![0-9.])', 'g');
+        return String(str).replace(re, '$1' + toIp);
+      }
+
+      var result = {
+        ok: true,
+        reIp: false,
+        oldIp: key,
+        newIp: key,
+        hostname: '',
+        domain: '',
+        os: '',
+        lhostChanged: false,
+        oldLhost: '',
+        newLhost: '',
+        rewrittenCommands: 0,
+      };
+
+      this.update(function (e) {
+        e.targets = e.targets || [];
+        e.params = e.params || {};
+        var t = e.targets.find(function (x) { return x && (x.ip === key || x.id === key); });
+        if (!t) {
+          t = { id: uid('t'), ip: key, hostname: '', domain: '', os: '' };
+          e.targets.push(t);
+        }
+        var oldIp = String(t.ip || t.id || key).trim();
+        var newIp = patch.ip != null && String(patch.ip).trim() ? String(patch.ip).trim() : oldIp;
+        var reIp = newIp !== oldIp;
+
+        var oldLhost = String(e.params.lhost || '').trim();
+        var newLhost = patch.lhost !== undefined ? String(patch.lhost || '').trim() : oldLhost;
+        var lhostChanged = !!(newLhost && oldLhost && newLhost !== oldLhost);
+        if (patch.lhost !== undefined && newLhost) {
+          e.params.lhost = newLhost;
+        }
+
+        // If newIp already exists as another target record in scope, merge cleanly into `t`
+        if (reIp) {
+          var dupIdx = e.targets.findIndex(function (x) { return x && x !== t && (x.ip === newIp || x.id === newIp); });
+          if (dupIdx >= 0) {
+            var dup = e.targets[dupIdx];
+            if (!t.hostname && dup.hostname) t.hostname = dup.hostname;
+            if (!t.domain && dup.domain) t.domain = dup.domain;
+            if (!t.os && dup.os) t.os = dup.os;
+            if (Array.isArray(dup.previousIps)) {
+              t.previousIps = (t.previousIps || []).concat(dup.previousIps);
+            }
+            e.targets.splice(dupIdx, 1);
+          }
+          var prevList = Array.isArray(t.previousIps) ? t.previousIps.slice() : [];
+          if (prevList.indexOf(oldIp) < 0) prevList.push(oldIp);
+          prevList = prevList.filter(function (p) { return p && p !== newIp; });
+          t.previousIps = prevList;
+          t.lastReIpAt = Date.now();
+          t.ip = newIp;
+        }
+
+        if (patch.hostname !== undefined) t.hostname = String(patch.hostname || '').trim();
+        if (patch.domain !== undefined) t.domain = String(patch.domain || '').trim().replace(/\.$/, '');
+        if (patch.os !== undefined) t.os = String(patch.os || '').trim();
+
+        var oldScope = 'host:' + oldIp;
+        var newScope = 'host:' + newIp;
+
+        // 1. Migrate facts scope & host bindings
+        if (reIp && Array.isArray(e.facts)) {
+          e.facts.forEach(function (f) {
+            if (!f || typeof f !== 'object') return;
+            if (f.scope === oldScope) f.scope = newScope;
+            if (f.value && typeof f.value === 'object' && !Array.isArray(f.value)) {
+              if (f.value.host === oldIp) f.value.host = newIp;
+              if (f.value.ip === oldIp) f.value.ip = newIp;
+              if (f.value.target === oldIp) f.value.target = newIp;
+              if (f.value.targetBinding === oldIp) f.value.targetBinding = newIp;
+            }
+          });
+        }
+
+        // 2. Sync edited identity fields (hostname, domain, os) into facts for newScope
+        if (OBOL.facts) {
+          var SUP = OBOL.facts.ProofState ? OBOL.facts.ProofState.SUPPORTED : 'supported';
+          var fs = new OBOL.facts.FactSet((e.facts || []).filter(Boolean).map(OBOL.facts.factFromJson).filter(Boolean));
+          if (patch.hostname !== undefined) {
+            fs.facts = fs.facts.filter(function (f) { return !(f.scope === newScope && f.kind === 'host.hostname'); });
+            if (t.hostname) {
+              var hParts = t.hostname.split('.');
+              fs.add(OBOL.facts.makeFact({
+                kind: 'host.hostname',
+                scope: newScope,
+                value: { name: hParts[0], fqdn: hParts.length > 1 ? t.hostname : (t.domain ? hParts[0] + '.' + t.domain : '') },
+                state: SUP,
+                source: 'target-edit',
+              }));
+            }
+          }
+          if (patch.domain !== undefined) {
+            fs.facts = fs.facts.filter(function (f) { return !(f.scope === newScope && f.kind === 'host.domain'); });
+            if (t.domain) {
+              fs.add(OBOL.facts.makeFact({
+                kind: 'host.domain',
+                scope: newScope,
+                value: { domain: t.domain },
+                state: SUP,
+                source: 'target-edit',
+              }));
+            }
+          }
+          if (patch.os !== undefined) {
+            fs.facts = fs.facts.filter(function (f) { return !(f.scope === newScope && (f.kind === 'host.os' || f.kind === 'host.os_hint') && f.source === 'target-edit'); });
+            if (t.os) {
+              var fam = /win/i.test(t.os) ? 'windows' : (/linux|ubuntu|debian|centos|redhat|rhel|fedora|arch|kali|freebsd|unix/i.test(t.os) ? 'linux' : '');
+              fs.add(OBOL.facts.makeFact({
+                kind: 'host.os',
+                scope: newScope,
+                value: { os: t.os, family: fam },
+                state: SUP,
+                source: 'target-edit',
+              }));
+            }
+          }
+          fs.add(OBOL.facts.makeFact({ kind: 'target.configured', scope: newScope, source: 'targets' }));
+          e.facts = fs.facts.map(OBOL.facts.factToJson);
+        }
+
+        // 3. Migrate checklist keys
+        if (reIp && e.checklist && typeof e.checklist === 'object') {
+          migrateChecklist(e);
+          Object.keys(e.checklist).forEach(function (ck) {
+            var pair; try { pair = JSON.parse(ck); } catch (err) { return; }
+            if (!Array.isArray(pair) || pair[0] !== oldIp) return;
+            var newCk = checklistKey(pair[1], newIp);
+            if (!e.checklist[newCk] || e.checklist[ck] === 'done') {
+              e.checklist[newCk] = e.checklist[ck];
+            }
+            delete e.checklist[ck];
+          });
+        }
+
+        // 4. Migrate credentials & contextSelections
+        if (reIp && Array.isArray(e.credentials)) {
+          e.credentials.forEach(function (c) {
+            if (!c || typeof c !== 'object') return;
+            if (c.scope === oldScope) c.scope = newScope;
+            if (c.targetBinding === oldIp) c.targetBinding = newIp;
+          });
+        }
+        if (e.contextSelections && typeof e.contextSelections === 'object') {
+          var cs = e.contextSelections;
+          if (reIp) {
+            if (cs.byTarget && cs.byTarget[oldIp] !== undefined) {
+              if (cs.byTarget[newIp] === undefined) cs.byTarget[newIp] = cs.byTarget[oldIp];
+              delete cs.byTarget[oldIp];
+            }
+            if (cs.targetDomains && cs.targetDomains[oldIp] !== undefined) {
+              if (cs.targetDomains[newIp] === undefined) cs.targetDomains[newIp] = cs.targetDomains[oldIp];
+              delete cs.targetDomains[oldIp];
+            }
+            if (cs.anonymousByTarget && cs.anonymousByTarget[oldIp] !== undefined) {
+              if (cs.anonymousByTarget[newIp] === undefined) cs.anonymousByTarget[newIp] = cs.anonymousByTarget[oldIp];
+              delete cs.anonymousByTarget[oldIp];
+            }
+          }
+          if (patch.domain !== undefined) {
+            cs.targetDomains = cs.targetDomains || {};
+            if (t.domain) cs.targetDomains[newIp] = t.domain;
+            else delete cs.targetDomains[newIp];
+          }
+        }
+
+        // 5. Migrate Run Log activities & rewrite commands (keeping stdout untouched)
+        var rewritten = 0;
+        (e.activities || []).forEach(function (a) {
+          if (!a || typeof a !== 'object') return;
+          var isTargetAct = (a.target === oldIp || a.target === newIp || a.scope === oldScope || a.scope === newScope);
+          if (reIp && (a.target === oldIp || a.scope === oldScope)) {
+            a.target = newIp;
+            a.scope = newScope;
+          }
+          if (a.command) {
+            var nextCmd = a.command;
+            if (reIp && isTargetAct) {
+              nextCmd = replaceIpExact(nextCmd, oldIp, newIp);
+            }
+            if (lhostChanged) {
+              nextCmd = replaceIpExact(nextCmd, oldLhost, newLhost);
+            }
+            if (nextCmd !== a.command) {
+              if (!a.originalCommand) a.originalCommand = a.command;
+              a.command = nextCmd;
+              if (reIp && isTargetAct) a.reIpFrom = a.reIpFrom || oldIp;
+              if (lhostChanged) a.reLhostFrom = a.reLhostFrom || oldLhost;
+              rewritten++;
+            }
+          }
+        });
+
+        // 6. Migrate screenshots
+        if (reIp && Array.isArray(e.screenshots)) {
+          e.screenshots.forEach(function (s) {
+            if (s && s.target === oldIp) s.target = newIp;
+          });
+        }
+
+        // 7. Update active target & params
+        if (reIp) {
+          if (e.params.target === oldIp || !e.params.target) e.params.target = newIp;
+          if (e.activeTarget === oldIp || !e.activeTarget) e.activeTarget = newIp;
+          try {
+            var oldLsKey = 'obol.apath:' + e.id + ':' + oldIp;
+            var newLsKey = 'obol.apath:' + e.id + ':' + newIp;
+            var remembered = localStorage.getItem(oldLsKey);
+            if (remembered != null) {
+              localStorage.setItem(newLsKey, remembered);
+              localStorage.removeItem(oldLsKey);
+            }
+          } catch (err) {}
+        }
+        if (patch.domain !== undefined && (e.params.target === newIp || e.targets.length <= 1)) {
+          e.params.domain = t.domain || '';
+        }
+
+        result.reIp = reIp;
+        result.oldIp = oldIp;
+        result.newIp = newIp;
+        result.hostname = t.hostname || '';
+        result.domain = t.domain || '';
+        result.os = t.os || '';
+        result.lhostChanged = lhostChanged;
+        result.oldLhost = oldLhost;
+        result.newLhost = newLhost;
+        result.rewrittenCommands = rewritten;
+      }, 'targets');
+
+      return result;
+    },
     resolvedContext(opts) {
       return OBOL.context.resolve(Object.assign({ engagement: this.active() }, opts || {}));
     },
@@ -660,12 +920,16 @@
       var eng = engagement || this.active() || {}, out = {};
       migrateChecklist(eng);
       target = target || eng.activeTarget || (eng.params && eng.params.target) || '*';
-      var epoch = OBOL.pack.accessEpoch(facts || this.factSetForTarget(target));
+      var targetFacts = this.factSetForTarget ? this.factSetForTarget(target) : null;
+      var epochTarget = targetFacts ? OBOL.pack.accessEpoch(targetFacts) : null;
+      var epochFacts = facts ? OBOL.pack.accessEpoch(facts) : epochTarget;
       Object.keys(eng.checklist).forEach(function (key) {
         var pair; try { pair = JSON.parse(key); } catch (e) { return; }
         if (!Array.isArray(pair) || pair[0] !== target) return;
         var state = eng.checklist[key], id = pair[1];
-        if (state === 'done' || state === 'empty:' + epoch) out[id] = true;
+        if (state === 'done'
+          || (epochFacts && state === 'empty:' + epochFacts)
+          || (epochTarget && state === 'empty:' + epochTarget)) out[id] = true;
         if (state === 'empty' && !(eng.activities || []).some(function (a) {
           return (a.action_id || a.actionId) === id && activityTarget(a) === target && (a.addedCount > 0 || (a.produced || []).some(function (k) { return !/^(blocker\.|credential\.validation$)/.test(k); }));
         })) out[id] = true;
@@ -756,11 +1020,14 @@
       var eng = this.active();
       if (!eng) return 0;
       var fs = new OBOL.facts.FactSet((eng.facts || []).filter(Boolean).map(OBOL.facts.factFromJson).filter(Boolean));
-      var added = 0, addedKinds = [];
+      var added = 0, addedKinds = [], normalizedInput = [];
       (facts || []).forEach(function (f) {
         if (!f) return;
         var fact = f.kind ? (f.state ? f : OBOL.facts.factFromJson(f)) : null;
-        if (fact && fs.add(fact)) { added++; addedKinds.push(fact.kind); }
+        if (fact) {
+          normalizedInput.push(fact);
+          if (fs.add(fact)) { added++; addedKinds.push(fact.kind); }
+        }
       });
       // Reflect a proven hostname onto its target record, so the UI can show "IP · HOSTNAME"
       // (the header/list already render target.hostname when set; nothing populated it before).
@@ -838,19 +1105,27 @@
           }
         });
       }
-      if (added || (facts && facts.length)) {
+      if (added || normalizedInput.length) {
         eng.facts = fs.facts.map(OBOL.facts.factToJson);
-        var selected = OBOL.context && OBOL.context.selectedId(eng, (eng.params || {}).target);
-        if (OBOL.context && (!selected || !OBOL.context.credentials(eng).some(function (c) { return c.id === selected; })) && OBOL.context.pin(eng) === undefined
-          && !((eng.contextSelections || {}).anonymousByTarget || {})[(eng.params || {}).target]) {
-          var activeIp = (eng.params || {}).target || eng.activeTarget;
+        var activeIp = String((eng.params || {}).target || eng.activeTarget || '').trim();
+        var selected = OBOL.context && OBOL.context.selectedId(eng, activeIp);
+        if (OBOL.context && activeIp && (!selected || !OBOL.context.credentials(eng).some(function (c) { return c.id === selected; })) && OBOL.context.pin(eng) === undefined
+          && !((eng.contextSelections || {}).anonymousByTarget || {})[activeIp]) {
           var applicable = this.factSetForTarget(activeIp).facts;
           var domainUnknown = !Object.keys(domainsForTarget(eng, activeIp, applicable.filter(function (f) { return f.scope === 'host:' + activeIp; }))).length;
-          var candidateFact = (facts || []).find(function (f) {
+          var candidateFacts = normalizedInput.filter(function (f) {
             return f && f.state === 'supported' && /^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)
               && ((observedTarget === activeIp && domainUnknown && /^domain:/.test(f.scope || ''))
                 || applicable.some(function (a) { return a.kind === f.kind && a.scope === f.scope && OBOL.facts.valuesEqual(a.value, f.value); }));
           });
+          candidateFacts.sort(function (a, b) {
+            var aUser = String((a.value && (a.value.user || a.value.username || a.value.principal)) || '').replace(/^.*\\/, '');
+            var bUser = String((b.value && (b.value.user || b.value.username || b.value.principal)) || '').replace(/^.*\\/, '');
+            var aAdm = /^(?:administrator|admin|root|krbtgt)$/i.test(aUser) ? 1 : 0;
+            var bAdm = /^(?:administrator|admin|root|krbtgt)$/i.test(bUser) ? 1 : 0;
+            return bAdm - aAdm;
+          });
+          var candidateFact = candidateFacts[0];
           if (candidateFact) {
             var materialValue = Object.assign({}, candidateFact.value);
             if (!materialValue.domain && /^domain:/.test(candidateFact.scope || '') && candidateFact.scope !== 'domain:domain') materialValue.domain = candidateFact.scope.slice(7);

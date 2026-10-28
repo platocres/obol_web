@@ -171,7 +171,9 @@
       }
     });
     reAll(/^\s*\*\s*FUZZ:\s*(\S+)/gim, text).forEach(function (m) {
-      if (/\[Status:\s*(?:200|301|302|307|401|403)/i.test(text)) hosts[m[1].toLowerCase()] = 1;
+      if (/\[Status:\s*(?:200|301|302|307|401|403)/i.test(text) || (/\s-(?:fw|fs|fl|ac)\b/.test(String(source || '')) && /\[Status:\s*\d{3}/i.test(text))) {
+        hosts[m[1].toLowerCase()] = 1;
+      }
     });
     var list = Object.keys(hosts).filter(function (x) { return x && x.toUpperCase() !== 'FUZZ'; });
     if (list.length) _add(facts, mkFact('web.vhost', h(ws), { vhosts: list.slice(0, 20) }, S, source));

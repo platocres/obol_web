@@ -95,8 +95,10 @@
         return;
       }
       if (waitingForSize) { waitingForSize.disconnect(); waitingForSize = null; }
-      var s = clamp(Math.min((vw - pad) / iw, (vh - pad) / ih) || 1);
-      st.s = s; st.x = Math.max(pad / 2, (vw - iw * s) / 2); st.y = Math.max(pad / 2, (vh - ih * s) / 2); apply();
+      var padBottom = 50;
+      var s = clamp(Math.min((vw - pad * 2) / iw, (vh - pad - padBottom) / ih) || 1);
+      if (ih > vh * 2.5) s = Math.max(0.45, s);
+      st.s = s; st.x = Math.max(pad / 2, (vw - iw * s) / 2); st.y = (ih > vh * 2.5) ? 20 : Math.max(pad / 2, (vh - padBottom - ih * s) / 2); apply();
     }
     function zoomAt(cx, cy, factor) {
       var ns = clamp(st.s * factor); if (ns === st.s) return;

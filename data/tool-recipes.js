@@ -1,5 +1,5 @@
 /*!
- * obol data — tool-recipes.js — named field PRESETS for the Tool Builders (the funnel's hero tiles).
+ * obol data - tool-recipes.js - named field PRESETS for the Tool Builders (the funnel's hero tiles).
  *
  * OBOL.TOOL_RECIPES maps a builder id to a small set of recipes. A recipe is a human-named bundle of
  * field values that pre-fills the builder form for a common job (the "directory brute", the "AS-REP
