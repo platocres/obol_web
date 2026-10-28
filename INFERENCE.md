@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Core Thesis**: Command-line tools evolve, flags change, columns reorder, terminal multiplexers corrupt lines, and operators improvise out of sequence. A parser architecture that relies solely on rigid, tool-specific regular expressions is inherently fragile over time. By combining **Logical Atomism** (*Tractatus Logico-Philosophicus*) with **Language Games & Family Resemblance** (*Philosophical Investigations*), OBOL derives high-confidence engagement facts and next moves 100% locally in the browser - even when tool outputs mutate, commands are omitted, or operators jump ahead of the expected workflow.
 
-OBOL runs 100% locally in your browser with zero backend, zero network calls, and zero LLM in the loop. It achieves tool-version and workflow resilience through a three-tier parsing cascade culminated by its **Wittgensteinian Contextual Inference Engine** ([`assets/engine/parsers/inference.js`](assets/engine/parsers/inference.js), [`assets/engine/parsers/shape.js`](assets/engine/parsers/shape.js), [`assets/engine/parsers/common.js`](assets/engine/parsers/common.js), [`assets/engine/parsers/index.js`](assets/engine/parsers/index.js), and [`assets/ui/ingest.js`](assets/ui/ingest.js)).
+OBOL runs 100% locally in your browser with zero backend, zero network calls, and zero LLM in the loop. It achieves tool-version and workflow resilience through a three-tier parsing cascade spanning **217 dedicated terminal-output parsers** (`145` `_parse_*` routines + `72` NetExec capability extractors, `2,255` bounded regex pattern matchers, and `634` fact-minting rules emitting `246` fact kinds/prefixes across `38` capability families in `17` parser modules), culminated by its **Wittgensteinian Contextual Inference Engine** ([`assets/engine/parsers/inference.js`](assets/engine/parsers/inference.js), [`assets/engine/parsers/shape.js`](assets/engine/parsers/shape.js), [`assets/engine/parsers/common.js`](assets/engine/parsers/common.js), [`assets/engine/parsers/index.js`](assets/engine/parsers/index.js), and [`assets/ui/ingest.js`](assets/ui/ingest.js)).
 
 ---
 
@@ -80,7 +80,7 @@ Real-world terminal buffers contain terminal control artifacts, multiplexer bord
 
 The three tiers cooperate under a **Selective Coexistence** contract:
 
-- **Tier 1 (High-Precision Tool-Keyed Parsers)**: Purpose-built parsers for `nmap`, `nxc`, `impacket`, `bloodyAD`, `certipy`, `ldapsearch`, `ffuf`/`gobuster`, `linpeas`/`winPEAS`, `hashcat`/`john`, etc. If the paste omits a command line, [`index.js`](assets/engine/parsers/index.js) consults the **Operator Attention Frame** (`opts.context.attentionFrame.matchedCopy`) so Tier 1 still receives the copied `actionId` and `command`.
+- **Tier 1 (High-Precision Tool-Keyed Parsers)**: `140` purpose-built tool and protocol `_parse_*` routines plus `72` dedicated NetExec capability extractors in [`nxc-catalog.js`](assets/engine/parsers/nxc-catalog.js) covering `nmap`, `nxc`, `impacket`, `bloodyAD`, `certipy`, `ldapsearch`, `ffuf`/`gobuster`/`feroxbuster`, `linpeas`/`winPEAS`, `hashcat`/`john`, `mimikatz`, `sqlmap`, etc. If the paste omits a command line, [`index.js`](assets/engine/parsers/index.js) consults the **Operator Attention Frame** (`opts.context.attentionFrame.matchedCopy`) so Tier 1 still receives the copied `actionId` and `command`.
 - **Tier 2 (Structural Shape & Family Resemblance Fallback in [`shape.js`](assets/engine/parsers/shape.js))**: Recognizes bare port tables, raw HTTP responses, kerberoast/AS-REP blobs, kernel strings, and AD ACL/ADCS/share families when no command line is present.
 - **Tier 3 (Wittgensteinian Contextual Inference in [`inference.js`](assets/engine/parsers/inference.js))**:
   - **Non-Interference on Complete Tier 1 Extractions**: When a Tier 1 parser has already extracted full structured credentials or complete tool-specific facts in isolation, Tier 3 steps aside so canonical tool outputs preserve their exact expected facts.
@@ -205,7 +205,7 @@ OBOL's **Cockpit** (`#/path`, `OBOL.coach` in code) is strictly proof-gated: eve
 
 ## 5. Linear-Time Complexity & ReDoS Invariants
 
-Because the inference engine runs synchronously inside the browser on every paste, it enforces four strict algorithmic invariants across all 19 parser modules:
+Because the inference engine runs synchronously inside the browser on every paste, it enforces four strict algorithmic invariants across all 17 parser modules (`2,255` compiled pattern matchers across `~11,900` lines):
 
 1. **Cached `RegExp` Compilation (`C.reAll` & `C.reSearch` in [`common.js`](assets/engine/parsers/common.js))**:
    - Caches compiled global and search `RegExp` instances (`rx._globalRe`, `rx._searchRe`) directly on each pattern literal, avoiding repeated `new RegExp(...)` allocations across multi-hundred-rule sweeps.
@@ -214,7 +214,7 @@ Because the inference engine runs synchronously inside the browser on every past
 3. **Pre-Filtered Zero-Allocation Entity Matching (`_hasUserTokenCI` in [`inference.js`](assets/engine/parsers/inference.js))**:
    - Pre-filters lines for secret or hash markers before checking `_lineHasNegPolarity` or scanning `globalIdx.users`, and matches usernames via a zero-allocation case-insensitive boundary check (`_hasUserTokenCI`) rather than compiling `N_users * N_lines` dynamic regexes.
 4. **Bounded Quantifiers & Atomic Dividers (Zero Catastrophic Backtracking)**:
-   - Section dividers use atomic character classes (`^[\s=\-*#~_]{3,}$`), JSON credential matchers bound interior spans to `[^{}]{1,160}?`, and all multi-token regular expressions across the 19 parser modules replace unbounded `.*` / `.+` / `[^...]*` spans with bounded quantifiers (`{0,240}`) so 20,000-character near-miss adversarial inputs evaluate in `< 15 ms`.
+   - Section dividers use atomic character classes (`^[\s=\-*#~_]{3,}$`), JSON credential matchers bound interior spans to `[^{}]{1,160}?`, and all multi-token regular expressions across the 17 parser modules replace unbounded `.*` / `.+` / `[^...]*` spans with bounded quantifiers (`{0,240}`) so 20,000-character near-miss adversarial inputs evaluate in `< 15 ms`.
 
 ---
 

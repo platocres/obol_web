@@ -14,7 +14,7 @@ OBOL is a deterministic, browser-local penetration-testing operator cockpit buil
 
 - **355 Moves & 1,923 Commands Across 19 Packs:** Expanded Active Directory (ACL/GPO/ADCS/delegation/cross-trust), Linux and Windows privilege escalation, web exploitation, database pivoting, and post-exploitation coverage with 100% 1:1 4-pillar Field Notes.
 - **5-Tab Hero Operator Deck & 13-Payload On-Host Tool Stager (`#/path`):** Instant access to `Flags & Proof` (`CMD`/`PS` toggles + proof checklist), `Get On Host`, `Persistence & Accounts`, `Shares & File Transfer` (matched Kali HTTP/SMB + target pull-and-run cradles for 13 payloads), and `Cred & AD Ops`.
-- **Deterministic Intelligence (`INFERENCE.md` & `RANKING.md`):** 3-tier Wittgensteinian Contextual Inference across 443 parser signals paired with a 7-tier Causal Frontier & Bayesian Utility Ranker, identity-scoped context (`ObolContext`), truthful outcome receipts (`ObolOutcomes`), and 16+ Error & Trap Doctors.
+- **217 Terminal Parsers & Deterministic Intelligence (`INFERENCE.md` & `RANKING.md`):** 217 dedicated terminal-output parsers (`2,250+` pattern matchers and `634` fact-minting rules across `17` parser modules, plus 3 structured-artifact parsers = `220` engine-wide) culminating in 3-tier Wittgensteinian Contextual Inference, paired with a 7-tier Causal Frontier & Bayesian Utility Ranker, identity-scoped context (`ObolContext`), truthful outcome receipts (`ObolOutcomes`), and 16+ Error & Trap Doctors.
 - **Multi-Domain BloodHound (`#/domain`):** Client-side SharpHound `.zip` / BloodHound CE `.json` Web Worker analysis, cross-trust forest graphs, `What-If` owned principal simulation, and numbered hop commands with automatic intermediate identity handoff.
 - **Overhauled 5-Tab Findings & AST-Paginated Report Studio (`#/findings`, `#/report`):** Neon ATT&CK `OBOL Scope` matrix, NIST CSF 2.0 posture with `<details>` control drill-downs, interactive MITRE D3FEND countermeasures, CISA KEV CVE tracking, and paginated paper previews exporting to **PDF**, **`.docx`**, **`.md`**, and **`.html`** across OSCP, CPTS, PNPT, Client Pentest, and Executive profiles.
 
@@ -26,7 +26,7 @@ For the complete release breakdown and earlier milestone history, see **[CHANGEL
 
 Most note-taking setups split your attention across a terminal, a cheatsheet tab, a scratchpad of credentials, and a half-finished report template. OBOL closes that loop around a single action: **paste raw terminal output** (`Ctrl+V` anywhere via QuickPaste, or drop multi-command terminal scrollback into the Cockpit).
 
-1. **4-Stage Session Ingestion:** Splits multi-command terminal scrollback, strips ANSI escape codes, auto-learns listener and host context, and routes output to the right `host:<ip>`, `domain:<name>`, and credential scope.
+1. **4-Stage Session Ingestion & 217 Terminal Parsers:** Splits multi-command terminal scrollback, strips ANSI escape codes, auto-learns listener and host context, routes output to the right `host:<ip>`, `domain:<name>`, and credential scope, and evaluates `2,250+` pattern matchers, 2D table/KV mappers, and 45-atom contextual inference across `634` fact-minting rules (`246` distinct fact kinds).
 2. **Causal Ranking & Campaign Playbook:** Evaluates all 355 methodology moves against your proven `FactSet` and orders ready hypotheses from immediate flag cash-in and earned credential frontiers down to baseline enumeration.
 3. **4-Pillar Field Notes on Every Card:** Every move pairs pre-filled commands with real terminal fixtures (`See It Run`) and structured operator notes (`1 Goal`, `2 Syntax`, `3 Gotchas`, `4 Pivot`).
 
@@ -203,7 +203,8 @@ assets/
   css/obol.css             Design tokens, 7 WCAG-AA skins, print rules & responsive layout
   jszip.min.js             Client-side SharpHound .zip & .docx packaging support
   engine/                  Pure UI-independent engine (facts, context, pack ranker, outcomes,
-                           bloodhound, frameworks, report, cruise, workbench, parsers/, workers/)
+                           bloodhound, frameworks, report, cruise, workbench, workers/, and
+                           parsers/: 17 modules, 217 terminal parsers, 2,250+ pattern matchers)
   ui/                      IndexedDB store, hash router, lazy group loader, 4-stage session
                            ingest, global Ctrl+K palette, and routes/ (21 routes across 18 modules)
 data/

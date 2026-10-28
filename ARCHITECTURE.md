@@ -69,7 +69,7 @@ it is enforced mechanically by the lints and the golden-path corpus (see Section
 ### Scale At A Glance
 
 - **Move packs:** `19 JSON move packs (355 moves, 1,923 commands total)` in `data/packs/` (`ad_2026_09.json`, `cisa_kev_2026_09.json`, `cracking_2026_09.json`, `credential_access_2026_09.json`, `database_2026_09.json`, `findings_catalog_2026_09.json`, `findings_checks_2026_09.json`, `known_exploits_2026_09.json`, `linux_privesc_2026_09.json`, `obol_flag_hunt_2026_09.json`, `obol_local_pivot_2026_09.json`, `pivoting_2026_09.json`, `recon_2026_09.json`, `scripts_2026_09.json`, `shells_2026_09.json`, `web_2026_09.json`, `web_exploit_checks_2026_09.json`, `web_fingerprints_2026_09.json`, `windows_privesc_2026_09.json`, and `oscp_gapfill_2026_10.json`), compiled into `data/packs-bundle.js`.
-- **Parsers:** `18 files in assets/engine/parsers/` (17 domain modules + `common.js`, `nxc-catalog.js`, `inference.js`; `443 parser signals` + `5 Wittgensteinian contextual inference rules`).
+- **Parsers:** `17 modules in assets/engine/parsers/` (`217` dedicated terminal-output parsers: `145` `_parse_*` routines + `72` NetExec capability extractors in `nxc-catalog.js`, `2,255` regex pattern matchers, and `634` fact-minting rules emitting `246` fact kinds across `38` capability families, plus 45-atom Wittgensteinian contextual inference; `220` parsers engine-wide including `bloodhound.js`, `arsenal.js`, and `vfs.js`).
 - **Study & reference content:** `data/study-fixtures.js (376 move keys: 355 active moves + 30 legacy aliases)`, `data/walkthroughs.js (37 complete practice boxes)`, `data/tools-glossary.js` / `data/tool-glossary.js (117 tools)`, and `data/tool-staging.js (13 payload keys across Windows/Linux/AD)`.
 - **Routes:** `21 hash routes across 18 route modules in assets/ui/routes/`.
 - **Verification suite:** `99 engine smoke suites` in `tests/engine/`, legacy suites in `tests/engine/legacy/`, and `12 Playwright specs` in `tests/e2e/`.
@@ -142,7 +142,7 @@ Every other route and heavy engine/data bundle is lazy-loaded on first navigatio
 | Lazy Group | Scripts Loaded (`OBOL.lazy.GROUPS`) |
 | :--- | :--- |
 | `start` | `data/resources.js`, `assets/ui/routes/start.js` |
-| `parsers` | `assets/engine/parsers/common.js`, `nxc-catalog.js`, 15 domain parsers (`nmap.js`, `directory.js`, `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, `blockers.js`, plus `index.js` dispatcher), and `assets/engine/parsers/inference.js` |
+| `parsers` | `17 modules` (`217` terminal parsers): `assets/engine/parsers/common.js`, `nxc-catalog.js` (`72` dedicated NetExec capability extractors), 13 domain modules (`nmap.js`, `directory.js`, `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, `blockers.js`), `inference.js`, and `index.js` dispatcher |
 | `help` | `data/help-content.js` (and `data/study-content.js` / Operator Manual chapters), `assets/ui/routes/help.js` |
 | `study` / `studydata` | `data/tool-glossary.js`, `data/study-fixtures.js`, `assets/engine/study.js`, `assets/ui/routes/study.js` (`studydata` omits route UI for background preloading) |
 | `tools` | `assets/engine/toolbuilder.js`, `data/toolset.js`, `data/tool-glossary.js`, `data/tool-recipes.js`, `data/tool-stations.js`, `assets/engine/toolkit.js`, `assets/engine/shellkit.js`, `assets/engine/pivotkit.js`, `assets/ui/pivotstation.js`, `assets/engine/workbench.js`, `assets/ui/bind.js`, `assets/ui/routes/tools.js` |
@@ -211,11 +211,11 @@ The Cockpit ranker (`rankActions` / `nextActionsV2`, formally specified in [RANK
 
 ### 4.7 The Parser Pipeline (`assets/engine/parsers/`) And Wittgensteinian Contextual Inference (`inference.js`)
 
-`assets/engine/parsers/` contains **18 files** (17 domain modules + `common.js`, `nxc-catalog.js`, `inference.js`; **443 parser signals + 5 Wittgensteinian contextual inference rules**):
+`assets/engine/parsers/` contains **17 modules** (`217` dedicated terminal-output parsers: `145` `_parse_*` routines + `72` NetExec capability extractors in `nxc-catalog.js`, `2,255` regex pattern matchers, and `634` fact-minting rules emitting `246` fact kinds across `38` capability families, plus 45-atom Wittgensteinian contextual inference):
 
 - **Dispatcher & Shared Library:** `index.js` (`parseActionOutput` multi-strategy fan-out dispatcher) and `common.js` (compiled regexes, OS signatures, scoping helpers, `mkFact`).
-- **Domain Parsers:** `nmap.js`, `directory.js`, `nxc-catalog.js` (NetExec capability map), `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, and `blockers.js`.
-- **Wittgensteinian Contextual Inference Engine (`assets/engine/parsers/inference.js`, `ObolInference`):** Documented in full in [INFERENCE.md](INFERENCE.md). Implements Tier 3 contextual inference across **5 cross-domain language-game inference rules** (atomic primitive decomposition across ~45 atom types, 2D table and Key-Value geometry parsing, operator attention-frame binding from `copiedQueue` and recent activities, shell prompt/echo subtraction, and causal entailment gate synchronization).
+- **Domain Parsers & NetExec Capability Catalog:** `nxc-catalog.js` (`72` dedicated `extract()` capability parsers across `110` NetExec protocols/flags/modules) plus `13` domain modules (`nmap.js`, `directory.js`, `creds.js`, `host.js`, `services.js`, `database.js`, `web.js`, `websource.js`, `findings.js`, `shape.js`, `pivot.js`, `dns.js`, and `blockers.js`).
+- **Wittgensteinian Contextual Inference Engine (`assets/engine/parsers/inference.js`, `ObolInference`):** Documented in full in [INFERENCE.md](INFERENCE.md). Implements Tier 3 contextual inference across a 45-atom lexicon, 8 co-occurrence families (`7A-7H`), 2D table and Key-Value geometry parsing, operator attention-frame binding from `copiedQueue` and recent activities, shell prompt/echo subtraction, and causal entailment gate synchronization.
 
 ### 4.8 Findings (`findings.js`), Resolver (`resolve.js`), Projections (`graph.js`, `chain.js`, `engmap.js`), BloodHound (`bloodhound.js`), And Engines (`report.js`, `study.js`, `toolbuilder.js`, `workbench.js`)
 
@@ -283,10 +283,10 @@ Raw Terminal Paste
 2. Scope & Context Router (assets/ui/ingest.js + assets/engine/context.js)
    │  Auto-learns {{lhost}} from prompt stamps; binds host:<ip>, domain:<name>, and active credential context
    ▼
-3. 3-Tier Multi-Strategy Parser & Wittgensteinian Inference Cascade (assets/engine/parsers/index.js)
-   │  ├── Tier 1: Command-Gated & Content-Sniffed Domain Parsers (15 domain modules + nxc-catalog.js, 443 signals)
+3. 3-Tier Multi-Strategy Parser & Wittgensteinian Inference Cascade (assets/engine/parsers/: 17 modules, 217 parsers)
+   │  ├── Tier 1: Command-Gated & Content-Sniffed Parsers (13 domain modules + nxc-catalog.js, 2,250+ matchers)
    │  ├── Tier 2: Output-Shape & Blocker Fallback (shape.js, blockers.js)
-   │  └── Tier 3: Wittgensteinian Contextual Inference Engine (inference.js: 5 cross-domain language-game rules + causal entailment)
+   │  └── Tier 3: Wittgensteinian Contextual Inference Engine (inference.js: 45 atoms + causal entailment)
    ▼
 4. FactSet Deduplication, Proof-State Ledger & Outcome Classification (facts.js + outcomes.js)
 ```
@@ -384,7 +384,8 @@ assets/
     graph.js chain.js engmap.js bloodhound.js decisionmap.js frameworks.js
     report.js study.js toolbuilder.js toolkit.js shellkit.js pivotkit.js
     workbench.js pivotdoctor.js arsenal.js library.js cruise.js playbooks.js stuck.js
-    parsers/               18 files: index.js + common.js + nxc-catalog.js + inference.js + 14 domain modules
+    parsers/               17 modules, 217 terminal parsers (index.js, common.js, nxc-catalog.js,
+                           inference.js + 13 domain modules; 2,255 pattern matchers, 634 rules)
     workers/               bloodhound-worker.js (runs the pure engine off-thread)
   ui/                      the DOM / IndexedDB / router layer
     store.js router.js lazy.js boot.js ingest.js util.js icons.js settings.js
