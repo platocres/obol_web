@@ -121,9 +121,11 @@
       var lineHost = observedHost(ws, m.groups && m.groups.host);
       var line = text.slice(m.index).split(/\r?\n/)[0];
       var pr = (m.groups && m.groups.proto || '').toLowerCase();
-      if (pr) (protosByHost[lineHost] = protosByHost[lineHost] || {})[pr] = 1;
       var pm = _NXC_ROW_PORT_RE.exec(line);
-      if (pm && pm.groups && pm.groups.port) (portsByHost[lineHost] = portsByHost[lineHost] || {})[parseInt(pm.groups.port, 10)] = 1;
+      var rowPort = (pm && pm.groups && pm.groups.port) ? parseInt(pm.groups.port, 10) : 0;
+      if (pr === 'smb' && (rowPort === 5985 || rowPort === 5986)) pr = 'winrm';
+      if (pr) (protosByHost[lineHost] = protosByHost[lineHost] || {})[pr] = 1;
+      if (rowPort) (portsByHost[lineHost] = portsByHost[lineHost] || {})[rowPort] = 1;
       (linesByHost[lineHost] = linesByHost[lineHost] || []).push(line);
     });
     var multiHost = Object.keys(hostSet).length > 1;
@@ -165,6 +167,9 @@
       var lh = 'host:' + lineHost;
       var lineWs = lineHost === ws.target ? ws : Object.assign({}, ws, { target: lineHost });
       var line = text.slice(m.index).split(/\r?\n/)[0];
+      var rowPm = _NXC_ROW_PORT_RE.exec(line);
+      var rowPort2 = (rowPm && rowPm.groups && rowPm.groups.port) ? parseInt(rowPm.groups.port, 10) : 0;
+      if (proto === 'smb' && (rowPort2 === 5985 || rowPort2 === 5986)) proto = 'winrm';
       C._add_os_from_text(line, lineWs, source, facts, 'nxc', 'high', true);
       var reachProto = proto === 'ldaps' ? 'ldap' : proto;
       if (['ldap', 'smb', 'winrm', 'rdp', 'ssh', 'ftp'].indexOf(reachProto) >= 0) _add(facts, mkFact(reachProto + '.reachable', lh, { tool: 'nxc' }, S, source));
@@ -214,7 +219,7 @@
     var gotSession = false;
     if (!hasNamedUser && !guestCommand && /\(Null Auth:True\)/i.test(text)) { _add(facts, mkFact('smb.null_session', h, { tool: 'nxc', null_auth: true }, S, source)); gotSession = true; }
     text.split(/\r?\n/).forEach(function (line) {
-      if (!/^\s*SMB\s+/i.test(line) || line.indexOf('[+]') < 0) return;
+      if (!/^\s*SMB\s+/i.test(line) || /^\s*SMB\s+\S+\s+(?:5985|5986)\b/i.test(line) || line.indexOf('[+]') < 0) return;
       var auth = line.split('[+]')[1].trim();
       var credPart = auth.replace(/(?:[ \t]+\([^)\r\n]*\))+[ \t]*$/, '').trim();
       var isGuest = guestCommand || /\(guest\)/i.test(auth) || /^(?:[^\\]+\\)?guest:/i.test(credPart);
@@ -672,9 +677,9 @@
   // line or a bare "-a---" fragment never mints on its own.
   var _WIN_DIR_HDR_LINE_RE = /^\s*Directory of\s+(?<path>.+?)\s*$/i;
   var _WIN_DIR_ROW_RE = /^\s*(?<date>\d{1,2}\/\d{1,2}\/\d{4})\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
-  var _PS_DIR_HDR_LINE_RE = /^\s*Directory:\s+(?<path>.+?)\s*$/i;
+  var _PS_DIR_HDR_LINE_RE = /^\s*(?:Directory|[^\s:\\/0-9]{2,24})\s*:\s+(?<path>(?:[A-Za-z]:\\|\\\\[^\\\s]+\\)[^\r\n]+?)\s*$/i;
   var _PS_LS_HEADER_RE = /^\s*Mode\s+LastWriteTime\s+Length\s+Name(?<pscol>\s+PSComputerName)?\s*$/i;
-  var _PS_LS_ROW_RE = /^\s*(?<mode>[-dalrhscetn]{4,7})\s+\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?<len>\d+)?\s+(?<rest>\S.*?)\s*$/i;
+  var _PS_LS_ROW_RE = /^\s*(?<mode>[-dalrhscetn]{4,7})\s+(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?\s+(?<len>\d+)?\s+(?<rest>\S.*?)\s*$/i;
 
   function _fs_join(dir, name) {
     if (!dir) return name;
@@ -1040,11 +1045,20 @@
       var p2 = line.split(/\s+/);
       if (p2.length >= 2 && ['Disk', 'IPC', 'Printer'].indexOf(p2[1]) >= 0) addShare(p2[0], '', p2[1]);
     });
-    if (!shares.length && /-L\b/.test(String(source || '')) && /^(?:ADMIN\$|C\$|IPC\$|SYSVOL|NETLOGON)\s*$/im.test(text)) {
-      text.split(/\r?\n/).forEach(function (raw) {
-        var s = raw.trim();
-        if (s && !/\s/.test(s)) addShare(s, '', 'Disk');
+    if (!shares.length) {
+      var rawShareLines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) {
+        return l && !/^(?:#\s*shares|shares|impacket[^\r\n]*|Type help for list of commands)$/i.test(l);
       });
+      var anchorCount = rawShareLines.filter(function (l) { return /^(?:ADMIN\$|C\$|IPC\$|SYSVOL|NETLOGON|PRINT\$)$/i.test(l); }).length;
+      var isBareSharesCmd = /-L\b|^\s*#?\s*shares\s*$/im.test(String(source || '') + '\n' + text);
+      if ((isBareSharesCmd && anchorCount >= 1) || (anchorCount >= 2 && rawShareLines.length >= 2 && rawShareLines.length <= 32 && rawShareLines.every(function (l) { return /^[A-Za-z0-9_$. -]{1,32}$/.test(l) && !/[:\\/]/.test(l); }))) {
+        rawShareLines.forEach(function (s) {
+          if (/^[A-Za-z0-9_$.-]{2,32}$/.test(s)) {
+            var stype = /^IPC\$$/i.test(s) ? 'IPC' : (/^PRINT\$$/i.test(s) ? 'Printer' : 'Disk');
+            addShare(s, '', stype);
+          }
+        });
+      }
     }
     if (/Anonymous login successful/i.test(text)) {
       _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbclient' }, S, source));
@@ -1384,6 +1398,7 @@
     var multiHost = Object.keys(hostSet).length > 1;
     reAll(C._NXC_AUTH_RE, text).forEach(function (m) {
       var proto = m.groups.proto.toLowerCase();
+      if (proto === 'smb' && /^\s*SMB\s+\S+\s+(?:5985|5986)\b/i.test(m[0])) proto = 'winrm';
       var auth = m.groups.auth.trim();
       if (/\((?:Guest|Null Auth:True)\)/i.test(auth)) return;
       var parsed = _parse_auth_material(auth);
@@ -1604,6 +1619,24 @@
       var tgt = first ? first.target : (hops[0] ? hops[0].to.split('@')[0].trim() : '');
       var fedge = first ? first.edge : (hops[0] ? hops[0].edge : '');
       _add(facts, mkFact('ad.acl_lead', scope, { tool: 'bloodhound', target: tgt, targets: tgt ? [tgt] : [], edge: fedge, first_action: first }, S, source));
+      var memberGroups = [], seenMg = {};
+      hops.forEach(function (hp) {
+        if (!hp || !/^memberof$/i.test(String(hp.edge || ''))) return;
+        var gName = String(hp.to || '').split('@')[0].trim();
+        var pName = String(hp.from || '').split('@')[0].trim();
+        if (!gName) return;
+        var gk = gName.toLowerCase();
+        if (!seenMg[gk]) { seenMg[gk] = true; memberGroups.push(gName); }
+        if (/^(?:Backup Operators|Account Operators|Server Operators|Print Operators|DnsAdmins|Domain Admins|Enterprise Admins|Schema Admins|Administrators|Remote Management Users|Exchange Windows Permissions)$/i.test(gName)) {
+          _add(facts, mkFact('ad.acl_lead', scope, { tool: 'bloodhound', principal: pName, group: gName, target: gName, targets: [gName], edge: 'MemberOf' }, S, source));
+          if (/^(?:Backup Operators|Account Operators|Server Operators|Print Operators|DnsAdmins)$/i.test(gName)) {
+            _add(facts, mkFact('privesc.privileged_group', 'host:' + ws.target, { principal: pName, user: pName, group: gName, via: 'bloodhound-memberof' }, S, source));
+          }
+        }
+      });
+      if (memberGroups.length) {
+        _add(facts, mkFact('ad.group_list', scope, { groups: memberGroups, count: memberGroups.length, method: 'bloodhound-edge' }, S, source));
+      }
       if ((first && first.edge === 'ReadGMSAPassword') || hops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
         _add(facts, mkFact('ad.gmsa', scope, { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt }, S, source));
       }
@@ -1621,6 +1654,7 @@
   function _is_ad_abuse_command(command) {
     var l = (command || '').toLowerCase();
     if (l.indexOf('net localgroup') >= 0 && l.indexOf('/domain') >= 0) return true;
+    if (/\bnet(?:\.exe)?\s+user\s+\S+\s+(?!\/)\S+\s+\/domain\b/i.test(command || '') && !/\/add\b/i.test(command || '')) return true;
     return ['bloodyad', 'dacledit', 'owneredit', 'ticketer', 'addcomputer', 'impacket-rbcd', 'rbcd.py', 'impacket-getst', 'getst.py', 'impacket-gettgt', 'gettgt.py', 'gmsadumper', 'msds-managedpassword', ' ms-mcs-admpwd', ' laps', ' -m laps', 'get-adcomputer', 'get-adserviceaccount', 'get-gppermission', 'rubeus', 'klist', 'kinit', 'net group', 'net rpc'].some(function (t) { return l.indexOf(t) >= 0; });
   }
   C._is_ad_abuse_command = _is_ad_abuse_command;
@@ -1662,9 +1696,12 @@
       return;
     }
     if (/\bnet\s+localgroup\b/i.test(lc) && !/\/domain\b/i.test(lc)) return;
+    var netUserResetM = /(?:^|\n|[>;]\s*)net(?:\.exe)?\s+user\s+(?:'([^']+)'|"([^"]+)"|([^\s/"']+))\s+(?:'([^']+)'|"([^"]+)"|([^\s/"']+))\s+\/domain\b(?![^\r\n]*\/add\b)/i.exec((command || '') + '\n' + (text || ''));
+    var netRpcPassM = /(?:^|\n|[>;$#]\s*)net\s+rpc\s+password\s+(?:'([^']+)'|"([^"]+)"|([^\s"'-][^\s"']*))\s+(?:'([^']+)'|"([^"]+)"|([^\s"'-][^\s"']*))/i.exec((command || '') + '\n' + (text || ''));
+    var nonCommentText = String(text || '').replace(/^\s*#[^\r\n]*$/gm, '').trim();
     var abuseVerb = ['groupmember', 'set owner', 'writeowner', 'owneredit', 'genericall', 'dacledit', '-action write',
       'add dcsync', ' dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'add computer', 'net group', 'net rpc'
-    ].some(function (k) { return lc.indexOf(k) >= 0; }) || (lc.indexOf('net localgroup') >= 0 && lc.indexOf('/domain') >= 0);
+    ].some(function (k) { return lc.indexOf(k) >= 0; }) || (lc.indexOf('net localgroup') >= 0 && lc.indexOf('/domain') >= 0) || !!netUserResetM;
     if (lc.indexOf('get writable') >= 0 && !abuseVerb) return;
     if (/\b(?:get-adcomputer|get-adserviceaccount|get-aduser|get-adgroup|get-domaincomputer|get-netcomputer)\b/i.test(lc) && !abuseVerb) return;
     var rightsSet = {};
@@ -1672,7 +1709,7 @@
     if (lc.indexOf('add dcsync') >= 0 || lc.indexOf(' dcsync') >= 0 || lc.indexOf('-rights dcsync') >= 0 || lc.indexOf('rights:dcsync') >= 0 || /is now able to dcsync/i.test(text)) { operation = 'dcsync_grant'; rightsSet.DCSync = true; }
     else if (lc.indexOf('groupmember') >= 0 || lc.indexOf('add groupmember') >= 0 || /\bnet\s+(?:group|localgroup\b[^\r\n]*\/domain|rpc\s+group\s+addmem)\b.*\/add\b/i.test(lc) || /\badded to (?:group\s+)?["']?[A-Za-z0-9 _-]+["']?\s*$/im.test(text)) { operation = 'group_member_write'; rightsSet.WriteMembers = true; }
     else if (lc.indexOf('set owner') >= 0 || lc.indexOf('writeowner') >= 0 || lc.indexOf('owneredit') >= 0 || /ownersid modified successfully|current owner information below/i.test(text)) { operation = 'owner_write'; rightsSet.WriteOwner = true; }
-    else if (lc.indexOf('set password') >= 0 || /password changed successfully/i.test(text)) { operation = 'password_reset'; rightsSet.ForceChangePassword = true; }
+    else if (lc.indexOf('set password') >= 0 || /password changed successfully/i.test(text) || (netUserResetM && /The command completed successfully/i.test(text)) || (netRpcPassM && nonCommentText.length > 0)) { operation = 'password_reset'; rightsSet.ForceChangePassword = true; }
     else if (lc.indexOf('genericall') >= 0 || lc.indexOf('dacledit') >= 0 || /dacl modified successfully/i.test(text)) { operation = 'dacl_write'; rightsSet.GenericAll = true; }
     else if (lc.indexOf('rbcd') >= 0 || textLow.indexOf('msds-allowedtoact') >= 0) { operation = 'rbcd_write'; rightsSet.RBCD = true; }
 
@@ -1690,7 +1727,9 @@
     var opError = reSearch(/^\s*\[-\]|\b(error|failed|denied|unauthorized|insufficient|insufficientAccessRights|insufficient_access_rights|INSUFF_ACCESS_RIGHTS|dsid-|traceback|not recognized|access is denied|constraint|cannot|invalid)\b/im, text);
     var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
     var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:|The command completed successfully)/im.test(text) || alreadyMemberRe.test(text));
-    var success = explicitAbuseSuccess || hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!text.trim() && !opError);
+    var success = explicitAbuseSuccess || hasJoinLine || evidence.length > 0 || !!reSearch(C._AD_CONTROL_SUCCESS_RE, text) || (!!operation && !!nonCommentText && !opError);
+    if (netUserResetM && !/The command completed successfully/i.test(text)) success = false;
+    if (netRpcPassM && (!nonCommentText || /\b(?:NT_STATUS_|Usage:|System error)\b/i.test(text))) success = false;
     if (opError && !explicitAbuseSuccess && !hasJoinLine && !reSearch(C._AD_CONTROL_SUCCESS_RE, text) && !alreadyMemberRe.test(text)) success = false;
     if (!success) return;
 
@@ -1752,6 +1791,10 @@
     var value = { rights: rights.length ? C.uniqueSortedCI(rights) : ['control_path'], method: _ad_abuse_tool(command), evidence: evidence.length ? evidence : defaultEvidence };
     if (operation) value.operation = operation;
     var target = C._command_arg(command, ['--target', '-target', '-target-dn', '--target-dn', '-delegate-to']) || C._command_arg(command, ['-target-sam']);
+    if (!target && operation === 'password_reset') {
+      var rstM = netUserResetM || netRpcPassM;
+      if (rstM) target = rstM[1] || rstM[2] || rstM[3] || '';
+    }
     if (target) value.target = C.stripChars(target, "'\"");
     var principal = C._command_arg(command, ['-principal', '--principal', '-new-owner', '--new-owner', '-delegate-from']);
     if (!principal && operation === 'dcsync_grant') {
@@ -1759,6 +1802,7 @@
       if (dm) principal = dm[1] || dm[2] || dm[3] || '';
     }
     if (principal) value.principal = C.stripChars(principal, "'\"");
+    if (operation === 'password_reset') value.action = 'password-reset';
     _add(facts, mkFact('ad.control_paths', domScope, value, S, source));
     if (operation === 'dcsync_grant') {
       _add(facts, mkFact('ad.domain_control', domScope, { principal: value.principal || '', right: 'DCSync', method: value.method, evidence: value.evidence }, S, source));
@@ -1770,6 +1814,11 @@
         var spUser = spm[1] || spm[2] || spm[3] || '';
         var spPass = spm[4] || spm[5] || spm[6] || '';
         C._add_plaintext_credential(facts, ws, source, spUser, spPass, C._domain_from_facts(ws), 'bloodyad-set-password', '');
+      } else if ((netUserResetM || netRpcPassM) && C._add_plaintext_credential) {
+        var nrM = netUserResetM || netRpcPassM;
+        var nrUser = nrM[1] || nrM[2] || nrM[3] || '';
+        var nrPass = nrM[4] || nrM[5] || nrM[6] || '';
+        C._add_plaintext_credential(facts, ws, source, nrUser, nrPass, C._domain_from_facts(ws), 'acl-password-reset', '');
       }
     }
   }

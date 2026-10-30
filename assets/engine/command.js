@@ -655,9 +655,109 @@
       }
     }
 
-    // domain SID
+    // domain SID and cross-trust forest-root / extra-SID derivation
+    var engAllFacts = ((resolved && resolved.engagement && resolved.engagement.facts) || (opts && opts.engagement && opts.engagement.facts) || []);
+    var localFactArr = (facts && Array.isArray(facts.facts)) ? facts.facts : (Array.isArray(facts) ? facts : []);
+    var combinedSidFacts = localFactArr.concat(engAllFacts);
+    var curDomLower = String(ctx.domain || '').trim().toLowerCase().replace(/\.$/, '');
     var sids = fvals('ad.domain_sid');
-    for (var s = 0; s < sids.length; s++) { if (sids[s].sid) { ctx.domain_sid = sids[s].sid; break; } }
+    if (!ctx.domain_sid) {
+      for (var s0 = 0; s0 < sids.length; s0++) {
+        var sv0 = sids[s0] || {};
+        var sd0 = String(sv0.domain || sv0.name || '').trim().toLowerCase().replace(/\.$/, '');
+        if (sv0.sid && curDomLower && sd0 && sd0 === curDomLower) { ctx.domain_sid = String(sv0.sid).trim(); break; }
+      }
+      if (!ctx.domain_sid) {
+        for (var s = 0; s < sids.length; s++) { if (sids[s] && sids[s].sid) { ctx.domain_sid = String(sids[s].sid).trim(); break; } }
+      }
+    }
+    if (!ctx.forest_root_sid || !ctx.extra_sid) {
+      var sidByDom = {};
+      var hostDomMap = {};
+      for (var hdi = 0; hdi < combinedSidFacts.length; hdi++) {
+        var hdf = combinedSidFacts[hdi];
+        if (!hdf || (hdf.state && hdf.state !== 'supported')) continue;
+        var hdSc = String(hdf.scope || '');
+        var hdv = hdf.value || {};
+        if (/^host:/i.test(hdSc)) {
+          var hdName = '';
+          if ((hdf.kind === 'ad.domain_known' || hdf.kind === 'host.domain') && (hdv.domain || hdv.name)) hdName = String(hdv.domain || hdv.name);
+          else if (hdf.kind === 'host.fqdn' && String(hdv.fqdn || hdv.name || '').indexOf('.') > 0) hdName = String(hdv.fqdn || hdv.name).split('.').slice(1).join('.');
+          if (hdName) hostDomMap[hdSc.toLowerCase()] = hdName.trim().toLowerCase().replace(/\.$/, '');
+        }
+      }
+      var otherSids = [];
+      for (var csi = 0; csi < combinedSidFacts.length; csi++) {
+        var csf = combinedSidFacts[csi];
+        if (!csf || csf.kind !== 'ad.domain_sid' || (csf.state && csf.state !== 'supported')) continue;
+        var csv = csf.value || {};
+        var rawSid = String(csv.sid || '').trim().replace(/-519$/i, '');
+        if (!/^S-1-5-21-\d+-\d+-\d+$/i.test(rawSid)) continue;
+        var csSc = String(csf.scope || '');
+        var csDom = String(csv.domain || csv.name || (/^domain:/i.test(csSc) ? csSc.slice(7) : (hostDomMap[csSc.toLowerCase()] || ''))).trim().toLowerCase().replace(/\.$/, '');
+        if (csDom && !sidByDom[csDom]) sidByDom[csDom] = rawSid;
+        if (!ctx.domain_sid || rawSid.toLowerCase() !== String(ctx.domain_sid).toLowerCase()) {
+          otherSids.push({ domain: csDom, sid: rawSid });
+        }
+      }
+      var foundRootSid = '';
+      var candidateTrustDoms = [];
+      var parentSuffix = (curDomLower && curDomLower.split('.').length >= 3) ? curDomLower.split('.').slice(1).join('.') : '';
+      if (parentSuffix) candidateTrustDoms.push(parentSuffix);
+      var hasTrustFact = false;
+      for (var cti = 0; cti < combinedSidFacts.length; cti++) {
+        var ctf = combinedSidFacts[cti];
+        if (!ctf || ctf.kind !== 'ad.trusts' || (ctf.state && ctf.state !== 'supported')) continue;
+        hasTrustFact = true;
+        var tv = ctf.value || {};
+        var directSid = String(tv.forest_root_sid || tv.parent_sid || tv.trusted_sid || tv.target_sid || '').trim().replace(/-519$/i, '');
+        if (/^S-1-5-21-\d+-\d+-\d+$/i.test(directSid) && (!ctx.domain_sid || directSid.toLowerCase() !== String(ctx.domain_sid).toLowerCase())) {
+          foundRootSid = directSid;
+          break;
+        }
+        [tv.forest_root, tv.parent_domain, tv.trusted_domain, tv.target_domain].forEach(function (dn) {
+          var cleanDn = String(dn || '').trim().toLowerCase().replace(/\.$/, '');
+          if (cleanDn && cleanDn !== curDomLower && candidateTrustDoms.indexOf(cleanDn) < 0) candidateTrustDoms.push(cleanDn);
+        });
+        if (Array.isArray(tv.trusts)) {
+          for (var tri = 0; tri < tv.trusts.length; tri++) {
+            var tr = tv.trusts[tri] || {};
+            var trDom = String(tr.target_domain || tr.TargetDomainName || tr.domain || tr.name || '').trim().toLowerCase().replace(/\.$/, '');
+            var trSid = String(tr.target_sid || tr.DomainSid || tr.domain_sid || tr.sid || '').trim().replace(/-519$/i, '');
+            if (trDom && trSid && /^S-1-5-21-\d+-\d+-\d+$/i.test(trSid) && !sidByDom[trDom]) sidByDom[trDom] = trSid;
+            if (trDom && trDom !== curDomLower) {
+              if (parentSuffix && trDom === parentSuffix) candidateTrustDoms.unshift(trDom);
+              else if (candidateTrustDoms.indexOf(trDom) < 0) candidateTrustDoms.push(trDom);
+            } else if (!trDom && /^S-1-5-21-\d+-\d+-\d+$/i.test(trSid) && (!ctx.domain_sid || trSid.toLowerCase() !== String(ctx.domain_sid).toLowerCase())) {
+              foundRootSid = foundRootSid || trSid;
+            }
+          }
+        }
+        if (Array.isArray(tv.domains)) {
+          tv.domains.forEach(function (dn2) {
+            var cleanDn2 = String(dn2 || '').trim().toLowerCase().replace(/\.$/, '');
+            if (cleanDn2 && cleanDn2 !== curDomLower) {
+              if (parentSuffix && cleanDn2 === parentSuffix) candidateTrustDoms.unshift(cleanDn2);
+              else if (candidateTrustDoms.indexOf(cleanDn2) < 0) candidateTrustDoms.push(cleanDn2);
+            }
+          });
+        }
+      }
+      if (!foundRootSid) {
+        for (var cdi = 0; cdi < candidateTrustDoms.length; cdi++) {
+          var candDom = candidateTrustDoms[cdi];
+          if (candDom && sidByDom[candDom] && (!ctx.domain_sid || sidByDom[candDom].toLowerCase() !== String(ctx.domain_sid).toLowerCase())) {
+            foundRootSid = sidByDom[candDom];
+            break;
+          }
+        }
+      }
+      if (!foundRootSid && hasTrustFact && otherSids.length === 1) {
+        foundRootSid = otherSids[0].sid;
+      }
+      if (foundRootSid && !ctx.forest_root_sid) ctx.forest_root_sid = foundRootSid;
+      if (ctx.forest_root_sid && !ctx.extra_sid) ctx.extra_sid = String(ctx.forest_root_sid).replace(/-519$/i, '') + '-519';
+    }
 
     // BloodHound cash-in tokens from attack path hops (advancing past already-joined groups)
     var paths = fvals('ad.attack_paths');
@@ -967,8 +1067,44 @@
     });
 
     // Populate high-frequency service, web, keyfile, SPN, NFS, SNMP, module, and KeePass tokens
+    function _resolveServicePort(defaultPort, factKinds, svcPattern) {
+      var kIdx, vIdx, vals, pv, pNum;
+      for (kIdx = 0; kIdx < factKinds.length; kIdx++) {
+        vals = scopedValues(facts, factKinds[kIdx], tgt);
+        if (!vals.length) vals = fvals(factKinds[kIdx]);
+        for (vIdx = 0; vIdx < vals.length; vIdx++) {
+          pv = vals[vIdx];
+          pNum = pv && typeof pv === 'object' ? Number(pv.port) : NaN;
+          if (pNum > 0 && pNum <= 65535) return String(pNum);
+        }
+      }
+      if (svcPattern && localFactArr.length) {
+        var hostPrefix = tgt ? ('host:' + String(tgt).toLowerCase()) : '';
+        for (var pfIdx = 0; pfIdx < localFactArr.length; pfIdx++) {
+          var pf = localFactArr[pfIdx];
+          if (!pf || (pf.state && pf.state !== 'supported')) continue;
+          if (hostPrefix && pf.scope && String(pf.scope).toLowerCase() !== hostPrefix && pf.scope !== 'host:target') continue;
+          var pm = /^port:(\d+)$/.exec(pf.kind || '');
+          if (pm && pf.value && svcPattern.test(String(pf.value.service || ''))) return pm[1];
+        }
+      }
+      return String(defaultPort);
+    }
+    if (!ctx.ftp_port) ctx.ftp_port = _resolveServicePort(21, ['ftp.reachable', 'service.ftp', 'ftp.anonymous_login', 'ftp.banner'], /^ftp/i);
+    if (!ctx.mssql_port) ctx.mssql_port = _resolveServicePort(1433, ['mssql.reachable', 'service.mssql', 'service.ms-sql-s', 'mssql.banner'], /^(?:ms-sql|mssql)/i);
+    if (!ctx.rdp_port) ctx.rdp_port = _resolveServicePort(3389, ['rdp.reachable', 'service.rdp', 'service.ms-wbt-server'], /^(?:rdp|ms-wbt-server)/i);
+    if (!ctx.ssh_port) ctx.ssh_port = _resolveServicePort(22, ['ssh.reachable', 'service.ssh', 'ssh.banner'], /^ssh/i);
+    if (!ctx.ccache_file) {
+      var krbTickets = fvals('kerberos.tickets');
+      var foundCcache = '';
+      for (var kti = 0; kti < krbTickets.length; kti++) {
+        var ktv = krbTickets[kti] || {};
+        if (ktv.ccache || ktv.file || ktv.path) { foundCcache = String(ktv.ccache || ktv.file || ktv.path); break; }
+      }
+      ctx.ccache_file = foundCcache || (ctx.user ? (String(ctx.user).replace(/^.*[\\/]/, '').split('@')[0] + '.ccache') : 'ticket.ccache');
+    }
     if (!ctx.web_origin || !ctx.http_port || !ctx.web_port || !ctx.url) {
-      var httpResps = fvals('http.response').concat(fvals('web.server')).concat(fvals('http.reachable'));
+      var httpResps = fvals('http.response').concat(fvals('web.server')).concat(fvals('http.reachable')).concat(fvals('service.http')).concat(fvals('https.reachable')).concat(fvals('service.https'));
       var foundUrl = '', foundWebPort = '';
       for (var hri = 0; hri < httpResps.length; hri++) {
         var hv = httpResps[hri] || {};
@@ -1762,7 +1898,7 @@
 
   var EARNED_TOKENS = {
     domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
-    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, abuse_groups_quoted: 1, ca_name: 1, template: 1,
+    nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, forest_root_sid: 1, extra_sid: 1, target_sam: 1, group: 1, abuse_groups_quoted: 1, ca_name: 1, template: 1,
     pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_smb_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1,
     edb_id: 1, edb_file: 1, edb_path: 1, custom_bin: 1, source_path: 1, app_base_path: 1, ssh_key_path: 1, reuse_user: 1, reuse_secret: 1
   };
@@ -1981,6 +2117,57 @@
     'wmi': [135, 445]
   };
 
+  var PROTO_REACHABLE_BY_PORT = {
+    21: { kinds: ['ftp.reachable', 'service.ftp', 'ftp.anonymous_login'], svcRe: /^ftp/i },
+    22: { kinds: ['ssh.reachable', 'service.ssh'], svcRe: /^ssh/i },
+    80: { kinds: ['http.reachable', 'https.reachable', 'service.http', 'service.https', 'service.http-proxy', 'service.http-alt'], svcRe: /^(?:https?|http-(?:proxy|alt))$/i },
+    443: { kinds: ['https.reachable', 'http.reachable', 'service.https', 'service.ssl/http'], svcRe: /^(?:https|ssl\/http)$/i },
+    161: { kinds: ['snmp.reachable', 'service.snmp'], svcRe: /^snmp/i },
+    389: { kinds: ['ldap.reachable', 'service.ldap'], svcRe: /^ldap/i },
+    636: { kinds: ['ldap.reachable', 'service.ldaps'], svcRe: /^ldaps/i },
+    445: { kinds: ['smb.reachable', 'service.smb', 'service.microsoft-ds', 'service.netbios-ssn'], svcRe: /^(?:smb|microsoft-ds|netbios-ssn)/i },
+    1433: { kinds: ['mssql.reachable', 'service.mssql', 'service.ms-sql-s'], svcRe: /^(?:ms-sql|mssql)/i },
+    3306: { kinds: ['mysql.reachable', 'service.mysql'], svcRe: /^mysql/i },
+    3389: { kinds: ['rdp.reachable', 'service.rdp', 'service.ms-wbt-server', 'host.rdp_enabled'], svcRe: /^(?:rdp|ms-wbt-server)/i },
+    5900: { kinds: ['vnc.reachable', 'service.vnc', 'service.rfb'], svcRe: /^(?:vnc|rfb)/i },
+    5985: { kinds: ['winrm.reachable', 'service.winrm', 'service.wsman', 'host.winrm_enabled'], svcRe: /^(?:winrm|wsman)$/i },
+    5986: { kinds: ['winrm.reachable', 'service.winrm', 'service.wsman', 'host.winrm_enabled'], svcRe: /^(?:winrm|wsman)$/i }
+  };
+
+  function resolveSemanticProtocolPort(facts, portsNeeded) {
+    if (!facts || !portsNeeded || !portsNeeded.length) return null;
+    var hasFn = typeof facts.has === 'function';
+    var valsFn = typeof facts.values === 'function';
+    var factArr = Array.isArray(facts.facts) ? facts.facts : (Array.isArray(facts) ? facts : []);
+    for (var pi = 0; pi < portsNeeded.length; pi++) {
+      var defPort = portsNeeded[pi];
+      var spec = PROTO_REACHABLE_BY_PORT[defPort];
+      if (!spec) continue;
+      for (var ki = 0; ki < spec.kinds.length; ki++) {
+        var fk = spec.kinds[ki];
+        var present = hasFn ? facts.has(fk) : factArr.some(function (f) { return f && f.kind === fk && (!f.state || f.state === 'supported'); });
+        if (!present) continue;
+        if (valsFn) {
+          var kVals = facts.values(fk) || [];
+          for (var vi = 0; vi < kVals.length; vi++) {
+            var pNum = kVals[vi] && typeof kVals[vi] === 'object' ? Number(kVals[vi].port) : NaN;
+            if (pNum > 0 && pNum <= 65535) return pNum;
+          }
+        }
+        if (spec.svcRe && factArr.length) {
+          for (var fi = 0; fi < factArr.length; fi++) {
+            var pf = factArr[fi];
+            if (!pf || (pf.state && pf.state !== 'supported')) continue;
+            var pm = /^port:(\d+)$/.exec(pf.kind || '');
+            if (pm && pf.value && spec.svcRe.test(String(pf.value.service || ''))) return Number(pm[1]);
+          }
+        }
+        return defPort;
+      }
+    }
+    return null;
+  }
+
   function commandPortFeasible(cmd, facts) {
     if (!cmd || !facts) return { feasible: true };
     var isObj = typeof cmd === 'object';
@@ -1996,18 +2183,20 @@
     }
     if (!portsNeeded) portsNeeded = CMD_PORT_MAP[tool];
     if (!portsNeeded || !portsNeeded.length) return { feasible: true };
-    if (portsNeeded.indexOf(161) >= 0 && facts.has && facts.has('snmp.reachable')) {
-      return { feasible: true, port: 161 };
-    }
 
     var portsKnown = openPorts(facts);
-    if (!portsKnown || !portsKnown.length) return { feasible: true }; // No scan data yet, don't rule out
-
-    for (var i = 0; i < portsNeeded.length; i++) {
-      if (portsKnown.indexOf(portsNeeded[i]) >= 0 || (facts.has && facts.has('port:' + portsNeeded[i]))) {
-        return { feasible: true, port: portsNeeded[i] };
+    if (portsKnown && portsKnown.length) {
+      for (var i = 0; i < portsNeeded.length; i++) {
+        if (portsKnown.indexOf(portsNeeded[i]) >= 0 || (facts.has && facts.has('port:' + portsNeeded[i]))) {
+          return { feasible: true, port: portsNeeded[i] };
+        }
       }
     }
+    var semPort = resolveSemanticProtocolPort(facts, portsNeeded);
+    if (semPort !== null) {
+      return { feasible: true, port: semPort };
+    }
+    if (!portsKnown || !portsKnown.length) return { feasible: true }; // No scan data yet, don't rule out
     return { feasible: false, required: portsNeeded };
   }
 

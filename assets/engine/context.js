@@ -160,6 +160,78 @@
     if (/\b(?:curl|wget|ffuf|gobuster|feroxbuster)\b/.test(c)) return 'http';
     return '';
   }
+  var DIR_METADATA_FACT_RE = /^ad\.(?:domain_known|base_dn|domain_sid|trusts)$/;
+  function hasConflictingNonAdEvidence(hostFacts, targetObj) {
+    if (targetObj) {
+      if (targetObj.os && /\b(?:linux|unix|ubuntu|debian|centos|freebsd|openbsd|netbsd)\b/i.test(String(targetObj.os))) return true;
+      var tDom = clean(targetObj.domain);
+      if (tDom && (lower(tDom) === 'workgroup' || tDom.indexOf('.') < 0)) return true;
+    }
+    var hasWinOrAd = false, hasLin = false, hasWg = false;
+    for (var i = 0; i < hostFacts.length; i++) {
+      var f = hostFacts[i];
+      if (!f || f.state !== 'supported') continue;
+      var v = f.value || {};
+      if (/^(?:foothold\.windows|os\.windows|ad\.dc_candidate|ad\.domain_known|(?:kerberos|ldap|winrm|rdp|mssql)\.reachable|port:(?:88|389|636|3268|3269|5985|5986))$/.test(f.kind)) hasWinOrAd = true;
+      if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint' || f.kind === 'host.os') && /windows/i.test(String(v.family || v.os || ''))) hasWinOrAd = true;
+      if (/^(?:foothold\.linux|os\.linux)$/.test(f.kind)) hasLin = true;
+      if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint' || f.kind === 'host.os') && /\b(?:linux|unix|ubuntu|debian|centos|freebsd|openbsd|netbsd)\b/i.test(String(v.family || v.os || ''))) hasLin = true;
+      if (f.kind === 'smb.signing' && v.workgroup === true) hasWg = true;
+      if (f.kind === 'host.domain') {
+        var hd = clean(v.domain || v.name);
+        if (hd && (lower(hd) === 'workgroup' || hd.indexOf('.') < 0)) hasWg = true;
+      }
+    }
+    return hasWg || (hasLin && !hasWinOrAd);
+  }
+  function cleanAdDom(v) {
+    return lower(String(v == null ? '' : v).trim().replace(/0\.$/, ''));
+  }
+  function uniqueProvenAdDomains(allFacts) {
+    var seen = Object.create(null), out = [];
+    list(allFacts).forEach(function (f) {
+      if (!f || f.state !== 'supported' || f.kind !== 'ad.domain_known') return;
+      var sc = clean(f.scope);
+      var raw = clean(((f.value || {}).name || (f.value || {}).domain || (/^domain:/i.test(sc) ? sc.slice(7) : ''))).replace(/0\.$/, '').replace(/\.$/, '');
+      var key = lower(raw);
+      if (!key || key === 'domain' || key === 'workgroup' || key.indexOf('.') < 0 || seen[key]) return;
+      seen[key] = 1;
+      out.push(raw);
+    });
+    return out;
+  }
+  function projectDirMetadataFacts(allFacts, domainName) {
+    var domKey = cleanAdDom(domainName);
+    if (!domKey || domKey === 'domain' || domKey === 'workgroup' || domKey.indexOf('.') < 0) return [];
+    var all = list(allFacts), hostDom = Object.create(null);
+    all.forEach(function (f) {
+      if (!f || f.state !== 'supported' || f.kind !== 'ad.domain_known' || !/^host:/i.test(f.scope || '')) return;
+      var d = cleanAdDom((f.value || {}).domain || (f.value || {}).name);
+      if (d && d.indexOf('.') > 0) hostDom[lower(f.scope)] = d;
+    });
+    var out = [];
+    all.forEach(function (f) {
+      if (!f || f.state !== 'supported' || !DIR_METADATA_FACT_RE.test(f.kind || '')) return;
+      var sc = clean(f.scope), v = f.value || {}, fDom = '';
+      if (/^domain:/i.test(sc)) fDom = cleanAdDom(sc.slice(7));
+      if (!fDom || fDom === 'domain') fDom = cleanAdDom(v.domain || v.name);
+      if (!fDom && f.kind === 'ad.base_dn' && (v.basedn || v.dn)) {
+        var dcs = [], m, re = /\bDC=([A-Za-z0-9-]+)/gi, bdn = String(v.basedn || v.dn);
+        while ((m = re.exec(bdn))) dcs.push(m[1].toLowerCase());
+        if (dcs.length >= 2) fDom = dcs.join('.');
+      }
+      if (!fDom && /^host:/i.test(sc)) fDom = hostDom[lower(sc)] || '';
+      if (fDom !== domKey) return;
+      if (/^domain:/i.test(sc)) {
+        out.push(f);
+      } else if (O.facts && O.facts.makeFact) {
+        out.push(O.facts.makeFact({ kind: f.kind, scope: 'domain:' + domKey, state: 'supported', source: f.source || 'domain-metadata', value: v }));
+      } else {
+        out.push(Object.assign({}, f, { scope: 'domain:' + domKey }));
+      }
+    });
+    return out;
+  }
   function targetDomain(eng, target, facts, params) {
     var configured = eng && shape(eng).targetDomains[target], tg = ((eng && eng.targets) || []).find(function (t) { return (t.ip || t.id) === target; });
     if (configured) return clean(configured);
@@ -171,8 +243,8 @@
       if (f.kind === 'host.fqdn' && String(v.fqdn || v.name || '').indexOf('.') > 0) return String(v.fqdn || v.name).split('.').slice(1).join('.');
     }
     if (!eng && params.domain) return clean(params.domain);
-    var names = list(facts).filter(function (f) { return f.state === 'supported' && f.kind === 'ad.domain_known' && /^domain:/.test(f.scope || ''); }).map(function (f) { return clean((f.value || {}).name || (f.value || {}).domain || f.scope.slice(7)); });
-    if ((!eng || (eng.targets || []).length <= 1) && names.length === 1) return names[0];
+    var names = uniqueProvenAdDomains(facts);
+    if (names.length === 1 && !hasConflictingNonAdEvidence(host, tg)) return names[0];
     return '';
   }
   function targetAliases(eng, target) {
@@ -216,7 +288,14 @@
         ownHostFacts.push(hf);
       }
     }
-    if (multi && target && !hasScannedActivity(ownHostFacts)) return ownHostFacts;
+    if (multi && target && !hasScannedActivity(ownHostFacts)) {
+      var isRegisteredTarget = ((eng && eng.targets) || []).some(function (t) { return (t.ip || t.id) === target; });
+      if (domain && isRegisteredTarget) {
+        var dirMeta = projectDirMetadataFacts(all, domain);
+        if (dirMeta.length) return ownHostFacts.concat(dirMeta);
+      }
+      return ownHostFacts;
+    }
     var baseScoped = all.filter(function (f) {
       if (!f) return false; var sc = clean(f.scope);
       if (/^host:/.test(sc)) return aliases.indexOf(lower(sc.slice(5)).replace(/\$$/, '')) >= 0 || (!multi && sc === 'host:target');
@@ -227,6 +306,15 @@
       if (multi && !sc && /^(?:access\.|foothold\.|credential\.|blocker\.|loot\.)/.test(f.kind)) return false;
       return !multi || /^scope:/.test(sc) || !sc;
     });
+    if (multi && domain) {
+      var extraDirMeta = projectDirMetadataFacts(all, domain);
+      for (var dmi = 0; dmi < extraDirMeta.length; dmi++) {
+        var dmf = extraDirMeta[dmi];
+        if (!baseScoped.some(function (ef) { return ef && ef.state === 'supported' && ef.kind === dmf.kind; })) {
+          baseScoped.push(dmf);
+        }
+      }
+    }
     if (multi && target && O.facts && O.facts.makeFact) {
       var hostScope = 'host:' + target;
       if (O.store && O.store.pivotRouteForTarget && (!eng || !O.store.active || O.store.active() === eng)
@@ -611,6 +699,51 @@
       });
       return applicable;
     };
+    function _privEpochKey(e) {
+      return e ? (String(e).replace(/(?:^|\|)h:[^|]*/g, '') || 'anon') : '';
+    }
+    function _actionDryState(action, curCtx, epoch, cleanOnly) {
+      var acts = (eng && eng.activities) || [];
+      if (!action || !acts.length) return { retireAll: false, hasNegativeProbe: false };
+      var privEp = _privEpochKey(epoch);
+      var retireAll = false, hasNegativeProbe = false;
+      for (var ai = 0; ai < acts.length; ai++) {
+        var act = acts[ai];
+        if (!act || (act.action_id || act.actionId) !== action.id) continue;
+        var actTarget = act.target || (/^host:/.test(act.scope || '') ? act.scope.slice(5) : '');
+        if (target && actTarget && actTarget !== target) continue;
+        if (privEp && act.epoch && _privEpochKey(act.epoch) !== privEp) continue;
+        var prevCtx = act.context || (act.outcome && act.outcome.context);
+        if (curCtx && prevCtx && (prevCtx.credentialId || null) !== (curCtx.credentialId || null)) continue;
+        var hasActiveBlocker = Array.isArray(act.blockers) && act.blockers.length && result.facts.has
+          && act.blockers.some(function (b) { return result.facts.has(b); });
+        var isProductive = (typeof act.addedCount === 'number' && act.addedCount > 0)
+          || (Array.isArray(act.produced) && act.produced.some(function (k) { return k && !/^(?:blocker\.|credential\.validation$)/.test(k); }));
+        if (hasActiveBlocker || isProductive) break;
+        var ao = act.outcome;
+        if (!ao || !ao.conclusive || !ao.retireCommand) continue;
+        if (cleanOnly && (ao.kind === 'rejected' || ao.kind === 'authorization-denied')) continue;
+        if (ao.retireMove === true || (ao.kind === 'completed-negative' && !clean(act.command))) {
+          retireAll = true;
+          hasNegativeProbe = true;
+          break;
+        }
+        if (ao.kind === 'completed-negative') {
+          hasNegativeProbe = true;
+        }
+      }
+      return { retireAll: retireAll, hasNegativeProbe: hasNegativeProbe };
+    }
+    function _isSubCmdTokenBlocked(filledObj) {
+      if (!filledObj || filledObj.blocked) return true;
+      if (O.command.unfilledTokens && O.command.EARNED_TOKENS) {
+        var un = O.command.unfilledTokens(filledObj.filled || '');
+        for (var ui = 0; ui < un.length; ui++) {
+          if (O.command.EARNED_TOKENS[un[ui]]) return true;
+        }
+      }
+      return false;
+    }
     function _checkCompleted(action, cmd, index, cleanOnly) {
       if (!eng || !O.command || !O.command.commandTriedInEpoch || !O.command.fillCommand) return false;
       var cacheKey = cleanOnly ? '__clean' : '__all';
@@ -628,9 +761,28 @@
       if (!attempts.length) return false;
       var commandFacts = result.facts.forAction(action, cmd);
       var filled = O.command.fillCommand(action, commandFacts, { params:p, target:target }, index);
-      if (filled.blocked) return false;
       var epoch = O.pack && O.pack.accessEpoch ? O.pack.accessEpoch(result.facts) : '';
-      return O.command.commandTriedInEpoch(action, cmd, filled.filled, attempts, epoch, target, commandFacts._resolvedContext);
+      if (O.command.commandTriedInEpoch(action, cmd, filled.blocked ? '' : filled.filled, attempts, epoch, target, commandFacts._resolvedContext)) {
+        return true;
+      }
+      var dryState = _actionDryState(action, commandFacts._resolvedContext, epoch, cleanOnly);
+      if (dryState.retireAll) return true;
+      if (dryState.hasNegativeProbe && _isSubCmdTokenBlocked(filled)) {
+        var appList = result.facts.applicableCommands(action);
+        var anyRunnableTried = false;
+        for (var ai = 0; ai < appList.length; ai++) {
+          var entry = appList[ai];
+          var subFacts = result.facts.forAction(action, entry.cmd);
+          var subFilled = O.command.fillCommand(action, subFacts, { params:p, target:target }, entry.index);
+          if (_isSubCmdTokenBlocked(subFilled)) continue;
+          if (!O.command.commandTriedInEpoch(action, entry.cmd, subFilled.filled, attempts, epoch, target, subFacts._resolvedContext)) {
+            return false;
+          }
+          anyRunnableTried = true;
+        }
+        return anyRunnableTried;
+      }
+      return false;
     }
     result.facts.commandCompleted = function (action, cmd, index) {
       return _checkCompleted(action, cmd, index, false);

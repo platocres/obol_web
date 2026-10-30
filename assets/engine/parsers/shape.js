@@ -133,10 +133,13 @@
       C._parse_gpp_artifacts(text, ws, source, facts);
     }
 
-    // (5) Ligolo-ng tunnel establishment or session shape pasted without command
+    // (5) Ligolo-ng or Chisel tunnel establishment / session shape pasted without command
     if ((/(\[Tunnel\] Interface ligolo is UP|session connected|Agent joined:)/i.test(text) || /ligolo-proxy[^\r\n]{0,80}?listening/i.test(text)) && !hasKind(facts, 'tunnel.route')) {
       _add(facts, mkFact('tunnel.route', h, { via: 'ligolo', shape: true }, S, source));
       _add(facts, mkFact('pivot.active', h, { via: 'ligolo', shape: true }, S, source));
+    } else if ((/\bclient:\s+Connected\s*\(Latency|\btun:\s+proxy#R:/i.test(text)) && !hasKind(facts, 'tunnel.route')) {
+      _add(facts, mkFact('tunnel.route', h, { via: 'chisel', shape: true }, S, source));
+      _add(facts, mkFact('pivot.active', h, { via: 'chisel', shape: true }, S, source));
     }
 
     // (6) Raw SQLite database dump, table schema, or multi-row delimited user + digest dump shape
@@ -149,6 +152,11 @@
       if (!tok || tok.length < 16) return '';
       if (/^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{50,}$/.test(tok)) return 'bcrypt';
       if (/^\$(?:1|5|6|y|apr1|P|H|NT)\$[^\s|,;]{8,}$/.test(tok)) return 'modular';
+      if (/^\*[0-9A-Fa-f]{40}$/.test(tok) && !/^\*(?:0{40}|f{40})$/i.test(tok)) return 'mysql-sha1';
+      if (/^md5[0-9a-fA-F]{32}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok.slice(3))) return 'postgres-md5';
+      if (/^SCRAM-SHA-256\$\d+:[^\s|,;]+$/i.test(tok)) return 'postgres-scram-sha-256';
+      if (/^pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|,;]+$/i.test(tok)) return 'pbkdf2';
+      if (/^sha(?:256|512)\$[A-Za-z0-9./$+=]{20,}$/i.test(tok)) return 'sha-crypt-web';
       if (/^[0-9a-fA-F]{32}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-md5';
       if (/^[0-9a-fA-F]{40}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-sha1';
       if (/^[0-9a-fA-F]{64}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-sha256';
@@ -194,7 +202,8 @@
             }
           }
         }
-        var minDumpRows = hasSqliteSchema ? 1 : 2;
+        var hasSelfEvidencingHash = dumpRows.some(function (r) { return r.format && r.format.indexOf('raw-') !== 0; });
+        var minDumpRows = (hasSqliteSchema || hasSelfEvidencingHash) ? 1 : 2;
         if (dumpRows.length >= minDumpRows) {
           for (var dri = 0; dri < dumpRows.length; dri++) {
             var dr = dumpRows[dri];
@@ -203,7 +212,7 @@
             _add(facts, mkFact('hash.crackable', h, dhVal, S, source));
             _add(facts, mkFact('credential.candidate', h, { user: dr.user, hash: dr.hash, kind: 'delimited_dump', via: 'shape' }, S, source));
           }
-          if ((dCh === '|' || dCh === '\t') && !hasKind(facts, 'loot.material')) {
+          if ((dCh === '|' || dCh === '\t') && (hasSqliteSchema || dumpRows.length >= 2) && !hasKind(facts, 'loot.material')) {
             _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', count: dumpRows.length, via: 'shape' }, S, source));
           }
           break;
@@ -289,6 +298,88 @@
         }
         if (metaUsers.length) {
           _add(facts, mkFact('web.users', h, { users: metaUsers, count: metaUsers.length, tool: 'exiftool', via: 'shape' }, S, source));
+        }
+      }
+    }
+
+    // (6e) Command-less PEM / OpenSSH / PuTTY private key shape
+    if (/-----BEGIN (?:OPENSSH|RSA|DSA|EC|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-----|PuTTY-User-Key-File-\d/.test(text)) {
+      var isEncPem = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(text)
+        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(text);
+      if (!hasKind(facts, 'loot.ssh_key')) _add(facts, mkFact('loot.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
+      if (!hasKind(facts, 'credential.ssh_key')) _add(facts, mkFact('credential.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
+      if (!hasKind(facts, 'credential.certificate')) _add(facts, mkFact('credential.certificate', h, { kind: 'private_key', encrypted: isEncPem, via: 'shape' }, S, source));
+      if (isEncPem && !hasKind(facts, 'hash.crackable')) {
+        _add(facts, mkFact('hash.crackable', h, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'shape' }, S, source));
+        _add(facts, mkFact('hash.candidate', h, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'shape' }, S, source));
+      }
+    }
+
+    // (6f) Command-less 10-field BSD master.passwd and LinPEAS box-drawing section slices
+    if (!hasKind(facts, 'loot.shadow') && C._parse_shadow_file
+        && /^[a-z_][a-z0-9_.-]{0,31}:\$(?:1|2[abxy]|5|6|y)\$[^\s:]+:\d+:\d+:[^:\r\n]*:\d+:\d+:[^:\r\n]*:\/[^\s:]*:[^\r\n]*$/im.test(text)) {
+      C._parse_shadow_file(text, '', ws, source, facts);
+    }
+    if (/(?:\u2554\u2550+\u2563|\u2560\u2550+\u2563)\s*[A-Za-z]/.test(text)
+        && !(C._looks_like_winpeas && C._looks_like_winpeas(text))
+        && C._parse_privesc_output) {
+      C._parse_privesc_output('linux-enum', text, ws, '', source, facts);
+    }
+
+    // (6g) Colon-aligned `<principal> : <32-hex>` NTLM hash summary table shape
+    if (!isCrack && !hasKind(facts, 'hash.ntlm') && text.indexOf(':') >= 0) {
+      var colonTblLines = text.split(/\r?\n/);
+      var colonRowRe = /^[ \t]*([A-Za-z0-9_.$\\@-]{2,64})[ \t]*:[ \t]*([0-9a-fA-F]{32})[ \t]*$/;
+      var colonRows = [], colonSeen = Object.create(null), colonContentCount = 0;
+      for (var cli = 0; cli < colonTblLines.length && cli < 5000; cli++) {
+        var cRaw = colonTblLines[cli].trim();
+        if (!cRaw || /^[-=+*#|\s]+$/.test(cRaw)) continue;
+        colonContentCount++;
+        var cm = colonRowRe.exec(cRaw);
+        if (!cm) continue;
+        var cPrin = cm[1], cHex = cm[2].toLowerCase();
+        if (/^(?:0{32}|f{32}|d41d8cd98f00b204e9800998ecf8427e)$/.test(cHex)) continue;
+        if (/^[0-9a-fA-F]{16,}$/.test(cPrin)) continue;
+        if (/^(?:md5|md5sum|etag|hash|digest|checksum|uuid|guid|id|token|session|key|iv|salt|nonce|signature)$/i.test(cPrin)) continue;
+        if (/\.(?:exe|dll|zip|tar|gz|tgz|txt|pdf|doc|docx|xls|xlsx|png|jpg|jpeg|gif|iso|bin|elf|sh|py|php|js|jar|war|bak|sql|db)$/i.test(cPrin)) continue;
+        var cKey = cPrin.toLowerCase() + ':' + cHex;
+        if (!colonSeen[cKey]) {
+          colonSeen[cKey] = 1;
+          colonRows.push({ principal: cPrin, nthash: cHex });
+        }
+      }
+      if (colonRows.length >= 3 && colonContentCount > 0 && (colonRows.length / colonContentCount) >= 0.6) {
+        var tblDomScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+        var emittedNtds = false;
+        for (var cri = 0; cri < colonRows.length; cri++) {
+          var cr = colonRows[cri];
+          var cDom = '', cUser = cr.principal;
+          if (cUser.indexOf('\\') >= 0) {
+            var bsIdx = cUser.indexOf('\\');
+            cDom = cUser.slice(0, bsIdx);
+            cUser = cUser.slice(bsIdx + 1);
+          } else if (cUser.indexOf('@') > 0) {
+            var atIdx = cUser.indexOf('@');
+            cDom = cUser.slice(atIdx + 1);
+            cUser = cUser.slice(0, atIdx);
+          }
+          if (!cUser) continue;
+          var ntTblVal = { user: cUser, nthash: cr.nthash, hash: cr.nthash, hash_type: 'ntlm', secret_type: 'NT', via: 'shape-ntlm-table' };
+          if (cDom) ntTblVal.domain = cDom;
+          _add(facts, mkFact('hash.ntlm', h, ntTblVal, S, source));
+          _add(facts, mkFact('credential.candidate', h, { user: cUser, domain: cDom || undefined, nthash: cr.nthash, hash: cr.nthash, kind: 'ntlm_table', via: 'shape-ntlm-table' }, S, source));
+          if (cUser.toLowerCase() === 'krbtgt' && cr.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
+            _add(facts, mkFact('hash.krbtgt', tblDomScope, { user: 'krbtgt', nthash: cr.nthash, via: 'shape-ntlm-table' }, S, source));
+            if (!emittedNtds && !hasKind(facts, 'loot.ntds')) {
+              emittedNtds = true;
+              _add(facts, mkFact('loot.ntds', tblDomScope, { count: colonRows.length, via: 'shape-ntlm-table' }, S, source));
+            }
+          } else if (cUser.charAt(cUser.length - 1) !== '$'
+                     && !/^(?:guest|defaultaccount|wdagutilityaccount)$/i.test(cUser)
+                     && cr.nthash !== '31d6cfe0d16ae931b73c59d7e0c089c0') {
+            _add(facts, mkFact('credential.ntlm_hash', h, ntTblVal, S, source));
+            _add(facts, mkFact('credential.available', h, ntTblVal, S, source));
+          }
         }
       }
     }
@@ -426,7 +517,8 @@
     }
 
     // 4. Share Table Family
-    // Multi-line table containing at least one standard share alongside permission tokens (READ, WRITE, Disk)
+    // Multi-line table containing at least one standard share alongside permission tokens (READ, WRITE, Disk),
+    // or a bare command-less SMB share list containing >= 2 canonical share anchors.
     if (!hasKind(facts, 'smb.shares')) {
       var stdShareRe = /(?:^|\s)(?:IPC\$|ADMIN\$|C\$|SYSVOL|NETLOGON)(?=\s|$)/i;
       var permRe = /\b(READ|WRITE|Disk)\b/i;
@@ -441,6 +533,8 @@
         }
         if (hasRead && !hasKind(facts, 'smb.readable_share')) _add(facts, mkFact('smb.readable_share', h, { via: 'shape' }, S, source));
         if (hasWrite && !hasKind(facts, 'smb.writable_share')) _add(facts, mkFact('smb.writable_share', h, { via: 'shape' }, S, source));
+      } else if (C._parse_smb_shares && lines.length <= 32 && (text.match(/^[ \t]*(?:ADMIN\$|C\$|IPC\$|SYSVOL|NETLOGON|PRINT\$)[ \t]*$/gim) || []).length >= 2) {
+        C._parse_smb_shares(text, ws, source, facts);
       }
     }
 

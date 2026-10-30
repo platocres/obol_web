@@ -368,7 +368,7 @@
     apache2: 'apache2', openvpn: 'openvpn', capsh: 'capsh', setarch: 'setarch', time: 'time', timeout: 'timeout',
     watch: 'watch', expect: 'expect', ionice: 'ionice', nice: 'nice', nohup: 'nohup', stdbuf: 'stdbuf',
     taskset: 'taskset', chroot: 'chroot', nsenter: 'nsenter', unshare: 'unshare', doas: 'doas',
-    'ansible-playbook': 'ansible-playbook', logrotate: 'logrotate'
+    'ansible-playbook': 'ansible-playbook', logrotate: 'logrotate', borg: 'borg', restic: 'restic'
   };
 
   function _normalize_gtfobin(base) {
@@ -400,6 +400,8 @@
   var _LINUX_CUSTOM_DIR_RE = /^\/(?:opt|usr\/local|srv|var\/backups|home|root|var\/tmp|tmp|dev\/shm|var\/www)\//i;
   var _NON_EXEC_EXT_RE = /\.(?:conf|cfg|ini|json|xml|ya?ml|txt|log|md|rst|csv|pid|sock|lock|service|timer|target|mount|socket|path|slice|scope|gz|bz2|xz|zst|zip|tar|tgz|bak|old|orig|swp|pem|crt|cer|key|pub|db|sqlite3?|sql|html?|css|png|jpe?g|gif|svg|ico|pdf)$/i;
 
+  var _THIRD_PARTY_SUDO_BINS = { borg: 1, restic: 1, 'ansible-playbook': 1, composer: 1 };
+
   function _check_linux_custom_binary(rawPath) {
     var p = String(rawPath || '').trim().replace(/^['"]+|['",;)]+$/g, '');
     if (!p || p.charAt(0) !== '/' || p.slice(-1) === '/') return null;
@@ -410,8 +412,8 @@
     if (_NON_EXEC_EXT_RE.test(base)) return null;
     var lowBase = base.toLowerCase();
     if (_STOCK_SUID_BINS.has(lowBase)) return null;
-    if (_normalize_gtfobin(lowBase)) return null;
     var inCustomDir = _LINUX_CUSTOM_DIR_RE.test(p);
+    if (!inCustomDir && !_THIRD_PARTY_SUDO_BINS[lowBase] && _normalize_gtfobin(lowBase)) return null;
     if (!inCustomDir && _STOCK_LINUX_BINS_RE.test(lowBase)) return null;
     if (inCustomDir && /^(?:linpeas|pspy|les\.sh|linux-exploit-suggester|chisel|agent)/i.test(lowBase)) return null;
     if (!inCustomDir && /^\/(?:lib|lib64|usr\/lib|usr\/lib64|usr\/share)\//i.test(p)) return null;
@@ -580,7 +582,8 @@
 
     var suidPaths = {};
     var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s', '-perm -2000', '-perm -g=s', '-perm /6000', '-perm -6000'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bfind\s+\/.*-perm\b/i.test(text);
-    var bareSuidList = (text.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
+    var findCmdConstraintOk = !/\bfind\b/i.test(command || '') || (/(?:-perm\b|-[246]000\b|[+-][ug]?s\b)/i.test(command || '') && !/\s-type\s+d\b/i.test(command || ''));
+    var bareSuidList = findCmdConstraintOk && !/\bfind\s+[^\r\n]*\s-type\s+d\b/i.test(text) && (text.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
     if (suidFind || lowered.indexOf('suid') >= 0 || lowered.indexOf('rws') >= 0 || bareSuidList) {
       text.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
@@ -733,14 +736,31 @@
       var name = m.groups.name, state = m.groups.state.toLowerCase();
       if ((state === 'enabled' || state === 'disabled' || state === 'habilitada' || state === 'habilitado' || state === 'deshabilitada' || state === 'deshabilitado') && C._DANGEROUS_WIN_PRIVS.has(name.toLowerCase())) privileges.push(name);
     });
+    reAll(/^\s*Privilege\s*:\s*(?<name>Se[A-Za-z0-9]+Privilege)\b/gim, text).forEach(function (m) {
+      var name = m.groups.name;
+      if (C._DANGEROUS_WIN_PRIVS.has(name.toLowerCase())) privileges.push(name);
+    });
     if (privileges.length) {
       var uniqPrivs = C.uniqueSortedCI(privileges);
       _add_host_privesc_fact(facts, ws, source, 'privesc.windows_privilege', { privileges: uniqPrivs, state: 'Enabled' }, leadKinds);
       var lowPrivs = uniqPrivs.map(function (p) { return p.toLowerCase(); });
+      if (lowPrivs.indexOf('seimpersonateprivilege') >= 0 || lowPrivs.indexOf('seassignprimarytokenprivilege') >= 0) {
+        var impPriv = lowPrivs.indexOf('seimpersonateprivilege') >= 0 ? 'SeImpersonatePrivilege' : 'SeAssignPrimaryTokenPrivilege';
+        _add_host_privesc_fact(facts, ws, source, 'privesc.seimpersonate', { privilege: impPriv, state: 'Enabled' }, leadKinds);
+      }
       if (lowPrivs.indexOf('sebackupprivilege') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.sebackup', { privilege: 'SeBackupPrivilege', state: 'Enabled' }, leadKinds);
       if (lowPrivs.indexOf('serestoreprivilege') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.serestore', { privilege: 'SeRestorePrivilege', state: 'Enabled' }, leadKinds);
       if (lowPrivs.indexOf('semanagevolumeprivilege') >= 0) _add_host_privesc_fact(facts, ws, source, 'privesc.semanagevolume', { privilege: 'SeManageVolumePrivilege', state: 'Enabled' }, leadKinds);
     }
+
+    reAll(/^\s*(?:BUILTIN\\Administrators\b[^\r\n]*?\bS-1-5-32-544\b|BUILTIN\\Administrators\b|[A-Za-z0-9_.-]+\\Administrators\b[^\r\n]*?\bS-1-5-32-544\b|[^\r\n]*?\bS-1-5-32-544\b)\s+(?<attrs>[^\r\n]+)$/gim, text).forEach(function (gm) {
+      var attrs = gm.groups.attrs || '';
+      if (/\bGroup used for deny only\b/i.test(attrs)) {
+        if (leadKinds) leadKinds['uac-token-filter'] = true;
+      } else if (/\bEnabled group\b/i.test(attrs)) {
+        _add(facts, mkFact('access.admin', h, { group: 'BUILTIN\\Administrators', sid: 'S-1-5-32-544', method: 'whoami-groups' }, S, source));
+      }
+    });
 
     var privGroups = [];
     var winGroupRe = /(?:BUILTIN\\|(?<![A-Za-z0-9._-])[A-Za-z0-9._-]{1,64}\\|\b)(Backup Operators|DnsAdmins|Server Operators|Print Operators|Account Operators|Hyper-V Administrators|Exchange Windows Permissions|Organization Management)\b/gi;
@@ -796,6 +816,19 @@
       if (lastRwHighPriv || _line_has_only_highpriv_acl(line)) return;
       if (reSearch(C._WEAK_SVC_ACCESS_RE, line) || reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || (C._WEAK_SERVICE_PERM_RE && reSearch(C._WEAK_SERVICE_PERM_RE, line))) weakService.push(line.slice(0, 220));
     });
+    var powerUpAbuseBins = [];
+    if (/AbuseFunction\s*:/i.test(text)) {
+      String(text).split(/\r?\n\s*\r?\n/).forEach(function (stanza) {
+        var abM = /^\s*AbuseFunction\s*:\s*(Install-ServiceBinary|Write-ServiceBinary|Invoke-ServiceAbuse)\b([^\r\n]*)/im.exec(stanza);
+        if (!abM) return;
+        var fileM = /^\s*(?:ModifiableFile|UnquotedService|Path)\s*:\s*['"]?([A-Za-z]:\\[^\r\n'"]+?\.exe)\b/im.exec(stanza);
+        var abEv = (fileM ? (fileM[1] + ' -> ') : '') + abM[1] + (abM[2] || '').trim();
+        weakService.push(abEv.slice(0, 220));
+        if (fileM && fileM[1]) {
+          powerUpAbuseBins.push({ path: fileM[1].trim(), abuseFunction: abM[1] });
+        }
+      });
+    }
     if (weakService.length) _add_host_privesc_fact(facts, ws, source, 'privesc.weak_service_permission', { evidence: C.uniqueSortedCI(weakService).slice(0, 30) }, leadKinds);
 
     var stored = [];
@@ -838,6 +871,15 @@
       if (/\b(?:sc\s+qc|wmic\s+service|win32_service|autorun)/i.test((command || '') + '\n' + text) && /\.(?:exe|bat|cmd|ps1|vbs)\b/i.test(line)) {
         pushWinCustom(line, 'service');
       }
+    });
+    powerUpAbuseBins.forEach(function (item) {
+      var cleanP = item.path;
+      var k = cleanP.toLowerCase();
+      if (seenWinCustom[k]) return;
+      if (/^C:\\Windows\\(?:System32|SysWOW64|WinSxS)\\/i.test(cleanP)) return;
+      seenWinCustom[k] = 1;
+      var baseName = cleanP.split(/[\\/]/).pop() || cleanP;
+      winCustom.push({ custom_bin: cleanP, path: cleanP, binary: baseName, context: 'powerup-service', abuse_function: item.abuseFunction, os: 'windows' });
     });
     if (winCustom.length) {
       var topWin = winCustom[0];
@@ -904,6 +946,9 @@
       /\b(?:BINARY_PATH_NAME|Binary Path Name|PathName|Image Path|Launch String)\s*[:=]\s*["']?[A-Za-z]:\\/i.test(t) ||
       /^\s*[A-Za-z0-9_.-]{2,64}\s+(?:"[A-Za-z]:\\[^"\r\n]+\.(?:exe|bat|cmd|ps1|vbs)"|[A-Za-z]:\\[^\r\n]+?\.(?:exe|bat|cmd|ps1|vbs))\s+(?:Auto|Manual|Disabled|Running|Stopped)\b/im.test(t) ||
       /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t) ||
+      /^\s*(?:BUILTIN\\Administrators|[^\r\n]*\bS-1-5-32-544\b)\s+.*?\b(?:Enabled group|Group used for deny only)\b/im.test(t) ||
+      /^\s*Privilege\s*:\s*Se[A-Za-z0-9]+Privilege\b/im.test(t) ||
+      /\bAbuseFunction\s*:\s*(?:Install-ServiceBinary|Write-ServiceBinary|Invoke-ServiceAbuse)\b/i.test(t) ||
       /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+/i.test(t) ||
       /\.dll\b.*(?:NAME NOT FOUND|PATH NOT FOUND)/i.test(t) ||
       reSearch(C._WIN_PRIV_RE, t) ||
@@ -931,7 +976,12 @@
 
   function _looks_like_whoami_priv(text) {
     var t = text || '';
-    return !!(reSearch(C._WIN_PRIV_RE, t) || /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t));
+    return !!(
+      reSearch(C._WIN_PRIV_RE, t) ||
+      /^\s*Privilege\s*:\s*Se[A-Za-z0-9]+Privilege\b/im.test(t) ||
+      /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t) ||
+      /^\s*(?:BUILTIN\\Administrators|[^\r\n]*\bS-1-5-32-544\b)\s+.*?\b(?:Enabled group|Group used for deny only)\b/im.test(t)
+    );
   }
   C._looks_like_whoami_priv = _looks_like_whoami_priv;
 
@@ -1017,14 +1067,40 @@
         if (members.length) _add(facts, mkFact('config.review', h, { kind: 'local_admins', group: group, members: members }, S, source));
       }
     }
-    // 2) net user <name> /domain showing domain-group membership → ad.user_list (the named account)
-    var domainMembership = reSearch(_NET_DOMAIN_MEMBERSHIP_RE, text);
+    // 2) net user <name> /domain showing domain-group membership → ad.user_list + ad.group_list + privileged group leads
+    var domainMembership = reSearch(_NET_DOMAIN_MEMBERSHIP_RE, text)
+      || (/Global Group memberships/i.test(text) && (/\/domain\b/i.test(lc) || /processed at a domain controller/i.test(text)));
     var nm = reSearch(_NET_USER_NAME_RE, text);
-    if (nm && domainMembership) {
+    if (nm) {
       var user = C._clean_username(nm.groups.user);
-      if (C._valid_username(user, false)) {
+      var grpMap = {};
+      var grpSecM = /(?:Local Group Memberships|Global Group memberships)[\s\S]*?(?=The command completed|$)/i.exec(text);
+      if (grpSecM) {
+        reAll(/\*([A-Za-z0-9][A-Za-z0-9 _.-]*?)(?=\s{2,}|\s*\*|\r?\n|$)/g, grpSecM[0]).forEach(function (gm) {
+          var gName = gm[1].trim();
+          if (gName && !/^none$/i.test(gName)) grpMap[gName] = true;
+        });
+      }
+      var userGroups = C.uniqueSortedCI(Object.keys(grpMap));
+      var privGroups = userGroups.filter(function (g) {
+        return /^(?:Backup Operators|Account Operators|Server Operators|Print Operators|DnsAdmins|Domain Admins|Enterprise Admins|Schema Admins|Administrators|Remote Management Users|Exchange Windows Permissions)$/i.test(g);
+      });
+      if (domainMembership && C._valid_username(user, false)) {
         var domain = C._domain_from_facts(ws);
-        _add(facts, mkFact('ad.user_list', C._scope_for_domain(ws, domain), { users: [user], count: 1, method: 'net' }, S, source));
+        var domScope = C._scope_for_domain(ws, domain);
+        _add(facts, mkFact('ad.user_list', domScope, { users: [user], count: 1, method: 'net' }, S, source));
+        if (userGroups.length) {
+          _add(facts, mkFact('ad.group_list', domScope, { groups: userGroups, user: user, count: userGroups.length, method: 'net' }, S, source));
+        }
+        if (privGroups.length) {
+          _add(facts, mkFact('ad.acl_lead', domScope, { principal: user, user: user, group: privGroups[0], groups: privGroups, targets: privGroups, method: 'net-user-domain' }, S, source));
+        }
+      }
+      var hostPrivGroups = privGroups.filter(function (g) {
+        return /^(?:Backup Operators|Account Operators|Server Operators|Print Operators|DnsAdmins)$/i.test(g);
+      });
+      if (hostPrivGroups.length && C._valid_username(user, false)) {
+        _add(facts, mkFact('privesc.privileged_group', h, { user: user, group: hostPrivGroups[0], groups: hostPrivGroups, via: 'net-user' }, S, source));
       }
     }
     // 3) net group "<name>" /domain members listing → ad.user_list (domain group members)
@@ -1642,11 +1718,34 @@
   }
   C._parse_icacls_accesschk = _parse_icacls_accesschk;
 
-  var _SHADOW_LINE_RE = /^(?<u>[a-z_][\w.-]{0,31}):\$(?:1|2[aby]|5|6|y)\$[^\s:]+/im;
+  var _SHADOW_LINE_RE = /(?:^|["'`\s:])(?<u>[a-z_][a-z0-9_.-]{0,31}):(?<h>\$(?:1|2[abxy]|5|6|y)\$[^\s:"'`]+)(?::[^\r\n:"'`]*){4,}/im;
+  function _shadow_hash_format(h) {
+    if (/^\$6\$/.test(h)) return 'sha512crypt';
+    if (/^\$5\$/.test(h)) return 'sha256crypt';
+    if (/^\$2[abxy]\$/i.test(h)) return 'bcrypt';
+    if (/^\$y\$/.test(h)) return 'yescrypt';
+    if (/^\$1\$/.test(h)) return 'md5crypt';
+    return 'crypt';
+  }
   function _parse_shadow_file(text, command, ws, source, facts) {
-    var users = reAll(_SHADOW_LINE_RE, text || '').map(function (m) { return m.groups.u; });
-    if (!users.length) return;
-    _add(facts, mkFact('loot.shadow', 'host:' + ws.target, { users: C.uniqueSortedCI(users).slice(0, 30), count: users.length }, S, source));
+    var matches = reAll(_SHADOW_LINE_RE, text || '');
+    if (!matches.length) return;
+    var hScope = 'host:' + ws.target;
+    var users = [], entries = [], seen = {};
+    matches.forEach(function (m) {
+      var u = m.groups.u, hash = m.groups.h;
+      users.push(u);
+      var key = u.toLowerCase() + '|' + hash;
+      if (seen[key]) return;
+      seen[key] = true;
+      var fmt = _shadow_hash_format(hash);
+      entries.push({ user: u, hash: hash, format: fmt });
+      _add(facts, mkFact('hash.crackable', hScope, { user: u, hash: hash, format: fmt, via: 'shadow' }, S, source));
+      _add(facts, mkFact('hash.candidate', hScope, { user: u, hash: hash, format: fmt, via: 'shadow' }, S, source));
+    });
+    var uniqUsers = C.uniqueSortedCI(users);
+    _add(facts, mkFact('loot.shadow', hScope, { users: uniqUsers.slice(0, 30), hashes: entries.slice(0, 30), count: uniqUsers.length }, S, source));
+    _add(facts, mkFact('credential.candidate', hScope, { kind: 'shadow_hash', users: uniqUsers.slice(0, 30), count: entries.length, via: 'shadow' }, S, source));
   }
   C._parse_shadow_file = _parse_shadow_file;
 
@@ -1705,7 +1804,7 @@
   }
   C._parse_nsclient_ini = _parse_nsclient_ini;
 
-  var _LISTENER_OPEN_RE = /\bListening on\s+(?:\[?(?<host>[0-9a-fA-F.:*]+)\]?\s+(?:\([^)\r\n]*\)\s+)?)?(?:port\s+|:)?(?<port>\d{2,5})\b/i;
+  var _LISTENER_OPEN_RE = /\bListening on\s+(?:\[?(?<host>[0-9a-fA-F.:*]+|any)\]?\s+(?:\([^)\r\n]*\)\s+)?)?(?:port\s+|:)?(?<port>\d{2,5})\b/i;
   var _LISTENER_CONN_RE = /\b(?:connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from\s+\S+)/i;
 
   function _parse_listener_output(text, ws, command, source, facts) {
@@ -1715,7 +1814,8 @@
     if (m && m.groups && m.groups.port) {
       var p = parseInt(m.groups.port, 10);
       if (p && p >= 1 && p <= 65535) {
-        var lh = (m.groups.host || '0.0.0.0').replace(/^\[|\]$/g, '');
+        var rawLh = (m.groups.host || '0.0.0.0').replace(/^\[|\]$/g, '');
+        var lh = /^any$/i.test(rawLh) ? '0.0.0.0' : rawLh;
         _add(facts, mkFact('listener.open', hScope, { host: lh, port: p }, S, source));
       }
     }
@@ -1732,16 +1832,22 @@
         _parse_command_execution(afterConn, ws, command, source, facts);
       } else {
         var linIdM = C._LINUX_ID_RE ? reSearch(C._LINUX_ID_RE, afterConn) : null;
+        var promptlessWhoamiM = /(?:^|\r?\n)[ \t]*(?:[$#%][ \t]*)?whoami[ \t]*\r?\n[ \t]*(?<shellUser>[a-z_][a-z0-9_.-]{0,31})[ \t]*(?:\r?\n|$)/m.exec(afterConn);
+        var hasPtySpawn = /\bpty\.spawn\(\s*['"]\/bin\/(?:ba|z|da|k|a)?sh['"]\s*\)/i.test(afterConn);
         var isUnixShell = !!linIdM
+          || !!(promptlessWhoamiM && promptlessWhoamiM.groups.shellUser !== 'whoami')
+          || hasPtySpawn
           || /(?:^|\n)\s*(?:[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^$#\r\n]*[$#]|(?:ba|da|z|k|a)?sh-[0-9.]+[$#]|\$\s+\S|#\s+(?:id|whoami|uname|pwd|ls|cat)\b)/i.test(afterConn)
           || !!reSearch(C._UNAME_RE, afterConn);
         if (isUnixShell) {
           var fhVal = { service: 'reverse-shell' };
-          if (linIdM && linIdM.groups && linIdM.groups.user) fhVal.identity = linIdM.groups.user.trim();
+          var shellUser = (linIdM && linIdM.groups && linIdM.groups.user) ? linIdM.groups.user.trim()
+            : ((promptlessWhoamiM && promptlessWhoamiM.groups && promptlessWhoamiM.groups.shellUser !== 'whoami') ? promptlessWhoamiM.groups.shellUser : '');
+          if (shellUser) fhVal.identity = shellUser;
           _add(facts, mkFact('access.shell', hScope, { handler: 'listener', os: 'linux' }, S, source));
           _add(facts, mkFact('foothold.linux', hScope, fhVal, S, source));
           C._add_os_observation(facts, ws, source, 'linux', 'reverse shell callback established', 'high', 'listener', true);
-          if ((linIdM && linIdM.groups.uid === '0') || /(?:^|\n)\s*(?:root@[A-Za-z0-9_.-]+:[^#\r\n]*#|(?:ba|da)?sh-[0-9.]+#)/i.test(afterConn)) {
+          if ((linIdM && linIdM.groups.uid === '0') || shellUser === 'root' || /(?:^|\n)\s*(?:root@[A-Za-z0-9_.-]+:[^#\r\n]*#|(?:ba|da)?sh-[0-9.]+#)/i.test(afterConn)) {
             _add(facts, mkFact('access.admin', hScope, { service: 'reverse-shell', identity: 'root', uid: 0 }, S, source));
             _add(facts, mkFact('access.root', hScope, { method: 'reverse-shell' }, S, source));
           }
@@ -1977,5 +2083,174 @@
     _add_privesc_leads(facts, ws, source, leadKinds);
   }
   C._parse_binary_inspection = _parse_binary_inspection;
+
+  // ---- POSIX/BSD whoami & doas/sudo/su subshell escalation ----
+  var _POSIX_WHOAMI_NOISE_RE = /^(?:whoami|error|denied|failed|failure|unknown|none|null|invalid|unauthorized|not|command|usage|help)$/i;
+  function _parse_posix_whoami_escalation(text, ws, command, source, facts) {
+    if (!text) return;
+    var clean = String(text).replace(C._ANSI_RE, '');
+    var cmd = String(command || '');
+    var h = 'host:' + ws.target;
+
+    // 1. Bare POSIX `whoami` command returning a single lowercase POSIX username
+    if (/^\s*whoami\s*$/i.test(cmd)) {
+      var stripped = clean.replace(/^\s*(?:[$#%]\s*)?whoami\s*\r?\n/i, '').trim();
+      if (/^[a-z_][a-z0-9_.-]{0,31}$/.test(stripped) && !_POSIX_WHOAMI_NOISE_RE.test(stripped)) {
+        _add(facts, mkFact('foothold.linux', h, { identity: stripped, method: 'whoami' }, S, source));
+        _add(facts, mkFact('access.shell', h, { user: stripped, os: 'linux', via: 'whoami' }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', 'POSIX whoami: ' + stripped, 'medium', 'whoami', true);
+        if (stripped === 'root') {
+          _add(facts, mkFact('access.admin', h, { identity: 'root', method: 'whoami' }, S, source));
+          _add(facts, mkFact('access.root', h, { method: 'whoami' }, S, source));
+        }
+      }
+    }
+
+    // 2. doas / sudo / su subshell escalation yielding echoed `whoami -> root` or `uid=0(root)`
+    var hasEscalationVerb = /\b(?:doas|sudo|su)\b/i.test(cmd) || /(?:^|\r?\n)\s*(?:[$#%]\s*)?(?:doas|sudo|su)\b/i.test(clean);
+    var isSudoListOrFail = /may run the following commands|\bNOPASSWD\s*:|(?:Authentication|perm)\s+fail|Sorry,\s*try again|not in the sudoers|Operation not permitted/i.test(clean);
+    if (hasEscalationVerb && !isSudoListOrFail) {
+      var hasEchoedRoot = /(?:^|\r?\n)[ \t]*(?:[$#%>][ \t]*)?whoami[ \t]*\r?\n[ \t]*root[ \t]*(?:\r?\n|$)/i.test(clean);
+      var hasDirectRoot = /\bwhoami\b/i.test(cmd) && /^\s*root\s*$/im.test(clean);
+      var hasUidZero = /\buid=0\(root\)/i.test(clean);
+      if (hasEchoedRoot || hasDirectRoot || hasUidZero) {
+        var escTool = /\bdoas\b/i.test(cmd + '\n' + clean) ? 'doas' : (/\bsudo\b/i.test(cmd + '\n' + clean) ? 'sudo' : 'su');
+        _add(facts, mkFact('foothold.linux', h, { identity: 'root', method: escTool }, S, source));
+        _add(facts, mkFact('access.shell', h, { user: 'root', os: 'linux', via: escTool }, S, source));
+        _add(facts, mkFact('access.admin', h, { identity: 'root', method: escTool }, S, source));
+        _add(facts, mkFact('access.root', h, { method: escTool }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', escTool + ' root escalation', 'high', escTool, true);
+      }
+    }
+  }
+  C._parse_posix_whoami_escalation = _parse_posix_whoami_escalation;
+
+  // ---- Meterpreter & Metasploit session / getuid / getsystem / local_exploit_suggester ----
+  function _looks_like_meterpreter(text, command) {
+    var t = String(text || '');
+    var c = String(command || '');
+    return /\bServer username:\s*\S+/i.test(t)
+      || /\bgot system via technique\s+\d+/i.test(t)
+      || /\[\*\]\s*(?:Meterpreter|Command shell) session \d+ opened\b/i.test(t)
+      || /\[\+\]\s*\S+\s*-\s*exploit\/(?:windows|linux|multi|osx|freebsd)\/local\/[A-Za-z0-9_/-]+:\s*The target appears to be vulnerable/i.test(t)
+      || /^\s*meterpreter\s*>/im.test(t)
+      || /\b(?:getuid|getsystem|local_exploit_suggester)\b/i.test(c);
+  }
+  C._looks_like_meterpreter = _looks_like_meterpreter;
+
+  function _parse_meterpreter(text, ws, command, source, facts) {
+    if (!text) return;
+    var clean = String(text).replace(C._ANSI_RE, '');
+    var h = 'host:' + ws.target;
+    var ctx = String(command || '') + '\n' + clean;
+
+    var uidM = /\bServer username:\s*([^\r\n]+)/i.exec(clean);
+    if (uidM && uidM[1]) {
+      var srvUser = uidM[1].trim();
+      if (/^nt authority\\system$/i.test(srvUser)) {
+        _add(facts, mkFact('foothold.windows', h, { identity: 'nt authority\\system', method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.shell', h, { handler: 'meterpreter', os: 'windows', user: srvUser }, S, source));
+        _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'meterpreter' }, S, source));
+        C._add_os_observation(facts, ws, source, 'windows', 'Meterpreter getuid: ' + srvUser, 'high', 'meterpreter', true);
+      } else if (/^(?:(?:nt authority|nt service|iis apppool|window manager|font driver host)\\[A-Za-z0-9_.$ -]+|[A-Za-z0-9_.-]+\\[A-Za-z0-9_.$-]+)$/i.test(srvUser)) {
+        _add(facts, mkFact('foothold.windows', h, { identity: srvUser, method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.shell', h, { handler: 'meterpreter', os: 'windows', user: srvUser }, S, source));
+        C._add_os_observation(facts, ws, source, 'windows', 'Meterpreter getuid: ' + srvUser, 'high', 'meterpreter', true);
+        if (/(?:^|\\)administrator$/i.test(srvUser)) {
+          _add(facts, mkFact('access.admin', h, { identity: srvUser, method: 'meterpreter' }, S, source));
+        }
+      } else if (/^(?:root\b|.*\buid=0\b)/i.test(srvUser)) {
+        _add(facts, mkFact('foothold.linux', h, { identity: 'root', method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.shell', h, { handler: 'meterpreter', os: 'linux', user: 'root' }, S, source));
+        _add(facts, mkFact('access.admin', h, { identity: 'root', method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.root', h, { method: 'meterpreter' }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', 'Meterpreter getuid: ' + srvUser, 'high', 'meterpreter', true);
+      } else if (/^[a-z_][a-z0-9_.-]{0,31}(?:\s*\(uid=\d+\))?$/i.test(srvUser)) {
+        var pUser = srvUser.split(/\s+/)[0];
+        _add(facts, mkFact('foothold.linux', h, { identity: pUser, method: 'meterpreter' }, S, source));
+        _add(facts, mkFact('access.shell', h, { handler: 'meterpreter', os: 'linux', user: pUser }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', 'Meterpreter getuid: ' + pUser, 'high', 'meterpreter', true);
+      }
+    }
+
+    var sysM = /\bgot system via technique\s+(\d+)/i.exec(clean);
+    if (sysM) {
+      _add(facts, mkFact('foothold.windows', h, { identity: 'nt authority\\system', method: 'meterpreter-getsystem' }, S, source));
+      _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: 'meterpreter-getsystem' }, S, source));
+      _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'meterpreter-getsystem', technique: parseInt(sysM[1], 10) }, S, source));
+      C._add_os_observation(facts, ws, source, 'windows', sysM[0].trim(), 'high', 'meterpreter', true);
+    }
+
+    var sessM = /\[\*\]\s*(Meterpreter|Command shell) session (\d+) opened\b/i.exec(clean);
+    if (sessM) {
+      _add(facts, mkFact('access.shell', h, { handler: 'metasploit', session_type: sessM[1].toLowerCase(), session: parseInt(sessM[2], 10) }, S, source));
+      if (/\b(?:windows\/|win(?:32|64)|x64\/windows|powershell|smb\/psexec)/i.test(ctx) && !/\b(?:linux|unix|freebsd|osx)\//i.test(ctx)) {
+        _add(facts, mkFact('foothold.windows', h, { method: 'metasploit' }, S, source));
+        C._add_os_observation(facts, ws, source, 'windows', sessM[0].trim(), 'medium', 'metasploit', true);
+      } else if (/\b(?:linux\/|unix\/|cmd\/unix|freebsd\/|osx\/|php\/meterpreter)/i.test(ctx)) {
+        _add(facts, mkFact('foothold.linux', h, { method: 'metasploit' }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', sessM[0].trim(), 'medium', 'metasploit', true);
+      }
+    }
+
+    var lesMods = C.uniqueSortedCI(reAll(/\[\+\]\s*\S+\s*-\s*(?<mod>exploit\/(?:windows|linux|multi|osx|freebsd)\/local\/[A-Za-z0-9_/-]+):\s*The target appears to be vulnerable/gim, clean).map(function (m) {
+      return m.groups.mod;
+    }));
+    if (lesMods.length) {
+      _add(facts, mkFact('exploit.candidate', h, { tool: 'local_exploit_suggester', modules: lesMods, module: lesMods[0], count: lesMods.length }, S, source));
+      _add(facts, mkFact('privesc.leads', h, { kinds: ['exploit.candidate'], modules: lesMods, count: lesMods.length }, S, source));
+    }
+  }
+  C._parse_meterpreter = _parse_meterpreter;
+
+  // ---- Windows localgroup Administrators grant & SAM/SYSTEM/NTDS backup staging receipts ----
+  function _parse_windows_admin_staging(text, ws, command, source, facts) {
+    if (!text) return;
+    var clean = String(text).replace(C._ANSI_RE, '');
+    var combined = String(command || '') + '\n' + clean;
+    var h = 'host:' + ws.target;
+
+    // 1. net localgroup Administrators <principal> /add + The command completed successfully.
+    var lgAddM = /\bnet(?:\.exe)?\s+localgroup\s+['"]?Administrators['"]?\s+['"]?([^\s'"]+)['"]?\s+\/add\b/i.exec(combined);
+    if (lgAddM && !/\/domain\b/i.test(lgAddM[0]) && /The command completed successfully\./i.test(clean) && !/\b(?:System error\s+\d+|Access is denied)\b/i.test(clean)) {
+      var rawPrin = lgAddM[1].trim();
+      var cleanPrin = C._clean_username ? C._clean_username(rawPrin) : rawPrin;
+      var hasPotatoSeImp = /Found privilege:\s*SeImpersonatePrivilege\b/i.test(clean)
+        || (/\b(?:PrintSpoofer|GodPotato|SweetPotato|JuicyPotato|RoguePotato|EfsPotato)\b/i.test(combined) && /SeImpersonatePrivilege/i.test(combined));
+      var adminVal = {
+        user: cleanPrin,
+        principal: rawPrin,
+        method: hasPotatoSeImp ? 'seimpersonate' : 'net-localgroup',
+        authorizationProof: 'net-localgroup-administrators'
+      };
+      _add(facts, mkFact('access.admin', h, adminVal, S, source));
+      if (hasPotatoSeImp) {
+        _add(facts, mkFact('privesc.seimpersonate', h, { privilege: 'SeImpersonatePrivilege', state: 'Enabled', exploited: true }, S, source));
+        _add(facts, mkFact('privesc.windows_privilege', h, { privileges: ['SeImpersonatePrivilege'], state: 'Enabled' }, S, source));
+      }
+    }
+
+    // 2. reg save hklm\(sam|system|security) <path> + The operation completed successfully.
+    var regMatches = reAll(/\breg(?:\.exe)?\s+save\s+hklm\\(sam|system|security)\s+(?:"([^"]+)"|'([^']+)'|([^\s'"]+))/gim, combined);
+    if (regMatches.length && /The operation completed successfully\./i.test(clean)) {
+      var savedHives = C.uniqueSortedCI(regMatches.map(function (m) {
+        return (m[2] || m[3] || m[4] || (m[1] + '.save')).trim();
+      }).filter(Boolean));
+      if (savedHives.length) {
+        _add(facts, mkFact('loot.files', h, { files: savedHives, count: savedHives.length, tool: 'reg-save', via: 'reg-save-hive', sensitive: savedHives }, S, source));
+      }
+    }
+
+    // 3. robocopy /b ... ntds.dit backup-mode staging completion
+    if (/\brobocopy(?:\.exe)?\b/i.test(combined) && /(?:^|\s)\/b\b/i.test(combined) && /\bntds\.dit\b/i.test(combined)) {
+      var roboOk = (/\b100%\b|\bNew File\b[^\r\n]*\bntds\.dit\b|^\s*Files\s*:\s*\d+\s+[1-9]\d*\b/im.test(clean))
+        && !/\bERROR\s+\d+\s+\(0x[0-9a-fA-F]+\)/i.test(clean);
+      if (roboOk) {
+        _add(facts, mkFact('loot.files', h, { files: ['ntds.dit'], count: 1, tool: 'robocopy', via: 'backup-mode-copy', sensitive: ['ntds.dit'] }, S, source));
+      }
+    }
+  }
+  C._parse_windows_admin_staging = _parse_windows_admin_staging;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

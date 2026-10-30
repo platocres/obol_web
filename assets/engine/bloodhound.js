@@ -31,17 +31,29 @@
     '526': 'Key Admins', '527': 'Enterprise Key Admins'
   };
   var WELL_KNOWN_SID = {
-    'S-1-1-0': 'Everyone', 'S-1-5-7': 'Anonymous', 'S-1-5-9': 'Enterprise Domain Controllers',
-    'S-1-5-11': 'Authenticated Users', 'S-1-5-18': 'SYSTEM', 'S-1-5-32-544': 'Administrators',
-    'S-1-5-32-545': 'Users', 'S-1-5-32-548': 'Account Operators', 'S-1-5-32-549': 'Server Operators',
+    'S-1-0-0': 'Nobody', 'S-1-1-0': 'Everyone', 'S-1-3-0': 'Creator Owner', 'S-1-3-1': 'Creator Group',
+    'S-1-5-4': 'Interactive', 'S-1-5-7': 'Anonymous', 'S-1-5-9': 'Enterprise Domain Controllers',
+    'S-1-5-10': 'Principal Self', 'S-1-5-11': 'Authenticated Users',
+    'S-1-5-18': 'SYSTEM', 'S-1-5-19': 'LOCAL SERVICE', 'S-1-5-20': 'NETWORK SERVICE',
+    'S-1-5-32-544': 'Administrators', 'S-1-5-32-545': 'Users',
+    'S-1-5-32-548': 'Account Operators', 'S-1-5-32-549': 'Server Operators',
     'S-1-5-32-550': 'Print Operators', 'S-1-5-32-551': 'Backup Operators',
     'S-1-5-32-554': 'Pre-Windows 2000 Compatible Access', 'S-1-5-32-555': 'Remote Desktop Users'
   };
   // Broad principals whose control/local-admin over something is a FINDING (a low-privilege
   // population holding privilege). Shape-based: a well-known broad SID, or the domain RID for
   // Domain Users / Domain Computers / Domain Guests.
-  var BROAD_PRINCIPAL_SID = { 'S-1-1-0': 1, 'S-1-5-11': 1, 'S-1-5-32-545': 1, 'S-1-5-32-555': 1 };
+  var BROAD_PRINCIPAL_SID = { 'S-1-1-0': 1, 'S-1-5-4': 1, 'S-1-5-11': 1, 'S-1-5-32-545': 1, 'S-1-5-32-555': 1 };
   var BROAD_PRINCIPAL_RID = { '513': 1, '515': 1, '514': 1 };
+
+  // Strip optional leading "<DOMAIN>-" prefix that SharpHound v4/v5 attaches to domain-scoped
+  // well-known SIDs (e.g. "EXAMPLE.LOCAL-S-1-5-32-544" -> "S-1-5-32-544").
+  function canonicalWellKnownSid(rawSid) {
+    var s = String(rawSid == null ? '' : rawSid).trim();
+    if (!s) return '';
+    var m = /^(?:.+-(?=S-1-[0-5]-))?(S-1-(?:0-0|1-0|3-\d+|5-(?:4|7|9|10|11|18|19|20|32-\d+)))$/i.exec(s);
+    return m ? m[1].toUpperCase() : s;
+  }
 
   // ACE right-names and lateral/delegation edges that are actionable control/movement edges.
   // MemberOf is a passive traversal edge and is handled separately.
@@ -97,8 +109,10 @@
   function resolveSid(sid, names) {
     var s = String(sid == null ? '' : sid).trim();
     if (!s) return '';
+    if (names && names[s] && names[s] !== s) return String(names[s]).split('@')[0];
+    var cSid = canonicalWellKnownSid(s);
+    if (WELL_KNOWN_SID[cSid]) return WELL_KNOWN_SID[cSid];
     if (names && names[s]) return String(names[s]).split('@')[0];
-    if (WELL_KNOWN_SID[s]) return WELL_KNOWN_SID[s];
     if (s.indexOf('S-1-5-21-') === 0) {
       var rid = s.substring(s.lastIndexOf('-') + 1);
       if (WELL_KNOWN_RID[rid]) return WELL_KNOWN_RID[rid];
@@ -107,20 +121,34 @@
   }
 
   function isBroadPrincipal(sid) {
-    var s = String(sid == null ? '' : sid);
-    if (BROAD_PRINCIPAL_SID[s]) return true;
+    var s = String(sid == null ? '' : sid).trim();
+    var cSid = canonicalWellKnownSid(s);
+    if (BROAD_PRINCIPAL_SID[cSid]) return true;
     return s.indexOf('S-1-5-21-') === 0 && !!BROAD_PRINCIPAL_RID[s.substring(s.lastIndexOf('-') + 1)];
   }
 
   var BUILTIN_PRIV_RID_RE = /-(?:512|516|518|519|520|521|544)$/;
-  var BUILTIN_PRIV_SID_RE = /^S-1-5-(?:9|18|32-544|32-548)$/i;
-  var BUILTIN_PRIV_NAME_RE = /^(?:DOMAIN ADMINS|ENTERPRISE ADMINS|SCHEMA ADMINS|ADMINISTRATORS|ACCOUNT OPERATORS|GROUP POLICY CREATOR OWNERS|ENTERPRISE DOMAIN CONTROLLERS|DOMAIN CONTROLLERS|READ-ONLY DOMAIN CONTROLLERS|SYSTEM|NT AUTHORITY\\SYSTEM)$/i;
+  var BUILTIN_PRIV_SID_RE = /^S-1-5-(?:9|18|19|20|32-544|32-548)$/i;
+  var BUILTIN_PRIV_NAME_RE = /^(?:DOMAIN ADMINS|ENTERPRISE ADMINS|SCHEMA ADMINS|ADMINISTRATORS|ACCOUNT OPERATORS|GROUP POLICY CREATOR OWNERS|ENTERPRISE DOMAIN CONTROLLERS|DOMAIN CONTROLLERS|READ-ONLY DOMAIN CONTROLLERS|SYSTEM|LOCAL SERVICE|NETWORK SERVICE|NT AUTHORITY\\(?:SYSTEM|LOCAL SERVICE|NETWORK SERVICE))$/i;
 
   function isBuiltinPrivilegedSid(sid, name) {
     var s = String(sid == null ? '' : sid).trim();
-    if (s && (BUILTIN_PRIV_RID_RE.test(s) || BUILTIN_PRIV_SID_RE.test(s))) return true;
+    var cSid = canonicalWellKnownSid(s);
+    if (s && (BUILTIN_PRIV_RID_RE.test(s) || BUILTIN_PRIV_SID_RE.test(cSid))) return true;
     var n = String(name == null ? '' : name).trim().split('@')[0].trim();
     if (n && BUILTIN_PRIV_NAME_RE.test(n)) return true;
+    return false;
+  }
+
+  var OPERATOR_GOAL_RID_RE = /-(?:548|549|550|551)$/;
+  var OPERATOR_GOAL_NAME_RE = /^(?:ACCOUNT OPERATORS|SERVER OPERATORS|PRINT OPERATORS|BACKUP OPERATORS|DNSADMINS)$/i;
+
+  function isOperatorGoalGroup(sid, name) {
+    var s = String(sid == null ? '' : sid).trim();
+    var cSid = canonicalWellKnownSid(s);
+    if (/^S-1-5-32-(?:548|549|550|551)$/i.test(cSid) || OPERATOR_GOAL_RID_RE.test(s)) return true;
+    var base = String(name == null ? '' : name).trim().split('@')[0].trim();
+    if (base && OPERATOR_GOAL_NAME_RE.test(base)) return true;
     return false;
   }
 
@@ -181,7 +209,8 @@
       local_admins: [], sessions: [], rdp: [], psremote: [], dcom: [],
       gpo_links: {}, contains: {}, raw_links: [], raw_delegation: [], raw_rbcd: [], raw_sid_history: [],
       da_sid: '', ea_sid: '', domain_sid: '',
-      da_sids: [], ea_sids: [], admin_sids: [], domain_sids: []
+      da_sids: [], ea_sids: [], admin_sids: [], operator_goal_sids: [], domain_sids: [],
+      trust_domain_sids: {}
     };
   }
 
@@ -258,14 +287,18 @@
         }
       }
       var base = name.split('@')[0].toUpperCase();
+      var cGroupSid = canonicalWellKnownSid(sid);
+      if (!graph.operator_goal_sids) graph.operator_goal_sids = [];
       if (base === 'DOMAIN ADMINS' || /-512$/.test(sid)) {
         if (!graph.da_sid) graph.da_sid = sid;
         if (graph.da_sids.indexOf(sid) < 0) graph.da_sids.push(sid);
       } else if (base === 'ENTERPRISE ADMINS' || /-519$/.test(sid)) {
         if (!graph.ea_sid) graph.ea_sid = sid;
         if (graph.ea_sids.indexOf(sid) < 0) graph.ea_sids.push(sid);
-      } else if (base === 'ADMINISTRATORS' || base === 'SCHEMA ADMINS' || sid === 'S-1-5-32-544' || /-544$/.test(sid) || /-518$/.test(sid)) {
+      } else if (base === 'ADMINISTRATORS' || base === 'SCHEMA ADMINS' || cGroupSid === 'S-1-5-32-544' || /-544$/.test(sid) || /-518$/.test(sid)) {
         if (graph.admin_sids.indexOf(sid) < 0) graph.admin_sids.push(sid);
+      } else if (isOperatorGoalGroup(sid, base)) {
+        if (graph.operator_goal_sids.indexOf(sid) < 0) graph.operator_goal_sids.push(sid);
       }
     } else if (kind === 'domains') {
       if (!graph.domain_sid) graph.domain_sid = sid;
@@ -350,6 +383,13 @@
             var isTrans = tr.IsTransitive !== undefined ? !!tr.IsTransitive : (tr.istransitive !== undefined ? !!tr.istransitive : true);
             var sidFilt = tr.SidFilteringEnabled !== undefined ? !!tr.SidFilteringEnabled : (tr.sidfilteringenabled !== undefined ? !!tr.sidfilteringenabled : false);
             if (tDom) {
+              if (tSid && graph) {
+                if (!graph.names[tSid]) graph.names[tSid] = tDom;
+                if (!graph.types[tSid]) graph.types[tSid] = 'domains';
+                if (!graph.trust_domain_sids) graph.trust_domain_sids = {};
+                graph.trust_domain_sids[tSid] = tDom;
+                if (graph.domain_sids.indexOf(tSid) < 0) graph.domain_sids.push(tSid);
+              }
               summary.trusts.push({
                 source_domain: domName || summary.domain || 'DOMAIN',
                 target_domain: tDom,
@@ -367,12 +407,23 @@
       for (i = 0; i < data.length; i++) {
         var u = data[i];
         var usid = sidOf(u);
+        var cUsid = canonicalWellKnownSid(usid);
         var un = String(prop(u, 'name') || '');
         var usam = String(prop(u, 'samaccountname') || '');
         var enabled = prop(u, 'enabled');
+        var isSyntheticSysUser = /^S-1-5-(?:18|19|20)$/i.test(cUsid);
+        if (isSyntheticSysUser) continue;
+        var isNonDomainWellKnown = /^S-1-(?:[0-4]-|5-(?!21-))/i.test(cUsid);
         var isKrbtgt = /-502$/.test(usid) || /^krbtgt(?:@|$)/i.test(un) || /^krbtgt$/i.test(usam);
         var isCompAcct = /\$(?:@|$)/.test(un) || /\$$/.test(usam) || String(prop(u, 'objecttype', 'type') || '').toLowerCase() === 'computer';
         summary.users += 1;
+        if (enabled !== false && !isKrbtgt && !isCompAcct && !isNonDomainWellKnown) {
+          var uShort = usam.trim() || String(un || '').split('@')[0].trim();
+          if (uShort && !/\$$/.test(uShort) && !/^krbtgt$/i.test(uShort) && !/^S-1-\d+-/i.test(uShort)) {
+            if (!summary.user_list) summary.user_list = [];
+            summary.user_list.push(uShort);
+          }
+        }
         if (prop(u, 'hasspn', 'hasSPN') && enabled !== false && !isKrbtgt && !isCompAcct) summary.kerberoastable.push(un);
         if (prop(u, 'dontreqpreauth', 'dontReqPreAuth') && enabled !== false && !isKrbtgt && !isCompAcct) summary.asrep_roastable.push(un);
         if (prop(u, 'highvalue', 'highValue', 'system_tags')) summary.high_value.push(un);
@@ -408,6 +459,7 @@
         var csid = sidOf(comp);
         var cPgSid = String(prop(comp, 'primarygroupsid') || '');
         var cDn = String(prop(comp, 'distinguishedname') || '');
+        var cEnabled = prop(comp, 'enabled');
         var cIsDc = prop(comp, 'isdc', 'isDC') === true || /-(?:516|521)$/.test(cPgSid) || /\bOU=Domain Controllers\b/i.test(cDn);
         if (cIsDc && graph) {
           if (!graph.dc_computers) graph.dc_computers = {};
@@ -415,6 +467,11 @@
           if (cn) graph.dc_computers[cn.toUpperCase()] = 1;
         }
         summary.computers.push(cn);
+        var compFqdn = String(prop(comp, 'name', 'dnshostname') || '').trim();
+        if (cEnabled !== false && compFqdn && !/^S-1-\d+-/i.test(compFqdn)) {
+          if (!summary.enabled_computers) summary.enabled_computers = [];
+          summary.enabled_computers.push(compFqdn);
+        }
         if (prop(comp, 'unconstraineddelegation', 'unconstrainedDelegation') && !cIsDc) summary.unconstrained_delegation.push(cn);
         if (prop(comp, 'haslaps', 'hasLaps') === true) {
           if (!summary.laps_computers) summary.laps_computers = [];
@@ -528,6 +585,29 @@
     }
   }
 
+  function buildAdminSidSet(g) {
+    var set = {};
+    if (!g) return set;
+    if (g.da_sid) set[g.da_sid] = 1;
+    if (g.ea_sid) set[g.ea_sid] = 1;
+    (g.da_sids || []).forEach(function (s) { if (s) set[s] = 1; });
+    (g.ea_sids || []).forEach(function (s) { if (s) set[s] = 1; });
+    if (Array.isArray(g.admin_sids)) {
+      g.admin_sids.forEach(function (s) { if (s) set[s] = 1; });
+    } else if (isObj(g.admin_sids)) {
+      Object.keys(g.admin_sids).forEach(function (s) { if (g.admin_sids[s]) set[s] = 1; });
+    }
+    return set;
+  }
+
+  function isGmsaExcludedSource(g, adminSet, src, names) {
+    var dcMap = (g && g.dc_computers) || {};
+    if (dcMap[src] || (names && names[src] && dcMap[String(names[src]).toUpperCase()])) return true;
+    if (adminSet && adminSet[src]) return true;
+    if (BUILTIN_PRIV_SID_RE.test(canonicalWellKnownSid(src)) || isBuiltinPrivilegedSid(src, names && names[src])) return true;
+    return false;
+  }
+
   // Census derivation (from the transient graph)
   function deriveCensus(summary) {
     var g = summary._graph || {};
@@ -544,7 +624,24 @@
     if (!g.da_sids) g.da_sids = g.da_sid ? [g.da_sid] : [];
     if (!g.ea_sids) g.ea_sids = g.ea_sid ? [g.ea_sid] : [];
     if (!g.admin_sids) g.admin_sids = [];
+    if (!g.operator_goal_sids) g.operator_goal_sids = [];
     if (!g.domain_sids) g.domain_sids = g.domain_sid ? [g.domain_sid] : [];
+
+    function ensureKnownGroupSid(rawSid) {
+      if (!rawSid) return;
+      var cSid = canonicalWellKnownSid(rawSid);
+      if (cSid === 'S-1-5-32-544') {
+        if (!names[rawSid]) names[rawSid] = WELL_KNOWN_SID[cSid];
+        if (!types[rawSid]) types[rawSid] = 'groups';
+        if (g.admin_sids.indexOf(rawSid) < 0) g.admin_sids.push(rawSid);
+      } else if (/^S-1-5-32-(?:548|549|550|551)$/i.test(cSid)) {
+        if (!names[rawSid]) names[rawSid] = WELL_KNOWN_SID[cSid];
+        if (!types[rawSid]) types[rawSid] = 'groups';
+        if (g.operator_goal_sids.indexOf(rawSid) < 0) g.operator_goal_sids.push(rawSid);
+      }
+    }
+    (g.members || []).forEach(function (e) { ensureKnownGroupSid(e[0]); ensureKnownGroupSid(e[1]); });
+    (g.control || []).forEach(function (e) { ensureKnownGroupSid(e[0]); ensureKnownGroupSid(e[2]); });
 
     // 1. Infer domain names & domain SIDs when domains.json was omitted or incomplete
     Object.keys(names).forEach(function (sid) {
@@ -656,8 +753,9 @@
     if (!g.dc_computers) g.dc_computers = {};
     (g.members || []).forEach(function (e) {
       var mSid = e[0], grpSid = e[1];
+      var cGrpSid = canonicalWellKnownSid(grpSid);
       var grpBase = String(names[grpSid] || '').split('@')[0].trim().toUpperCase();
-      if (/-(?:516|521)$/.test(grpSid) || /^S-1-5-9$/i.test(grpSid)
+      if (/-(?:516|521)$/.test(grpSid) || /^S-1-5-9$/i.test(cGrpSid)
           || grpBase === 'DOMAIN CONTROLLERS' || grpBase === 'READ-ONLY DOMAIN CONTROLLERS' || grpBase === 'ENTERPRISE DOMAIN CONTROLLERS') {
         g.dc_computers[mSid] = 1;
         if (names[mSid]) g.dc_computers[String(names[mSid]).toUpperCase()] = 1;
@@ -728,17 +826,19 @@
     var gmsaList = (summary.gmsa_accounts || []).slice();
     var lapsList = (summary.laps_computers || []).slice();
     var nonPrivAclEdges = [];
+    var adminSidSet = buildAdminSidSet(g);
     (g.control || []).forEach(function (e) {
       var src = e[0], right = e[1], dst = e[2];
       var srcBuiltin = isBuiltinPrivilegedSid(src, names[src]);
-      if (ABUSABLE_ACE[right] && !srcBuiltin) nonPrivAclEdges.push(e);
+      var gmsaExcl = right === 'ReadGMSAPassword' && isGmsaExcludedSource(g, adminSidSet, src, names);
+      if (ABUSABLE_ACE[right] && !srcBuiltin && !gmsaExcl) nonPrivAclEdges.push(e);
       if ((right === 'AllowedToAct' || right === 'AddAllowedToAct') && !isBroadPrincipal(src) && !srcBuiltin) {
         var rLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names) + ' (' + right + ')';
         if (rbcdList.indexOf(rLine) < 0) rbcdList.push(rLine);
       } else if (right === 'HasSIDHistory') {
         var sLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names);
         if (sidHistList.indexOf(sLine) < 0) sidHistList.push(sLine);
-      } else if (right === 'ReadGMSAPassword' && !isBroadPrincipal(src) && !srcBuiltin) {
+      } else if (right === 'ReadGMSAPassword' && !isBroadPrincipal(src) && !srcBuiltin && !gmsaExcl) {
         var gLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names);
         if (gmsaList.indexOf(gLine) < 0) gmsaList.push(gLine);
       } else if ((right === 'ReadLAPSPassword' || right === 'SyncLAPSPassword') && !isBroadPrincipal(src) && !srcBuiltin) {
@@ -747,6 +847,7 @@
       }
     });
     g.acl_edges = nonPrivAclEdges;
+    summary.acl_edges = nonPrivAclEdges;
     summary.rbcd_targets = rbcdList;
     summary.sid_history = sidHistList;
     summary.gmsa_accounts = gmsaList;
@@ -911,6 +1012,7 @@
   function buildDeduplicatedGraph(graph, allowedPrivSids) {
     var names = graph.names || {};
     var dcComputers = graph.dc_computers || {};
+    var adminSidSet = buildAdminSidSet(graph);
     var domSet = {};
     if (graph.domain_sid) domSet[graph.domain_sid] = 1;
     (graph.domain_sids || []).forEach(function (ds) { if (ds) domSet[ds] = 1; });
@@ -924,6 +1026,9 @@
     });
     function validControl(src, right, dst) {
       if (!ABUSABLE_ACE[right]) return false;
+      if (right === 'ReadGMSAPassword' && isGmsaExcludedSource(graph, adminSidSet, src, names)) {
+        return false;
+      }
       if ((isBuiltinPrivilegedSid(src, names[src]) || dcComputers[src]) && !(allowedPrivSids && allowedPrivSids[src])) {
         return false;
       }
@@ -968,24 +1073,41 @@
       var item = adjMap[k];
       (adj[item.src] = adj[item.src] || []).push(item);
     });
-    var goals = {};
-    if (graph.da_sid) goals[graph.da_sid] = 1;
-    if (graph.ea_sid) goals[graph.ea_sid] = 1;
-    if (graph.domain_sid) goals[graph.domain_sid] = 1;
-    (graph.da_sids || []).forEach(function (s) { if (s) goals[s] = 1; });
-    (graph.ea_sids || []).forEach(function (s) { if (s) goals[s] = 1; });
-    (graph.admin_sids || []).forEach(function (s) { if (s) goals[s] = 1; });
-    (graph.domain_sids || []).forEach(function (s) { if (s) goals[s] = 1; });
-
-    var dist = {}, rq = [];
-    Object.keys(goals).forEach(function (g) { dist[g] = 0; rq.push(g); });
-    for (var qi = 0; qi < rq.length; qi++) {
-      var node = rq[qi], d = dist[node];
-      (radj[node] || []).forEach(function (src) {
-        if (dist[src] === undefined) { dist[src] = d + 1; rq.push(src); }
-      });
+    var tier0Goals = {};
+    if (graph.da_sid) tier0Goals[graph.da_sid] = 1;
+    if (graph.ea_sid) tier0Goals[graph.ea_sid] = 1;
+    if (graph.domain_sid) tier0Goals[graph.domain_sid] = 1;
+    (graph.da_sids || []).forEach(function (s) { if (s) tier0Goals[s] = 1; });
+    (graph.ea_sids || []).forEach(function (s) { if (s) tier0Goals[s] = 1; });
+    if (Array.isArray(graph.admin_sids)) {
+      graph.admin_sids.forEach(function (s) { if (s) tier0Goals[s] = 1; });
+    } else if (isObj(graph.admin_sids)) {
+      Object.keys(graph.admin_sids).forEach(function (s) { if (graph.admin_sids[s]) tier0Goals[s] = 1; });
     }
-    return { adj: adj, radj: radj, hasEdge: hasEdge, goals: goals, dist: dist };
+    (graph.domain_sids || []).forEach(function (s) { if (s) tier0Goals[s] = 1; });
+
+    var operatorGoals = {};
+    (graph.operator_goal_sids || []).forEach(function (s) {
+      if (s && !tier0Goals[s]) operatorGoals[s] = 1;
+    });
+
+    var goals = Object.assign({}, tier0Goals, operatorGoals);
+
+    function reverseBfsDist(goalMap) {
+      var dMap = {}, rq = [];
+      Object.keys(goalMap).forEach(function (g) { dMap[g] = 0; rq.push(g); });
+      for (var qi = 0; qi < rq.length; qi++) {
+        var node = rq[qi], d = dMap[node];
+        (radj[node] || []).forEach(function (src) {
+          if (dMap[src] === undefined) { dMap[src] = d + 1; rq.push(src); }
+        });
+      }
+      return dMap;
+    }
+
+    var dist = reverseBfsDist(goals);
+    var tier0Dist = reverseBfsDist(tier0Goals);
+    return { adj: adj, radj: radj, hasEdge: hasEdge, goals: goals, tier0Goals: tier0Goals, operatorGoals: operatorGoals, dist: dist, tier0Dist: tier0Dist };
   }
 
   function ownedPaths(summary, ownedPrincipals, opts) {
@@ -1001,8 +1123,9 @@
     });
     var allowedPriv = memberGroupClosure(graph, nonPrivOwned);
     var dg = buildDeduplicatedGraph(graph, allowedPriv);
-    var goals = dg.goals, adj = dg.adj, hasEdge = dg.hasEdge, distToGoal = dg.dist;
-    if (!owned.length || !Object.keys(goals).length) return { paths: [], first: null };
+    var goals = dg.goals, tier0Goals = dg.tier0Goals || goals, operatorGoals = dg.operatorGoals || {};
+    var adj = dg.adj, hasEdge = dg.hasEdge, distToGoal = dg.dist, tier0Dist = dg.tier0Dist || distToGoal;
+    if (!owned.length || !Object.keys(goals).length) return { paths: [], first: null, owned_sids: owned.slice() };
 
     var found = [];
     var types = graph.types || {};
@@ -1012,20 +1135,24 @@
     owned.forEach(function (sid) {
       var startDist = distToGoal[sid];
       var v0 = {}; v0[sid] = 1;
-      var q = [{ node: sid, nodes: [sid], hops: [], visited: v0 }];
+      var q = [{ node: sid, nodes: [sid], hops: [], visited: v0, afterOperatorGoal: !!operatorGoals[sid] }];
       var pFound = [];
       for (var qi = 0; qi < q.length && pFound.length < maxPaths && spent < budget; qi++) {
         var cur = q[qi]; spent++;
         if (cur.hops.length >= maxDepth) continue;
         var out = adj[cur.node] || [];
-        var curDist = distToGoal[cur.node];
+        var activeGoals = cur.afterOperatorGoal ? tier0Goals : goals;
+        var activeDist = cur.afterOperatorGoal ? tier0Dist : distToGoal;
+        var curDist = activeDist[cur.node];
+        var effStartDist = cur.afterOperatorGoal ? tier0Dist[sid] : startDist;
         for (var i = 0; i < out.length; i++) {
           var item = out[i], edge = item.edge, dst = item.dst;
           if (cur.visited[dst]) continue;
-          if (distToGoal[dst] === undefined) continue;
-          if (!goals[dst]) {
-            if (cur.hops.length > 0 && curDist === 1) continue;
-            if (startDist === 1 && cur.hops.length > 0 && distToGoal[dst] >= curDist) continue;
+          if (activeDist[dst] === undefined) continue;
+          if (!activeGoals[dst]) {
+            var advancesTier0 = tier0Dist[dst] !== undefined && tier0Dist[cur.node] !== undefined && tier0Dist[dst] < tier0Dist[cur.node];
+            if (cur.hops.length > 0 && curDist === 1 && !advancesTier0) continue;
+            if (effStartDist === 1 && cur.hops.length > 0 && activeDist[dst] >= curDist && !advancesTier0) continue;
           }
           var chord = false;
           for (var ai = 0; ai < cur.nodes.length - 1; ai++) {
@@ -1042,19 +1169,30 @@
           };
           if (item.alts && item.alts.length > 1) hop.alt_edges = item.alts.slice();
           var nextHops = cur.hops.concat([hop]);
-          if (goals[dst]) {
+          if (tier0Goals[dst]) {
             pFound.push(nextHops);
             if (pFound.length >= maxPaths) break;
             continue;
           }
+          if (!cur.afterOperatorGoal && operatorGoals[dst]) {
+            if (firstAbusable(nextHops) !== null || tier0Dist[dst] === undefined) {
+              pFound.push(nextHops);
+              if (pFound.length >= maxPaths) break;
+            }
+            if (tier0Dist[dst] !== undefined) {
+              var nvOp = Object.assign({}, cur.visited); nvOp[dst] = 1;
+              q.push({ node: dst, nodes: cur.nodes.concat([dst]), hops: nextHops, visited: nvOp, afterOperatorGoal: true });
+            }
+            continue;
+          }
           var nv = Object.assign({}, cur.visited); nv[dst] = 1;
-          q.push({ node: dst, nodes: cur.nodes.concat([dst]), hops: nextHops, visited: nv });
+          q.push({ node: dst, nodes: cur.nodes.concat([dst]), hops: nextHops, visited: nv, afterOperatorGoal: cur.afterOperatorGoal });
         }
       }
       pFound.forEach(function (p) { found.push(p); });
     });
 
-    if (!found.length) return { paths: [], first: null };
+    if (!found.length) return { paths: [], first: null, owned_sids: owned.slice() };
     found.sort(function (a, b) { return a.length - b.length; });
     if (found.length > maxPaths) found = found.slice(0, maxPaths);
     var firstAbuse = null;
@@ -1062,7 +1200,7 @@
       firstAbuse = firstAbusable(found[fi]);
       if (firstAbuse) break;
     }
-    return { paths: found, first: firstAbuse };
+    return { paths: found, first: firstAbuse, owned_sids: owned.slice() };
   }
 
   function typeMatchesFilter(nodeType, allowedTypes) {
@@ -1236,6 +1374,7 @@
     var out = [], seen = {};
     Object.keys(names).forEach(function (s) {
       var t = types[s] || '';
+      if (t === 'users' && /^S-1-5-(?:18|19|20)$/i.test(canonicalWellKnownSid(s))) return;
       if (!typeMatchesFilter(t, opts.types)) return;
       var nm = names[s];
       var baseShort = String(nm).split('@')[0];
@@ -1775,7 +1914,9 @@
     var F = OBOL.facts;
     if (!F) throw new Error('OBOL.facts (facts.js) must be loaded before bloodhound.js');
     summary = summary || {};
+    var ownedInputNames = [];
     if (Array.isArray(paths) && paths.length && typeof paths[0] === 'string') {
+      ownedInputNames = paths.slice();
       paths = ownedPaths(summary, paths);
     }
     scope = scope || (summary.domain ? 'domain:' + summary.domain : 'domain:unknown');
@@ -1797,6 +1938,12 @@
     if (summary._graph && summary._graph.domain_sid) {
       mk('ad.domain_sid', { sid: summary._graph.domain_sid, domain: summary.domain || '' });
     }
+    if (Array.isArray(summary.user_list) && summary.user_list.length) {
+      mk('ad.user_list', { users: summary.user_list.slice(), count: summary.user_list.length, method: 'bloodhound' });
+    }
+    if (Array.isArray(summary.enabled_computers) && summary.enabled_computers.length) {
+      mk('ad.computer_list', { computers: summary.enabled_computers.slice(), count: summary.enabled_computers.length, method: 'bloodhound' });
+    }
 
     [['ad.kerberoastable', 'kerberoastable'], ['ad.asrep_roastable', 'asrep_roastable'],
      ['ad.dcsync_principals', 'dcsync_principals'], ['ad.unconstrained_delegation', 'unconstrained_delegation'],
@@ -1808,6 +1955,21 @@
 
     if (summary.trusts && summary.trusts.length) {
       mk('ad.trusts', { trusts: summary.trusts.slice(), count: summary.trusts.length });
+      var seenTrustSids = {};
+      var primaryDomUpper = String(summary.domain || '').toUpperCase();
+      if (summary._graph && summary._graph.domain_sid && primaryDomUpper) {
+        seenTrustSids[primaryDomUpper + '|' + summary._graph.domain_sid] = 1;
+      }
+      summary.trusts.forEach(function (t) {
+        if (!t || !t.target_domain || !t.target_sid) return;
+        var td = String(t.target_domain).trim();
+        var ts = String(t.target_sid).trim();
+        if (!td || !ts) return;
+        var tk = td.toUpperCase() + '|' + ts;
+        if (seenTrustSids[tk]) return;
+        seenTrustSids[tk] = 1;
+        mk('ad.domain_sid', { domain: td, sid: ts, via: 'bloodhound-trust' }, 'domain:' + td.toLowerCase());
+      });
     }
     if (summary.constrained_delegation && summary.constrained_delegation.length) {
       mk('ad.delegation', { tool: 'bloodhound', type: 'constrained', targets: summary.constrained_delegation.slice(), count: summary.constrained_delegation.length });
@@ -1853,18 +2015,26 @@
       mk('adcs.vulnerable', { tool: 'bloodhound', templates: summary.esc_templates.slice() });
     }
 
+    var gRef = summary._graph || null;
     var chains = paths || [];
     var first = null;
-    if (chains && !Array.isArray(chains)) { first = chains.first || null; chains = chains.paths || []; }
+    var pathOwnedSids = [];
+    if (chains && !Array.isArray(chains)) {
+      first = chains.first || null;
+      if (Array.isArray(chains.owned_sids)) pathOwnedSids = chains.owned_sids.slice();
+      chains = chains.paths || [];
+    }
     var validChains = (Array.isArray(chains) ? chains : []).filter(function (c) {
       return Array.isArray(c) && c.length > 0 && isObj(c[0]) && typeof c[0].edge === 'string';
     });
+    var emittedAclLeadKeys = {};
+    var emittedAclLeadCount = 0;
     if (validChains.length) {
-      var gRef = summary._graph || null;
-      var daShortMap = {}, eaShortMap = {}, eaSids = {}, daSidsByDom = {};
+      var daShortMap = {}, eaShortMap = {}, eaSids = {}, daSidsByDom = {}, opGoalSet = {};
       (summary.domain_admins || []).forEach(function (d) { daShortMap[label(d).toUpperCase()] = 1; });
       (summary.enterprise_admins || []).forEach(function (e) { eaShortMap[label(e).toUpperCase()] = 1; });
       if (gRef) {
+        (gRef.operator_goal_sids || []).forEach(function (os) { if (os) opGoalSet[os] = 1; });
         var revMem = {};
         (gRef.members || []).forEach(function (e) { (revMem[e[1]] = revMem[e[1]] || []).push(e[0]); });
         (gRef.ea_sids || []).forEach(function (es) {
@@ -1891,8 +2061,8 @@
         });
       }
       var actionable = validChains.filter(function (c) {
-        if (!firstAbusable(c)) return false;
         var h0 = c[0], hEnd = c[c.length - 1];
+        if (!firstAbusable(c) && !(hEnd && opGoalSet[hEnd.to_sid])) return false;
         if (isBuiltinPrivilegedSid(h0.from_sid, h0.from)) return false;
         if (gRef && gRef.dc_computers && (gRef.dc_computers[h0.from_sid] || gRef.dc_computers[String(h0.from || '').toUpperCase()])) {
           return false;
@@ -1918,7 +2088,13 @@
       });
       if (actionable.length) {
         var shortest = actionable[0];
-        first = firstAbusable(shortest) || first;
+        first = firstAbusable(shortest);
+        if (!first) {
+          for (var ai = 1; ai < actionable.length; ai++) {
+            first = firstAbusable(actionable[ai]);
+            if (first) break;
+          }
+        }
         var goal = (shortest && shortest.length && shortest[shortest.length - 1]) ? shortest[shortest.length - 1].to : '';
         var value = {
           tool: 'bloodhound', evidence: 'reachability',
@@ -1934,7 +2110,20 @@
         }
         var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
         var tgtShort = String(tgt || '').split('@')[0].trim();
-        mk('ad.acl_lead', { tool: 'bloodhound', target: tgtShort || tgt, targets: tgtShort ? [tgtShort] : [], edge: first ? first.edge : '', first_action: first });
+        if (first) {
+          var pKey = String(first.from || '').toUpperCase() + '|' + first.edge + '|' + String(tgtShort || tgt).toUpperCase();
+          emittedAclLeadKeys[pKey] = 1;
+          emittedAclLeadCount += 1;
+          mk('ad.acl_lead', {
+            tool: 'bloodhound',
+            principal: first.from || '',
+            right: first.edge,
+            target: tgtShort || tgt,
+            targets: tgtShort ? [tgtShort] : [],
+            edge: first.edge,
+            first_action: first
+          });
+        }
         if ((first && first.edge === 'ReadGMSAPassword') || shortestHops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
           mk('ad.gmsa', { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt });
         }
@@ -1953,13 +2142,88 @@
         }
       }
     }
+
+    var rawAclEdges = (gRef && Array.isArray(gRef.acl_edges)) ? gRef.acl_edges : (Array.isArray(summary.acl_edges) ? summary.acl_edges : []);
+    if (rawAclEdges.length && emittedAclLeadCount < 20) {
+      var aclLeadRights = {
+        GenericAll: 1, GenericWrite: 1, WriteDacl: 1, WriteOwner: 1,
+        ForceChangePassword: 1, AllExtendedRights: 1, AddMember: 1,
+        AddKeyCredentialLink: 1, AddSelf: 1
+      };
+      var gNames = (gRef && gRef.names) || {};
+      var gTypes = (gRef && gRef.types) || {};
+      var gDcMap = (gRef && gRef.dc_computers) || {};
+      var gAdminSet = buildAdminSidSet(gRef);
+      var directOwnedSids = [];
+      var directOwnedMap = {};
+      if (gRef && ownedInputNames.length) {
+        resolveOwnedSids(gRef, ownedInputNames).forEach(function (s) {
+          if (s && !directOwnedMap[s]) { directOwnedMap[s] = 1; directOwnedSids.push(s); }
+        });
+      }
+      pathOwnedSids.forEach(function (s) {
+        if (s && !directOwnedMap[s]) { directOwnedMap[s] = 1; directOwnedSids.push(s); }
+      });
+      validChains.forEach(function (c) {
+        var s0 = c[0] && c[0].from_sid;
+        if (s0 && !directOwnedMap[s0]) { directOwnedMap[s0] = 1; directOwnedSids.push(s0); }
+      });
+      var ownedGroupMap = gRef && directOwnedSids.length ? memberGroupClosure(gRef, directOwnedSids) : {};
+      var candidates = [];
+      rawAclEdges.forEach(function (e) {
+        if (!Array.isArray(e) || e.length < 3) return;
+        var src = e[0], right = e[1], dst = e[2];
+        if (!src || !dst || src === dst || !aclLeadRights[right]) return;
+        var dstType = gTypes[dst] || '';
+        if (dstType === 'ous' || dstType === 'containers') return;
+        if (/-(?:500|502)$/i.test(src)) return;
+        if (gDcMap[src] || (gNames[src] && gDcMap[String(gNames[src]).toUpperCase()])) return;
+        if (gAdminSet[src] || isBuiltinPrivilegedSid(src, gNames[src])) return;
+        var cSrc = canonicalWellKnownSid(src);
+        if (/^S-1-(?:0-0|3-\d+|5-10|5-18|5-19|5-20|5-32-554)$/i.test(cSrc)) return;
+        var srcFull = resolveSid(src, gNames);
+        var dstFull = resolveSid(dst, gNames);
+        var srcShort = String(srcFull || '').split('@')[0].trim();
+        var dstShort = String(dstFull || '').split('@')[0].trim();
+        if (!srcShort || !dstShort) return;
+        if (/^S-1-\d+-/i.test(srcShort) || /^S-1-\d+-/i.test(dstShort)) return;
+        var prio = directOwnedMap[src] ? 0 : (ownedGroupMap[src] ? 1 : 2);
+        candidates.push({
+          prio: prio,
+          rank: edgeRank(right),
+          srcShort: srcShort,
+          dstShort: dstShort,
+          right: right
+        });
+      });
+      candidates.sort(function (a, b) {
+        return (a.prio - b.prio) || (a.rank - b.rank) ||
+          (a.srcShort < b.srcShort ? -1 : (a.srcShort > b.srcShort ? 1 : 0)) ||
+          (a.dstShort < b.dstShort ? -1 : (a.dstShort > b.dstShort ? 1 : 0));
+      });
+      for (var ci = 0; ci < candidates.length && emittedAclLeadCount < 20; ci++) {
+        var cand = candidates[ci];
+        var cKey = cand.srcShort.toUpperCase() + '|' + cand.right + '|' + cand.dstShort.toUpperCase();
+        if (emittedAclLeadKeys[cKey]) continue;
+        emittedAclLeadKeys[cKey] = 1;
+        emittedAclLeadCount += 1;
+        mk('ad.acl_lead', {
+          tool: 'bloodhound',
+          principal: cand.srcShort,
+          right: cand.right,
+          edge: cand.right,
+          target: cand.dstShort,
+          targets: [cand.dstShort]
+        });
+      }
+    }
     return out;
   }
 
   function newSummary() {
     return {
       domain: '', domains: [], trusts: [],
-      users: 0, computers: [], domain_admins: [],
+      users: 0, user_list: [], computers: [], enabled_computers: [], domain_admins: [],
       enterprise_admins: [], kerberoastable: [], asrep_roastable: [],
       high_value: [], unconstrained_delegation: [], constrained_delegation: [],
       rbcd_targets: [], sid_history: [], gpo_abuse: [], gmsa_accounts: [], laps_computers: [],
@@ -1973,7 +2237,7 @@
     };
   }
 
-  var DEDUP_KEYS = ['domains', 'computers', 'domain_admins', 'enterprise_admins', 'kerberoastable',
+  var DEDUP_KEYS = ['domains', 'user_list', 'computers', 'enabled_computers', 'domain_admins', 'enterprise_admins', 'kerberoastable',
     'asrep_roastable', 'high_value', 'unconstrained_delegation', 'constrained_delegation',
     'rbcd_targets', 'sid_history', 'gpo_abuse', 'gmsa_accounts', 'laps_computers',
     'dcsync_principals', 'admin_to', 'da_sessions', 'password_not_required', 'pwd_never_expires',
@@ -2143,6 +2407,8 @@
     summaryToFacts: toFacts,
     prop: prop,
     resolveSid: resolveSid,
+    canonicalWellKnownSid: canonicalWellKnownSid,
+    isOperatorGoalGroup: isOperatorGoalGroup,
     resolvePrincipalSid: resolvePrincipalSid,
     isBroadPrincipal: isBroadPrincipal,
     isBuiltinPrivilegedSid: isBuiltinPrivilegedSid,

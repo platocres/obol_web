@@ -448,8 +448,9 @@
     var hasHttpAuthPost = isHttpExchange && reSearch(_HTTP_AUTH_ENDPOINT_RE, cmdAndText)
       && (/\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd) || /^(?:>\s*)?POST\s+\//im.test(t) || hasHttpAuthParams);
     var hasConnFailure = /curl:\s*\(\d+\)|Connection refused|Could not resolve host|Failed to connect|No route to host/i.test(t);
+    var hasLiveCmdResponse = t.trim().length > 0 && !hasConnFailure && !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+404\b/im.test(t);
 
-    if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || reSearch(_PARAM_URL_RE, cmd) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
+    if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || (hasLiveCmdResponse && reSearch(_PARAM_URL_RE, cmd)) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
       _add(facts, mkFact('web.parameterized', h, { evidence: hasOcrLogin ? 'OCR browser form input controls' : 'parameter or form input observed' }, S, source));
     }
     if (reSearch(_UPLOAD_FORM_RE, t)) _add(facts, mkFact('web.upload_form', h, { evidence: 'file-upload form' }, S, source));
@@ -559,6 +560,23 @@
       var body = raw.slice(1).trim();
       if (!body || /^(?:\/\/|#|\/\*|\*)/.test(body)) continue;
       hunkText.push(body);
+      if (pfx === '+' || pfx === '-') {
+        var emM = /^(?:[\w.-]+\s*[:=]\s*)?['"]?(?<user>[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}):(?<pw>[^\s'"`;,]{4,64})['"]?[;,]?$/.exec(body);
+        if (emM && _valid_diff_token(emM.groups.user, true) && _valid_diff_token(emM.groups.pw, false) && !/^\d{2}(?::\d{2})/.test(emM.groups.pw)) {
+          var emKey = emM.groups.user + '\x00' + emM.groups.pw;
+          if (!seen[emKey]) {
+            seen[emKey] = true;
+            pairs.push({
+              user: emM.groups.user,
+              password: emM.groups.pw,
+              userKey: 'email',
+              passKey: 'password',
+              file: curFile,
+              isDb: false
+            });
+          }
+        }
+      }
       var um = _DIFF_USER_ASSIGN_RE.exec(body);
       if (um) {
         var uKey = um[1] || um[3], uVal = um[2] || um[4];

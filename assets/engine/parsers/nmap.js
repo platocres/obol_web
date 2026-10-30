@@ -13,6 +13,42 @@
 
   var _NMAPRUN_BLOCK_RE = /<nmaprun\b[\s\S]*?<\/nmaprun>/i;
   var _PORTLINE_RE = /^\s*\d+\/(?:tcp|udp)\b/i;
+  var _NON_HTTP_WIRE_SVC_RE = /^(?:mongodb|mysql|mysqlx|postgresql|redis|memcached|amqp|jdwp|msrpc|ms-sql-s|netbios-ssn|microsoft-ds|ssh|ftp|smtp|pop3|imap|ldap|ldaps|kerberos(?:-sec)?|rdp|ms-wbt-server|vnc)$/i;
+  var _DRIVER_PORT_HTTP_DIAG_RE = /trying to access MongoDB over HTTP on the native driver port/i;
+  var _HTTP_SERVER_VER_RE = /^(Apache httpd|nginx|Microsoft IIS httpd|Jetty|lighttpd|Caddy|Cherokee|MiniServ|Werkzeug|gunicorn|TornadoServer|SimpleHTTPServer)\s+v?([0-9][0-9A-Za-z._-]*)/i;
+
+  function _extract_http_ls_paths(blockText) {
+    if (!/http-ls:/i.test(blockText || '')) return [];
+    var lines = String(blockText).split(/\r?\n/);
+    var inLs = false, curVol = '/', found = [];
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var hdrM = /^\s*\|[_ ]?\s*http-ls:\s*(.*)$/i.exec(raw);
+      if (hdrM) {
+        inLs = true;
+        curVol = '/';
+        var hVol = /\bVolume\s+(\/\S*)/i.exec(hdrM[1] || '');
+        if (hVol) curVol = hVol[1].trim();
+        continue;
+      }
+      if (!inLs) continue;
+      if (!/^\s*\|/.test(raw)) { inLs = false; continue; }
+      if (/^\s*\|[_ ]?\s*[a-z0-9]+-[a-z0-9_-]+:/i.test(raw)) { inLs = false; continue; }
+      var body = raw.replace(/^\s*\|[_ ]?\s*/, '');
+      var volM = /^Volume\s+(\/\S*)/i.exec(body);
+      if (volM) { curVol = volM[1].trim() || '/'; continue; }
+      var rowM = /^(?:[\d.]+[KMGTPB]?|-)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?\s+(.+?)\s*$/i.exec(body);
+      if (rowM) {
+        var entry = rowM[1].trim();
+        if (!entry || /^\.\.?\/?$/.test(entry)) continue;
+        var normPath = entry.charAt(0) === '/'
+          ? entry
+          : ((curVol === '/' ? '/' : curVol.replace(/\/+$/, '') + '/') + entry);
+        found.push(normPath);
+      }
+    }
+    return C.uniqueSortedCI(found);
+  }
 
   function _clean_version(v) {
     v = (v || '').trim();
@@ -203,6 +239,17 @@
       reAll(/^\|\s*_?([^\s|][^\r\n]*)$/gim, tBlk).forEach(function (m) { tFiles.push(m[1].trim()); });
       if (tFiles.length) _add(facts, mkFact('loot.files', h, { files: tFiles, tool: 'nmap-tftp' }, S, source));
     }
+    if (/http-ls:/i.test(text) && !facts.some(function (f) { return f && f.kind === 'web.paths'; })) {
+      var lsPaths = _extract_http_ls_paths(text);
+      if (lsPaths.length) {
+        var lsVal = { paths: lsPaths.slice(0, 500), count: lsPaths.length, tool: 'nmap-http-ls' };
+        if (C._WEB_INTERESTING_RE) {
+          var lsInt = lsPaths.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
+          if (lsInt.length) lsVal.interesting = lsInt.slice(0, 200);
+        }
+        _add(facts, mkFact('web.paths', h, lsVal, S, source));
+      }
+    }
     var hasHttpReachable = facts.some(function (f) { return f && f.kind === 'http.reachable'; });
     var titles = [];
     reAll(C._NMAP_HTTP_TITLE_RE, text).forEach(function (m) {
@@ -318,7 +365,7 @@
   }
 
   function _unescape_nmap_fp(s) {
-    return String(s || '').replace(/\\x20/gi, ' ').replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+    return String(s || '').replace(/\\x20/gi, ' ').replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\./g, '.');
   }
 
   function _parse_nmap_single(text, ws, source, facts, actionId, command) {
@@ -326,7 +373,9 @@
     var openPorts = {}, portBlocks = {};
     var snmpOs = /^\s*[|_ ]*description:\s*(Linux\b[^\r\n]*)/im.exec(text);
     if (snmpOs) C._add_os_observation(facts, ws, source, 'linux', snmpOs[1], 'high', 'nmap-snmp', true);
-    var osText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
+    var osText = text
+      .replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
+      .replace(/^\s*(?:\|[_ ]?\s*)?215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
     C._add_os_from_text(osText, ws, source, facts, 'nmap', 'high', true);
 
     reAll(C._NMAP_DISCOVERED_RE, text).forEach(function (m) {
@@ -447,19 +496,118 @@
       var value = openPorts[k];
       summary.push(value.port);
       _add(facts, mkFact('port:' + value.port, h, value, S, source));
+      var rawSvcClean = String(value.service || '').replace(/\?$/, '');
+      var normSvc = '';
       if (value.service) {
-        var normSvc = (value.port === 47001 && /^(?:winrm|http|wsman)$/i.test(value.service)) ? 'httpapi' : _normalize_service(value.service);
+        if (value.port === 47001 && /^(?:winrm|http|https|ssl[\/-]http|wsman|httpapi)$/i.test(rawSvcClean)) {
+          normSvc = 'httpapi';
+        } else if ((value.port === 5985 || value.port === 5986) && /^(?:winrm|http|https|ssl[\/-]http|wsman|httpapi)$/i.test(rawSvcClean)) {
+          normSvc = 'winrm';
+        } else {
+          normSvc = _normalize_service(rawSvcClean || value.service);
+        }
         _add(facts, mkFact('service.' + normSvc, h, value, S, source));
       }
       _parse_service_reachability(value.port, value.protocol, value.service || '', ws, source, facts);
       var pBlk = portBlocks[k] || '';
-      if (value.protocol === 'tcp' && pBlk && [5985, 5986, 47001].indexOf(value.port) < 0 && !/winrm|wsman|httpapi/i.test(value.service || '') && /HTTP\/1\.[01]\s+[1-5]\d{2}\b/i.test(pBlk)) {
+      var pBlkDec = pBlk ? _unescape_nmap_fp(pBlk) : '';
+      var promotedNonHttpProto = false;
+
+      if (value.protocol === 'tcp' && pBlkDec && (!rawSvcClean || /^(?:unknown|tcpwrapped|unassigned)$/i.test(rawSvcClean))) {
+        var ftpGreetM = /(?:^|[\r\n"|\s])220[- ]([^\r\n"\\]*(?:FTP|FileZilla|vsFTPd|ProFTPD|Pure-FTPd|Microsoft FTP)[^\r\n"\\]*)/i.exec(pBlkDec);
+        var smtpGreetM = !ftpGreetM ? /(?:^|[\r\n"|\s])220[- ]([^\r\n"\\]*\bESMTP\b[^\r\n"\\]*)/i.exec(pBlkDec) : null;
+        var sshGreetM = (!ftpGreetM && !smtpGreetM) ? /(?:^|[\r\n"|\s])(SSH-2\.0-[^\r\n"\\]+)/.exec(pBlkDec) : null;
+        var vncGreetM = (!ftpGreetM && !smtpGreetM && !sshGreetM) ? /(?:^|[\r\n"|\s])(RFB 00\d\.\d{3})\b/.exec(pBlkDec) : null;
+        if (ftpGreetM) {
+          var ftpLine = ftpGreetM[1].trim();
+          var ftpVerM = /\b(FileZilla(?:\s+Server)?|vsFTPd|ProFTPD|Pure-FTPd|Microsoft\s+FTP(?:\s+Service)?)\s+v?([0-9][0-9A-Za-z._-]*)/i.exec(ftpLine);
+          var ftpSvcVal = { port: value.port, protocol: 'tcp', service: 'ftp' };
+          if (ftpVerM) ftpSvcVal.version = ftpVerM[1] + ' ' + ftpVerM[2];
+          _add(facts, mkFact('service.ftp', h, ftpSvcVal, S, source));
+          _add(facts, mkFact('ftp.reachable', h, { port: value.port, protocol: 'tcp', service: 'ftp' }, S, source));
+          _add(facts, mkFact('ftp.banner', h, { port: value.port, banner: ftpLine, banners: [ftpLine] }, S, source));
+          if (ftpVerM) {
+            _add(facts, mkFact('service.version', h, {
+              port: value.port,
+              service: 'ftp',
+              product: ftpVerM[1],
+              version: ftpVerM[2],
+              raw: ftpLine
+            }, S, source));
+          }
+          promotedNonHttpProto = true;
+        } else if (smtpGreetM) {
+          var smtpLine = smtpGreetM[1].trim();
+          _add(facts, mkFact('service.smtp', h, { port: value.port, protocol: 'tcp', service: 'smtp' }, S, source));
+          _add(facts, mkFact('smtp.reachable', h, { port: value.port, protocol: 'tcp', service: 'smtp' }, S, source));
+          _add(facts, mkFact('mail.reachable', h, { port: value.port, protocol: 'tcp', service: 'smtp' }, S, source));
+          _add(facts, mkFact('smtp.banner', h, { port: value.port, banner: smtpLine, banners: [smtpLine] }, S, source));
+          promotedNonHttpProto = true;
+        } else if (sshGreetM) {
+          var sshBanner = sshGreetM[1].trim();
+          var sshVerM = /^SSH-2\.0-([A-Za-z0-9._]+?)(?:[_-]([0-9][0-9A-Za-z._p-]*))?(?:\s|$)/.exec(sshBanner);
+          _add(facts, mkFact('service.ssh', h, { port: value.port, protocol: 'tcp', service: 'ssh', version: sshBanner }, S, source));
+          _add(facts, mkFact('ssh.reachable', h, { port: value.port, protocol: 'tcp', service: 'ssh' }, S, source));
+          _add(facts, mkFact('ssh.banner', h, { port: value.port, banner: sshBanner, banners: [sshBanner] }, S, source));
+          if (sshVerM) {
+            _add(facts, mkFact('service.version', h, {
+              port: value.port,
+              service: 'ssh',
+              product: sshVerM[1],
+              version: sshVerM[2] || '',
+              raw: sshBanner
+            }, S, source));
+          }
+          promotedNonHttpProto = true;
+        } else if (vncGreetM) {
+          var rfbVer = vncGreetM[1].trim();
+          _add(facts, mkFact('service.vnc', h, { port: value.port, protocol: 'tcp', service: 'vnc', version: rfbVer }, S, source));
+          _add(facts, mkFact('vnc.reachable', h, { port: value.port, protocol: 'tcp', service: 'vnc' }, S, source));
+          promotedNonHttpProto = true;
+        }
+      }
+
+      if (value.protocol === 'tcp' && pBlk && /http-ls:/i.test(pBlk)) {
+        var portLsPaths = _extract_http_ls_paths(pBlk);
+        if (portLsPaths.length) {
+          var portLsVal = { paths: portLsPaths.slice(0, 500), count: portLsPaths.length, port: value.port, tool: 'nmap-http-ls' };
+          if (C._WEB_INTERESTING_RE) {
+            var portLsInt = portLsPaths.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
+            if (portLsInt.length) portLsVal.interesting = portLsInt.slice(0, 200);
+          }
+          _add(facts, mkFact('web.paths', h, portLsVal, S, source));
+        }
+      }
+
+      if (value.protocol === 'tcp' && [5985, 5986, 47001].indexOf(value.port) < 0 &&
+          /^(?:http|https|ssl[\/-]http|http-alt|http-proxy)$/i.test(rawSvcClean) && value.version) {
+        var httpVerM = _HTTP_SERVER_VER_RE.exec(value.version);
+        if (httpVerM && !C._isNonWebServerHeader(value.version)) {
+          _add(facts, mkFact('service.version', h, {
+            port: value.port,
+            service: normSvc || 'http',
+            product: httpVerM[1],
+            version: httpVerM[2],
+            raw: value.version
+          }, S, source));
+          if (!pBlk || !reSearch(C._NMAP_HTTP_SERVER_RE, pBlk)) {
+            fpServerHeaders.push(value.version);
+          }
+        }
+      }
+
+      if (value.protocol === 'tcp' && pBlkDec && !promotedNonHttpProto &&
+          [5985, 5986, 47001].indexOf(value.port) < 0 &&
+          !/winrm|wsman|httpapi/i.test(rawSvcClean) &&
+          !_NON_HTTP_WIRE_SVC_RE.test(rawSvcClean) &&
+          !_DRIVER_PORT_HTTP_DIAG_RE.test(pBlkDec) &&
+          /HTTP\/1\.[01]\s+[1-5]\d{2}\b/i.test(pBlkDec)) {
         var rawSrv = [];
-        reAll(/^\s*(?:\|[_ ]?\s*)?Server:\s*([^\r\n"\\]+?)\s*$/im, pBlk).forEach(function (sm) {
+        reAll(/^\s*(?:\|[_ ]?\s*)?Server:\s*([^\r\n"\\]+?)\s*$/im, pBlkDec).forEach(function (sm) {
           var sh = sm[1].trim();
           if (sh) rawSrv.push(sh);
         });
-        reAll(/^\s*(?:\|[_ ]?\s*)?_?http-server-header:\s*([^\r\n]+?)\s*$/im, pBlk).forEach(function (sm) {
+        reAll(/^\s*(?:\|[_ ]?\s*)?_?http-server-header:\s*([^\r\n]+?)\s*$/im, pBlkDec).forEach(function (sm) {
           var sh = sm[1].trim();
           if (sh) rawSrv.push(sh);
         });
@@ -482,8 +630,10 @@
 
     var scriptContext = _parse_nmap_script_facts(text, ws, source, facts, fpServerHeaders);
     var tcpPorts = Object.keys(openPorts).map(function (k) { return openPorts[k]; }).filter(function (v) { return v.protocol === 'tcp'; }).map(function (v) { return v.port; });
-    if ([88, 389, 445].every(function (p) { return tcpPorts.indexOf(p) >= 0; }) || _looks_like_ad_ldap(text)) {
-      var value = { ports: [88, 389, 445].filter(function (p) { return tcpPorts.indexOf(p) >= 0; }) };
+    var hasKerbAndDir = tcpPorts.indexOf(88) >= 0 && [389, 636, 3268, 3269, 9389].some(function (p) { return tcpPorts.indexOf(p) >= 0; });
+    var hasAdwsAndLdap = tcpPorts.indexOf(9389) >= 0 && [389, 636, 3268, 3269].some(function (p) { return tcpPorts.indexOf(p) >= 0; });
+    if (hasKerbAndDir || hasAdwsAndLdap || _looks_like_ad_ldap(text)) {
+      var value = { ports: [88, 389, 445, 636, 3268, 3269, 9389].filter(function (p) { return tcpPorts.indexOf(p) >= 0; }) };
       Object.keys(scriptContext).forEach(function (k) { value[k] = scriptContext[k]; });
       _add(facts, mkFact('ad.dc_candidate', h, value, S, source));
     }

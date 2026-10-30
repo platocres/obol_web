@@ -113,25 +113,29 @@ function resolveWalkthroughDir(dirInput) {
   };
 }
 
+const SUDO_TRANSPARENT_TOOLS_RE = /^(?:hashcat|john|[a-z0-9_]+2john|nmap|masscan|rustscan|feroxbuster|gobuster|ffuf|dirsearch|dirb|wfuzz|nikto|nuclei|wpscan|sqlmap|hydra|whatweb|httpx|impacket-[\w-]+|(?:secretsdump|getuserspns|getnpusers|getst|gettgt|wmiexec|psexec|smbexec|atexec|dcomexec|mssqlclient|smbclient|lookupsid|rpcdump|samrdump|finddelegation|ntlmrelayx|dacledit|owneredit|addcomputer|ticketer|changepasswd|targetedkerberoast|timeroast|pywhisker)(?:\.py)?|nxc|netexec|crackmapexec|cme|smbmap|rpcclient|enum4linux(?:-ng)?|ldapsearch|certipy(?:-ad)?|bloodyad|bloodhound(?:-ce)?-python|kerbrute|evil-winrm|xfreerdp3?|rdesktop|responder|mitm6|chisel|ligolo[-\w]*|socat|tcpdump|tshark|openvpn|ip|mount|python[23]?|curl|wget|ike-scan|snmpwalk|onesixtyone|showmount|git-dumper|msfconsole|msfvenom|searchsploit)$/i;
+
 function stripCommandWrappers(cmd) {
   let s = String(cmd || '').trim();
   if (!s) return '';
   let changed = true;
   while (changed) {
     changed = false;
-    const next = s
+    let next = s
+      .replace(/^cd\s+(?:-[LP]\s+)?(?:"[^"]+"|'[^']+'|[^;&|<>\s]+)\s*&&\s*/i, '')
       .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/, '')
       .replace(/^(?:proxychains4?(?:\s+-q|\s+-f\s+\S+)*|time|rlwrap(?:\s+-[A-Za-z0-9]+)*|stdbuf(?:\s+-\S+)*|timeout\s+\S+)\s+/i, '');
+    if (/^sudo\b/i.test(next) && !/^sudo\s+(?:-[A-Za-z]*[lisV]\b|--list\b|--version\b|su\b)/i.test(next)) {
+      const afterSudo = next.replace(/^sudo(?:\s+-E|\s+(?:-[uUggh]\s+\S+|-[A-Za-z]+))*\s+/i, '').trim();
+      const headRaw = (afterSudo.split(/\s+/)[0] || '').replace(/^["']|["']$/g, '').split(/[\\/]/).pop();
+      const headClean = headRaw.replace(/\.(?:bin|exe)$/i, '').toLowerCase();
+      if (afterSudo && afterSudo !== next && (SUDO_TRANSPARENT_TOOLS_RE.test(headRaw) || SUDO_TRANSPARENT_TOOLS_RE.test(headClean) || /^(?:proxychains4?|time|rlwrap|stdbuf|timeout|[A-Za-z_][A-Za-z0-9_]*=)/i.test(afterSudo))) {
+        next = afterSudo;
+      }
+    }
     if (next !== s) {
       s = next.trim();
       changed = true;
-    }
-  }
-  if (/^sudo\b/i.test(s) && !/^sudo\s+(?:-l\b|--list\b|-V\b|--version\b)/i.test(s)) {
-    const afterSudo = s.replace(/^sudo(?:\s+(?:-[uUggh]\s+\S+|-[A-Za-z]+))*\s+/i, '').trim();
-    const head = (afterSudo.split(/\s+/)[0] || '').split(/[\\/]/).pop().toLowerCase();
-    if (/^(?:nmap|masscan|rustscan|responder|ntlmrelayx|mitm6|chisel|ligolo|socat|tcpdump|openvpn|ip| mount|python3?)$/i.test(head)) {
-      s = afterSudo;
     }
   }
   return s;
@@ -187,9 +191,44 @@ function applyIpAliases(text, ipAliasMap) {
   return s;
 }
 
+function isRfc1918Prefix2(prefix2) {
+  return prefix2 === '192.168'
+    || /^10\.\d+$/.test(prefix2)
+    || /^172\.(?:1[6-9]|2\d|3[01])$/.test(prefix2);
+}
+
+function spansAreNonOverlapping(spA, spB) {
+  if (spA.lastTurn < spB.firstTurn || spB.lastTurn < spA.firstTurn) return true;
+  const arrA = spA.soloTurns.length > 0 ? spA.soloTurns : spA.turns;
+  const arrB = spB.soloTurns.length > 0 ? spB.soloTurns : spB.turns;
+  if (!arrA.length || !arrB.length) return false;
+  if (arrA[arrA.length - 1] < arrB[0] || arrB[arrB.length - 1] < arrA[0]) return true;
+
+  function trimSingleBoundaryOutlier(arr) {
+    if (arr.length < 3) return [arr];
+    const variants = [arr];
+    if (arr[1] - arr[0] > 3) variants.push(arr.slice(1));
+    if (arr[arr.length - 1] - arr[arr.length - 2] > 3) variants.push(arr.slice(0, -1));
+    return variants;
+  }
+
+  const varsA = trimSingleBoundaryOutlier(arrA);
+  const varsB = trimSingleBoundaryOutlier(arrB);
+  for (let i = 0; i < varsA.length; i++) {
+    for (let j = 0; j < varsB.length; j++) {
+      const a = varsA[i];
+      const b = varsB[j];
+      if (a[a.length - 1] < b[0] || b[b.length - 1] < a[0]) return true;
+    }
+  }
+  return false;
+}
+
 function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
   const spansByIp = Object.create(null);
   const cooccurringPairs = new Set();
+  const cooccurringSubnetPairs = new Set();
+  const oct3FirstSeen = Object.create(null);
 
   for (let idx = 0; idx < (turns || []).length; idx++) {
     const t = turns[idx] || {};
@@ -209,7 +248,7 @@ function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
     if (nmapM && isPrivateLabIpv4(nmapM[1]) && !selfIps.has(nmapM[1]) && !ATTACKER_SUBNET_RE.test(nmapM[1])) {
       turnIps.add(nmapM[1]);
     }
-    const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
+    const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|VNC|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
     if (nxcM && isPrivateLabIpv4(nxcM[1]) && !selfIps.has(nxcM[1]) && !ATTACKER_SUBNET_RE.test(nxcM[1])) {
       turnIps.add(nxcM[1]);
     }
@@ -223,17 +262,29 @@ function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
       }
     }
     for (let i = 0; i < allInTurn.length; i++) {
+      const pa = allInTurn[i].split('.');
+      const prefA = pa[0] + '.' + pa[1];
       for (let j = i + 1; j < allInTurn.length; j++) {
         const a = allInTurn[i];
         const b = allInTurn[j];
         cooccurringPairs.add(a < b ? (a + '|' + b) : (b + '|' + a));
+        const pb = b.split('.');
+        const prefB = pb[0] + '.' + pb[1];
+        if (prefA === prefB && pa[2] !== pb[2]) {
+          const oLo = Number(pa[2]) < Number(pb[2]) ? pa[2] : pb[2];
+          const oHi = Number(pa[2]) < Number(pb[2]) ? pb[2] : pa[2];
+          cooccurringSubnetPairs.add(prefA + ':' + oLo + '|' + oHi);
+        }
       }
     }
 
+    const isFocusedTurn = turnIps.size <= 2 && allInTurn.length <= 2;
     for (const ip of turnIps) {
       const p = ip.split('.');
       const prefix2 = p[0] + '.' + p[1];
-      if (prefix2 !== '192.168' && prefix2 !== '10.10') continue;
+      if (!isRfc1918Prefix2(prefix2)) continue;
+      const octKey = prefix2 + ':' + p[2];
+      if (oct3FirstSeen[octKey] === undefined) oct3FirstSeen[octKey] = idx;
       if (!spansByIp[ip]) {
         spansByIp[ip] = {
           ip: ip,
@@ -241,10 +292,14 @@ function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
           oct3: p[2],
           host4: p[3],
           firstTurn: idx,
-          lastTurn: idx
+          lastTurn: idx,
+          turns: [idx],
+          soloTurns: isFocusedTurn ? [idx] : []
         };
       } else {
         spansByIp[ip].lastTurn = idx;
+        spansByIp[ip].turns.push(idx);
+        if (isFocusedTurn) spansByIp[ip].soloTurns.push(idx);
       }
     }
   }
@@ -257,38 +312,117 @@ function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
     groups[key].push(sp);
   }
 
+  // Count how many distinct host4 endpoints in the same prefix2 share an identical
+  // non-co-occurring third-octet substitution pair (octLo, octHi).
+  const octPairHostCounts = Object.create(null);
+  for (const key of Object.keys(groups)) {
+    const grp = groups[key];
+    if (grp.length < 2) continue;
+    const seenPairsForHost = new Set();
+    for (let i = 0; i < grp.length; i++) {
+      for (let j = i + 1; j < grp.length; j++) {
+        const a = grp[i];
+        const b = grp[j];
+        const ipPair = a.ip < b.ip ? (a.ip + '|' + b.ip) : (b.ip + '|' + a.ip);
+        if (cooccurringPairs.has(ipPair)) continue;
+        const oLo = Number(a.oct3) < Number(b.oct3) ? a.oct3 : b.oct3;
+        const oHi = Number(a.oct3) < Number(b.oct3) ? b.oct3 : a.oct3;
+        const subKey = a.prefix2 + ':' + oLo + '|' + oHi;
+        if (cooccurringSubnetPairs.has(subKey)) continue;
+        seenPairsForHost.add(subKey);
+      }
+    }
+    for (const sk of seenPairsForHost) {
+      octPairHostCounts[sk] = (octPairHostCounts[sk] || 0) + 1;
+    }
+  }
+
+  const prefParts = preferredTarget && isPrivateLabIpv4(preferredTarget) ? preferredTarget.split('.') : null;
+  const prefPrefix2 = prefParts ? (prefParts[0] + '.' + prefParts[1]) : '';
+  const prefOct3 = prefParts ? prefParts[2] : '';
+
   const aliasMap = Object.create(null);
   for (const key of Object.keys(groups)) {
     const grp = groups[key];
     if (grp.length < 2) continue;
     grp.sort((a, b) => a.firstTurn - b.firstTurn);
-    let nonOverlapping = true;
-    for (let i = 0; i < grp.length - 1; i++) {
-      if (grp[i].lastTurn >= grp[i + 1].firstTurn) {
-        nonOverlapping = false;
-        break;
-      }
-    }
-    if (!nonOverlapping) continue;
 
-    let anyCooccurred = false;
-    for (let i = 0; i < grp.length && !anyCooccurred; i++) {
+    // Build connected components of valid revert-alias pairs within this (prefix2, host4) group
+    const parent = grp.map((_, idx) => idx);
+    function find(x) {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
+      return x;
+    }
+    function unite(x, y) {
+      const rx = find(x);
+      const ry = find(y);
+      if (rx !== ry) parent[ry] = rx;
+    }
+
+    for (let i = 0; i < grp.length; i++) {
       for (let j = i + 1; j < grp.length; j++) {
-        const a = grp[i].ip;
-        const b = grp[j].ip;
-        if (cooccurringPairs.has(a < b ? (a + '|' + b) : (b + '|' + a))) {
-          anyCooccurred = true;
-          break;
+        const a = grp[i];
+        const b = grp[j];
+        const ipPair = a.ip < b.ip ? (a.ip + '|' + b.ip) : (b.ip + '|' + a.ip);
+        if (cooccurringPairs.has(ipPair)) continue;
+        const oLo = Number(a.oct3) < Number(b.oct3) ? a.oct3 : b.oct3;
+        const oHi = Number(a.oct3) < Number(b.oct3) ? b.oct3 : a.oct3;
+        const subKey = a.prefix2 + ':' + oLo + '|' + oHi;
+        if (cooccurringSubnetPairs.has(subKey)) continue;
+        const siblingCorroborated = (octPairHostCounts[subKey] || 0) >= 2;
+        if (spansAreNonOverlapping(a, b) || siblingCorroborated) {
+          unite(i, j);
         }
       }
     }
-    if (anyCooccurred) continue;
 
-    const canonical = (preferredTarget && grp.some(g => g.ip === preferredTarget))
-      ? preferredTarget
-      : grp[0].ip;
-    for (const g of grp) {
-      if (g.ip !== canonical) aliasMap[g.ip] = canonical;
+    const comps = Object.create(null);
+    for (let i = 0; i < grp.length; i++) {
+      const r = find(i);
+      if (!comps[r]) comps[r] = [];
+      comps[r].push(grp[i]);
+    }
+
+    for (const r of Object.keys(comps)) {
+      const comp = comps[r];
+      if (comp.length < 2) continue;
+      // Ensure no pair inside the transitive component co-occurred in the same turn
+      let compCooccurred = false;
+      for (let i = 0; i < comp.length && !compCooccurred; i++) {
+        for (let j = i + 1; j < comp.length; j++) {
+          const a = comp[i].ip;
+          const b = comp[j].ip;
+          const oLo = Number(comp[i].oct3) < Number(comp[j].oct3) ? comp[i].oct3 : comp[j].oct3;
+          const oHi = Number(comp[i].oct3) < Number(comp[j].oct3) ? comp[j].oct3 : comp[i].oct3;
+          const subKey = comp[i].prefix2 + ':' + oLo + '|' + oHi;
+          if (cooccurringPairs.has(a < b ? (a + '|' + b) : (b + '|' + a)) || cooccurringSubnetPairs.has(subKey)) {
+            compCooccurred = true;
+            break;
+          }
+        }
+      }
+      if (compCooccurred) continue;
+
+      let canonical = '';
+      if (preferredTarget && comp.some(g => g.ip === preferredTarget)) {
+        canonical = preferredTarget;
+      } else if (prefPrefix2 && comp[0].prefix2 === prefPrefix2 && comp.some(g => g.oct3 === prefOct3)) {
+        canonical = comp.find(g => g.oct3 === prefOct3).ip;
+      } else {
+        comp.sort((a, b) => {
+          const seenA = oct3FirstSeen[a.prefix2 + ':' + a.oct3];
+          const seenB = oct3FirstSeen[b.prefix2 + ':' + b.oct3];
+          if (seenA !== seenB) return seenA - seenB;
+          return a.firstTurn - b.firstTurn;
+        });
+        canonical = comp[0].ip;
+      }
+      for (const g of comp) {
+        if (g.ip !== canonical) aliasMap[g.ip] = canonical;
+      }
     }
   }
   return aliasMap;
@@ -372,10 +506,10 @@ function inferEngagementNetworking(turns, opts) {
     const nmapM = /Nmap scan report for (?:[^\r\n(]+\()?(\d{1,3}(?:\.\d{1,3}){3})\)?/i.exec(out);
     if (nmapM) noteTargetIp(nmapM[1], 6);
 
-    const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
+    const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|VNC|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
     if (nxcM) noteTargetIp(nxcM[1], 5);
 
-    if (isAttackerTurn(t) || /\b(?:ssh|scp|evil-winrm|impacket-[\w-]+|(?:psexec|wmiexec|smbexec|atexec|dcomexec|mssqlclient)(?:\.py)?|nxc|netexec|crackmapexec|cme|nmap|rustscan|masscan|Enter-PSSession|Invoke-Command)\b/i.test(cmd)) {
+    if (isAttackerTurn(t) || /\b(?:ssh|scp|evil-winrm|impacket-[\w-]+|(?:psexec|wmiexec|smbexec|atexec|dcomexec|mssqlclient)(?:\.py)?|nxc|netexec|crackmapexec|cme|nmap|rustscan|masscan|chisel|ligolo[-\w]*|socat|portfwd|Enter-PSSession|Invoke-Command)\b/i.test(cmd)) {
       let cm;
       IPV4_GLOBAL_RE.lastIndex = 0;
       while ((cm = IPV4_GLOBAL_RE.exec(cmd)) !== null) {
@@ -513,11 +647,16 @@ function isFlagCollectionMove(a) {
 }
 
 const STANDALONE_SUBCMD_KEYWORDS = new Set([
-  'smb', 'ldap', 'winrm', 'mssql', 'ssh', 'ftp', 'rdp', 'wmi', 'dir', 'vhost', 'dns', 'fuzz',
+  'smb', 'ldap', 'winrm', 'mssql', 'ssh', 'ftp', 'rdp', 'vnc', 'wmi', 'dir', 'vhost', 'dns', 'fuzz',
   'req', 'auth', 'shadow', 'account', 'dump', 'shares', 'users', 'groups', 'pass-pol',
   'rid-brute', 'kerberoasting', 'asreproast', 'bloodhound', 'spider_plus', 'just-dc',
   'just-dc-ntlm', 'request', 'getcap', 'linpeas', 'winpeas', 'systeminfo', 'cmdkey',
   'socks', 'server', 'client'
+]);
+
+const HASHCAT_GENERIC_RUNTIME_FLAGS = new Set([
+  '--force', '--potfile-disable', '--quiet', '--status', '--show', '--username', '--user',
+  '-o', '-w', '-r', '-a'
 ]);
 
 const GENERIC_INTERPRETERS = new Set([
@@ -538,6 +677,7 @@ function extractCommandFlags(cmdStr) {
   const noTemplates = String(cmdStr || '').replace(/\{\{[^}]+\}\}/g, ' ');
   const rawTokens = noTemplates.split(/[\s;|&'"]+/).filter(Boolean);
   const isWinStyle = /[A-Za-z]:\\|\b(?:whoami|xfreerdp|cmd|dir|reg|schtasks|icacls|runas)\b/i.test(noTemplates);
+  const isHashcat = extractPrimaryTool(noTemplates) === 'hashcat';
   const out = [];
   const seen = Object.create(null);
 
@@ -547,7 +687,24 @@ function extractCommandFlags(cmdStr) {
     out.push(t);
   }
 
-  for (const raw of rawTokens) {
+  for (let tIdx = 0; tIdx < rawTokens.length; tIdx++) {
+    const raw = rawTokens[tIdx];
+    const lowRaw = raw.toLowerCase();
+    if (isHashcat) {
+      if ((lowRaw === '-m' || lowRaw === '--hash-type') && tIdx + 1 < rawTokens.length && /^\d+$/.test(rawTokens[tIdx + 1])) {
+        pushTok('-m:' + rawTokens[tIdx + 1]);
+        tIdx++;
+        continue;
+      }
+      if (/^-m\d+$/.test(lowRaw)) {
+        pushTok('-m:' + lowRaw.slice(2));
+        continue;
+      }
+      if (/^--hash-type=\d+$/.test(lowRaw)) {
+        pushTok('-m:' + lowRaw.split('=')[1]);
+        continue;
+      }
+    }
     if (raw === '-H') {
       pushTok('-H');
       continue;
@@ -725,10 +882,36 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     bump('windows-enum', 23);
   }
 
-  // B2.4: Archive cracking (zip2john/rar2john/7z2john and john --format=zip/rar/7z)
+  // B2.4: Archive & KeePass cracking (zip2john/rar2john/7z2john, keepass2john, hashcat -m <mode>)
   if (/\b(?:zip|rar|7z)2john\b/i.test(cleanCmd) || (cmdTool === 'john' && /(?:--format=(?:zip|pkzip|rar|rar5|7z)\b|\b[^\s/\\]*(?:zip|rar|7z)[^\s/\\]*\.hash\b)/i.test(cleanCmd))) {
     excludedIds.add('cisco-decrypt');
     bump('crack-archive', 25);
+  }
+
+  const cmdHashcatModes = cmdTool === 'hashcat'
+    ? cmdFlags.filter(f => f.indexOf('-m:') === 0)
+    : [];
+  if (cmdTool === 'keepass2john' || (cmdTool === 'hashcat' && cmdHashcatModes.indexOf('-m:13400') >= 0)) {
+    bump('keepass-dump-recover', 24);
+  }
+  if (cmdHashcatModes.length > 0) {
+    for (const a of actionableMoves) {
+      const actionModes = [];
+      for (const cObj of (a.commands || [])) {
+        if (!cObj || !cObj.run) continue;
+        const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
+        for (const clause of clauses) {
+          const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
+          if (extractPrimaryTool(cleanClause) !== 'hashcat') continue;
+          for (const fl of extractCommandFlags(cleanClause)) {
+            if (fl.indexOf('-m:') === 0 && actionModes.indexOf(fl) < 0) actionModes.push(fl);
+          }
+        }
+      }
+      if (actionModes.length > 0 && !actionModes.some(m => cmdHashcatModes.indexOf(m) >= 0)) {
+        excludedIds.add(a.id);
+      }
+    }
   }
 
   if (cmdTool === 'nmap' || cmdTool === 'rustscan' || cmdTool === 'masscan') {
@@ -759,15 +942,46 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
-  if (cmdTool === 'whatweb' || (cmdTool === 'curl' && /\s-(?:I|sSI|sI|-head)\b/.test(cleanCmd))) {
+  if (cmdTool === 'curl' && (/(?:^|\s)(?:-F|--form(?:-string)?)\s+['"]?[^'"\s]*=@/i.test(cleanCmd) || /(?:^|\s)(?:-T|--upload-file)\s+\S+/i.test(cleanCmd))) {
+    if (/\bftps?:\/\//i.test(cleanCmd)) {
+      bump('ftp-webroot-upload-webshell', 25);
+      bump('ftp-upload-webshell', 24);
+      bump('file-upload', 22);
+    } else {
+      bump('file-upload', 25);
+    }
+  } else if (cmdTool === 'whatweb' || (cmdTool === 'curl' && /\s-(?:I|sSI|sI|-head)\b/.test(cleanCmd))) {
     bump('recon-web-triage', 22);
   }
 
-  // B2.3: Authenticated vs Anonymous SMB enumeration & nxc module disambiguation
-  if (cmdTool === 'nxc' && !/-M\s+smbghost\b/i.test(cleanCmd)) {
-    excludedIds.add('smbghost');
+  // B2.3: Multi-protocol NetExec (nxc/cme) & Authenticated vs Anonymous SMB disambiguation
+  if (cmdTool === 'nxc') {
+    if (!/-M\s+smbghost\b/i.test(cleanCmd)) {
+      excludedIds.add('smbghost');
+    }
+    if (!/\b(?:local|user|root|proof)\.txt\b/i.test(cleanCmd)) {
+      excludedIds.add('flag-hunt-windows');
+      excludedIds.add('flag-hunt-root-windows');
+      excludedIds.add('flag-hunt-linux');
+      excludedIds.add('flag-hunt-root-linux');
+    }
+    excludedIds.add('windows-enum');
+    excludedIds.add('linux-enum');
+    excludedIds.add('windows-loot-hunt');
+    excludedIds.add('stored-credentials');
   }
-  if (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd) && /-M\s+(?:gpp_password|gpp_autologin)\b/i.test(cleanCmd)) {
+
+  const nxcProtoM = cmdTool === 'nxc'
+    ? /^(?:nxc|netexec|crackmapexec|cme)\s+(smb|winrm|rdp|ssh|ldap|mssql|ftp|vnc|wmi)\b/i.exec(cleanCmd)
+    : null;
+  const nxcProto = nxcProtoM ? nxcProtoM[1].toLowerCase() : '';
+  const hasNxcSprayList = cmdTool === 'nxc'
+    && (/(?:^|\s)-(?:u|p|H)\s+(?:'[^']*\.(?:txt|lst)'|"[^"]*\.(?:txt|lst)"|\S+\.(?:txt|lst))(?:\s|$)/i.test(cleanCmd)
+        || /--continue-on-success\b/i.test(cleanCmd));
+  const hasNxcSpecialAction = cmdTool === 'nxc'
+    && /\s-[xX]\b|--(?:shares|sam|lsa|ntds|dpapi|mkfile|get-file|put-file|kerberoasting|asreproast|users|groups|pass-pol|rid-brute|loggedon-users|sessions|disks|bloodhound)\b|\s-M\s+\S+/i.test(cleanCmd);
+
+  if (cmdTool === 'nxc' && nxcProto === 'smb' && /-M\s+(?:gpp_password|gpp_autologin)\b/i.test(cleanCmd)) {
     bump('smb-share-inventory', 25);
     bump('gpp-passwords', 24);
   }
@@ -775,18 +989,24 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       (cmdTool === 'smbclient' && /\s-L\b/.test(cleanCmd) && (/\s-N\b|anonymous/i.test(cleanCmd) || /-U\s*(?:''|""|%)(?=\s|$)/i.test(cleanCmd)))
       || (cmdTool === 'enum4linux')
       || (cmdTool === 'smbmap' && /(?:-u\s*(?:''|""|anonymous|guest)(?=\s|$)|\s-H\s+\S+\s*$)/i.test(cleanCmd))
-      || (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd) && /-u\s*(?:''|""|(?:guest|anonymous)\b)/i.test(cleanCmd)))) {
+      || (cmdTool === 'nxc' && nxcProto === 'smb' && /-u\s*(?:''|""|(?:guest|anonymous)\b)/i.test(cleanCmd)))) {
     if (!/-M\s+(?:gpp_password|gpp_autologin|spider_plus)\b/i.test(cleanCmd)) {
       bump('recon-smb-anon', 23);
     } else {
       bump('smb-share-inventory', 24);
       bump('recon-smb-anon', 20);
     }
+  } else if (!explicitAuth && cmdTool === 'nxc' && nxcProto === 'rdp') {
+    bump('rdp-enum', 24);
   } else if (explicitAuth) {
-    if (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd)) {
+    if (cmdTool === 'nxc' && nxcProto === 'smb') {
       if (/--shares\b|-M\s+spider_plus\b/i.test(cleanCmd)) {
         bump('smb-share-inventory', 24);
         bump('validate-credential', 22);
+      } else if (hasNxcSprayList) {
+        bump('password-spray', 25);
+        bump('cred-reuse-sweep', 23);
+        bump('validate-credential', 21);
       } else if (!/\s-[xX]\b|--sam\b|--lsa\b|--ntds\b|-M\s+(?:lsassy|ntds|dcsync)/i.test(cleanCmd)) {
         if (/\/\d{1,2}\b/.test(cleanCmd)) {
           bump('cred-reuse-sweep', 24);
@@ -794,8 +1014,61 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
           bump('validate-credential', 21);
         } else {
           bump('validate-credential', 24);
+          bump('cred-reuse-sweep', 22);
           bump('lateral-exec', 21);
         }
+      }
+    } else if (cmdTool === 'nxc' && nxcProto && nxcProto !== 'smb') {
+      if (nxcProto === 'rdp') {
+        if (hasNxcSprayList) {
+          bump('online-brute-rdp', 25);
+          bump('password-spray', 24);
+          bump('cred-reuse-sweep', 23);
+          bump('rdp-enum', 22);
+          bump('validate-credential', 21);
+        } else if (!hasNxcSpecialAction) {
+          bump('validate-credential', 25);
+          bump('cred-reuse-sweep', 24);
+          bump('rdp-enum', 23);
+          bump('rdp-interactive', 22);
+        }
+      } else if (nxcProto === 'winrm') {
+        if (hasNxcSprayList) {
+          bump('password-spray', 25);
+          bump('cred-reuse-sweep', 24);
+          bump('validate-credential', 22);
+        } else if (/\s-[xX]\b/.test(cleanCmd)) {
+          bump('win-interactive-shell', 24);
+          bump('lateral-exec', 24);
+          bump('validate-credential', 21);
+        } else if (!hasNxcSpecialAction) {
+          bump('validate-credential', 25);
+          bump('win-interactive-shell', 23);
+          bump('cred-reuse-sweep', 23);
+        }
+      } else if (nxcProto === 'mssql') {
+        if (hasNxcSprayList) {
+          bump('password-spray', 25);
+          bump('mssql-login', 23);
+          bump('validate-credential', 22);
+        } else if (!hasNxcSpecialAction) {
+          bump('mssql-login', 25);
+          bump('validate-credential', 24);
+          bump('cred-reuse-sweep', 22);
+        }
+      } else if (nxcProto === 'ldap' && /--bloodhound\b/i.test(cleanCmd)) {
+        bump('ad-bloodhound-collect', 25);
+      } else if (hasNxcSprayList) {
+        if (nxcProto === 'ssh') bump('online-brute-ssh', 24);
+        if (nxcProto === 'ftp') bump('online-brute-ftp', 24);
+        bump('password-spray', 25);
+        bump('cred-reuse-sweep', 23);
+        bump('validate-credential', 21);
+      } else if (!hasNxcSpecialAction) {
+        bump('validate-credential', 25);
+        bump('cred-reuse-sweep', 24);
+        if (nxcProto === 'ssh') bump('ssh-login', 22);
+        if (nxcProto === 'wmi') bump('lateral-exec', 22);
       }
     } else if ((cmdTool === 'smbclient' || cmdTool === 'smbmap') && !/\s-N\b/.test(cleanCmd)) {
       bump('smb-share-inventory', 24);
@@ -817,6 +1090,11 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   } else if (!isAttackerTurn(turn) && /^sudo\s+/i.test(rawCmd) && !/^sudo\s+(?:-l|--list|-V|--version)\b/i.test(rawCmd)) {
     bump('sudo-abuse', 22);
+  }
+
+  if (cmdTool === 'find' && /\s-writable\b/.test(cleanCmd) && !/\.(?:timer|service)\b|\/(?:etc|lib|usr\/lib)\/systemd\b/i.test(cleanCmd)) {
+    excludedIds.add('systemd-timer-abuse');
+    bump('linux-enum', 24);
   }
 
   if (onTarget && (/\blinpeas\b/i.test(cleanCmd) || /\bfind\s+\/\s+[^\r\n]*-perm\s+[-/]?(?:4000|u=s)/i.test(cleanCmd) || /\bgetcap\s+-r\b/i.test(cleanCmd))) {
@@ -888,7 +1166,18 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
         let distinctiveHits = 0;
         let misses = 0;
         for (const fl of clauseFlags) {
-          if (cmdFlags.indexOf(fl) >= 0) {
+          if (fl.indexOf('-m:') === 0) {
+            if (cmdFlags.indexOf(fl) >= 0) {
+              hits += 12;
+              distinctiveHits++;
+            } else if (cmdHashcatModes.length > 0) {
+              misses += 10;
+            }
+          } else if (cmdTool === 'hashcat' && HASHCAT_GENERIC_RUNTIME_FLAGS.has(fl)) {
+            if (cmdFlags.indexOf(fl) >= 0) {
+              hits += 1;
+            }
+          } else if (cmdFlags.indexOf(fl) >= 0) {
             const weight = fl.length > 4 ? 4 : 2;
             hits += weight;
             if (fl.length > 4 && fl !== '--cmd') distinctiveHits++;
@@ -1091,7 +1380,11 @@ function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId
 
   const outcomes = [];
   const seenAttemptSigs = new Set();
-  const maxAttempts = Math.max(Math.min(cmds.length * 3, 12), 6);
+  const activeCreds = (OBOL.context && typeof OBOL.context.credentials === 'function')
+    ? OBOL.context.credentials(session.eng)
+    : [];
+  const activeCredentialCount = Array.isArray(activeCreds) ? activeCreds.length : 0;
+  const maxAttempts = Math.min(256, Math.max(16, (cmds.length || 4) * Math.max(2, activeCredentialCount + 1)));
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const coachNow = session.computeCoach(targetIp);
     const stillAtHead = coachNow.onFlow.findIndex(x => x.id === card.id);
@@ -1307,16 +1600,22 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
     const seenAnyInHistory = targetHistory.some(h =>
       (Array.isArray(h.matched_moves) && h.matched_moves.indexOf(cand.id) >= 0) || h.executed_move_id === cand.id
     );
+    const producesList = Array.isArray(cand.move.produces) ? cand.move.produces : [];
     const allProducesSatisfied =
-      Array.isArray(cand.move.produces) &&
-      cand.move.produces.length > 0 &&
-      cand.move.produces.every(p => facts.has(p));
+      producesList.length > 0 &&
+      producesList.every(p => facts.has(p));
+    const adGraphAlreadyCollected =
+      producesList.indexOf('ad.graph.collected') >= 0 &&
+      facts.has('ad.graph.collected');
     const actionSettled =
       allProducesSatisfied ||
+      adGraphAlreadyCollected ||
       (typeof cand.move.settled === 'function' && cand.move.settled(facts)) ||
       (typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
     const isCandEligible = typeof cand.move.eligible === 'function' ? cand.move.eligible(facts) : true;
-    const alreadySatisfiedOnTarget = isCandEligible && Boolean(doneIds[cand.id] || allProducesSatisfied);
+    const alreadySatisfiedOnTarget = isCandEligible && Boolean(
+      doneIds[cand.id] || allProducesSatisfied || cmdInfo.allSettled || adGraphAlreadyCollected
+    );
     const priorSubcmdContinuation =
       seenReachableInHistory &&
       isCandEligible &&
@@ -1486,7 +1785,67 @@ function stripAttackerCallbackArgsForTargetRouting(cmd) {
     .replace(/\bLHOST\s*=\s*\S+/gi, ' ')
     .replace(/--lhost(?:=|\s+)\S+/gi, ' ')
     .replace(/(?:^|\s)-l\s+\d{1,3}(?:\.\d{1,3}){3}\b/g, ' ')
-    .replace(/--socks\d*(?:=|\s+)\S+/gi, ' ');
+    .replace(/--socks\d*(?:=|\s+)\S+/gi, ' ')
+    .replace(/(?:^|\s)-[A-Za-z]*[LR]\s*(?:(?:\d{1,3}\.){3}\d{1,3}:)?\d{2,5}:(?:\d{1,3}(?:\.\d{1,3}){3}|localhost):\d{2,5}\b/g, ' ')
+    .replace(/\bR:(?:(?:\d{1,3}\.){3}\d{1,3}:)?\d{2,5}:(?:\d{1,3}(?:\.\d{1,3}){3}|localhost):\d{2,5}\b/gi, ' ');
+}
+
+function extractLoopbackForwardPort(cmd) {
+  const s = String(cmd || '');
+  if (!/\b(?:127\.0\.0\.1|localhost)\b/i.test(s)) return '';
+  // Do not treat tunnel-establishment flags themselves (-L/-R/R:/chisel server) as tunnel consumers
+  if (/\bchisel(?:\.exe)?\s+(?:server|client)\b/i.test(s)) return '';
+  if (/(?:^|\s)-[A-Za-z]*[LR]\s*(?:(?:\d{1,3}\.){3}\d{1,3}:)?\d{2,5}:(?:\d{1,3}(?:\.\d{1,3}){3}|localhost):\d{2,5}\b/.test(s)) {
+    return '';
+  }
+  const hostPortM = /\b(?:127\.0\.0\.1|localhost):(\d{2,5})\b/i.exec(s);
+  if (hostPortM) return hostPortM[1];
+  const flagPortM = /(?:^|\s)(?:-p|-P|--port)(?:=|\s+)(\d{2,5})\b/.exec(s);
+  if (flagPortM) return flagPortM[1];
+  const ncPortM = /\b(?:nc|ncat|netcat|telnet)\b[^\r\n]*?\b(?:127\.0\.0\.1|localhost)\s+(\d{2,5})\b/i.exec(s);
+  if (ncPortM) return ncPortM[1];
+  return '';
+}
+
+function recordPortForwardBindings(cmd, stdout, hostTarget, fallbackTunnelTarget, net, portForwardTargets) {
+  const s = String(cmd || '');
+  const out = String(stdout || '');
+  function isNonSelfLabIp(ip) {
+    return Boolean(ip && isPrivateLabIpv4(ip) && net.selfIps.indexOf(ip) < 0 && !ATTACKER_SUBNET_RE.test(ip));
+  }
+  function bindPort(lport, rhost) {
+    if (!lport) return;
+    const endpoint = isNonSelfLabIp(rhost) ? rhost : (hostTarget || fallbackTunnelTarget || '');
+    if (endpoint) portForwardTargets[String(lport)] = endpoint;
+  }
+
+  let m;
+  const chiselRevRe = /\bR:(?:(?:\d{1,3}\.){3}\d{1,3}:)?(\d{2,5}):(\d{1,3}(?:\.\d{1,3}){3}|localhost):(\d{2,5})\b/gi;
+  while ((m = chiselRevRe.exec(s)) !== null) {
+    bindPort(m[1], m[2]);
+  }
+  if (/\bchisel(?:\.exe)?\s+client\b/i.test(s)) {
+    const chiselFwdRe = /(?:^|\s)(?:(?:\d{1,3}\.){3}\d{1,3}:)?(\d{2,5}):(\d{1,3}(?:\.\d{1,3}){3}|localhost):(\d{2,5})(?=\s|$)/g;
+    while ((m = chiselFwdRe.exec(s)) !== null) {
+      bindPort(m[1], m[2]);
+    }
+  }
+  const sshTunnelRe = /(?:^|\s)-[A-Za-z]*[LR]\s*(?:(?:\d{1,3}\.){3}\d{1,3}:)?(\d{2,5}):(\d{1,3}(?:\.\d{1,3}){3}|localhost):(\d{2,5})\b/g;
+  while ((m = sshTunnelRe.exec(s)) !== null) {
+    bindPort(m[1], m[2]);
+  }
+  if (/\bportfwd\s+add\b/i.test(s)) {
+    const lpM = /(?:^|\s)-l\s+(\d{2,5})\b/i.exec(s);
+    const rhM = /(?:^|\s)-r\s+(\d{1,3}(?:\.\d{1,3}){3}|localhost)\b/i.exec(s);
+    if (lpM) bindPort(lpM[1], rhM ? rhM[1] : '');
+  }
+  const chiselOutRe = /proxy#R:(?:(?:\d{1,3}\.){3}\d{1,3}:)?(\d{2,5})=>/gi;
+  while ((m = chiselOutRe.exec(out)) !== null) {
+    const lp = String(m[1]);
+    if (!portForwardTargets[lp] && (fallbackTunnelTarget || hostTarget)) {
+      portForwardTargets[lp] = fallbackTunnelTarget || hostTarget;
+    }
+  }
 }
 
 function replayWalkthrough(OBOL, walkthroughInput, opts) {
@@ -1564,6 +1923,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
   let bhIngested = false;
   let ligoloAgentHost = '';
   let activeTunnelTarget = '';
+  const portForwardTargets = Object.create(null);
 
   for (let idx = 0; idx < turns.length; idx++) {
     const rawTurn = turns[idx];
@@ -1619,6 +1979,14 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
           if (turnTarget !== net.primaryTarget) {
             activeTunnelTarget = turnTarget;
           }
+        } else if (isAttackerTurn(turn)) {
+          const fwdPort = extractLoopbackForwardPort(expandedCmd);
+          if (fwdPort && portForwardTargets[fwdPort]) {
+            turnTarget = portForwardTargets[fwdPort];
+            if (turnTarget !== activeBefore) {
+              session.setActiveTarget(turnTarget);
+            }
+          }
         }
       }
 
@@ -1628,6 +1996,15 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
           activeTunnelTarget = turnTarget;
         }
       }
+
+      recordPortForwardBindings(
+        expandedCmd,
+        turn.stdout || '',
+        turnTarget,
+        activeTunnelTarget,
+        net,
+        portForwardTargets
+      );
     }
 
     // Trigger BloodHound JSON bundle right when a bloodhound/sharphound collection command appears
@@ -1949,6 +2326,9 @@ if (require.main === module) {
 
 module.exports = {
   STALL_BUCKETS: STALL_BUCKETS,
+  stripCommandWrappers: stripCommandWrappers,
+  extractCommandFlags: extractCommandFlags,
+  detectSequentialRevertAliases: detectSequentialRevertAliases,
   applyIpAliases: applyIpAliases,
   isHousekeepingTurn: isHousekeepingTurn,
   inferEngagementNetworking: inferEngagementNetworking,

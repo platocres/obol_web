@@ -14,7 +14,7 @@
   var _HASHCAT_NETNTLM_RE = /^(?<user>[a-zA-Z0-9._$-]+)::(?<domain>[^:]*):[0-9a-fA-F:]+:(?<pw>[^\r\n]+)$/;
   var _HASHCAT_IPMI_RE = /^(?:[0-9a-fA-F]+:)?(?:(?<user>[a-zA-Z0-9._-]+):)?[0-9a-fA-F]{16,}:[0-9a-fA-F]{16,}:(?<pw>[^\r\n:]+)$/;
   var _CRACKED_DCC2_RE = /^(?:[^:\s]+:)?\$DCC2\$\d+#(?<user>[^#]+)#(?<hash>[0-9a-fA-F]{32}):(?<pw>[^\r\n]+)$/i;
-  var _CRACKED_MODULAR_RE = /^(?:(?<user>[^:\s$]+):)?(?<hash>(?:\$(?:1|2[abxy]|5|6|y|apr1|P|H|S|pbkdf2[^$]*|pfx|pkzip2?|zip2|rar\d?|7z|office|pdf|sshng|ansible|PEM)\$[^\s:]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s:]+|sha(?:1|256|512):\d+:[^:\s]+:[^:\s]+)):(?<pw>[^\r\n:]+)$/i;
+  var _CRACKED_MODULAR_RE = /^(?:(?<user>[^:\s$]+):)?(?<hash>(?:\$(?:1|2[abxy]|5|6|y|apr1|P|H|S|pbkdf2[^$]*|pfx|pkzip2?|zip2|rar\d?|7z|office|pdf|sshng|ansible|PEM|keepass)\$[^\s:]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s:]+|sha(?:1|256|512):\d+:[^:\s]+:[^:\s]+)):(?<pw>[^\r\n:]+)$/i;
   var _CRACKED_FILE_RE = /^\s*(?<file>[A-Za-z0-9_.-]+\.(?:psafe3|kdbx|pfx|p12|zip|rar|7z|pdf|docx?|xlsx?)):(?<pw>[^\r\n:]+)\s*$/i;
 
   function _user_for_nthash(ws, nthash) {
@@ -206,9 +206,9 @@
 
       if (ll.indexOf('$keepass$*') >= 0) {
         var idxK = line.lastIndexOf(':');
-        if (idxK >= 0) {
+        if (idxK >= 0 && ll.slice(0, idxK).indexOf('$keepass$*') >= 0) {
           var passK = line.slice(idxK + 1).trim();
-          if (C._valid_password(passK)) {
+          if (C._valid_password(passK) && !/^\$keepass\$/i.test(passK)) {
             _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'keepass_master', password: passK, via: isHashcatCtx ? 'hashcat' : 'john' }, S, source));
             _add_plaintext_credential(facts, ws, source, 'keepass_master', passK, C._domain_from_facts(ws), isHashcatCtx ? 'hashcat' : 'john', 'keepass');
             return;
@@ -217,7 +217,7 @@
       }
 
       var mMod = _CRACKED_MODULAR_RE.exec(line);
-      if (mMod && C._valid_password(mMod.groups.pw.trim())) {
+      if (mMod && C._valid_password(mMod.groups.pw.trim()) && !/^\$(?:keepass|krb5|dcc2|sntp-ms)/i.test(mMod.groups.pw.trim())) {
         var modRawUser = (mMod.groups.user || '').replace(/^.*[\\/]/, '');
         var modUser = C._clean_username(modRawUser) || 'cracked';
         if (!C._valid_username(modUser, false)) modUser = 'cracked';
@@ -434,7 +434,9 @@
       if (edom && edom.indexOf('.') >= 0) domCounts[edom] = (domCounts[edom] || 0) + 1;
       if (user.toLowerCase() === 'krbtgt') krbtgtNt = nt;
     });
-    if (/Dumping LSA Secrets|\[\*\]\s*(?:_SC_|DefaultPassword|\$MACHINE\.ACC|DPAPI_SYSTEM)/i.test(text)) {
+    var hasLsaBanner = /Dumping LSA Secrets|\[\*\]\s*(?:_SC_|DefaultPassword|\$MACHINE\.ACC|DPAPI_SYSTEM)/i.test(text);
+    var hasSecretsdumpCtx = /\bsecretsdump\b/i.test((command || '') + '\n' + text);
+    if (hasLsaBanner || hasSecretsdumpCtx) {
       _DPAPI_KEY_RE.lastIndex = 0;
       var dm;
       while ((dm = _DPAPI_KEY_RE.exec(text)) !== null) {
@@ -443,11 +445,15 @@
       _LSA_CLEARTEXT_RE.lastIndex = 0;
       var lm;
       while ((lm = _LSA_CLEARTEXT_RE.exec(text)) !== null) {
+        var lsaDom = (lm.groups.domain || '').trim();
+        if (!hasLsaBanner && (!lsaDom || lsaDom.length < 2)) continue;
+        if (/^(?:BUILTIN|NT AUTHORITY|NT SERVICE|IIS APPPOOL|WINDOW MANAGER|FONT DRIVER HOST)$/i.test(lsaDom)) continue;
         var lsaUser = C._clean_username(lm.groups.user);
         var lsaPw = (lm.groups.pw || '').trim();
-        var lsaDom = (lm.groups.domain || '').trim();
-        if (/^(?:dpapi_machinekey|dpapi_userkey|NL\$KM|plain_password_hex|aes256-cts-hmac-sha1-96|aes128-cts-hmac-sha1-96|des-cbc-md5)$/i.test(lsaUser)) continue;
-        if (/^0x[0-9a-fA-F]+$/i.test(lsaPw) || /^[0-9a-fA-F]{32,128}$/.test(lsaPw)) continue;
+        if (/^(?:dpapi_machinekey|dpapi_userkey|NL\$KM|plain_password_hex|aes256-cts-hmac-sha1-96|aes128-cts-hmac-sha1-96|des-cbc-md5|\$MACHINE\.ACC)$/i.test(lsaUser)) continue;
+        if (/^0x[0-9a-fA-F]+$/i.test(lsaPw) || /^[0-9a-fA-F]{32,128}$/.test(lsaPw) || /^\d+$/.test(lsaPw)) continue;
+        if (/^(?:\([A-Za-z0-9_,]+\))+$/.test(lsaPw)) continue;
+        if (!hasLsaBanner && /\.(?:txt|xml|ini|cfg|conf|config|ps1|bat|cmd|log|exe|dll|py|sh|php|aspx?|json|ya?ml|md)$/i.test(lsaUser)) continue;
         if (C._valid_username(lsaUser, false) && C._valid_password(lsaPw)) {
           _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'lsa_secret', user: lsaUser, password: lsaPw, domain: lsaDom }, S, source));
           _add_plaintext_credential(facts, ws, source, lsaUser, lsaPw, lsaDom || C._domain_from_facts(ws), 'lsa-secrets', '');
@@ -491,11 +497,11 @@
 
   function _looks_like_sam_dump(text) {
     if (!text) return false;
-    return /^(?:[a-zA-Z0-9._$-]+:\d{3,5}:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::)/m.test(text);
+    return /^(?:[a-zA-Z0-9._$-]+:\d{3,5}:(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):[0-9a-fA-F]{32}:::)/m.test(text);
   }
   C._looks_like_sam_dump = _looks_like_sam_dump;
 
-  var _MIMI_SIG_RE = /sekurlsa::|lsadump::|token::elevate|->\s*Impersonated\s*!|crypto::capi|mimikatz\s+#|pypykatz|^Hash NTLM:|Authentication Id\s*:[\s\S]{1,400}?(?:\bmsv\s*:|\bwdigest\s*:|\bkerberos\s*:|\*\s*NTLM\s*:)/im;
+  var _MIMI_SIG_RE = /sekurlsa::|lsadump::|token::elevate|->\s*Impersonated\s*!|crypto::capi|mimikatz\s+#|pypykatz|^\s*Hash NTLM:|^\s*SysKey\s*:[ \t]*[0-9a-fA-F]{32}\b|^\s*msv credentials\s*\r?\n\s*=+|\[\+\]\s*Running as SYSTEM\b|\b(?:creds_all|creds_msv|creds_wdigest|creds_kerberos|lsa_dump_sam|lsa_dump_secrets)\b|Authentication Id\s*:[\s\S]{1,400}?(?:\bmsv\s*:|\bwdigest\s*:|\bkerberos\s*:|\*\s*NTLM\s*:)/im;
   var _MIMI_USERNAME_RE = /^\s*\*\s*Username\s*:\s*(?<user>.+?)\s*$/i;
   var _MIMI_LSA_USER_RE = /^\s*User\s*:\s*(?<user>.+?)\s*$/i;
   var _MIMI_DOMAIN_RE = /^\s*\*\s*Domain\s*:\s*(?<dom>.+?)\s*$/i;
@@ -509,9 +515,52 @@
   function _parse_mimikatz(text, ws, command, source, facts) {
     if (!text || !text.trim()) return;
     text = text.replace(C._ANSI_RE, '');
-    var h = 'host:' + ws.target, lc = (command || '').toLowerCase(), lowered = text.toLowerCase();
-    var entries = [], seen = {}, plainSeen = {}, curUser = '', curDomain = '', curRid = null;
+    var h = 'host:' + ws.target;
+    var entries = [], kiwiMsvEntries = [], seen = {}, plainSeen = {}, curUser = '', curDomain = '', curRid = null;
+    var kiwiMode = '', kiwiHasRows = false;
     text.split(/\r?\n/).forEach(function (raw) {
+      if (/^\s*msv credentials\s*$/i.test(raw)) { kiwiMode = 'msv'; kiwiHasRows = false; return; }
+      if (/^\s*(?:wdigest|kerberos|tspkg|ssp|livessp)\s+credentials\s*$/i.test(raw)) { kiwiMode = 'plain'; kiwiHasRows = false; return; }
+      if (kiwiMode) {
+        if (/^\s*[=-]{4,}(?:\s+[=-]{4,})*\s*$/.test(raw)) return;
+        if (/^\s*Username\s+Domain\s+(?:NTLM|Password)\b/i.test(raw)) return;
+        if (!raw.trim()) { if (kiwiHasRows) { kiwiMode = ''; kiwiHasRows = false; } return; }
+        if (/^\s*\[\*\]|\[\+\]|meterpreter\s*>/i.test(raw)) { kiwiMode = ''; kiwiHasRows = false; }
+        else if (kiwiMode === 'msv') {
+          var km = /^\s*(?<user>\S+)\s+(?<dom>\S+)\s+(?<nt>[0-9a-fA-F]{32})(?:\s+\S+){0,3}\s*$/.exec(raw);
+          if (km) {
+            kiwiHasRows = true;
+            var ku = C._clean_username(km.groups.user), kdom = km.groups.dom.trim(), knt = km.groups.nt.toLowerCase();
+            if (ku && C._valid_username(ku)) {
+              var kkey = ku.toLowerCase() + '|' + knt;
+              if (!seen[kkey]) {
+                seen[kkey] = true;
+                var ke = { user: ku, nthash: knt };
+                if (kdom && kdom !== '(null)') ke.domain = kdom;
+                entries.push(ke);
+                kiwiMsvEntries.push(ke);
+              }
+            }
+            return;
+          }
+        } else if (kiwiMode === 'plain') {
+          if (/^\s{8,}/.test(raw)) return;
+          var kpm = /^\s*(?<user>\S+)\s+(?<dom>\S+)\s+(?<pw>.+?)\s*$/.exec(raw);
+          if (kpm) {
+            kiwiHasRows = true;
+            var kpu = C._clean_username(kpm.groups.user), kpdom = kpm.groups.dom.trim(), kpw = kpm.groups.pw.trim();
+            if (kpu && !/\$$/.test(kpu) && C._valid_username(kpu) && !/(?:^|\s)(?:[0-9a-fA-F]{1,2}\s+){3,}[0-9a-fA-F]{1,2}(?:\s|$)/.test(kpw) && kpw !== '(null)' && kpw !== '<null>' && C._valid_password(kpw)) {
+              var kpk = kpu.toLowerCase() + '|' + kpw;
+              if (!plainSeen[kpk]) {
+                plainSeen[kpk] = true;
+                var kdomClean = (kpdom && kpdom.indexOf('.') >= 0) ? kpdom : '';
+                _add_plaintext_credential(facts, ws, source, kpu, kpw, kdomClean, 'mimikatz', '');
+              }
+            }
+            return;
+          }
+        }
+      }
       var um = _MIMI_USERNAME_RE.exec(raw) || _MIMI_LSA_USER_RE.exec(raw);
       if (um) {
         var u = um.groups.user.trim();
@@ -550,7 +599,7 @@
       }
     });
     var fullMimi = text + '\n' + (command || '');
-    if (/(?:token::elevate|Impersonated\s*!)[\s\S]{0,400}?(?:NT AUTHORITY\\SYSTEM|\bS-1-5-18\b)|(?:NT AUTHORITY\\SYSTEM|\bS-1-5-18\b)[\s\S]{0,240}?->\s*Impersonated\s*!/i.test(fullMimi)) {
+    if (/\[\+\]\s*Running as SYSTEM\b/i.test(fullMimi) || /(?:token::elevate|Impersonated\s*!)[\s\S]{0,400}?(?:NT AUTHORITY\\SYSTEM|\bS-1-5-18\b)|(?:NT AUTHORITY\\SYSTEM|\bS-1-5-18\b)[\s\S]{0,240}?->\s*Impersonated\s*!/i.test(fullMimi)) {
       _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'token-impersonation', tool: 'mimikatz' }, S, source));
     }
     if (!entries.length) return;
@@ -559,12 +608,32 @@
     var isDcsyncOrNtds = /lsadump::(?:dcsync|lsa\s+\/inject)/i.test(fullMimi)
       || /\bUser\s*:\s*krbtgt\b/i.test(text)
       || entries.some(function (e) { return e.user && e.user.toLowerCase() === 'krbtgt'; });
-    var isSamDump = /lsadump::sam\b/i.test(fullMimi)
-      || (/\bSAMKey\s*:/i.test(text) && /\bRID\s*:\s*000001f4\s*\(500\)/i.test(text));
+    var isSamDump = /(?:lsadump::sam|lsa_dump_sam)\b/i.test(fullMimi)
+      || (/\bSAMKey\s*:/i.test(text) && (/\bRID\s*:\s*000001f4\s*\(500\)/i.test(text) || /\bSysKey\s*:[ \t]*[0-9a-fA-F]{32}\b/i.test(text)));
     if (isDcsyncOrNtds) {
       _add(facts, mkFact('loot.ntds', h, { count: entries.length, method: 'lsadump' }, S, source));
     } else if (isSamDump) {
       _add(facts, mkFact('loot.sam', h, { count: entries.length, method: 'mimikatz-lsadump-sam' }, S, source));
+      entries.forEach(function (e) {
+        if (!e || !e.nthash || e.nthash === '31d6cfe0d16ae931b73c59d7e0c089c0') return;
+        if (e.rid === 501 || e.rid === 503 || e.rid === 504) return;
+        if (/^(?:guest|defaultaccount|wdagutilityaccount)$/i.test(e.user) || /\$$/.test(e.user)) return;
+        var lav = { user: e.user, nthash: e.nthash, method: 'sam-dump', hash_type: 'ntlm', accountType: 'local', targetBinding: ws.target };
+        if (e.domain) lav.domain = e.domain;
+        _add(facts, mkFact('credential.available', h, lav, S, source));
+        _add(facts, mkFact('credential.ntlm_hash', h, lav, S, source));
+      });
+    }
+    if (kiwiMsvEntries.length) {
+      kiwiMsvEntries.forEach(function (e) {
+        if (!e || !e.nthash || e.nthash === '31d6cfe0d16ae931b73c59d7e0c089c0') return;
+        if (/^(?:guest|defaultaccount|wdagutilityaccount)$/i.test(e.user) || /\$$/.test(e.user)) return;
+        var kScope = (e.domain && e.domain.indexOf('.') >= 0) ? C._scope_for_domain(ws, e.domain) : h;
+        var kav = { user: e.user, nthash: e.nthash, method: 'kiwi-msv', hash_type: 'ntlm' };
+        if (e.domain) kav.domain = e.domain;
+        _add(facts, mkFact('credential.available', kScope, kav, S, source));
+        _add(facts, mkFact('credential.ntlm_hash', kScope, kav, S, source));
+      });
     }
   }
   C._parse_mimikatz = _parse_mimikatz;
@@ -638,13 +707,13 @@
 
   var _GENERIC_CRED_BLOCK_RE = /(?:^\s*Domain\s*:\s*(?<dom>[^\r\n]+)\s*\r?\n\s*)?^\s*User(?:name)?\s*:\s*(?<user>[^\r\n]+)\s*\r?\n\s*(?:Domain\s*:\s*(?<dom2>[^\r\n]+)\s*\r?\n\s*)?Password\s*:\s*(?<pw>[^\r\n]+)/gim;
   var _CMD_CRED_RE = /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?(?<user>[a-zA-Z0-9._-]+)['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?<pw>(?!-)[^\s'"]+)['"]?/gi;
-  var _ATTACKER_CMD_LINE_RE = /^\s*(?:(?:\$|\#|└─\$|┌──|\[\*\]|\[\+\]|\[\-\]|PS\s+[A-Za-z]:\\[^>]*>|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^$#]*[$#])\s*)*(?:sudo\s+|proxychains\d?\s+)*(?:nxc|netexec|crackmapexec|cme|impacket-[\w.-]+|evil-winrm|xfreerdp|rdesktop|hydra|medusa|ncrack|sqlmap|gobuster|ffuf|feroxbuster|dirsearch|wfuzz|curl|wget|smbclient|smbmap|rpcclient|ldapsearch|bloodyAD|certipy|kerbrute|responder)\b/i;
+  var _ATTACKER_CMD_LINE_RE = /^\s*(?:(?:\$|\#|└─\$|┌──|\[\*\]|\[\+\]|\[\-\]|PS\s+[A-Za-z]:\\[^>]*>|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^$#]*[$#])\s*)*(?:(?:sudo|proxychains4?|time|env|python[23]?(?:\.\d+)?|py|perl|ruby|bash|sh)\s+)*(?:[\w.~/-]+[\\/])?(?:nxc|netexec|crackmapexec|cme|impacket-[\w.-]+|targetedkerberoast(?:\.py)?|getuserspns(?:\.py)?|getnpusers(?:\.py)?|secretsdump(?:\.py)?|dacledit(?:\.py)?|owneredit(?:\.py)?|pywhisker(?:\.py)?|timeroast(?:\.py)?|addcomputer(?:\.py)?|gettgt(?:\.py)?|getst(?:\.py)?|rbcd(?:\.py)?|lookupsid(?:\.py)?|psexec(?:\.py)?|wmiexec(?:\.py)?|smbexec(?:\.py)?|atexec(?:\.py)?|dcomexec(?:\.py)?|mssqlclient(?:\.py)?|ticketer(?:\.py)?|finddelegation(?:\.py)?|evil-winrm|xfreerdp|rdesktop|hydra|medusa|ncrack|sqlmap|gobuster|ffuf|feroxbuster|dirsearch|wfuzz|curl|wget|smbclient|smbmap|rpcclient|ldapsearch|bloodyAD|certipy(?:-ad)?|bloodhound(?:-python)?|kerbrute|responder)\b/i;
   var _JSON_CRED_RE = /"(?:username|user)"\s*:\s*"(?<user>[^"]+)"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"(?<pw>[^"]+)"/gi;
   var _JSON_CRED_REV_RE = /"(?:password|pass)"\s*:\s*"(?<pw>[^"]+)"[^{}]{1,160}?"(?:username|user)"\s*:\s*"(?<user>[^"]+)"/gi;
   var _URL_CRED_RE = /https?:\/\/(?<user>[a-zA-Z0-9._-]+):(?<pw>[^@\s'"]+)@/gi;
   var _KEEPASS_DUMP_RE = /(?:Possible master password|Master password candidate|Extracted password|KeePass master password|KeePass password)\s*[:=]\s*['"]?(?<pw>[^\r\n'"]+)['"]?/gi;
   var _MREMOTENG_DECRYPT_RE = /^\s*(?<user>[a-zA-Z0-9._$-]{1,64})@(?<host>[a-zA-Z0-9._-]{1,64})(?::\d+)?\s*\|\s*password\s+is:\s*(?<pw>\S+)/gim;
-  var _CISCO_CONFIG_CRED_RE = /^\s*username\s+(?<user>[a-zA-Z0-9._-]+)(?:\s+privilege\s+\d+)?\s+(?:password\s+0|secret\s+0|password)\s+['"]?(?<pw>[^\r\n\s'"]+)['"]?/gmi;
+  var _CISCO_CONFIG_CRED_RE = /^[ \t]*username[ \t]+(?<user>[a-zA-Z0-9._-]+)(?:[ \t]+privilege[ \t]+\d+)?[ \t]+(?:password[ \t]+0|secret[ \t]+0|password)[ \t]+['"]?(?<pw>[^\r\n\s'"]+)['"]?/gmi;
   var _CISCO_DECRYPT_OUTPUT_RE = /(?:cisco-decrypt|decrypted\s*(?:cisco)?\s*password)\s*[:=->]\s*['"]?(?<pw>[^\r\n'"]+)['"]?/gi;
   var _CONN_STRING_USER_RE = /(?:User ID|UID)\s*=\s*['"]?(?<user>[a-zA-Z0-9._-]+)['"]?/gi;
   var _CONN_STRING_PASS_RE = /(?:Password|PWD)\s*=\s*['"]?(?<pw>[^;'"\r\n]+)['"]?/gi;
@@ -707,12 +776,14 @@
       /\b(?:password|encryptedPassword)\s*=\s*[a-fA-F0-9]{40}\b/i.test(text) ||
       /\[\+\]\s+Valid credentials found:\s*[a-zA-Z0-9_$]+\/\S+/i.test(text) ||
       /^[+-]?\s*(?:(?:db_|admin_|app_|api_)?password|passwd|pwd)\s*[=:]\s*['"]?[^\r\n\s'"]+['"]/mi.test(text) ||
-      /^\s*username\s+[a-zA-Z0-9._-]+(?:\s+privilege\s+\d+)?\s+(?:password|secret)\b/mi.test(text) ||
+      (/^[ \t]*username[ \t]+[a-zA-Z0-9._-]+(?:[ \t]+privilege[ \t]+\d+)?[ \t]+(?:password|secret)[ \t]+\S/mi.test(text) && /\bprivilege[ \t]+\d+\b|\b(?:password|secret)[ \t]+[05789][ \t]+\S|\benable[ \t]+(?:secret|password)\b|^![ \t]*$/im.test(text)) ||
       /(?:cisco-decrypt|decrypted\s*(?:cisco)?\s*password)\s*[:=->]/i.test(text) ||
       /(?:User ID|UID)\s*=\s*[a-zA-Z0-9._-]+[\s\S]{1,150}?(?:Password|PWD)\s*=/i.test(text) ||
       /(?:Password|PWD)\s*=[^;\r\n]+[\s\S]{1,150}?(?:User ID|UID)\s*=/i.test(text) ||
       /(?:(?:extracted|recovered|found)\s*(?:nosql|user|admin|db)?\s*(?:password|passwd)|\[\+\]\s*password)\s*[:=->]/i.test(text) ||
-      /^(?:["']?[a-zA-Z0-9_]+["']?[,\t])*(?:["']?(?:username|user|login)["']?[,\t])+(?:["']?[a-zA-Z0-9_]+["']?[,\t])*(?:["']?(?:password|pass|passwd|pwd)["']?)/mi.test(text)
+      /^(?:["']?[a-zA-Z0-9_]+["']?[,\t])*(?:["']?(?:username|user|login)["']?[,\t])+(?:["']?[a-zA-Z0-9_]+["']?[,\t])*(?:["']?(?:password|pass|passwd|pwd)["']?)/mi.test(text) ||
+      (/^\s*(?:#+\s*)?(?:[\w\s]{0,24}\b)?(?:passwords?|credentials?|logins?|accounts?)\s*:\s*$/im.test(text) && /^\s*[-*+]\s*[A-Za-z0-9_.\\@-]{2,64}\s*:\s*\S+/m.test(text)) ||
+      (/(?:\$|\b)(?:[A-Za-z0-9_.-]*?(?:User(?:name)?|Login|Uid|Account))\s*[:=]/i.test(text) && /(?:\$|\b)(?:[A-Za-z0-9_.-]*?(?:Pass(?:word|wd)?|Pwd|Secret)|[A-Za-z0-9_]*[a-z0-9_]Pw|pw)\s*[:=]/i.test(text))
     );
   }
   C._looks_like_generic_dumped_credentials = _looks_like_generic_dumped_credentials;
@@ -903,6 +974,8 @@
         while ((cm = _CMD_CRED_RE.exec(line)) !== null) {
           var cUser = C._clean_username(cm.groups.user);
           var cPw = (cm.groups.pw || '').trim();
+          if (/^(?:controlleduser|targetuser|username|user|victim|<user>)$/i.test(cUser) && (/^(?:itspassword|password|pass|<password>)$/i.test(cPw) || /\bdomain\.local\b/i.test(line))) continue;
+          if (/^controlleduser$/i.test(cUser) || /^itspassword$/i.test(cPw)) continue;
           if (!C._valid_username(cUser, false) || !C._valid_password(cPw)) continue;
           _add_plaintext_credential(facts, ws, source, cUser, cPw, C._domain_from_facts(ws), 'process-leak', '');
         }
@@ -969,13 +1042,15 @@
       }
     }
 
-    _CISCO_CONFIG_CRED_RE.lastIndex = 0;
-    var ciscoM;
-    while ((ciscoM = _CISCO_CONFIG_CRED_RE.exec(text)) !== null) {
-      var ciscoUser = C._clean_username(ciscoM.groups.user);
-      var ciscoPw = (ciscoM.groups.pw || '').trim();
-      if (C._valid_username(ciscoUser, false) && C._valid_password(ciscoPw)) {
-        _add_plaintext_credential(facts, ws, source, ciscoUser, ciscoPw, C._domain_from_facts(ws), 'cisco-config', '');
+    if (/\bprivilege[ \t]+\d+\b|\b(?:password|secret)[ \t]+[05789][ \t]+\S|\benable[ \t]+(?:secret|password)\b|^![ \t]*$/im.test(text)) {
+      _CISCO_CONFIG_CRED_RE.lastIndex = 0;
+      var ciscoM;
+      while ((ciscoM = _CISCO_CONFIG_CRED_RE.exec(text)) !== null) {
+        var ciscoUser = C._clean_username(ciscoM.groups.user);
+        var ciscoPw = (ciscoM.groups.pw || '').trim();
+        if (C._valid_username(ciscoUser, false) && C._valid_password(ciscoPw)) {
+          _add_plaintext_credential(facts, ws, source, ciscoUser, ciscoPw, C._domain_from_facts(ws), 'cisco-config', '');
+        }
       }
     }
 
@@ -1060,8 +1135,137 @@
         }
       }
     }
+
+    // Headed bulleted credential lists (e.g., "Local Admin Passwords:\n- user: secret")
+    if (!hasInteractiveAuthFail && /^\s*(?:#+\s*)?(?:[\w\s]{0,24}\b)?(?:passwords?|credentials?|logins?|accounts?)\s*:\s*$/im.test(text)) {
+      var bLines = text.split(/\r?\n/);
+      var inBulletSection = false;
+      for (var bi = 0; bi < bLines.length; bi++) {
+        var bLn = bLines[bi];
+        if (/^\s*(?:#+\s*)?(?:[\w\s]{0,24}\b)?(?:passwords?|credentials?|logins?|accounts?)\s*:\s*$/i.test(bLn)) {
+          inBulletSection = true;
+          continue;
+        }
+        if (!inBulletSection) continue;
+        if (!bLn.trim()) continue;
+        var bm = /^\s*[-*+]\s*([A-Za-z0-9_.\\@-]{2,64})\s*:\s*([^\s'"]{3,80})\s*$/.exec(bLn);
+        if (!bm) {
+          inBulletSection = false;
+          continue;
+        }
+        var bRawU = bm[1], bPw = bm[2].trim(), bDom = '';
+        if (bRawU.indexOf('\\') >= 0) {
+          var bParts = bRawU.split('\\');
+          bDom = bParts[0].trim();
+          bRawU = bParts.slice(1).join('\\');
+        }
+        if (_NOTE_SCHEME_DENY_RE.test(bRawU) || _NOTE_USER_DENY_RE.test(bRawU)) continue;
+        if (/^(?:active|inactive|enabled|disabled|locked|unlocked|expired|valid|invalid|present|absent|yes|no|true|false|none|null|n\/a|tbd|todo|unknown|standard|member|owner)$/i.test(bPw)) continue;
+        var bCleanU = C._clean_username(bRawU);
+        if (!C._valid_username(bCleanU, false) || !C._valid_password(bPw)) continue;
+        var bScope = (bDom && bDom.indexOf('.') >= 0) ? C._scope_for_domain(ws, bDom) : hScope;
+        _add(facts, mkFact('credential.candidate', bScope, { kind: 'credential_list', user: bCleanU, password: bPw, domain: bDom, via: 'bulleted-list' }, S, source));
+        _add_plaintext_credential(facts, ws, source, bCleanU, bPw, bDom || C._domain_from_facts(ws), 'bulleted-list', '');
+      }
+    }
+
+    // Paired variable/config assignments within 5 lines (*Login / *Pw, *_user / *_pass, .cfg user= / pass=)
+    if (!hasInteractiveAuthFail && !/^\s*(?:SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+/im.test(text)) {
+      var kvLines = text.split(/\r?\n/);
+      var userVars = [], passVars = [];
+      var isCodeLike = /\b(?:function|def|class|import|require|return)\b/.test(text);
+      for (var kvi = 0; kvi < kvLines.length; kvi++) {
+        var kvLn = kvLines[kvi];
+        if (!kvLn || kvLn.length > 240 || _ATTACKER_CMD_LINE_RE.test(kvLn) || /^\s*(?:\/\/|\/\*|\*|--|;)/.test(kvLn)) continue;
+        var kvM = /^\s*(?:(?:var|let|const|my|local|export|set|private|public|string|String)\s+)?(\$?[A-Za-z][A-Za-z0-9_.-]{1,48})\s*[:=]\s*(?:(['"])([^'"\r\n]{2,96})\2|([^\s'"#;,()[\]{}]{2,96}))\s*[;,]?\s*$/.exec(kvLn);
+        if (!kvM) continue;
+        var rawKey = kvM[1].replace(/^\$/, '');
+        var isQuoted = !!kvM[2];
+        var rawVal = (isQuoted ? kvM[3] : kvM[4] || '').trim();
+        if (!rawVal || (!isQuoted && (isCodeLike || /^\$/.test(kvM[1]) || /^(?:args|opts|options|self|this|req|request|params|form|data|env|os|sys|config|cfg|row|item|obj)\./i.test(rawVal)))) continue;
+        if (/^(?:\$[A-Za-z_]|{{|<[A-Za-z_]|%[A-Za-z_]|env\(|os\.|process\.env)/i.test(rawVal)) continue;
+        var isUserKey = /(?:[a-z0-9](?:User(?:name)?|Login|Uid|Account))$/.test(rawKey) || /(?:^|[._-])(?:user(?:name)?|login|uid|account)$/i.test(rawKey);
+        var isPassKey = /(?:[a-z0-9](?:Pass(?:word|wd)?|Pwd|Pw|Secret))$/.test(rawKey) || /(?:^|[._-])(?:pass(?:word|wd)?|pwd|pw|secret)$/i.test(rawKey);
+        if (isUserKey && !isPassKey) userVars.push({ line: kvi, key: rawKey, val: rawVal });
+        else if (isPassKey && !isUserKey) passVars.push({ line: kvi, key: rawKey, val: rawVal });
+      }
+      if (userVars.length && passVars.length) {
+        var usedPass = {};
+        for (var uvi = 0; uvi < userVars.length; uvi++) {
+          var uv = userVars[uvi], bestPv = null, bestDist = 99;
+          for (var pvi = 0; pvi < passVars.length; pvi++) {
+            if (usedPass[pvi]) continue;
+            var dist = Math.abs(uv.line - passVars[pvi].line);
+            if (dist <= 5 && dist < bestDist) { bestDist = dist; bestPv = pvi; }
+          }
+          if (bestPv === null) continue;
+          usedPass[bestPv] = true;
+          var pvVal = passVars[bestPv].val;
+          var uvRaw = uv.val, uvDom = '';
+          if (uvRaw.indexOf('\\') >= 0) {
+            var uvParts = uvRaw.split('\\');
+            uvDom = uvParts[0].trim();
+            uvRaw = uvParts.slice(1).join('\\');
+          }
+          var uvClean = C._clean_username(uvRaw);
+          if (/^(?:controlleduser|targetuser|your_?user(?:name)?|example|placeholder)$/i.test(uvClean) || /^(?:itspassword|your_?pass(?:word)?|changeme|placeholder)$/i.test(pvVal)) continue;
+          if (!C._valid_username(uvClean, false)) continue;
+          if (_looks_like_password_hash(pvVal)) {
+            _add(facts, mkFact('credential.candidate', hScope, { kind: 'config_hash', user: uvClean, hash: pvVal, via: 'config-pair' }, S, source));
+            _add(facts, mkFact('hash.candidate', hScope, { user: uvClean, hash: pvVal, via: 'config-pair' }, S, source));
+            _add(facts, mkFact('hash.crackable', hScope, { user: uvClean, hash: pvVal, via: 'config-pair' }, S, source));
+          } else if (C._valid_password(pvVal)) {
+            var kvScope = (uvDom && uvDom.indexOf('.') >= 0) ? C._scope_for_domain(ws, uvDom) : hScope;
+            _add(facts, mkFact('credential.candidate', kvScope, { kind: 'config_pair', user: uvClean, password: pvVal, domain: uvDom, via: 'config-pair' }, S, source));
+            _add_plaintext_credential(facts, ws, source, uvClean, pvVal, uvDom || C._domain_from_facts(ws), 'config-pair', '');
+          }
+        }
+      }
+    }
   }
   C._parse_generic_dumped_credentials = _parse_generic_dumped_credentials;
+
+  function _looks_like_tshark_http(text, command) {
+    return !!text && (/\btshark\b/i.test(command || '') || /HTML Form URL Encoded:/i.test(text) || (/^Frame \d+:/m.test(text) && /Form item:\s*"/i.test(text)));
+  }
+  C._looks_like_tshark_http = _looks_like_tshark_http;
+
+  function _parse_tshark_http_creds(text, ws, command, source, facts) {
+    if (!_looks_like_tshark_http(text, command)) return;
+    text = text.replace(C._ANSI_RE, '');
+    var hScope = 'host:' + ws.target;
+    var hasHttpOk = /HTTP\/1\.[01]\s+(?:200|302)\b/.test(text);
+    var frames = /^Frame \d+:/m.test(text) ? text.split(/^Frame \d+:/m) : text.split(/HTML Form URL Encoded:/i);
+    var seenPair = {};
+    for (var fi = 0; fi < frames.length; fi++) {
+      var blk = frames[fi];
+      if (!/Form item:\s*"/i.test(blk)) continue;
+      var fUser = '', fPass = '', fm;
+      var formRe = /^\s*Form item:\s*"([^"]+)"\s*=\s*"([^"]*)"/gim;
+      while ((fm = formRe.exec(blk)) !== null) {
+        var fKey = fm[1].trim(), fVal = fm[2].trim();
+        if (!fVal) continue;
+        if (!fUser && /^(?:user(?:name|_name)?|login|email|e-mail|uid|uname|account|userid)$/i.test(fKey)) fUser = fVal;
+        else if (!fPass && /^(?:pass(?:word|wd)?|pwd|secret|user_pass|login_pass)$/i.test(fKey)) fPass = fVal;
+      }
+      if (!fUser || !fPass) continue;
+      var fDom = '';
+      if (fUser.indexOf('\\') >= 0) {
+        var fp = fUser.split('\\');
+        fDom = fp[0].trim();
+        fUser = fp.slice(1).join('\\');
+      }
+      var cleanU = C._clean_username(fUser);
+      if (!C._valid_username(cleanU, false) || !C._valid_password(fPass)) continue;
+      var pk = cleanU.toLowerCase() + '|' + fPass;
+      if (seenPair[pk]) continue;
+      seenPair[pk] = true;
+      var fScope = (fDom && fDom.indexOf('.') >= 0) ? C._scope_for_domain(ws, fDom) : hScope;
+      _add(facts, mkFact('credential.candidate', fScope, { kind: 'http_form', user: cleanU, password: fPass, domain: fDom, http_response_seen: hasHttpOk, via: 'tshark-http-form' }, S, source));
+      _add_plaintext_credential(facts, ws, source, cleanU, fPass, fDom || C._domain_from_facts(ws), 'tshark-http-form', '');
+    }
+  }
+  C._parse_tshark_http_creds = _parse_tshark_http_creds;
 
   var _FLAG_MARK_RE = /===FLAG:\s*(?<path>[^\r\n]*?)::(?<body>[^\r\n]*)/g;
   var _FLAG_TOKEN = '(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{64}|(?:HTB|FLAG|THM|OSCP|PG|CTF)\\{[^}\\r\\n]{3,}\\}|\\{[0-9A-Za-z_@!#%.:\\-]{3,}\\}|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})';
@@ -1305,6 +1509,18 @@
         var adsTarget = adsMatch.groups.fn + ':' + adsMatch.groups.stream;
         mintPath(adsTarget, _slot_for_flagfile(adsTarget.split(':').pop()));
       }
+      // 3d) LOCATE from parsed on-host / share directory listings (cmd dir / PowerShell Get-ChildItem)
+      facts.forEach(function (lf) {
+        if (!lf || lf.kind !== 'loot.files' || !lf.value) return;
+        var isSmbShare = lf.value.via === 'smb-share';
+        var rawEntries = Array.isArray(lf.value.entries) ? lf.value.entries.map(function (e) { return e && e.path; }) : (lf.value.files || []);
+        rawEntries.forEach(function (fp) {
+          if (!fp || !/[\\/]/.test(fp)) return;
+          if (!/(?:^|[\\/])(?:local|proof|user|root|flag\d?)\.txt$/i.test(fp)) return;
+          var locPath = isSmbShare ? _smbRelToWinPath(fp) : fp;
+          if (locPath) mintPath(locPath, _slot_for_flagfile(locPath.split(/[\\/]/).pop()), isSmbShare);
+        });
+      });
     }
     _parse_backdoor_created(text, ws, command, source, facts);
   }
@@ -1428,6 +1644,7 @@
   // have loot files" gate. A bare mention with no artifact mints nothing.
   var _KEEPASS_KDBX_RE = /(?:[A-Za-z]:\\[^\r\n"'<>|*?\s]*?\.kdbx|\/[^\r\n"'<>|*?\s]*?\.kdbx|(?<![A-Za-z0-9_.\-$])(?!PATTERN\.kdbx\b)[A-Za-z0-9_$-][A-Za-z0-9_.\-]{0,120}\.kdbx)\b/i;
   var _KEEPASS_HASH_RE = /\$keepass\$\*\d/i;
+  var _KEEPASS_FULL_HASH_RE = /\$keepass\$\*\d+\*[^\s'":]+/gi;
   var _KEEPASS_DUMP_RE = /\bkeepass[\w.]*\.(?:dmp|dump)\b|masterkey(?:\.txt)?\b.*keepass|keepass.*master\s*key/i;
   function _parse_keepass_dump(text, ws, command, source, facts) {
     if (!text && !command) return;
@@ -1441,7 +1658,21 @@
     var h = 'host:' + ws.target;
     var kdbx = reSearch(_KEEPASS_KDBX_RE, hay);
     var kdbxFile = kdbx ? kdbx[0] : null;
-    _add(facts, mkFact('loot.keepass_dump', h, { file: kdbxFile, path: kdbxFile, has_hash: !!reSearch(_KEEPASS_HASH_RE, hay), via: 'keepass' }, S, source));
+    var hasHash = !!reSearch(_KEEPASS_HASH_RE, hay);
+    _add(facts, mkFact('loot.keepass_dump', h, { file: kdbxFile, path: kdbxFile, has_hash: hasHash, via: 'keepass' }, S, source));
+    if (hasHash) {
+      _KEEPASS_FULL_HASH_RE.lastIndex = 0;
+      var khm, seenKp = {};
+      while ((khm = _KEEPASS_FULL_HASH_RE.exec(cleanLines)) !== null) {
+        var afterCh = cleanLines.charAt(khm.index + khm[0].length);
+        if (afterCh === ':') continue;
+        var kpHash = khm[0];
+        if (seenKp[kpHash]) continue;
+        seenKp[kpHash] = true;
+        _add(facts, mkFact('hash.crackable', h, { hash: kpHash, format: 'keepass', mode: 13400, via: 'keepass2john' }, S, source));
+        _add(facts, mkFact('hash.candidate', h, { hash: kpHash, format: 'keepass', mode: 13400, via: 'keepass2john' }, S, source));
+      }
+    }
   }
   C._parse_keepass_dump = _parse_keepass_dump;
 

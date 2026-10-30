@@ -546,11 +546,14 @@
     // Key the tool signal on the PRIMARY tool only - a secondary tool in the array (e.g. targetedKerberoast
     // listed alongside the standard GetUserSPNs Kerberoast) must not escalate an otherwise-core move.
     var primary = String((d.tool || (d.tools && d.tools[0]) || '')).toLowerCase();
-    var gates = (d.requires_all || []).concat(d.requires_any || []);
-    if (SCOPE_BEYOND_IDS[id] || SCOPE_BEYOND_TOOLS[primary] ||
-        gates.some(function (g) { return SCOPE_BEYOND_FACTS[g]; })) return 'beyond';
-    if (SCOPE_PLUS_ID_RE.test(id) || SCOPE_PLUS_TOOLS[primary] ||
-        gates.some(function (g) { return SCOPE_PLUS_FACTS[g]; })) return 'oscp+';
+    var reqAll = d.requires_all || [];
+    var reqAny = d.requires_any || [];
+    function hasGate(map) {
+      return reqAll.some(function (g) { return map[g]; }) ||
+        (reqAny.length > 0 && reqAny.every(function (g) { return map[g]; }));
+    }
+    if (SCOPE_BEYOND_IDS[id] || SCOPE_BEYOND_TOOLS[primary] || hasGate(SCOPE_BEYOND_FACTS)) return 'beyond';
+    if (SCOPE_PLUS_ID_RE.test(id) || SCOPE_PLUS_TOOLS[primary] || hasGate(SCOPE_PLUS_FACTS)) return 'oscp+';
     return 'oscp';
   }
   function locusRank(l) { return l === 'R' ? 0 : (l === 'F' ? 1 : 2); }

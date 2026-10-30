@@ -59,10 +59,10 @@
   C._ASREP_USER_RE = /\$krb5asrep\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})(?<user>[^:@$\s)]+)(?:[@$](?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?(?=[:$)\s]|$)/i;
   C._TGS_RE = /(\$krb5tgs\$[^\s]+)/i;
   C._TGS_USER_RE = /\$krb5tgs\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})\*?(?<user>[^$*:\s)]+)(?:\$(?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?/i;
-  C._NTDS_HASH_RE = /(?<![^\s\\:])(?:(?<domain>[^\s\\:]{1,128})\\)?(?<user>[^\s\\:]{1,128}):(?<rid>\d+):[0-9a-fA-F]{32}:(?<nt>[0-9a-fA-F]{32}):::/;
+  C._NTDS_HASH_RE = /(?<![^\s\\:])(?:(?<domain>[^\s\\:]{1,128})\\)?(?<user>[^\s\\:]{1,128}):(?<rid>\d+):(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):(?<nt>[0-9a-fA-F]{32}):::/;
   var NXC_ROW_PREFIX = '(?:(?:SMB|WINRM|WMI|RPC|SSH)\\s+\\S+\\s+\\d+\\s+\\S+\\s+)?';
   C._SYSTEM_ID_RE = /\bnt authority\\system\b/i;
-  C._WHOAMI_ID_RE = new RegExp('^' + NXC_ROW_PREFIX + '(?<id>nt authority\\\\system|[A-Za-z0-9][A-Za-z0-9.-]*\\\\[A-Za-z0-9._$-]{2,})\\s*$', 'im');
+  C._WHOAMI_ID_RE = new RegExp('^' + NXC_ROW_PREFIX + '(?<id>(?:nt authority|nt service|iis apppool|window manager|font driver host)\\\\[A-Za-z0-9_.$-](?:[A-Za-z0-9_.$ -]{0,62}[A-Za-z0-9_.$-])?|[A-Za-z0-9][A-Za-z0-9.-]*\\\\[A-Za-z0-9._$-]{2,})\\s*$', 'im');
   C._EXEC_SUCCESS_RE = /\bexecuted command\b|\[\+\]\s+executed|Microsoft Windows \[Version|^[A-Za-z]:\\.*>/im;
   C._LINUX_ID_RE = /\buid=(?<uid>\d+)\((?<user>[^)]+)\)\s+gid=\d+(?:\([^)]*\))?(?:\s+euid=(?<euid>\d+)\((?<euser>[^)]+)\))?(?:\s+egid=\d+(?:\([^)]*\))?)?(?:\s+groups=(?<groups>[^\r\n]+))?/i;
   C._LINUX_ROOT_RE = /\b(?:e?uid)=0\(root\)/i;
@@ -162,7 +162,7 @@
   C._HTTP_HEADER_RE = /^\s*(?:<\s*)?(?<key>Server|X-Powered-By|Location|Content-Type):\s*(?<value>.+)$/im;
   C._WHATWEB_PLUGIN_RE = /\b(?<name>[A-Za-z][A-Za-z0-9_.+-]{1,30})\[(?<value>[^\]\r\n]{1,120})\]/;
   C._SSH_BANNER_RE = /\bSSH-(?<version>[12]\.\d+)-(?<banner>[^\r\n]+)/i;
-  C._FTP_BANNER_RE = /^(?:220[- ](?<banner>.+)|230[- ](?<login>(?:Login successful|User logged in|Anonymous access granted|Anonymous user logged in|Guest login ok).*))$/im;
+  C._FTP_BANNER_RE = /^(?:220[- ](?<banner>.+)|230[- ](?<login>(?:Login successful|User logged in|Anonymous access granted|Anonymous user logged in|Guest login ok|Logged on|Login ok).*))$/im;
   C._SNMP_SYSDESCR_RE = /(?:SNMPv2-MIB::sysDescr\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.1\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
   C._SNMP_SYSNAME_RE = /(?:SNMPv2-MIB::sysName\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.5\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
   C._SNMP_SYSLOCATION_RE = /(?:SNMPv2-MIB::sysLocation\.0|(?:iso|\.?1)\.3\.6\.1\.2\.1\.1\.6\.0)\s*=\s*(?:STRING:\s*)?(?<value>.+)/i;
@@ -541,7 +541,9 @@
     // Strip proxychains wrapper lines, tmux split-pane bleed, and attacker Kali/Parrot prompt header lines so they never match Linux OS signatures
     var cleanText = _strip_tmux_split(_strip_proxychains(text))
       .replace(/^\s*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*[$#]\s*[^\r\n]*)$/gim, '')
-      .replace(/[ \t]*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|\b(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*)/gi, '');
+      .replace(/[ \t]*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|\b(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*)/gi, '')
+      .replace(/^\s*(?:Remote system type is [^\r\n]*|215[ \t]+UNIX(?:\s+Type:\s*L8|\s+emulated by FileZilla)\b[^\r\n]*)$/gim, '')
+      .replace(/^(\s*Name\s*\([^:\r\n)]+):(?:kali|parrot|ubuntu|debian|arch)(\)\s*:)/gim, '$1$2');
     var matches = {};
     Object.keys(C._OS_SIGNATURES).forEach(function (family) {
       var pats = C._OS_SIGNATURES[family];
@@ -573,9 +575,10 @@
 
   function _check_linux_kernel_vulns(kernelStr, ws, source, facts, leadKinds) {
     var ks = String(kernelStr || '').trim();
-    var m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(ks);
+    var m = /^(?:Linux\s+)?(\d+)\.(\d+)(?:\.(\d+))?(?:-(\d+))?/i.exec(ks);
     if (!m) return;
     var major = parseInt(m[1], 10), minor = parseInt(m[2], 10), patch = m[3] !== undefined ? parseInt(m[3], 10) : 0;
+    var abi = m[4] !== undefined ? parseInt(m[4], 10) : null;
     var h = 'host:' + ws.target;
     if ((major === 2 && minor === 6 && patch >= 22) || (major === 2 && minor > 6) || major === 3 || (major === 4 && (minor < 8 || (minor === 8 && patch < 3)))) {
       _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
@@ -583,7 +586,9 @@
       if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
     }
     if (major === 5 && (minor > 8 || (minor === 8 && patch >= 0)) && (minor < 16 || (minor === 16 && patch < 11))) {
-      if (!(major === 5 && minor === 10 && patch >= 102) && !(major === 5 && minor === 15 && patch >= 25)) {
+      var isDistroPatchedDirtyPipe = (major === 5 && minor === 15 && patch === 0 && abi !== null && abi >= 25)
+        || (major === 5 && minor === 13 && patch === 0 && abi !== null && abi >= 35);
+      if (!(major === 5 && minor === 10 && patch >= 102) && !(major === 5 && minor === 15 && patch >= 25) && !isDistroPatchedDirtyPipe) {
         _add(facts, mkFact('vuln.dirtypipe', h, { cve: 'CVE-2022-0847', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
         _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2022-0847'], names: ['dirtypipe'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
         if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
@@ -615,7 +620,7 @@
   function _valid_password(password) {
     password = (password || '').trim();
     if (!password || ['?', '*', '!', '!!', 'x', 'NP', '<password>', '{{password}}', '(null)', 'null', 'none'].indexOf(password) >= 0) return false;
-    if (/^(?:\*+|!+|no\s+password\*+)$/i.test(password)) return false;
+    if (/^(?:\*+|!+|[-=_*]+|\(null\)|no\s+password\*+)$/i.test(password)) return false;
     var l = password.toLowerCase();
     if (l === '(null)' || l === 'null' || l.indexOf('status') === 0 || l.indexOf('recovered') === 0 || l.indexOf('progress') === 0 || l.indexOf('guess') === 0 || l.indexOf('no password') === 0) return false;
     return true;

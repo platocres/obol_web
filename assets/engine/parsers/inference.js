@@ -48,7 +48,8 @@
     geoclue: 1, pulse: 1, rtkit: 1, saned: 1, hplip: 1, gdm: 1,
     users: 1, computers: 1, builtin: 1, system: 1, 'domain controllers': 1,
     foreignsecurityprincipals: 1, 'managed service accounts': 1, 'program data': 1,
-    'local service': 1, 'network service': 1, anonymous: 1, 'anonymous logon': 1,
+    'local service': 1, 'network service': 1, localservice: 1, networkservice: 1,
+    defaultapppool: 1, iusr: 1, iwam: 1, anonymous: 1, 'anonymous logon': 1,
     everyone: 1, 'authenticated users': 1, 'domain users': 1, 'domain computers': 1,
     'enterprise admins': 1, 'schema admins': 1, administrators: 1,
     'print operators': 1, 'server operators': 1, 'account operators': 1,
@@ -81,8 +82,19 @@
     var low = raw.toLowerCase().replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
     if (!low || low.length < 2 || low.length > 64) return true;
     if (_BOILERPLATE_USERS[low]) return true;
-    if (/^(?:nt authority|builtin|window manager|font driver host|iis apppool|workgroup)$/i.test(low)) return true;
+    if (/^(?:nt authority|nt service|builtin|window manager|font driver host|iis apppool|workgroup)$/i.test(low)) return true;
     if (/^(?:null|none|true|false|unknown|error|failed|denied|invalid|status|version|server|client|target|host|domain|user|username|login|password|secret|admin\$|ipc\$|c\$|print\$|http|https|ldap|smb|tcp|udp|initshutdown|eventlog|srvsvc|atsvc|wkssvc|samr|lsarpc|lsass|netlogon|spoolss|winreg|svcctl|ntsvcs|epmapper|browser|davhlp|currentversion|currentcontrolset|microsoft|windows)$/i.test(low)) return true;
+    return false;
+  }
+
+  var _DECODE_FAIL_RE = /\b(?:ciphertext length (?:was|is) not divisible by|not divisible by (?:8|16)\b|bad decrypt|wrong final block length|block length is not|data not multiple of block length|padding (?:error|is invalid|cannot be removed)|decryption failed|unable to decrypt|invalid (?:hex|base64|ciphertext|key length|iv length|padding)|cipherfinal|corrupt(?:ed)?\s+(?:data|block|ciphertext)|incorrect\s+padding|binascii\.error|unicodedecodeerror)\b/i;
+
+  function _windowHasDecodeFailure(linesArr, idx) {
+    if (!linesArr) return false;
+    var lo = Math.max(0, idx - 6), hi = Math.min(linesArr.length - 1, idx + 3);
+    for (var wi = lo; wi <= hi; wi++) {
+      if (_DECODE_FAIL_RE.test(linesArr[wi] || '')) return true;
+    }
     return false;
   }
 
@@ -90,9 +102,11 @@
     if (s === undefined || s === null) return true;
     var clean = String(s).trim().replace(/^['"]|['"]$/g, '').trim();
     if (!clean || clean.length < 3 || clean.length > 256) return true;
+    if (/[\x00-\x08\x0e-\x1f\x7f-\x9f\ufffd]/.test(clean)) return true;
     if (echoSet && echoSet[clean.toLowerCase()]) return true;
     if (/^(?:null|none|false|true|empty|nil|undefined|n\/a|na|tbd|todo|changeme|change_me|password|passwd|secret|user|username|account|login|domain|host|server|your_password|password_here|secret_here|api_key_here|token_here|example|sample|test|placeholder|redacted|hidden|masked|encrypted|not\s*set|write|read|create_child|delete_child|full_control|generic_all|generic_write|\*+|\.+|-+|_+|<[^>]+>|\[[^\]]+\]|\{[^}]+\}|0x0+)$/i.test(clean)) return true;
     if (/^(?:https?:\/\/|#[0-9a-fA-F]{3,8}$|\d+(?:px|em|rem|ms|s|%|pt|vh|vw)$)/.test(clean)) return true;
+    if (/^(?:document\.|window\.|navigator\.|location\.|localStorage\.|sessionStorage\.|form\.|this\.|self\.|process\.env\b|os\.environ\b|os\.getenv\b|System\.getenv\b|\$_(?:POST|GET|REQUEST|COOKIE|SERVER|ENV|SESSION)\b|req\.(?:body|query|params|headers|cookies)\b|request\.(?:form|args|json|values|POST|GET|DATA)\b|[A-Za-z_$][A-Za-z0-9_$.]*\s*\(|[A-Za-z_$][A-Za-z0-9_$.]*\[|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){2,}$)/i.test(clean)) return true;
     return false;
   }
 
@@ -744,7 +758,8 @@
   var _ATOM_PORT_PROTO_RE = /\b(\d{1,5})\/(tcp|udp)\b/gi;
   var _ATOM_URI_PATH_RE = /(?:^|[\s"'(])(\/[A-Za-z0-9_.\-\/]{1,120})(?=[\s"')]|$)/g;
   var _ATOM_HTTP_STATUS_RE = /(?:^HTTP\/[12](?:\.\d)?\s+(\d{3})\b|\b(?:Status|Code)\s*[:=]\s*(\d{3})\b|\(\s*Status:\s*(\d{3})\s*\)|\[\s*Status:\s*(\d{3})\b)/im;
-  var _ATOM_DOM_USER_RE = /(?<![\\/:A-Za-z0-9_.-])([A-Za-z0-9_.-]{2,32})\\([A-Za-z0-9_.\-$]{2,48})(?=$|[^A-Za-z0-9_.\-$\\/])/g;
+  var _ATOM_DOM_USER_RE = /(?<![\\/:A-Za-z0-9_.-])((?:nt authority|nt service|iis apppool|window manager|font driver host)|[A-Za-z0-9_.-]{2,32})\\([A-Za-z0-9_.\-$]{2,48})(?=$|[^A-Za-z0-9_.\-$\\/])/gi;
+  var _ATOM_WIN_SVC_WHOAMI_RE = /^[ \t]*((?:nt authority|nt service|iis apppool|window manager|font driver host)\\[A-Za-z0-9_.$-](?:[A-Za-z0-9_.$ -]{0,62}[A-Za-z0-9_.$-])?)[ \t]*$/im;
   var _ATOM_UPN_RE = /\b([A-Za-z0-9_.\-]{2,48})@([A-Za-z0-9_\-]+(?:\.[A-Za-z0-9_\-]+)+)\b/g;
   var _ATOM_POSIX_ID_RE = /\buid=(\d+)\(([^)\r\n]{1,48})\)\s+gid=(\d+)\(([^)\r\n]{1,48})\)(?:\s+euid=(\d+)\(([^)\r\n]{1,48})\))?/i;
   var _ATOM_WIN_SID_RE = /\bS-1-5-21-\d+-\d+-\d+(?:-\d+)?\b/g;
@@ -754,7 +769,7 @@
   var _ATOM_NTHASH_PAIR_RE = /\b(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}):([0-9a-fA-F]{32})\b/g;
   var _ATOM_HEX32_RE = /\b([0-9a-fA-F]{32})\b/g;
   var _ATOM_JWT_RE = /\beyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*\b/g;
-  var _ATOM_KV_SECRET_RE = /\b(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|ms-?mcs-?admpwd|mslaps-password|cleartext)\s*[:=]\s*['"]?([^\s'"\r\n,;]{3,128})['"]?/gi;
+  var _ATOM_KV_SECRET_RE = /\b(?:[A-Za-z0-9_]*(?:pass(?:word|wd)?|pwd)|[A-Za-z0-9_]*[a-z0-9_]pw|pw|secret|api[_-]?key|access[_-]?token|auth[_-]?token|ms-?mcs-?admpwd|mslaps-password|cleartext)\s*[:=]\s*(?:"([^"\r\n]{3,128})"|'([^'\r\n]{3,128})'|(?![ \t]*["'])([^\s'"\r\n,;]{3,128})(?=[ \t]*(?:[,;#]|\/\/|$)))/gi;
   var _ATOM_WIN_PATH_RE = /\b[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n\s]+\\)*[^\\/:*?"<>|\r\n\s]+/g;
   var _ATOM_UNC_PATH_RE = /\\\\[A-Za-z0-9_.\-]+\\[A-Za-z0-9_.\-$]+(?:\\[^\r\n\s"']*)?/g;
   var _ATOM_POSIX_PATH_RE = /(?:^|[\s"':=])(\/(?:etc|var|opt|home|root|usr|tmp|srv|proc|dev|mnt|media|run)\/[A-Za-z0-9_.\-\/]{1,120})/g;
@@ -876,6 +891,7 @@
         if (domUsers.length >= MAX_ATOM_ITEMS) break;
         var dom = m[1], usr = m[2];
         if (wgSet[dom.toLowerCase()]) continue;
+        if (/^(?:nt authority|nt service|iis apppool|window manager|font driver host|builtin)$/i.test(dom)) continue;
         if (!/^(?:http|https|C|D|E|HKLM|HKCU|HKCR|HKU|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER|Microsoft|Windows|WINNT|Program|System32|SysWOW64|Users|inetpub|pipe|ipc|rpc|ncacn_np|ncacn_ip_tcp|ncalrpc|System|CurrentVersion|CurrentControlSet|Software|Policies|Classes)$/i.test(dom) && !isBoilerplateUser(usr)) {
           pushUniq(domUsers, dom + '\\' + usr);
         }
@@ -928,13 +944,14 @@
 
     var sLines = s.split(/\r?\n/);
     var sLineCap = Math.min(sLines.length, 100000);
-    var kvHintRe = /(?:pass|pwd|secret|key|token|admpwd|cleartext)/i;
+    var kvHintRe = /(?:pass|pwd|[a-z0-9_]pw\b|\bpw\s*[:=]|secret|key|token|admpwd|cleartext)/i;
     var hasXmlNonPlainEnc = /<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(s);
-    var xmlSecTagRe = /<(?:[A-Za-z0-9_.-]+:)?(pass(?:word|wd)?|pwd|secret|cpassword|apikey|api_key)(?:\s+([^>\r\n]*))?>([^<\r\n]{3,128})<\/(?:[A-Za-z0-9_.-]+:)?\1>/gi;
+    var xmlSecTagRe = /<(?:[A-Za-z0-9_.-]+:)?(pass(?:word|wd)?|pwd|pw|secret|cpassword|apikey|api_key)(?:\s+([^>\r\n]*))?>([^<\r\n]{3,128})<\/(?:[A-Za-z0-9_.-]+:)?\1>/gi;
     for (var sli = 0; sli < sLineCap; sli++) {
       var sLn = sLines[sli];
       if (!sLn || sLn.length > 2048 || !kvHintRe.test(sLn)) continue;
       if (_isInteractivePasswordPromptEcho(sLines, sli, s, cmdSem && cmdSem.raw)) continue;
+      if (_windowHasDecodeFailure(sLines, sli)) continue;
       if (!hasXmlNonPlainEnc && sLn.indexOf('<') >= 0 && sLn.indexOf('</') > 1) {
         xmlSecTagRe.lastIndex = 0;
         var xsm, matchedXmlSec = false;
@@ -954,7 +971,8 @@
       while ((m = _ATOM_KV_SECRET_RE.exec(sLn)) !== null) {
         if (!checkedNeg) { checkedNeg = true; isNeg = _lineHasNegPolarity(sLines, sli); }
         if (isNeg) break;
-        var secVal = m[1].trim();
+        var secVal = (m[1] || m[2] || m[3] || '').trim();
+        if (/^\s*pwd?\s*[:=]/i.test(m[0]) && /^(?:\/|~\/|[A-Za-z]:\\)/.test(secVal)) continue;
         if (!isPlaceholderSecret(secVal, echoSet)) pushUniq(kvSecrets, secVal);
       }
     }
@@ -1478,15 +1496,28 @@
       var blk = kvBlocks[bi];
       var blkText = (blk._lines || []).join('\n');
       var isXmlEncryptedBlk = !!(blk.encryptionmethod && !/^(?:none|cleartext|plain|plaintext|false|0)$/i.test(String(Array.isArray(blk.encryptionmethod) ? blk.encryptionmethod[0] : blk.encryptionmethod).trim()));
-      var hasExplicitIdField = !!(blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || blk.uid);
-      var hasIdentityPeer = !!(blk.password || blk.pass || blk.passwd || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || blk.serviceprincipalname || blk.spn || blk.objectsid || blk.sid);
-      var blkUser = blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || (hasIdentityPeer ? (blk.cn || blk.name) : '') || '';
+      var hasDecodeErrBlk = _DECODE_FAIL_RE.test(blkText);
+      var suffixLoginVal = '', suffixPwVal = '';
+      var blkKeys = Object.keys(blk);
+      for (var bki = 0; bki < blkKeys.length; bki++) {
+        var bk = blkKeys[bki];
+        if (bk.charAt(0) === '_') continue;
+        if (!suffixLoginVal && /^(?:user|admin|svc|db|app|sql|ftp|ssh|mail|account|auth)_?(?:login|user(?:name)?)$/.test(bk)) {
+          suffixLoginVal = blk[bk];
+        } else if (!suffixPwVal && (bk === 'pw' || bk === 'pwd' || /^(?:[a-z0-9_]+_)?[a-z0-9]*(?:pw|pwd|pass(?:word|wd)?)$/.test(bk)) && !/(?:hash|reset|forgot|change|update|policy|min|max|age|len|expir|prompt|file|path)/.test(bk)) {
+          suffixPwVal = blk[bk];
+        }
+      }
+      var hasExplicitIdField = !!(blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || blk.uid || suffixLoginVal);
+      var hasIdentityPeer = !!(blk.password || blk.pass || blk.passwd || blk.pw || blk.pwd || suffixPwVal || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || blk.serviceprincipalname || blk.spn || blk.objectsid || blk.sid);
+      var blkUser = blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || suffixLoginVal || (hasIdentityPeer ? (blk.cn || blk.name) : '') || '';
       if (Array.isArray(blkUser)) blkUser = blkUser[0];
       blkUser = String(blkUser || '').trim().replace(/^CN=/i, '').replace(/,.*$/, '').replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
 
-      var blkSec = isXmlEncryptedBlk ? '' : (blk.password || blk.pass || blk.passwd || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || '');
+      var blkSec = (isXmlEncryptedBlk || hasDecodeErrBlk) ? '' : (blk.password || blk.pass || blk.passwd || blk.pw || blk.pwd || suffixPwVal || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || '');
       if (Array.isArray(blkSec)) blkSec = blkSec[0];
       blkSec = String(blkSec || '').trim().replace(/^['"]|['"]$/g, '');
+      if ((blk.pw || blk.pwd) && blkSec === String(blk.pw || blk.pwd).trim() && /^(?:\/|~\/|[A-Za-z]:\\)/.test(blkSec)) blkSec = '';
 
       // KV Block: User + Secret
       if (!(hasTier1CredOrHash && isDedicatedTier1CredTool) && blkUser && blkSec && !isBoilerplateUser(blkUser) && !isPlaceholderSecret(blkSec, cmdSem.echoSet) && !_hasExtractedSecretFor(blkUser, blkSec)) {
@@ -1586,7 +1617,7 @@
         _ATOM_MOD_HASH_RE.lastIndex = 0;
         _ATOM_HEX32_RE.lastIndex = 0;
         var hasLineSecret = _ATOM_KV_SECRET_RE.test(ln) || _ATOM_NTHASH_PAIR_RE.test(ln) || _ATOM_MOD_HASH_RE.test(ln) || _ATOM_HEX32_RE.test(ln);
-        if (!hasLineSecret || _lineHasNegPolarity(lines, li)) continue;
+        if (!hasLineSecret || _lineHasNegPolarity(lines, li) || _windowHasDecodeFailure(lines, li)) continue;
         var lnLow = ln.toLowerCase();
 
         for (var uk = 0; uk < globalIdx.userKeys.length; uk++) {
@@ -1597,8 +1628,9 @@
           _ATOM_KV_SECRET_RE.lastIndex = 0;
           var kvM, matchedKvSec = false;
           while ((kvM = _ATOM_KV_SECRET_RE.exec(ln)) !== null) {
-            if (kvM[1] && !isPlaceholderSecret(kvM[1], cmdSem.echoSet)) {
-              _emit_credential_facts(facts, h, { user: canonicalUser, password: kvM[1].trim(), via: 'global-entity-bind' }, source);
+            var kvSecCand = (kvM[1] || kvM[2] || kvM[3] || '').trim();
+            if (kvSecCand && !isPlaceholderSecret(kvSecCand, cmdSem.echoSet)) {
+              _emit_credential_facts(facts, h, { user: canonicalUser, password: kvSecCand, via: 'global-entity-bind' }, source);
               matchedKvSec = true;
             }
           }
@@ -1765,6 +1797,102 @@
       }
       if (atoms.posixId.uid === 0 && !hasKind(facts, 'access.root') && !_ATTACKER_HOSTS.test(atoms.posixId.user)) {
         _add(facts, mkFact('access.root', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+      }
+    }
+
+    // 7D-Win. Multi-Word Windows Built-in Service Authority Identity (`iis apppool\defaultapppool`, `nt service\...`, `nt authority\...`)
+    if (!isRemoteScanner && analysisText.indexOf('\\') >= 0) {
+      var winSvcM = _ATOM_WIN_SVC_WHOAMI_RE.exec(analysisText);
+      if (winSvcM && winSvcM[1]) {
+        var winSvcId = winSvcM[1].trim();
+        var winSvcParts = winSvcId.split('\\');
+        var winAuthDom = winSvcParts[0].toLowerCase();
+        var winAuthAcct = (winSvcParts[1] || '').toLowerCase();
+        if (isWebClient && !hasKind(facts, 'web.rce')) {
+          _add(facts, mkFact('web.rce', h, { user: winSvcId, os: 'windows', via: 'context-cooccurrence' }, S, source));
+        }
+        if (!hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
+          _add(facts, mkFact('foothold.windows', h, { identity: winSvcId, method: isWebClient ? 'web-rce' : (cmdSem.tool || 'shell'), via: 'context-cooccurrence' }, S, source));
+          if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'windows', winSvcId, 'high', 'whoami', true);
+        }
+        if (winAuthDom === 'nt authority' && /^(?:system|sistema|syst\u00e8me)$/i.test(winAuthAcct) && !hasKind(facts, 'access.system')) {
+          _add(facts, mkFact('access.system', h, { identity: winSvcId, method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+        }
+      }
+    }
+
+    // 7E-krbtgt. Direct `krbtgt` Hash-Binding Exemption (`krbtgt` remains boilerplate for prose/user-lists,
+    // but co-occurrence with a valid 32-hex NTLM or 64-hex AES-256 key on the same line proves hash.krbtgt)
+    if (!hasKind(facts, 'hash.krbtgt') && /\bkrbtgt\b/i.test(analysisText)) {
+      for (var kli = 0; kli < maxLineScan; kli++) {
+        var kLn = lines[kli];
+        if (!kLn || kLn.length > 2048 || !/\bkrbtgt\b/i.test(kLn) || _lineHasNegPolarity(lines, kli)) continue;
+        if (/^\s*(?:impacket-)?(?:ticketer|getTGT|getST|Rubeus)\b/i.test(kLn)) continue;
+        var kNtM = /\bkrbtgt:(?:\d+:)?(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):([0-9a-fA-F]{32}):::/i.exec(kLn)
+          || /(?:^|[\s\\])krbtgt\s*[:=]\s*([0-9a-fA-F]{32})\b/i.exec(kLn)
+          || /\bkrbtgt:rc4_hmac:([0-9a-fA-F]{32})\b/i.exec(kLn)
+          || (/\b(?:ntlm|nthash|rc4)\b/i.test(kLn) && /\b([0-9a-fA-F]{32})\b/.exec(kLn));
+        var kAesM = !kNtM && (/\bkrbtgt:aes256-cts-hmac-sha1-96:([0-9a-fA-F]{64})\b/i.exec(kLn)
+          || /(?:^|[\s\\])krbtgt\s*[:=]\s*([0-9a-fA-F]{64})\b/i.exec(kLn)
+          || (/\baes256\b/i.test(kLn) && /\b([0-9a-fA-F]{64})\b/.exec(kLn)));
+        if (kNtM && kNtM[1]) {
+          var kNt = kNtM[1].toLowerCase();
+          if (kNt !== _EMPTY_NTHASH && kNt !== _EMPTY_LMHASH && kNt !== _EMPTY_MD5 && !/^(?:0{32}|f{32})$/.test(kNt) && !cmdSem.echoSet[kNt]) {
+            _add(facts, mkFact('hash.krbtgt', domScope, { user: 'krbtgt', nthash: kNt, via: 'inference-hash-bind' }, S, source));
+            break;
+          }
+        } else if (kAesM && kAesM[1]) {
+          var kAes = kAesM[1].toLowerCase();
+          if (!/^(?:0{64}|f{64})$/.test(kAes) && !cmdSem.echoSet[kAes]) {
+            _add(facts, mkFact('hash.krbtgt', domScope, { user: 'krbtgt', aes256: kAes, via: 'inference-hash-bind' }, S, source));
+            break;
+          }
+        }
+      }
+    }
+
+    // 7I. Credential-Delivery Announcement + Adjacent 2-Line `<principal>` / `<secret>` Pair
+    // Handles plaintext emails, notes, and OOXML/HTML (`word/document.xml`) paragraphs without key=value syntax.
+    if (/\b(?:credentials?|creds?|login\s+details?|account\s+details?)\b/i.test(analysisText)) {
+      var docParaLines = lines;
+      if (/<\/(?:w:p|p|div|li|tr)>|<br\s*\/?>/i.test(analysisText)) {
+        docParaLines = analysisText
+          .replace(/<\/(?:w:p|p|div|li|tr)>|<br\s*\/?>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+          .split(/\r?\n/);
+      }
+      var credAnnounceRe = /(?:\b(?:below\s+(?:you\s+(?:can|will)\s+find|are|is)|here(?:'s|\s+are|\s+is)|(?:please\s+)?find\s+below|use\s+the\s+following|following\s+are)\b[^\r\n]{0,80}?\b(?:credentials?|creds?|login\s+details?|account\s+details?)\b|\b(?:your|temporary|initial|new|updated|default|login|access)\s+(?:login\s+)?(?:credentials?|creds?)\s+(?:are(?:\s+as\s+follows|\s+below)?|below)\b|\b(?:credentials?|creds?)\s+(?:are\s+as\s+follows|below)\s*:?\s*$)/i;
+      var docUserSkipRe = /^(?:thanks|thank|regards|sincerely|best|cheers|welcome|dear|please|hello|hi|hey|note|warning|important|username|user|login|password|pass|account|credentials|creds|http|https|mailto)$/i;
+      var docCap = Math.min(docParaLines.length, 20000);
+      for (var dli = 0; dli < docCap; dli++) {
+        var dLn = String(docParaLines[dli] || '').trim();
+        if (!dLn || dLn.length > 512 || !credAnnounceRe.test(dLn)) continue;
+        var nextNonEmpty = [];
+        for (var dnj = dli + 1; dnj < docCap && nextNonEmpty.length < 4; dnj++) {
+          var dnTrim = String(docParaLines[dnj] || '').trim();
+          if (!dnTrim) continue;
+          if (/^[-=*#]{3,}$/.test(dnTrim)) break;
+          nextNonEmpty.push(dnTrim);
+        }
+        for (var np = 0; np + 1 < nextNonEmpty.length && np <= 1; np++) {
+          var uDoc = nextNonEmpty[np], pDoc = nextNonEmpty[np + 1];
+          if (!/^[A-Za-z][A-Za-z0-9._-]{1,31}(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?$/.test(uDoc)) continue;
+          if (docUserSkipRe.test(uDoc) || isBoilerplateUser(uDoc)) continue;
+          if (!/^[\x21-\x7e]{8,64}$/.test(pDoc) || docUserSkipRe.test(pDoc)) continue;
+          if (/^(?:https?:\/\/|\/|[A-Za-z]:\\|[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$)/i.test(pDoc)) continue;
+          if (isPlaceholderSecret(pDoc, cmdSem.echoSet)) continue;
+          var clsCount = (/[a-z]/.test(pDoc) ? 1 : 0) + (/[A-Z]/.test(pDoc) ? 1 : 0) + (/[0-9]/.test(pDoc) ? 1 : 0) + (/[^A-Za-z0-9]/.test(pDoc) ? 1 : 0);
+          var hasNonWordEntropy = /[0-9]|[^A-Za-z0-9]|[a-z][A-Z]/.test(pDoc);
+          if (clsCount < 2 || !hasNonWordEntropy) continue;
+          if (!_hasExtractedSecretFor(uDoc, pDoc)) {
+            var docCredVal = { user: uDoc, password: pDoc, secret_type: 'plaintext', via: 'inference-doc-cred-pair', unvalidated: true };
+            _add(facts, mkFact('credential.candidate', h, docCredVal, S, source));
+            _add(facts, mkFact('credential.plaintext', h, docCredVal, S, source));
+            _add(facts, mkFact('credential.available', h, docCredVal, S, source));
+          }
+          break;
+        }
       }
     }
 

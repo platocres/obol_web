@@ -16,7 +16,8 @@
 
   // check-web-headers: a curl -I / header scan. Record which security headers are present vs missing.
   function _parse_http_headers(text, ws, source, facts) {
-    if (!/HTTP\/\d/i.test(text)) return;
+    if (!/^\s*(?:<\s*)?HTTP\/\d(?:\.\d)?\s+\d{3}\b/im.test(text)) return;
+    if (C._is_outbound_http_request_only && C._is_outbound_http_request_only(text)) return;
     var want = {
       'strict-transport-security': 'HSTS',
       'content-security-policy': 'CSP',

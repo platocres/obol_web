@@ -150,7 +150,10 @@
       if (/^\s*description\s*:/im.test(text) && has('_parse_ldap_descriptions')) guarded._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
     }
 
+    var _bareSmbAnchors = (text.match(/^[ \t]*(?:ADMIN\$|C\$|IPC\$|SYSVOL|NETLOGON|PRINT\$)[ \t]*$/gim) || []).length >= 2;
     var isSmbEnum = lc.indexOf('smbclient') >= 0 || lc.indexOf('smbmap') >= 0 || lc.indexOf('rpcclient') >= 0 || lc.indexOf('enum4linux') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('samrdump') >= 0
+      || /^\s*#?\s*shares\s*$/i.test(command || '')
+      || (_bareSmbAnchors && (/^\s*#?\s*shares\s*$/im.test(text) || text.trim().split(/\r?\n/).length <= 32))
       || /^\s*Sharename\s+Type\s+Comment/im.test(text) || /^\s*Disk\s+Permissions\s+Comment/im.test(text) || /user:\[[^\]]+\]\s+rid:\[/i.test(text) || /\(SidTypeUser\)/i.test(text) || /\bindex:\s*0x[0-9a-f]+\s+RID:\s*0x/i.test(text);
     if (isSmbEnum) {
       guarded._parse_smb_shares(text, ws, source, facts);
@@ -177,7 +180,7 @@
     // "gci"), so sniff the output anchors: cmd "Directory of <path>" or the PowerShell Get-ChildItem
     // "Mode  LastWriteTime  Length Name" table header (also emitted by Invoke-Command { ls }). The
     // parser only takes rows under a matching header, so a stray date or "-a---" line never mints.
-    if ((/^\s*Directory of\s+\S/im.test(text) || /^\s*Mode\s+LastWriteTime\s+Length\s+Name/im.test(text)) && has('_parse_fs_listing')) {
+    if ((/^\s*Directory of\s+\S/im.test(text) || /^\s*Mode\s+LastWriteTime\s+Length\s+Name/im.test(text) || /^\s*(?:Directory|[^\s:\\/0-9]{2,24})\s*:\s+(?:[A-Za-z]:\\|\\\\[^\\\s]+\\)/im.test(text)) && has('_parse_fs_listing')) {
       guarded._parse_fs_listing(text, ws, command, source, facts);
     }
 
@@ -212,14 +215,14 @@
     if (lc.indexOf('getnpusers') >= 0 || lc.indexOf('asreproast') >= 0 || text.indexOf('$krb5asrep$') >= 0 || (/^Name\s+MemberOf\s+PasswordLastSet/im.test(text) && /UF_DONT_REQUIRE_PREAUTH|DONT_REQ_PREAUTH/i.test(text))) guarded._parse_asrep_hashes(text, ws, source, facts);
     if (lc.indexOf('getuserspns') >= 0 || lc.indexOf('kerberoast') >= 0 || text.indexOf('$krb5tgs$') >= 0 || /^ServicePrincipalName\s+Name\s+MemberOf/im.test(text)) guarded._parse_tgs_hashes(text, ws, source, facts);
 
-    if (lc.indexOf('secretsdump') >= 0 || lc.indexOf('hashdump') >= 0 || lc.indexOf('samdump2') >= 0 || actionId === 'vhd-mount-sam-extract' || (lc.indexOf('volatility') >= 0 && lc.indexOf('dump') >= 0) || (isNxc && ['--ntds', '--sam', '--lsa'].some(function (f) { return lc.indexOf(f) >= 0; })) || (C._looks_like_sam_dump && guarded._looks_like_sam_dump(text)) || /Dumping (?:local )?SAM hashes|Dumping LSA Secrets|Dumping Domain Credentials|_SC_[A-Za-z0-9_.-]+/i.test(text)) {
+    if (lc.indexOf('secretsdump') >= 0 || /\bsecretsdump\b/i.test(text) || lc.indexOf('hashdump') >= 0 || lc.indexOf('samdump2') >= 0 || actionId === 'vhd-mount-sam-extract' || (lc.indexOf('volatility') >= 0 && lc.indexOf('dump') >= 0) || (isNxc && ['--ntds', '--sam', '--lsa'].some(function (f) { return lc.indexOf(f) >= 0; })) || (C._looks_like_sam_dump && guarded._looks_like_sam_dump(text)) || /Dumping (?:local )?SAM hashes|Dumping LSA Secrets|Dumping Domain Credentials|_SC_[A-Za-z0-9_.-]+/i.test(text)) {
       guarded._parse_ntlm_dump(text, ws, command, source, facts);
     }
 
     // mimikatz / pypykatz credential dumps: sekurlsa::logonpasswords -> hash.ntlm (+ credential.plaintext
     // when a cleartext is present), lsadump::sam/lsa -> hash.ntlm (+ loot.ntds for a full dump). Routed on
     // the command OR a content signature so an attached dump file with no command line still mints.
-    if ((lc.indexOf('mimikatz') >= 0 || lc.indexOf('sekurlsa') >= 0 || lc.indexOf('lsadump') >= 0 || lc.indexOf('pypykatz') >= 0 || (has('_looks_like_mimikatz') && guarded._looks_like_mimikatz(text))) && has('_parse_mimikatz')) guarded._parse_mimikatz(text, ws, command, source, facts);
+    if ((lc.indexOf('mimikatz') >= 0 || lc.indexOf('sekurlsa') >= 0 || lc.indexOf('lsadump') >= 0 || lc.indexOf('pypykatz') >= 0 || /\b(?:creds_all|creds_msv|creds_wdigest|creds_kerberos|lsa_dump_sam|lsa_dump_secrets)\b/.test(lc) || (has('_looks_like_mimikatz') && guarded._looks_like_mimikatz(text))) && has('_parse_mimikatz')) guarded._parse_mimikatz(text, ws, command, source, facts);
 
     // MSCache2/DCC2 cached domain hashes ($DCC2$...) from secretsdump cached output or lsadump::cache.
     // Routed on the content token so a pasted cache dump mints even without a recognizable command line.
@@ -230,9 +233,10 @@
 
     // Structured cleartext credential blocks (Domain: ... Username: ... Password: ...) and process leaks.
     if (has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(text, command, ws)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
+    if (has('_looks_like_tshark_http') && guarded._looks_like_tshark_http(text, command) && has('_parse_tshark_http_creds')) guarded._parse_tshark_http_creds(text, ws, command, source, facts);
 
     if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0 || /\b\d{8,14}_(?:bloodhound|computers|users|groups|domains)\.zip\b|Done in \d+M \d+S/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts);
-    if (lc.indexOf('bloodhound') >= 0 || /Compromised-Owned-Principal|Shortest Paths to Domain Admins/i.test(text)) guarded._parse_bloodhound_analysis(text, ws, source, facts);
+    if (lc.indexOf('bloodhound') >= 0 || /Compromised-Owned-Principal|Shortest Paths to Domain Admins|-\[\s*MemberOf\s*\]->/i.test(text)) guarded._parse_bloodhound_analysis(text, ws, source, facts);
 
     if ((' ' + lc + ' ').indexOf(' winrm ') >= 0 || lc.indexOf('evil-winrm') >= 0 || /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\/i.test([text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n'))) guarded._parse_evil_winrm(text, ws, command, source, facts);
     if ((lc.indexOf('xfreerdp') >= 0 || lc.indexOf('freerdp') >= 0 || text.indexOf('[com.freerdp.') >= 0 || text.indexOf('Logon Info V') >= 0 || text.indexOf('Authentication only, exit status 0') >= 0 || /Remote framebuffer format PIXEL_FORMAT_|Loading Dynamic Virtual Channel rdpgfx/i.test(text)) && has('_parse_xfreerdp')) guarded._parse_xfreerdp(text, ws, command, source, facts);
@@ -301,6 +305,9 @@
 
     if (lc.indexOf('penelope') >= 0 || (C._PENELOPE_GOT_RE && C._PENELOPE_GOT_RE.test(text)) || (C._PENELOPE_UPGRADE_RE && C._PENELOPE_UPGRADE_RE.test(text))) guarded._parse_penelope(text, ws, source, facts);
     if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(text)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
+    if (has('_looks_like_meterpreter') && guarded._looks_like_meterpreter(text, command) && has('_parse_meterpreter')) guarded._parse_meterpreter(text, ws, command, source, facts);
+    if (has('_parse_posix_whoami_escalation') && /\b(?:whoami|doas|sudo|su)\b/i.test((command || '') + '\n' + text)) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
+    if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) {
       guarded._parse_privesc_output(actionId, text, ws, command, source, facts);
@@ -317,7 +324,7 @@
     // action-id, so the gate above skips it. Route on the command OR a conservative content signature
     // (a dangerous Enabled Se*Privilege line; a sudo rights listing) so an attached paste with no
     // command line still mints its lead, while unrelated output (an ls, a config dump) never does.
-    if ((lc.indexOf('whoami /priv') >= 0 || lc.indexOf('whoami /all') >= 0 || (has('_looks_like_whoami_priv') && guarded._looks_like_whoami_priv(text))) && has('_parse_whoami_priv')) guarded._parse_whoami_priv(text, ws, command, source, facts);
+    if ((lc.indexOf('whoami /priv') >= 0 || lc.indexOf('whoami /all') >= 0 || lc.indexOf('whoami /groups') >= 0 || (has('_looks_like_whoami_priv') && guarded._looks_like_whoami_priv(text))) && has('_parse_whoami_priv')) guarded._parse_whoami_priv(text, ws, command, source, facts);
     if ((lc.indexOf('sudo -l') >= 0 || lc.indexOf('sudo --list') >= 0 || /\bdoas\b/.test(lc) || (has('_looks_like_sudo_l') && guarded._looks_like_sudo_l(text))) && has('_parse_sudo_l')) guarded._parse_sudo_l(text, ws, command, source, facts);
     // net user / net localgroup / net group account enumeration, and winPEAS/PrivescCheck privesc dumps -
     // both arrive as operator-ingest with no action-id, so route on the command OR a conservative content
@@ -355,7 +362,7 @@
     if ((lc.indexOf('certipy auth') >= 0 || lc.indexOf('certipy shadow') >= 0 || lc.indexOf('shadow auto') >= 0 || actionId === 'cert-authenticate' || /Got hash for\s+['"]?[^\s'"]+['"]?\s*:\s*(?:[a-f0-9]{32}:)?[a-f0-9]{32}|Saved credential cache to/i.test(text)) && has('_parse_certipy_auth')) {
       guarded._parse_certipy_auth(text, ws, command, source, facts);
     }
-    if (has('_is_ad_abuse_command') && (C._is_ad_abuse_command(command) || (C._AD_ABUSE_ACTION_IDS && C._AD_ABUSE_ACTION_IDS.has(actionId)) || /DACL modified successfully|OwnerSid modified successfully|Password changed successfully!|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|DeviceKey\s*:|KeyCredential\s+added/i.test(text))) {
+    if (has('_is_ad_abuse_command') && (C._is_ad_abuse_command(command) || (C._AD_ABUSE_ACTION_IDS && C._AD_ABUSE_ACTION_IDS.has(actionId)) || /DACL modified successfully|OwnerSid modified successfully|Password changed successfully!|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|DeviceKey\s*:|KeyCredential\s+added|\bnet\s+rpc\s+password\b/i.test(text) || (/\bnet(?:\.exe)?\s+user\b[^\r\n]+\/domain\b/i.test(text) && /The command completed successfully\./i.test(text)))) {
       if (has('_parse_ad_abuse_output')) guarded._parse_ad_abuse_output(actionId, text, ws, command, source, facts);
     }
     // Content-sniff fallback: a bloodyAD `get writable` dump is often ATTACHED as a file with no command
@@ -378,16 +385,18 @@
     else if (C._is_web_content_command(command) || /\[Status:\s*\d{3},\s*Size:\s*\d+/i.test(text) || /\bGobuster\s+v?\d/i.test(text) || ((text.indexOf('http://') >= 0 || text.indexOf('https://') >= 0) && /^\s*\d{3}\s+(?:(?:GET|POST|HEAD)\s+)?\d+l\s+\d+w\s+\d+c\s+https?:\/\//im.test(text)) || (/\(Status:\s*\d{3}\)/i.test(text) && (/^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?\/\S+\s+\(Status:\s*\d{3}\)\s*(?:\[[^\]]*\]\s*)*$/im.test(text) || /^\s*(?:Found:\s*)?[A-Za-z0-9_.~%-][^\s()]*\s+\(Status:\s*\d{3}\)\s+\[Size:\s*\d+\](?:\s*\[[^\]]*\])*\s*$/im.test(text)))) guarded._parse_web_content(text, ws, source, facts, command);
     if ((lc.indexOf('arjun') >= 0 || /Parameters found(?:\s+for\s+\S+)?\s*:\s*[a-zA-Z0-9_,\s-]+|\[\+\]\s+Heuristic scanner found\s+\d+\s+parameters/i.test(text)) && has('_parse_arjun')) guarded._parse_arjun(text, ws, command, source, facts);
     if (lc.indexOf('sqlmap') >= 0 || /sqlmap identified the following injection point|---\nParameter:\s*\S+\s*\((?:GET|POST|URI|Cookie|Header)\)/i.test(text)) guarded._parse_sqlmap(text, ws, source, facts, command);
-    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || /\bgit\s+(?:show|log|diff)\b/i.test(lc) || /^diff --git\s+a\//m.test(text) || C._GIT_HEAD_RE.test(text)) guarded._parse_git_source(text, ws, command, source, facts);
+    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || /\bgit\s+(?:show|log|diff)\b/i.test(lc) || /^diff --git\s+a\//m.test(text) || (/^commit\s+[0-9a-f]{7,40}\b/m.test(text) && /^@@\s+-\d+/m.test(text)) || C._GIT_HEAD_RE.test(text)) guarded._parse_git_source(text, ws, command, source, facts);
     if ((lc.indexOf('nikto') >= 0 || /^- Nikto v\d+\.\d+/im.test(text)) && has('_parse_nikto')) guarded._parse_nikto(text, ws, source, facts, command);
-    if (isWebExploitCmd) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
     var isSqlClientSession = !!(C._is_sql_client_output && C._is_sql_client_output(text, ws, command));
-    if (!isSqlClientSession && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text))) guarded._parse_http_metadata(text, ws, source, facts);
+    var isOutboundHttpReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(text));
+    var isNonHttpAccountOrOutbound = !!(C._is_unix_account_dump && C._is_unix_account_dump(text)) || isOutboundHttpReqOnly;
+    if (isWebExploitCmd && !isOutboundHttpReqOnly) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
+    if (!isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text))) guarded._parse_http_metadata(text, ws, source, facts);
     // Product fingerprints (Jenkins, NVMS-1000) run content-first on any web-ish
     // paste (nmap http-* scripts, curl -I, whatweb, a pasted page/headers). The
     // parser self-gates on a definitive signature, so an unrelated paste mints
     // nothing; a hit lights the precise exploit move instead of a bare port gate.
-    if (!isSqlClientSession && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
+    if (!isSqlClientSession && !isNonHttpAccountOrOutbound && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
     // LAPS read (nxc -M laps / --laps, ldapsearch/Get-ADComputer ms-MCS-AdmPwd):
     // content-gated on a LAPS signature, and self-gated to require a real
     // Password:/attribute value so the "No result found" failure mints nothing.
@@ -400,12 +409,15 @@
     if (!isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(text) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+/im.test(text))) guarded._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(text)) guarded._parse_snmp_output(text, ws, command, source, facts);
     var dbSessionCheckText = [text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
-    if (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || (text.indexOf('|') >= 0 && text.indexOf('$') >= 0 && /^\s*\d+\|[^|\r\n]+\|\$(?:2[aby]|1|5|6|y|P|H|apr1)\$/im.test(text))) guarded._parse_database_output(text, ws, command, source, facts);
+    var looksLikeDbQueryOrHashRow = /\b(?:pg_database|pg_tables|pg_shadow|pg_authid)\b|^\s*\\(?:l|list|dt)\+?(?:\s|;|$)|^\s*List of (?:databases|relations)\s*$/im.test(dbSessionCheckText)
+      || (text.indexOf('|') >= 0 && /(?:\$(?:2[abxy]|1|5|6|y|P|H|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)/.test(text));
+    if (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || looksLikeDbQueryOrHashRow) guarded._parse_database_output(text, ws, command, source, facts);
     if ((lc.indexOf('sqlite3') >= 0 || ((text.indexOf('|') >= 0 || /CREATE TABLE\s+/i.test(text)) && /CREATE TABLE\s+|^\s*\d+\|[^|\r\n]+\|[^|\r\n]+/im.test(text))) && has('_parse_sqlite_dump')) guarded._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0 || /^\s*(?:200 PORT command successful|2(?:27|29) Entering (?:Passive|Extended Passive) Mode|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting))/im.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
     if (C._SSH_BANNER_RE.test(text)) guarded._parse_ssh_banner(text, ws, source, facts);
     if (((' ' + lc + ' ').indexOf(' 21') >= 0 || lc.indexOf('ftp') >= 0 || C._FTP_BANNER_RE.test(text)) && C._FTP_BANNER_RE.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
+    if (has('_parse_smtp_output') && (/\b(?:swaks|smtp-user-enum|sendmail)\b/i.test(lc) || /^(?:<-|<--)?\s*220[\s-][^\r\n]*\bE?SMTP\b/im.test(text) || (/^\s*(?:->|-->)?\s*(?:EHLO|HELO|AUTH\s+LOGIN|MAIL\s+FROM:|RCPT\s+TO:|VRFY\s)/im.test(text) && /^\s*(?:<-|<--)?\s*2(?:20|35|50)[\s-]/im.test(text)))) guarded._parse_smtp_output(text, ws, command, source, facts);
     if (has('_parse_rsync_nfs') && (/\b(?:rsync|showmount)\b/.test(lc) || /^Export list for\s+\S+:|^NFS\s+\d{1,3}(?:\.\d{1,3}){3}\s+2049\b/im.test(text))) guarded._parse_rsync_nfs(text, ws, command, source, facts);
 
     if (((lc.indexOf('rubeus') >= 0 && (lc.indexOf('asktgt') >= 0 || lc.indexOf('tgtdeleg') >= 0)) || /ServiceName\s*:\s*krbtgt\/[\s\S]{1,400}?Base64EncodedTicket/i.test(text)) && has('_parse_rubeus_asktgt')) guarded._parse_rubeus_asktgt(text, ws, source, facts);
@@ -426,13 +438,13 @@
     if (has('_parse_flags')) guarded._parse_flags(text, ws, command, source, facts);
 
     // Section 33 content-gated OSWE parsers (only the ported ones run)
-    if (has('_has_source_secret') && C._has_source_secret(text)) guarded._parse_source_secret(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_source_secret') && C._has_source_secret(text)) guarded._parse_source_secret(text, ws, command, source, facts);
     if (has('_has_windows_creds') && C._has_windows_creds(text, command)) guarded._parse_windows_creds(text, ws, command, source, facts);
-    if (has('_has_product_signature') && C._has_product_signature(text, ws, command)) guarded._parse_product_signature(text, ws, command, source, facts);
-    if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
-    if (has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
-    if (has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
-    if (has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_product_signature') && C._has_product_signature(text, ws, command)) guarded._parse_product_signature(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
+    if (!isOutboundHttpReqOnly && has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
 
     // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
     // action-id, each parser is content-gated so an unrelated paste mints nothing.
@@ -469,7 +481,7 @@
     // a pivot tool's setup output -> the live tunnel. Powers the hub connectivity view.
     if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b|\bnetstat\s+-r/.test(lc) || /\binet\s+\d|IPv4 Address|Network Destination|\bGenmask\b/i.test(text)))
       guarded._parse_local_net(text, ws, source, facts);
-    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b|\bagent(?:\.exe)?\s+-connect\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat|Agent joined|\[Tunnel\] Interface ligolo|obol:fact:pivot_active/i.test(text)))
+    if (has('_parse_tunnel') && (/\bchisel\b|\bligolo\b|\bsshuttle\b|\bdnscat|ssh\s+[^\n]*-[a-z]*d\b|\bagent(?:\.exe)?\s+-connect\b/.test(lc) || /\bchisel\b|ligolo|sshuttle|dnscat|Agent joined|\[Tunnel\] Interface ligolo|obol:fact:pivot_active|\b(?:client|server):\s+(?:Connecting to ws:\/\/|Connected\s*\(Latency|Fingerprint\s+[0-9a-f]{2}:)|\btun:\s+proxy#R:/i.test(text)))
       guarded._parse_tunnel(text, ws, source, facts, command);
     // Adjacent hosts (ARP/neighbour cache), listening services, and internal resolvers from the foothold
     // - the leads that tell the operator what to aim the pivot at. Command-keyed, with a shape fallback.

@@ -11,6 +11,11 @@
   var reAll = C.reAll, reSearch = C.reSearch;
 
   function _parse_http_metadata(text, ws, source, facts) {
+    var trimmedHttp = String(text || '').trim();
+    if (/^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\S+\s+HTTP\/\d(?:\.\d)?\b/.test(trimmedHttp) &&
+        !/^\s*(?:<\s*)?HTTP\/\d(?:\.\d)?\s+\d{3}\b/m.test(trimmedHttp)) {
+      return [];
+    }
     var h = 'host:' + ws.target;
     var headerOnlyText = String(text || '');
     var bodySplit = /\r?\n\r?\n|<\s*(?:!doctype|html|head|body)\b/i.exec(headerOnlyText);
@@ -149,7 +154,10 @@
     });
     if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length) return;
     var h = 'host:' + ws.target;
-    C._add_os_from_text(text, ws, source, facts, 'ftp', 'medium', true);
+    var ftpOsText = String(text || '')
+      .replace(/^\s*Remote system type is [^\r\n]*$/gim, '')
+      .replace(/^\s*215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
+    C._add_os_from_text(ftpOsText, ws, source, facts, 'ftp', 'medium', true);
     _add(facts, mkFact('ftp.reachable', h, { tool: 'ftp-client' }, S, source));
     if (banners.length) _add(facts, mkFact('ftp.banner', h, { banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
     var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
@@ -446,5 +454,147 @@
     }
   }
   C._parse_rsync_nfs = _parse_rsync_nfs;
+
+  function _b64DecodeUtf8(token) {
+    var s = String(token || '').trim();
+    if (!s || !/^[A-Za-z0-9+/]{2,}={0,2}$/.test(s) || (s.length % 4 !== 0)) return '';
+    try {
+      if (typeof Buffer !== 'undefined') return Buffer.from(s, 'base64').toString('utf8');
+      if (typeof atob === 'function') return atob(s);
+    } catch (_e) {}
+    return '';
+  }
+
+  function _cleanSmtpUser(raw) {
+    var u = String(raw || '').replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
+    return (u && /^[\x21-\x7e]{1,128}$/.test(u)) ? u : '';
+  }
+
+  function _extractSmtpAuthUser(text, command) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    var lines = t.split(/\r?\n/);
+
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i].replace(/^\s*(?:(?:<[-~*]{1,3}|[-~*]{1,3}>|[CS]:|[<>])\s*)?/, '').trim();
+      var plainInline = /^AUTH\s+PLAIN\s+([A-Za-z0-9+/]{4,}={0,2})\s*$/i.exec(ln);
+      if (plainInline) {
+        var decPlain = _b64DecodeUtf8(plainInline[1]);
+        if (decPlain) {
+          var pParts = decPlain.split('\x00');
+          var pu = _cleanSmtpUser(pParts.length >= 2 ? (pParts[1] || pParts[0]) : pParts[0]);
+          if (pu) return pu;
+        }
+      }
+      var loginInline = /^AUTH\s+LOGIN\s+([A-Za-z0-9+/]{2,}={0,2})\s*$/i.exec(ln);
+      if (loginInline) {
+        var lu = _cleanSmtpUser(_b64DecodeUtf8(loginInline[1]));
+        if (lu) return lu;
+      }
+      if (/^334[\s-]+(?:VXNlcm5hbWU6|dXNlcm5hbWU6|VXNlcm5hbWU=)/i.test(ln)) {
+        for (var j = i + 1; j < lines.length && j <= i + 3; j++) {
+          var cand = lines[j].replace(/^\s*(?:(?:<[-~*]{1,3}>?|[-~*]{1,3}>|[CS]:|[<>])\s*)?/, '').trim();
+          if (!cand) continue;
+          if (/^(?:334|235|535)\b/.test(cand)) break;
+          var cu = _cleanSmtpUser(_b64DecodeUtf8(cand));
+          if (cu) return cu;
+        }
+      }
+    }
+
+    var inAuthLogin = false, inAuthPlain = false;
+    for (var k = 0; k < lines.length; k++) {
+      var cl = lines[k].replace(/^\s*(?:(?:<[-~*]{1,3}>?|[-~*]{1,3}>|[CS]:|[<>])\s*)?/, '').trim();
+      if (!cl) continue;
+      if (/^AUTH\s+LOGIN\s*$/i.test(cl)) { inAuthLogin = true; inAuthPlain = false; continue; }
+      if (/^AUTH\s+PLAIN\s*$/i.test(cl)) { inAuthPlain = true; inAuthLogin = false; continue; }
+      if (/^334\b/.test(cl)) continue;
+      if (/^(?:235|5\d\d|QUIT|MAIL\s+FROM|EHLO|HELO)\b/i.test(cl)) { inAuthLogin = false; inAuthPlain = false; continue; }
+      if (inAuthPlain && /^[A-Za-z0-9+/]{4,}={0,2}$/.test(cl)) {
+        var dp = _b64DecodeUtf8(cl);
+        if (dp) {
+          var pp = dp.split('\x00');
+          var ppu = _cleanSmtpUser(pp.length >= 2 ? (pp[1] || pp[0]) : pp[0]);
+          if (ppu) return ppu;
+        }
+        inAuthPlain = false;
+      } else if (inAuthLogin && /^[A-Za-z0-9+/]{2,}={0,2}$/.test(cl)) {
+        var dlu = _cleanSmtpUser(_b64DecodeUtf8(cl));
+        if (dlu) return dlu;
+        inAuthLogin = false;
+      }
+    }
+
+    var swaksM = /(?:--auth-user|--au|-au)(?:=|\s+)['"]?([^\s'"]+)['"]?/i.exec(cmd + '\n' + t);
+    if (swaksM) {
+      var su = _cleanSmtpUser(swaksM[1]);
+      if (su) return su;
+    }
+    return '';
+  }
+
+  function _parse_smtp_output(text, a1, a2, a3, a4) {
+    var ws, command = '', source = 'smtp', facts = [];
+    if (a1 && typeof a1 === 'object' && !Array.isArray(a1)) {
+      ws = a1;
+      if (Array.isArray(a4)) {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'smtp');
+        facts = a4;
+      } else if (Array.isArray(a3)) {
+        source = typeof a2 === 'string' ? a2 : 'smtp';
+        facts = a3;
+        command = typeof a4 === 'string' ? a4 : '';
+      } else {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'smtp');
+      }
+    } else {
+      command = typeof a1 === 'string' ? a1 : '';
+      facts = Array.isArray(a2) ? a2 : [];
+      var ipM = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(command) || /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(String(text || ''));
+      ws = { target: ipM ? ipM[1] : 'unknown' };
+      source = command || 'smtp';
+    }
+    var t = String(text || '');
+    if (!t) return facts;
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var banners = [];
+    reAll(/^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?220[\s-]([^\r\n]*\bE?SMTP\b[^\r\n]*)/gim, t).forEach(function (m) {
+      var b = (m[1] || '').trim();
+      if (b) banners.push(b);
+    });
+    var hasAuthContext = /\bAUTH\s+(?:LOGIN|PLAIN|CRAM-MD5|NTLM)\b/i.test(t) ||
+      /\b334[\s-]+(?:VXNlcm5hbWU6|dXNlcm5hbWU6|UGFzc3dvcmQ6)/i.test(t) ||
+      /(?:--auth(?:-user)?|--au|-au|-a)\b/i.test(command);
+    var has235Success = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?235[\s-][^\r\n]*(?:authenticated|Authentication\s+success(?:ful|eeded)?|2\.7\.0\s+Authentication)\b/im.test(t);
+
+    if (banners.length || (hasAuthContext && has235Success)) {
+      _add(facts, mkFact('smtp.reachable', h, { tool: 'smtp-client' }, S, source));
+      _add(facts, mkFact('mail.reachable', h, { tool: 'smtp-client' }, S, source));
+    }
+    if (banners.length) {
+      _add(facts, mkFact('smtp.banner', h, { banner: banners[0], banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
+    }
+    if (hasAuthContext && has235Success) {
+      var user = _extractSmtpAuthUser(t, command);
+      var credVal = { service: 'smtp', outcome: 'accepted' };
+      if (user) credVal.user = user;
+      _add(facts, mkFact('credential.validated', h, credVal, S, source));
+    }
+    return facts;
+  }
+  C._parse_smtp_output = _parse_smtp_output;
+
+  OBOL.parsers = OBOL.parsers || {};
+  OBOL.parsers.services = Object.assign(OBOL.parsers.services || {}, {
+    _parse_http_metadata: _parse_http_metadata,
+    _parse_ssh_banner: _parse_ssh_banner,
+    _parse_ftp_output: _parse_ftp_output,
+    _parse_sqlite_dump: _parse_sqlite_dump,
+    _parse_rsync_nfs: _parse_rsync_nfs,
+    _parse_smtp_output: _parse_smtp_output
+  });
+  if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.parsers.services; }
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -385,7 +385,9 @@
         "ssh.reachable"
       ],
       "requires_any": [
-        "credential.certificate"
+        "credential.certificate",
+        "loot.ssh_key",
+        "credential.ssh_key"
       ],
       "produces": [
         "foothold.linux",
@@ -494,7 +496,9 @@
         "credential.available",
         "credential.password",
         "credential.plaintext",
-        "credential.certificate"
+        "credential.certificate",
+        "loot.ssh_key",
+        "credential.ssh_key"
       ],
       "produces": [
         "foothold.linux",

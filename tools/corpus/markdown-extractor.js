@@ -53,23 +53,33 @@ const TOOL_HEAD_TOKENS = new Set((
   'getuserspns.py secretsdump secretsdump.py certipy certipy-ad bloodyad bloodhound ' +
   'bloodhound-python sharphound evil-winrm hashcat john responder ntlmrelayx ntlmrelayx.py ' +
   'getst getst.py gettgt gettgt.py wmiexec wmiexec.py psexec psexec.py smbexec atexec dcomexec ' +
-  'lookupsid lookupsid.py rubeus pywhisker sccmhunter sharpsccm impacket-secretsdump ' +
+  'lookupsid lookupsid.py rubeus pywhisker pywhisker.py sccmhunter sharpsccm impacket-secretsdump ' +
   'impacket-getuserspns impacket-getnpusers impacket-rpcdump rpcdump rpcdump.py ' +
   'impacket-samrdump samrdump samrdump.py impacket-lookupsid impacket-wmiexec impacket-psexec ' +
   'impacket-smbexec impacket-atexec impacket-dcomexec impacket-mssqlclient impacket-getst ' +
   'impacket-gettgt impacket-addcomputer impacket-ntlmrelayx impacket-dacledit ' +
   'impacket-owneredit impacket-finddelegation finddelegation finddelegation.py ' +
+  'targetedkerberoast targetedkerberoast.py dacledit dacledit.py owneredit owneredit.py ' +
+  'timeroast timeroast.py ticketer ticketer.py changepasswd changepasswd.py addcomputer addcomputer.py ' +
   'nikto nuclei feroxbuster ffuf gobuster dirb dirsearch whatweb httpx curl wget sqlmap ' +
   'hydra dig host nslookup fierce dnsrecon dnsenum volatility vol.py git-dumper ike-scan ' +
-  'penelope ftp lftp snmpwalk onesixtyone showmount rpcinfo id whoami sudo uname hostname ' +
+  'penelope ftp lftp snmpwalk onesixtyone showmount rpcinfo id whoami sudo doas uname hostname ' +
   'ipconfig ifconfig systeminfo net netstat ss ps find findstr grep awk sed cat type head ' +
   'tail more less ls dir tree chmod chown cp mv rm scp ssh ssh-keygen tar unzip zip base64 ' +
   'certutil powershell pwsh cmd msfvenom msfconsole searchsploit linpeas winpeas pspy ' +
   'chisel ligolo-ng ligolo-proxy ligolo-agent agent socat nc ncat netcat rlwrap ' +
-  'mssqlclient mysql psql sqlite3 redis-cli xfreerdp xfreerdp3 rdesktop'
+  'mssqlclient mysql psql sqlite3 redis-cli xfreerdp xfreerdp3 rdesktop ' +
+  'diskshadow robocopy borg restic swaks tshark tcpdump mimikatz seatbelt certify ' +
+  'printspoofer godpotato juicypotato sweetpotato lazagne'
 ).split(/\s+/));
 
 const EXPLOIT_DB_HEADER_RE = /(?:^\s*(?:#|\/\/|\/\*+|\*|--|;)\s*Exploit\s+Title\s*:|Exploit\s+Database|\bExploit-DB\b|^\s*(?:#|\/\/|\*)\s*CVE\s*:\s*CVE-\d{4}-\d+)/im;
+
+const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|FolderPerms\s*:)/;
+
+const STEP_CAPTION_HEADER_RE = /^Step\s+\d+\s*(?:[-:.)]\s*.*)?$/i;
+
+const UNPROMPTED_SETUP_LEAD_RE = /^(?:cd\s+(?:-[LP]\s+)?(?:"[^"]+"|'[^']+'|[^;&|<>\s]+)|git\s+clone\s+(?:-\S+\s+)*\S+(?:\s+\S+)?)\s*$/i;
 
 const TERMINAL_CONTENT_SIG_RE = new RegExp([
   'Nmap scan report for',
@@ -103,7 +113,30 @@ const ZSH_BOT_PROMPT_RE = /^\s*[└╰]─\s*([#$%>])\s?(.*)$/;
 const ZSH_ONE_LINE_RE = /^\s*[┌╭]──\(([^)㉿@\r\n]+)[㉿@]([^)\r\n]+)\)-(?:\[[^\]]*\])?\s*[└╰]─\s*([#$%>])\s?(.*)$/;
 
 // Non-command comment patterns that must NOT be misread as root `# cmd` prompts
-const HASH_PROSE_COMMENT_RE = /^(?:extended LDIF|LDAPv3|base\s*<|filter\s*:|requesting\s*:|search result|search:|result:|numResponses\s*:|numEntries\s*:|Nmap\s+\d|Nmap done at|Password\s*:|Username\s*:|Exploit\s+Title\s*:|Date\s*:|Exploit\s+Author\s*:|Vendor\s+Homepage\s*:|Software\s+Link\s*:|Version\s*:|Tested\s+on\s*:|CVE\s*:|\d+\s+[A-Za-z]+|(?:doctors|users|from|using|shows|file|transfer|create|upload|download|check|note|todo|step|example|output)\b)/i;
+const HASH_PROSE_COMMENT_RE = /^(?:extended LDIF|LDAPv3|base\s*<|filter\s*:|requesting\s*:|search result|search:|result:|results?\b|numResponses\s*:|numEntries\s*:|Nmap\s+\d|Nmap done at|Password\s*:|Username\s*:|Exploit\s+Title\s*:|Date\s*:|Exploit\s+Author\s*:|Vendor\s+Homepage\s*:|Software\s+Link\s*:|Version\s*:|Tested\s+on\s*:|CVE\s*:|\$[A-Za-z0-9_]+\s*:|\d+\s+[A-Za-z]+|(?:doctors|users|from|using|shows|file|transfer|create|upload|download|check|note|notes|todo|step|example|output|plain\s+text|found|provided|query|change|attack|getting|running|executing|make\s+less|set\s+variable)\b)/i;
+
+const BARE_HASH_SHELL_BUILTINS = new Set([
+  'cd', 'pwd', 'echo', 'printf', 'export', 'unset', 'env', 'printenv', 'set',
+  'source', 'alias', 'unalias', 'umask', 'ulimit', 'history', 'exit', 'logout',
+  'su', 'chroot', 'mount', 'umount', 'crontab', 'systemctl', 'service', 'journalctl',
+  'ip', 'ifconfig', 'route', 'arp', 'iptables', 'ufw', 'tcpdump',
+  'useradd', 'usermod', 'userdel', 'adduser', 'passwd', 'groupadd', 'visudo',
+  'apt', 'apt-get', 'dpkg', 'yum', 'dnf', 'rpm', 'apk', 'pacman', 'pip', 'pip3',
+  'git', 'strings', 'file', 'xxd', 'hexdump', 'openssl', 'gpg',
+  'shares', 'use', 'get', 'put', 'mget', 'mput', 'info', 'who', 'logoff',
+  'del', 'mkdir', 'rmdir', 'lcd', 'lls', 'prompt', 'recurse'
+]);
+
+const AMBIGUOUS_ENGLISH_CLI_HEADS = new Set([
+  'find', 'file', 'more', 'less', 'head', 'tail', 'type', 'host', 'dig', 'who',
+  'id', 'net', 'dir', 'tree', 'cat', 'make', 'go', 'time', 'test', 'set',
+  'mount', 'service', 'history', 'strings', 'route'
+]);
+
+const PROSE_VERB_BARE_HASH_GUARD = new Set([
+  'make', 'set', 'get', 'use', 'info', 'find', 'file', 'more', 'less', 'time',
+  'test', 'host', 'who', 'history', 'strings', 'echo'
+]);
 
 const PROMPTS = [
   { kind: 'unix', isZshOneLine: true, re: ZSH_ONE_LINE_RE },
@@ -129,7 +162,7 @@ const PROMPTS = [
   { kind: 'repl', tool: 'python', re: /^\s*>>>\s+(.*)$/ },
   { kind: 'repl', tool: 'gdb', re: /^\s*(?:gdb-peda\$|\(gdb\)|pwndbg>)\s+(.*)$/ },
   { kind: 'bare', isDollar: true, re: /^\s*\$\s+([A-Za-z0-9_.\/~\\-].*)$/ },
-  { kind: 'bare', isHash: true, re: /^\s*#\s+([A-Za-z\/.].*)$/ }
+  { kind: 'bare', isHash: true, re: /^\s*#\s+([A-Za-z\/.~].*)$/ }
 ];
 
 function applyPrefix(command, prefix) {
@@ -144,16 +177,69 @@ function stripAnsi(s) {
   return String(s || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g, '');
 }
 
+function isBareHashCommand(cand) {
+  const trimmed = String(cand || '').trim();
+  if (!trimmed) return false;
+  if (HASH_PROSE_COMMENT_RE.test(trimmed)) return false;
+  let s = trimmed
+    .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/, '')
+    .trim();
+  if (!s) return false;
+  const firstRaw = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
+  if (!firstRaw || firstRaw.endsWith(':') || firstRaw.indexOf('...') >= 0) return false;
+  // Pure TitleCase or ALL-CAPS words on a bare `#` line are English prose annotations, not shell commands
+  if (/^[A-Z][a-z]+$/.test(firstRaw) || /^[A-Z]{2,}:?$/.test(firstRaw)) return false;
+
+  if (/^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(firstRaw)) {
+    return true;
+  }
+  if (/^(?:Invoke|Get|Set|New|Import|Start|Stop|Enter|Add|Enable|Disable|Test|Select|Out|ConvertTo|ConvertFrom)-[A-Za-z0-9]+$/i.test(firstRaw)) {
+    return true;
+  }
+
+  let unwrapped = s.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*)\s+/i, '').trim();
+  if (!unwrapped) unwrapped = s;
+  const headTok = (unwrapped.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
+  if (!headTok || headTok.endsWith(':')) return false;
+  if (/^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(headTok)) {
+    return true;
+  }
+
+  const base = headTok.split(/[\\/]/).pop().toLowerCase();
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
+  const knownHead = TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem)
+    || CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem) || CAPTION_CLI_EXTRA_BINS.has(archStem)
+    || BARE_HASH_SHELL_BUILTINS.has(base);
+  if (!knownHead) return false;
+
+  const toks = unwrapped.split(/\s+/).filter(Boolean);
+  if (base === 'set' && toks.length > 1 && !toks[1].startsWith('-') && unwrapped.indexOf('=') < 0) {
+    return false;
+  }
+  if (/\([1-8]\)/.test(unwrapped) && !/[|;&><$`"']/.test(unwrapped)) {
+    return false;
+  }
+  if (toks.length >= 6 && toks.slice(1).every(w => /^[A-Za-z,;:!?()]+$/.test(w))) {
+    return false;
+  }
+  if (PROSE_VERB_BARE_HASH_GUARD.has(base) && toks.length >= 3
+      && toks.slice(1).every(w => /^[A-Za-z]{2,}[,.:;!?]?$/.test(w) && !/\.[A-Za-z0-9]{1,5}$/.test(w))) {
+    return false;
+  }
+  return true;
+}
+
 function matchPromptLine(rawLine, opts) {
   const line = stripAnsi(rawLine);
   for (const p of PROMPTS) {
     const m = line.match(p.re);
     if (!m) continue;
     if (p.isHash) {
+      if (opts && opts.suppressBareHash) continue;
       const cand = (m[1] || '').trim();
       if (!opts || !opts.legacyBareHash) {
-        if (HASH_PROSE_COMMENT_RE.test(cand)) continue;
-        if (!(opts && opts.afterPrompt) && /^[A-Z]/.test(cand) && !isCommandLikeLine(cand)) continue;
+        if (!isBareHashCommand(cand)) continue;
       }
     }
     if (p.isZshOneLine) {
@@ -167,6 +253,8 @@ function matchPromptLine(rawLine, opts) {
         host: m[2] || '',
         hostHint: m[2] || '',
         isZshOneLine: true,
+        isHash: false,
+        isDollar: false,
         promptLine: rawLine
       };
     }
@@ -181,6 +269,8 @@ function matchPromptLine(rawLine, opts) {
         host: '',
         hostHint: '',
         isZshBotOnly: true,
+        isHash: false,
+        isDollar: false,
         promptLine: rawLine
       };
     }
@@ -198,6 +288,8 @@ function matchPromptLine(rawLine, opts) {
         host: hst,
         hostHint: 'windows',
         isWinOpenSsh: true,
+        isHash: false,
+        isDollar: false,
         promptLine: rawLine
       };
     }
@@ -211,6 +303,8 @@ function matchPromptLine(rawLine, opts) {
         user: m[1] || '',
         host: m[2] || '',
         hostHint: m[2] || '',
+        isHash: false,
+        isDollar: false,
         promptLine: rawLine
       };
     }
@@ -223,6 +317,8 @@ function matchPromptLine(rawLine, opts) {
       user: '',
       host: '',
       hostHint: p.hostHint || '',
+      isHash: Boolean(p.isHash),
+      isDollar: Boolean(p.isDollar),
       promptLine: rawLine
     };
   }
@@ -234,10 +330,33 @@ const CAPTION_CLI_EXTRA_BINS = new Set([
   'make', 'go', 'cargo', 'dotnet', 'mono', 'wine', 'bash', 'sh', 'zsh', 'gpupdate',
   'runas', 'icacls', 'sc', 'reg', 'schtasks', 'wmic', 'tasklist', 'quser', 'qwinsta',
   'klist', 'certreq', 'wevtutil', 'zip2john', 'rar2john', '7z2john', 'keepass2john',
-  'pfx2john', 'ssh2john', 'iwr', 'irm', 'iex'
+  'pfx2john', 'ssh2john', 'iwr', 'irm', 'iex', 'git', 'cmdkey', 'netsh', 'accesschk'
 ]);
 
-const SESSION_LAUNCHER_RE = /^(?:evil-winrm|impacket-(?:mssqlclient|psexec|wmiexec|smbexec)|(?:mssqlclient|psexec|wmiexec|smbexec)(?:\.py)?|ssh|ftp|lftp|mysql|mariadb|psql)$/i;
+const SESSION_LAUNCHER_RE = /^(?:evil-winrm|impacket-(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)|(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)(?:\.py)?|ssh|ftp|lftp|mysql|mariadb|psql)$/i;
+
+const ENUM_SCRIPT_NO_SUBSHELL_RE = /\b(?:linpeas|winpeas|pspy|linux-exploit-suggester|lse\.sh|unix-privesc-check)\b/i;
+
+const NON_SHELL_READER_HEAD_RE = /^(?:cat|type|head|tail|more|less|grep|egrep|fgrep|rg|awk|sed|cut|sort|uniq|wc|tr|diff|git|curl|wget|strings|xxd|hexdump|od|file|stat|ls|dir|tree|get-content|gc|get-childitem|gci|select-string|ldapsearch|nmap|rustscan|masscan|nikto|gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz|whatweb|httpx|searchsploit|sqlmap|wpscan|enum4linux|enum4linux-ng|smbmap|rpcclient|nxc|netexec|crackmapexec|cme|secretsdump|impacket-secretsdump|getuserspns|impacket-getuserspns|getnpusers|impacket-getnpusers|kerbrute|certipy|certipy-ad|bloodhound-python|sharphound|dig|host|nslookup|whois|id|whoami|hostname|uname|ipconfig|ifconfig|ip|netstat|ss|ps|env|printenv|export|alias|echo|printf|pwd|cd|chmod|chown|cp|mv|rm|mkdir|touch|tar|unzip|zip|base64|hashcat|john)$/i;
+
+const BARE_HASH_SUBSHELL_RE = /(?:^|[\s;|&()])(?:su|sudo\s+(?:-[A-Za-z]*[is]\b|su\b|[^\s|;&]*(?:sh|bash|zsh|ash|dash|ksh|chroot|docker|lxc|python|perl|ruby|lua|awk|vim|vi|less|more|man|gdb|pkexec|find)\b)|doas|pkexec|chroot|nsenter|unshare|docker\s+(?:run|exec)\b|podman\s+(?:run|exec)\b|lxc\s+exec\b|pty\.spawn|(?:\/usr\/local\/bin\/|\/usr\/bin\/|\/bin\/)?(?:ba|da|z|a|k)?sh\b|nc|ncat|netcat|penelope|socat|rlwrap|ssh|evil-winrm|impacket-(?:smbclient|psexec|wmiexec|smbexec|atexec|mssqlclient)|(?:smbclient|psexec|wmiexec|smbexec|atexec|mssqlclient)\.py|msfconsole)(?:\s|$|[;|&()"'])/i;
+
+function isBareHashSubshellLauncher(cmd) {
+  const s = String(cmd || '').trim();
+  if (!s) return false;
+  if (ENUM_SCRIPT_NO_SUBSHELL_RE.test(s)) return false;
+  if (getSessionLauncherTool(s)) return true;
+  if (BARE_HASH_SUBSHELL_RE.test(s)) return true;
+  const first = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
+  if (!first) return false;
+  const base = first.split(/[\\/]/).pop().toLowerCase();
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
+  if (NON_SHELL_READER_HEAD_RE.test(base) || NON_SHELL_READER_HEAD_RE.test(stem)) return false;
+  if (/^(?:printspoofer|godpotato|juicypotato|sweetpotato)$/i.test(archStem)) return true;
+  if (/^(?:\.\/|\/tmp\/|\/dev\/shm\/|\/var\/tmp\/)/.test(first)) return true;
+  return false;
+}
 
 function getSessionLauncherTool(cmd) {
   let s = String(cmd || '').trim();
@@ -277,22 +396,39 @@ function stripPromptPrefix(rawLine, rawCmd) {
   return (idx > 0 ? clean.slice(0, idx) : clean).trim();
 }
 
+function hasTitleCaseEnglishProseLook(firstTok, fullLine) {
+  if (!/^[A-Z][a-z]+$/.test(firstTok)) return false;
+  const base = firstTok.toLowerCase();
+  if (!AMBIGUOUS_ENGLISH_CLI_HEADS.has(base)) return false;
+  const rest = String(fullLine || '').trim().slice(firstTok.length).trim();
+  if (!rest) return false;
+  if (/(?:^|\s)--?[A-Za-z0-9]/.test(rest)) return false;
+  if (/[\/\\|;&><=$`'"']/.test(rest)) return false;
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(rest)) return false;
+  if (/\b\w+\.[A-Za-z0-9]{1,5}\b/.test(rest)) return false;
+  return true;
+}
+
 function isCaptionFollowCliLine(line) {
   if (isCommandLikeLine(line)) return true;
   const trimmed = String(line || '').trim();
   if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
+  if (STEP_CAPTION_HEADER_RE.test(trimmed)) return false;
   let s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
   if (!s) return false;
   const first = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
   if (!first) return false;
+  if (hasTitleCaseEnglishProseLook(first, s)) return false;
   const base = first.split(/[\\/]/).pop().toLowerCase();
-  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin)$/i, '');
-  return CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem);
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
+  return CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem) || CAPTION_CLI_EXTRA_BINS.has(archStem);
 }
 
 function isPlainEnglishCaptionLine(line) {
   const t = String(line || '').trim();
   if (!t || t.length > 80) return false;
+  if (STEP_CAPTION_HEADER_RE.test(t)) return true;
   if (!/^[A-Z][A-Za-z0-9 '",._():\/-]*$/.test(t)) return false;
   if (!/[a-z]/.test(t)) return false;
   if (isCaptionFollowCliLine(t)) return false;
@@ -354,12 +490,17 @@ function joinWrappedPromptLines(rawLines, opts) {
 
 function hasShellPrompt(text) {
   const lines = String(text || '').split(/\r?\n/);
+  let allowBareHash = true;
   for (let i = 0; i < lines.length && i < 200; i++) {
     if (ZSH_TOP_PROMPT_RE.test(lines[i]) && i + 1 < lines.length && ZSH_BOT_PROMPT_RE.test(lines[i + 1])) {
       return true;
     }
-    const mp = matchPromptLine(lines[i]);
+    const mp = matchPromptLine(lines[i], { suppressBareHash: !allowBareHash });
     if (mp && mp.rawCommand) return true;
+    const t = lines[i].trim();
+    if (t && !t.startsWith('#') && !isPlainEnglishCaptionLine(t) && !isBareHashSubshellLauncher(t)) {
+      allowBareHash = false;
+    }
   }
   return false;
 }
@@ -367,17 +508,20 @@ function hasShellPrompt(text) {
 function isCommandLikeLine(line) {
   const trimmed = String(line || '').trim();
   if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
+  if (STEP_CAPTION_HEADER_RE.test(trimmed)) return false;
   let s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
   if (!s) return false;
   const first = s.split(/[\s|;&><]+/)[0].replace(/^["']|["']$/g, '');
   if (!first) return false;
+  if (hasTitleCaseEnglishProseLook(first, s)) return false;
   if (/^(?:\.\/|\.\\|\/usr\/|\/bin\/|\/sbin\/|\/opt\/|[A-Za-z]:\\)/.test(first)) return true;
   if (/^(?:Invoke|Get|Set|New|Import|Start|Stop|Enter|Add|Enable|Disable|Test|Select|Out|ConvertTo|ConvertFrom)-[A-Za-z0-9]+$/i.test(first)) {
     return true;
   }
   const base = first.split(/[\\/]/).pop().toLowerCase();
-  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin)$/i, '');
-  return TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem);
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
+  return TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem);
 }
 
 function classifyFenceBlock(lang, text) {
@@ -389,9 +533,15 @@ function classifyFenceBlock(lang, text) {
     return { include: true, reason: 'terminal-lang', lang: normLang };
   }
 
+  const nonEmptyLines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const firstNonEmpty = nonEmptyLines[0] || '';
+
   if (normLang && STATIC_CODE_LANGS.has(normLang)) {
     if (EXPLOIT_DB_HEADER_RE.test(body)) {
       return { include: true, reason: 'exploit-db-header', lang: normLang };
+    }
+    if ((normLang === 'diff' || normLang === 'patch') && firstNonEmpty && /^commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$/.test(firstNonEmpty)) {
+      return { include: true, reason: 'raw-artifact-header', lang: normLang };
     }
     if (hasShellPrompt(body)) {
       return { include: true, reason: 'prompt-inside-code-fence', lang: normLang };
@@ -400,21 +550,31 @@ function classifyFenceBlock(lang, text) {
   }
 
   // Bare fence or unknown tag: classify via ingest.js-aligned prompt/tool/content signatures
+  if (firstNonEmpty && RAW_ARTIFACT_HEADER_RE.test(firstNonEmpty)) {
+    return { include: true, reason: 'bare-raw-artifact', lang: normLang };
+  }
   if (hasShellPrompt(body)) return { include: true, reason: 'bare-prompt', lang: normLang };
   if (EXPLOIT_DB_HEADER_RE.test(body)) return { include: true, reason: 'bare-exploit-db', lang: normLang };
   if (TERMINAL_CONTENT_SIG_RE.test(body)) return { include: true, reason: 'bare-content-sig', lang: normLang };
 
-  const nonEmptyLines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const activeLines = nonEmptyLines.filter(l => !l.startsWith('#') && !l.startsWith('//'));
-  const firstActive = activeLines[0];
+  let leadIdx = 0;
+  let skippedLead = false;
+  while (leadIdx + 1 < activeLines.length && leadIdx < 3
+      && (isPlainEnglishCaptionLine(activeLines[leadIdx]) || UNPROMPTED_SETUP_LEAD_RE.test(activeLines[leadIdx]))) {
+    if (isCaptionFollowCliLine(activeLines[leadIdx + 1]) || UNPROMPTED_SETUP_LEAD_RE.test(activeLines[leadIdx + 1])) {
+      leadIdx++;
+      skippedLead = true;
+    } else {
+      break;
+    }
+  }
+  const firstActive = activeLines[leadIdx];
   if (firstActive && isCommandLikeLine(firstActive)) {
     return { include: true, reason: 'bare-tool-command', lang: normLang };
   }
   const hadHashCaption = nonEmptyLines.some(l => /^#\s+/.test(l) && isPlainEnglishCaptionLine(l.replace(/^#+\s*/, '')));
-  if (firstActive && hadHashCaption && isCaptionFollowCliLine(firstActive)) {
-    return { include: true, reason: 'bare-tool-command', lang: normLang };
-  }
-  if (firstActive && isPlainEnglishCaptionLine(firstActive) && activeLines[1] && isCaptionFollowCliLine(activeLines[1])) {
+  if (firstActive && (hadHashCaption || skippedLead) && isCaptionFollowCliLine(firstActive)) {
     return { include: true, reason: 'bare-tool-command', lang: normLang };
   }
   if (STATIC_SOURCE_LOOK_RE.test(body)) {
@@ -458,11 +618,11 @@ function extractHeadings(md, lineStarts) {
   let inFence = null;
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
-    const fm = ln.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+    const fm = ln.match(/^[ \t]{0,8}(`{3,}|~{3,})/);
     if (fm) {
       const ch = fm[1][0];
       if (!inFence) inFence = { ch: ch, len: fm[1].length };
-      else if (inFence.ch === ch && fm[1].length >= inFence.len && /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*$/.test(ln)) inFence = null;
+      else if (inFence.ch === ch && fm[1].length >= inFence.len && /^[ \t]{0,8}(?:`{3,}|~{3,})[ \t]*$/.test(ln)) inFence = null;
       continue;
     }
     if (inFence) continue;
@@ -490,6 +650,29 @@ function headingAtLine(headings, lineNum) {
 
 const HTML_DIV_BLOCK_RE = /<div class="language-([a-zA-Z0-9_+-]+)[^"]*">\s*(?:<div class="highlight">\s*)?```[^\r\n]*\r?\n([\s\S]*?)\r?\n```(?:\s*<\/div>)*/g;
 
+function visualIndentWidth(ws) {
+  let cols = 0;
+  for (let i = 0; i < ws.length; i++) {
+    cols += ws[i] === '\t' ? 4 : 1;
+  }
+  return cols;
+}
+
+function dedentFenceLines(bodyLines, indent) {
+  if (!indent) return bodyLines;
+  const targetCols = visualIndentWidth(indent);
+  return bodyLines.map(ln => {
+    if (ln.startsWith(indent)) return ln.slice(indent.length);
+    let cols = 0;
+    let idx = 0;
+    while (idx < ln.length && cols < targetCols && (ln[idx] === ' ' || ln[idx] === '\t')) {
+      cols += ln[idx] === '\t' ? 4 : 1;
+      idx++;
+    }
+    return idx > 0 ? ln.slice(idx) : ln;
+  });
+}
+
 function findCommonMarkBlocksOutsideSpans(md, excludedSpans) {
   const blocks = [];
   const lineStarts = buildLineIndex(md);
@@ -508,12 +691,14 @@ function findCommonMarkBlocksOutsideSpans(md, excludedSpans) {
     if (!open && isExcludedOffset(off)) continue;
     const ln = lines[i];
     if (!open) {
-      const m = ln.match(/^[ \t]{0,3}(`{3,}|~{3,})([^\r\n]*)$/);
+      const m = ln.match(/^([ \t]{0,8})(`{3,}|~{3,})([^\r\n]*)$/);
       if (m) {
-        const fence = m[1];
-        const info = (m[2] || '').trim();
+        const indent = m[1] || '';
+        const fence = m[2];
+        const info = (m[3] || '').trim();
         if (fence[0] === '`' && info.indexOf('`') >= 0) continue;
         open = {
+          indent: indent,
           fenceChar: fence[0],
           fenceLen: fence.length,
           lang: info.split(/\s+/)[0] || '',
@@ -523,9 +708,9 @@ function findCommonMarkBlocksOutsideSpans(md, excludedSpans) {
         };
       }
     } else {
-      const closeRe = new RegExp('^[ \\t]{0,3}' + open.fenceChar + '{' + open.fenceLen + ',}[ \\t]*$');
+      const closeRe = new RegExp('^[ \\t]{0,8}' + open.fenceChar + '{' + open.fenceLen + ',}[ \\t]*$');
       if (closeRe.test(ln)) {
-        const bodyLines = lines.slice(open.startLineIdx + 1, i);
+        const bodyLines = dedentFenceLines(lines.slice(open.startLineIdx + 1, i), open.indent);
         const endOffset = off + ln.length;
         blocks.push({
           lang: open.lang.toLowerCase(),
@@ -625,6 +810,15 @@ function inferContentCommandHint(text) {
   return '';
 }
 
+const _legacyLeadBridge = new Map();
+
+function recordLegacyLeadBridge(newCmd, newOut, origCmd, origOut) {
+  const key = String(newCmd || '') + '\u0000' + outputHead(newOut);
+  if (!_legacyLeadBridge.has(key)) {
+    _legacyLeadBridge.set(key, { origCmd: String(origCmd || ''), origOut: String(origOut || '') });
+  }
+}
+
 function segmentBlock(blockOrText, opts) {
   opts = opts || {};
   const isObj = blockOrText && typeof blockOrText === 'object';
@@ -640,6 +834,9 @@ function segmentBlock(blockOrText, opts) {
   const rawUnits = [];
   let cur = null;
   let sawPrompt = false;
+  let sawDecoratedPrompt = false;
+  let inBareHashSubshell = false;
+  let seenUnpromptedNonLauncher = false;
   let checkedUnpromptedLead = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -652,8 +849,10 @@ function segmentBlock(blockOrText, opts) {
       const botM = lines[i + 1].match(ZSH_BOT_PROMPT_RE);
       if (botM) {
         sawPrompt = true;
+        sawDecoratedPrompt = true;
         if (cur) rawUnits.push(cur);
         const rawCmd = (botM[2] || '').trim();
+        inBareHashSubshell = isBareHashSubshellLauncher(rawCmd);
         cur = {
           promptLine: ln + '\n' + lines[i + 1],
           followPrompt: '',
@@ -673,9 +872,20 @@ function segmentBlock(blockOrText, opts) {
       }
     }
 
-    const p = matchPromptLine(ln, sawPrompt ? Object.assign({}, opts, { afterPrompt: true }) : opts);
+    const suppressBareHash = !opts.legacyBareHash && (
+      (sawDecoratedPrompt && !inBareHashSubshell) ||
+      (!sawPrompt && seenUnpromptedNonLauncher && !inBareHashSubshell)
+    );
+    const matchOpts = Object.assign({}, opts, {
+      afterPrompt: sawPrompt,
+      suppressBareHash: suppressBareHash
+    });
+    const p = matchPromptLine(ln, matchOpts);
     if (p) {
       sawPrompt = true;
+      if (!p.isHash && !p.isDollar) {
+        sawDecoratedPrompt = true;
+      }
       const curLauncher = cur ? getSessionLauncherTool(cur.command) : '';
       if (curLauncher && isInteractiveTargetOrReplPrompt(p)) {
         const fp = stripPromptPrefix(ln, p.rawCommand);
@@ -690,6 +900,11 @@ function segmentBlock(blockOrText, opts) {
       if (!p.rawCommand && i === lines.length - 1) {
         cur = null;
         continue;
+      }
+      if (p.isHash) {
+        inBareHashSubshell = true;
+      } else {
+        inBareHashSubshell = isBareHashSubshellLauncher(p.command);
       }
       cur = {
         promptLine: p.promptLine,
@@ -713,11 +928,16 @@ function segmentBlock(blockOrText, opts) {
         continue;
       }
       checkedUnpromptedLead = true;
+      if (isBareHashSubshellLauncher(trimmed)) {
+        inBareHashSubshell = true;
+      } else {
+        seenUnpromptedNonLauncher = true;
+      }
       if (includeUnprompted && getSessionLauncherTool(trimmed)) {
         let hasLaterTargetPrompt = false;
         for (let j = i + 1; j < lines.length; j++) {
           const pj = matchPromptLine(lines[j], opts);
-          if (pj && isInteractiveTargetOrReplPrompt(pj)) {
+          if (pj && (isInteractiveTargetOrReplPrompt(pj) || pj.isHash)) {
             hasLaterTargetPrompt = true;
             break;
           }
@@ -745,7 +965,7 @@ function segmentBlock(blockOrText, opts) {
 
   if (!sawPrompt && includeUnprompted) {
     // Handle unprompted CommonMark blocks (command-first or raw stdout paste)
-    let firstIdx = -1;
+    let origFirstIdx = -1;
     let sawHashCaption = false;
     for (let i = 0; i < lines.length; i++) {
       const t = lines[i].trim();
@@ -754,78 +974,23 @@ function segmentBlock(blockOrText, opts) {
         if (isPlainEnglishCaptionLine(t.replace(/^#+\s*/, ''))) sawHashCaption = true;
         continue;
       }
-      firstIdx = i;
+      origFirstIdx = i;
       break;
     }
 
-    if (firstIdx >= 0) {
-      let firstLine = lines[firstIdx].trim();
-      let captionSkipped = false;
-      if (isPlainEnglishCaptionLine(firstLine)) {
-        for (let j = firstIdx + 1; j < lines.length; j++) {
-          const tj = lines[j].trim();
-          if (!tj || (tj.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(tj))) continue;
-          if (isCaptionFollowCliLine(tj)) {
-            firstIdx = j;
-            firstLine = tj;
-            captionSkipped = true;
-          }
-          break;
-        }
-      }
-      const firstOffset = lineOffsets[firstIdx] != null ? lineOffsets[firstIdx] : firstIdx;
-      const shellTagged = /^(?:bash|sh|shell|zsh|console|terminal|powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang);
-      if (isCommandLikeLine(firstLine) || ((captionSkipped || sawHashCaption) && isCaptionFollowCliLine(firstLine)) || (shellTagged && !TERMINAL_CONTENT_SIG_RE.test(firstLine) && !EXPLOIT_DB_HEADER_RE.test(text))) {
-        // Check if block is multiple standalone command lines (e.g. a 2-line command snippet with no stdout)
-        const restLines = lines.slice(firstIdx + 1);
-        const nonCommentRest = restLines.filter(l => l.trim() && !l.trim().startsWith('#'));
-        const allCommands = shellTagged && nonCommentRest.length > 0 && nonCommentRest.length <= 6
-          && nonCommentRest.every(l => isCommandLikeLine(l));
+    if (origFirstIdx >= 0) {
+      const origFirstLine = lines[origFirstIdx].trim();
+      const origRestOut = lines.slice(origFirstIdx + 1).join('\n');
 
-        if (allCommands) {
-          for (let i = firstIdx; i < lines.length; i++) {
-            const t = lines[i].trim();
-            if (!t || t.startsWith('#')) continue;
-            const iOff = lineOffsets[i] != null ? lineOffsets[i] : i;
-            rawUnits.push({
-              promptLine: '',
-              followPrompt: '',
-              tool: '',
-              rawCommand: t,
-              command: t,
-              kind: /^(?:powershell|ps1|pwsh)$/.test(lang) ? 'powershell' : (/^(?:cmd|dos|bat|batch)$/.test(lang) ? 'cmd' : 'unprompted'),
-              user: '',
-              host: '',
-              hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
-              lineStart: baseLine + iOff,
-              heading: heading,
-              outLines: []
-            });
-          }
-        } else {
-          rawUnits.push({
-            promptLine: '',
-            followPrompt: '',
-            tool: '',
-            rawCommand: firstLine,
-            command: firstLine,
-            kind: /^(?:powershell|ps1|pwsh)$/.test(lang) ? 'powershell' : (/^(?:cmd|dos|bat|batch)$/.test(lang) ? 'cmd' : 'unprompted'),
-            user: '',
-            host: '',
-            hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
-            lineStart: baseLine + firstOffset,
-            heading: heading,
-            outLines: restLines
-          });
-        }
-      } else {
-        const inferredCmd = inferContentCommandHint(text);
+      if (RAW_ARTIFACT_HEADER_RE.test(origFirstLine)) {
+        const fullOut = lines.join('\n');
+        recordLegacyLeadBridge('', fullOut, origFirstLine, origRestOut);
         rawUnits.push({
           promptLine: '',
           followPrompt: '',
-          tool: inferredCmd.split(/\s+/)[0] || '',
+          tool: '',
           rawCommand: '',
-          command: inferredCmd,
+          command: '',
           kind: 'unprompted',
           user: '',
           host: '',
@@ -834,6 +999,117 @@ function segmentBlock(blockOrText, opts) {
           heading: heading,
           outLines: lines
         });
+      } else {
+        let firstIdx = origFirstIdx;
+        let firstLine = origFirstLine;
+        let captionSkipped = false;
+        let steps = 0;
+        while (steps < 4 && (isPlainEnglishCaptionLine(firstLine) || UNPROMPTED_SETUP_LEAD_RE.test(firstLine))) {
+          let nextActiveIdx = -1;
+          for (let j = firstIdx + 1; j < lines.length; j++) {
+            const tj = lines[j].trim();
+            if (!tj || (tj.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(tj))) continue;
+            nextActiveIdx = j;
+            break;
+          }
+          if (nextActiveIdx < 0) break;
+          const nextLine = lines[nextActiveIdx].trim();
+          if (RAW_ARTIFACT_HEADER_RE.test(nextLine)) break;
+          if (isCaptionFollowCliLine(nextLine)) {
+            firstIdx = nextActiveIdx;
+            firstLine = nextLine;
+            captionSkipped = true;
+            steps++;
+            continue;
+          }
+          if (UNPROMPTED_SETUP_LEAD_RE.test(nextLine)) {
+            let afterSetupIdx = -1;
+            for (let k = nextActiveIdx + 1; k < lines.length; k++) {
+              const tk = lines[k].trim();
+              if (!tk || (tk.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(tk))) continue;
+              afterSetupIdx = k;
+              break;
+            }
+            if (afterSetupIdx >= 0 && isCaptionFollowCliLine(lines[afterSetupIdx].trim())) {
+              firstIdx = afterSetupIdx;
+              firstLine = lines[afterSetupIdx].trim();
+              captionSkipped = true;
+              steps += 2;
+              continue;
+            }
+          }
+          break;
+        }
+
+        const firstOffset = lineOffsets[firstIdx] != null ? lineOffsets[firstIdx] : firstIdx;
+        const shellTagged = /^(?:bash|sh|shell|zsh|console|terminal|powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang);
+        if (isCommandLikeLine(firstLine) || ((captionSkipped || sawHashCaption) && isCaptionFollowCliLine(firstLine)) || (shellTagged && !TERMINAL_CONTENT_SIG_RE.test(firstLine) && !EXPLOIT_DB_HEADER_RE.test(text))) {
+          // Check if block is multiple standalone command lines (e.g. a 2-line command snippet with no stdout)
+          const restLines = lines.slice(firstIdx + 1);
+          const nonCommentRest = restLines.filter(l => l.trim() && !l.trim().startsWith('#'));
+          const allCommands = shellTagged && nonCommentRest.length > 0 && nonCommentRest.length <= 6
+            && nonCommentRest.every(l => isCommandLikeLine(l));
+
+          if (allCommands) {
+            if (firstIdx !== origFirstIdx) {
+              recordLegacyLeadBridge(firstLine, '', origFirstLine, origRestOut);
+            }
+            for (let i = firstIdx; i < lines.length; i++) {
+              const t = lines[i].trim();
+              if (!t || t.startsWith('#')) continue;
+              const iOff = lineOffsets[i] != null ? lineOffsets[i] : i;
+              rawUnits.push({
+                promptLine: '',
+                followPrompt: '',
+                tool: '',
+                rawCommand: t,
+                command: t,
+                kind: /^(?:powershell|ps1|pwsh)$/.test(lang) ? 'powershell' : (/^(?:cmd|dos|bat|batch)$/.test(lang) ? 'cmd' : 'unprompted'),
+                user: '',
+                host: '',
+                hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
+                lineStart: baseLine + iOff,
+                heading: heading,
+                outLines: []
+              });
+            }
+          } else {
+            const joinedRest = restLines.join('\n');
+            if (firstIdx !== origFirstIdx) {
+              recordLegacyLeadBridge(firstLine, joinedRest, origFirstLine, origRestOut);
+            }
+            rawUnits.push({
+              promptLine: '',
+              followPrompt: '',
+              tool: '',
+              rawCommand: firstLine,
+              command: firstLine,
+              kind: /^(?:powershell|ps1|pwsh)$/.test(lang) ? 'powershell' : (/^(?:cmd|dos|bat|batch)$/.test(lang) ? 'cmd' : 'unprompted'),
+              user: '',
+              host: '',
+              hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
+              lineStart: baseLine + firstOffset,
+              heading: heading,
+              outLines: restLines
+            });
+          }
+        } else {
+          const inferredCmd = inferContentCommandHint(text);
+          rawUnits.push({
+            promptLine: '',
+            followPrompt: '',
+            tool: inferredCmd.split(/\s+/)[0] || '',
+            rawCommand: '',
+            command: inferredCmd,
+            kind: 'unprompted',
+            user: '',
+            host: '',
+            hostHint: '',
+            lineStart: baseLine,
+            heading: heading,
+            outLines: lines
+          });
+        }
       }
     }
   }
@@ -1128,8 +1404,66 @@ function outputHead(out) {
   return String(out || '').split('\n').filter(l => l.trim()).slice(0, 6).join('\n');
 }
 
-function blockId(file, command, out) {
+function rawSha1Id(file, command, out) {
   return crypto.createHash('sha1').update(file + '\u0000' + command + '\u0000' + outputHead(out)).digest('hex').slice(0, 12);
+}
+
+let _knownLabelIds = null;
+function getKnownLabelIds() {
+  if (_knownLabelIds) return _knownLabelIds;
+  _knownLabelIds = new Set();
+  const labelsDir = path.join(__dirname, 'labels');
+  try {
+    if (fs.existsSync(labelsDir)) {
+      const files = fs.readdirSync(labelsDir);
+      for (let i = 0; i < files.length; i++) {
+        if (!files[i].toLowerCase().endsWith('.json')) continue;
+        const doc = JSON.parse(fs.readFileSync(path.join(labelsDir, files[i]), 'utf8'));
+        const cases = doc && Array.isArray(doc.cases) ? doc.cases : [];
+        for (let j = 0; j < cases.length; j++) {
+          if (cases[j] && typeof cases[j].id === 'string' && cases[j].id) {
+            _knownLabelIds.add(cases[j].id);
+          }
+        }
+      }
+    }
+  } catch (_e) {
+    // Fall back to primary hash when label directory is unavailable
+  }
+  return _knownLabelIds;
+}
+
+function blockId(file, command, out) {
+  const primary = rawSha1Id(file, command, out);
+  const known = getKnownLabelIds();
+  if (!known.size || known.has(primary)) return primary;
+
+  const bridgeKey = String(command || '') + '\u0000' + outputHead(out);
+  const bridged = _legacyLeadBridge.get(bridgeKey);
+  if (bridged) {
+    const legacyLeadId = rawSha1Id(file, bridged.origCmd, bridged.origOut);
+    if (known.has(legacyLeadId)) return legacyLeadId;
+  }
+
+  const outStr = String(out || '');
+  if (outStr.indexOf('#') >= 0) {
+    const outLines = outStr.split('\n');
+    const hashHits = [];
+    for (let i = 0; i < outLines.length; i++) {
+      const m = outLines[i].match(/^\s*#\s+([A-Za-z\/.].*)$/);
+      if (m) hashHits.push({ idx: i, cand: (m[1] || '').trim() });
+    }
+    for (let h = 0; h < hashHits.length; h++) {
+      const prefixHashId = rawSha1Id(file, command, outLines.slice(0, hashHits[h].idx).join('\n'));
+      if (known.has(prefixHashId)) return prefixHashId;
+      const start = hashHits[h].idx + 1;
+      const end = h + 1 < hashHits.length ? hashHits[h + 1].idx : outLines.length;
+      const legacyHashId = rawSha1Id(file, hashHits[h].cand, outLines.slice(start, end).join('\n'));
+      if (known.has(legacyHashId)) return legacyHashId;
+    }
+  }
+
+  return primary;
 }
 
 function resolveCorpusWalkthroughsDir(corpusDir) {
@@ -1271,9 +1605,11 @@ module.exports = {
   EXPLICIT_TERMINAL_LANGS: EXPLICIT_TERMINAL_LANGS,
   STATIC_CODE_LANGS: STATIC_CODE_LANGS,
   FACT_BEARING: FACT_BEARING,
+  RAW_ARTIFACT_HEADER_RE: RAW_ARTIFACT_HEADER_RE,
   cleanProse: cleanProse,
   classifyFenceBlock: classifyFenceBlock,
   hasShellPrompt: hasShellPrompt,
+  isBareHashCommand: isBareHashCommand,
   isCommandLikeLine: isCommandLikeLine,
   isPlainEnglishCaptionLine: isPlainEnglishCaptionLine,
   joinWrappedPromptLines: joinWrappedPromptLines,

@@ -31,16 +31,45 @@
     var names = [], m, re = /^\s*\|\s*([^|\r\n]+?)\s*\|\s*$/gm;
     while ((m = re.exec(text)) !== null) names.push(m[1].trim());
     if (names.length) return names;
+    if (/^\s*-+\+[-+]+\s*$/m.test(text)) {
+      var pLines = text.split(/\r?\n/);
+      var sepIdx = -1;
+      for (var pi = 0; pi < pLines.length; pi++) {
+        if (/^\s*-+\+[-+]+\s*$/.test(pLines[pi])) { sepIdx = pi; break; }
+      }
+      if (sepIdx > 0) {
+        var hdrCells = pLines[sepIdx - 1].split('|').map(function (c) { return c.trim().toLowerCase(); });
+        var colIdx = 0;
+        for (var hi = 0; hi < hdrCells.length; hi++) {
+          if (hdrCells[hi] === 'name' || hdrCells[hi] === 'datname' || hdrCells[hi] === 'tablename' || hdrCells[hi] === 'table_name') {
+            colIdx = hi;
+            break;
+          }
+        }
+        for (var ri = sepIdx + 1; ri < pLines.length; ri++) {
+          var rLn = pLines[ri];
+          if (!rLn.trim() || /^\s*\(\d+\s+rows?\)\s*$/i.test(rLn)) break;
+          if (rLn.indexOf('|') < 0) continue;
+          var rCells = rLn.split('|');
+          if (colIdx < rCells.length) {
+            var cellVal = rCells[colIdx].trim();
+            if (cellVal && /^[A-Za-z0-9_$][A-Za-z0-9_$.-]*$/.test(cellVal)) names.push(cellVal);
+          }
+        }
+        if (names.length) return names;
+      }
+    }
     text.split(/\r?\n/).forEach(function (ln) {
       var t = ln.trim();
-      if (!t || /^[-+]+$/.test(t)) return;
-      if (/\b(?:Query OK|rows? in set|Warning|Reading table information|Database changed|turn off this feature|Empty set|Bye|Aborted|Ctrl-C)\b/i.test(t)) return;
+      if (!t || /^[-+]+$/.test(t) || /^\(\d+\s+rows?\)$/i.test(t)) return;
+      if (/\b(?:Query OK|rows? in set|Warning|Reading table information|Database changed|turn off this feature|Empty set|Bye|Aborted|Ctrl-C|List of databases|List of relations)\b/i.test(t)) return;
       if (/^[A-Za-z0-9_$][A-Za-z0-9_$.-]*$/.test(t)) names.push(t);
     });
     return names;
   }
 
   var _EMPTY_DB_DIGEST_RE = /^(?:0x)?(?:d41d8cd98f00b204e9800998ecf8427e|31d6cfe0d16ae931b73c59d7e0c089c0|aad3b435b51404eeaad3b435b51404ee|da39a3ee5e6b4b0d3255bfef95601890afd80709|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)$/i;
+  var _SELF_EVIDENCING_DB_HASH_RE = /(?:\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:1|5|6|y|P|H|S|apr1)\$[^\s|'"\t]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|'"\t]+|\bsha(?:256|512)\$[A-Za-z0-9./$+=]{20,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|'"\t]+)/g;
 
   function _detect_db_hash_format(hsh) {
     var s = String(hsh || '');
@@ -51,7 +80,11 @@
     if (/^\$6\$/i.test(s)) return 'sha512crypt';
     if (/^\$y\$/i.test(s)) return 'yescrypt';
     if (/^pbkdf2_sha/i.test(s)) return 'pbkdf2';
+    if (/^sha256\$/i.test(s)) return 'sha256-django';
+    if (/^sha512\$/i.test(s)) return 'sha512-django';
     if (/^\*[0-9A-Fa-f]{40}$/.test(s)) return 'mysql-sha1';
+    if (/^md5[0-9a-fA-F]{32}$/.test(s)) return 'postgres-md5';
+    if (/^SCRAM-SHA-256\$\d+:/i.test(s)) return 'postgres-scram-sha-256';
     var hex = s.replace(/^0x/i, '');
     if (/^[0-9a-fA-F]{32}$/.test(hex)) return 'raw-md5';
     if (/^[0-9a-fA-F]{40}$/.test(hex)) return 'raw-sha1';
@@ -109,7 +142,7 @@
     }
 
     var hashes = [], seen = {};
-    if (['password', 'hash', 'users', 'user', 'partners', 'accounts', 'credential', 'sqlite', 'authentication_string', 'pass', 'person'].some(function (k) { return (text + '\n' + low).toLowerCase().indexOf(k) >= 0; }) || /^\s*\d+\|[^|\r\n]+\|\$(?:2[abxy]|1|5|6|y|P|H|S|apr1)\$/im.test(text) || /pbkdf2_sha(?:1|256|512)\$\d+\$/i.test(text)) {
+    if (['password', 'hash', 'users', 'user', 'partners', 'accounts', 'credential', 'sqlite', 'authentication_string', 'pass', 'person', 'pg_shadow', 'pg_authid'].some(function (k) { return (text + '\n' + low).toLowerCase().indexOf(k) >= 0; }) || /^\s*\d+\|[^|\r\n]+\|\$(?:2[abxy]|1|5|6|y|P|H|S|apr1)\$/im.test(text) || /pbkdf2_sha(?:1|256|512)\$\d+\$/i.test(text)) {
       reAll(_DB_HASH_ROW_RE, text).concat(reAll(_DB_HASH_REV_ROW_RE, text)).forEach(function (m) {
         var hsh = m.groups.hash, usr = m.groups.user;
         if (!usr || /^(?:null|true|false|\d+)$/i.test(usr)) return;
@@ -120,6 +153,43 @@
         hashes.push({ user: usr, hash: hsh });
       });
     }
+    // Table-agnostic self-evidencing cryptographic hash rows (MCF, MySQL *SHA1, Postgres md5/SCRAM-SHA-256)
+    text.split(/\r?\n/).forEach(function (rowLn) {
+      if (!rowLn || (rowLn.indexOf('$') < 0 && rowLn.indexOf('*') < 0 && !/\bmd5[0-9a-fA-F]{32}\b/.test(rowLn))) return;
+      if (!/SCRAM-SHA-256\$/i.test(rowLn) && (rowLn.match(/:/g) || []).length >= 5 && rowLn.indexOf('|') < 0) return;
+      _SELF_EVIDENCING_DB_HASH_RE.lastIndex = 0;
+      var shm = _SELF_EVIDENCING_DB_HASH_RE.exec(rowLn);
+      if (!shm) return;
+      var hsh = shm[0];
+      if (_EMPTY_DB_DIGEST_RE.test(hsh) || seen[hsh.toLowerCase()]) return;
+      var delim = rowLn.indexOf('|') >= 0 ? '|' : (rowLn.indexOf('\t') >= 0 ? '\t' : (rowLn.indexOf(',') >= 0 ? ',' : null));
+      var rawCells = delim ? rowLn.split(delim) : rowLn.trim().split(/\s+/);
+      var cells = [];
+      for (var ci = 0; ci < rawCells.length; ci++) {
+        var cTrim = rawCells[ci].trim().replace(/^['"]|['"]$/g, '');
+        if (cTrim !== '' || (ci > 0 && ci < rawCells.length - 1)) cells.push(cTrim);
+      }
+      if (cells.length < 2) return;
+      var hIdx = -1;
+      for (var hi = 0; hi < cells.length; hi++) {
+        if (cells[hi].indexOf(hsh) >= 0) { hIdx = hi; break; }
+      }
+      if (hIdx < 0) return;
+      var bestUser = '', bestDist = 999;
+      for (var ui = 0; ui < cells.length; ui++) {
+        if (ui === hIdx) continue;
+        var cand = cells[ui];
+        if (!cand || cand.indexOf(hsh) >= 0) continue;
+        if (!/^[A-Za-z_][A-Za-z0-9_.@+-]{1,48}$/.test(cand)) continue;
+        if (/^(?:null|true|false|yes|no|t|f|usename|username|user|login|passwd|password|rolname|rolpassword|table|select|from|where)$/i.test(cand)) continue;
+        var dist = Math.abs(ui - hIdx) * 2 + (ui > hIdx ? 1 : 0);
+        if (dist < bestDist) { bestDist = dist; bestUser = cand; }
+      }
+      if (bestUser) {
+        seen[hsh.toLowerCase()] = true;
+        hashes.push({ user: bestUser, hash: hsh });
+      }
+    });
     if (hashes.length) {
       _add(facts, mkFact('loot.material', h, { kind: 'db_hashes', entries: hashes.slice(0, 5000), count: hashes.length, via: 'database', tool: _db_tool(low) }, S, source));
       _add(facts, mkFact('db.hashes', h, { entries: hashes.slice(0, 5000), count: hashes.length, tool: _db_tool(low) }, S, source));
@@ -147,8 +217,14 @@
     // multi-column select or describe grid (interior pipes, different intent) never enters here.
     var showDb = /\bshow\s+(?:databases|schemas)\b/i.test(low)
       || /\bselect\s+name\s+from\s+(?:master\.\s*)?(?:sys\.\s*)?databases\b/i.test(low + '\n' + text)
+      || /\bselect\s+datname\s+from\s+(?:pg_catalog\.)?pg_database\b/i.test(low + '\n' + text)
+      || /(?:^|\n)\s*\\l(?:ist)?\+?(?:\s|;|$)/i.test((command || '') + '\n' + text)
+      || /^\s*List of databases\s*$/im.test(text)
       || /(?:^|\n)\s*(?:mysql|MariaDB\s*\[[^\]]*\]|SQL(?:\s*\([^)]*\))?|postgres=#?)\s*>\s*show\s+(?:databases|schemas)\b/i.test(text);
     var showTbl = /\bshow\s+tables\b/i.test(low)
+      || /\bselect\s+(?:tablename|table_name)\s+from\s+(?:(?:pg_catalog\.)?pg_tables|information_schema\.tables)\b/i.test(low + '\n' + text)
+      || /(?:^|\n)\s*\\dt\+?(?:\s|;|$)/i.test((command || '') + '\n' + text)
+      || /^\s*List of relations\s*$/im.test(text)
       || /(?:^|\n)\s*(?:mysql|MariaDB\s*\[[^\]]*\]|SQL(?:\s*\([^)]*\))?|postgres=#?)\s*>\s*show\s+tables\b/i.test(text)
       || /^\s*\|\s*Tables_in_[^|\r\n]+\|\s*$/im.test(text);
     if (showDb || showTbl) {
@@ -161,7 +237,7 @@
           var nm = pm ? pm[1].trim() : '';
           if (!nm) return;
           var lo = nm.toLowerCase();
-          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || /^tables_in_/i.test(nm)) return;
+          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || lo === 'datname' || lo === 'tablename' || lo === 'table_name' || /^tables_in_/i.test(nm)) return;
           var bucket = curKind === 'tbl' ? tblNames : dbNames;
           if (bucket.indexOf(nm) < 0) bucket.push(nm);
         });
@@ -171,7 +247,7 @@
         var listNames = [];
         _db_listing_names(text).forEach(function (nm) {
           var lo = nm.toLowerCase();
-          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || /^tables_in_/i.test(nm)) return;
+          if (lo === 'database' || lo === 'databases' || lo === 'schema_name' || lo === 'name' || lo === 'datname' || lo === 'tablename' || lo === 'table_name' || /^tables_in_/i.test(nm)) return;
           if (listNames.indexOf(nm) < 0) listNames.push(nm);
         });
         if (listNames.length) {
@@ -195,8 +271,8 @@
                (/\bSQL\s*[>(]/.test(sessionText) || /microsoft sql server/i.test(sessionText) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
       // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
-      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b/i.test(sessionText)) &&
-               (/list of databases/i.test(sessionText) || /^\s*\w+=[#>]/m.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
+      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b/i.test(sessionText) || /\b(?:pg_shadow|pg_database|pg_authid|pg_tables)\b/i.test(low + '\n' + sessionText)) &&
+               (/list of (?:databases|relations)/i.test(sessionText) || /^\s*\w+=[#>]/m.test(sessionText) || /^\s*\(\d+\s+rows?\)\s*$/im.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
       else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database/i.test(sessionText)) &&
                (/connected to:/i.test(sessionText) || /^\s*SQL>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
       else if ((low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&

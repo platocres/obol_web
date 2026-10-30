@@ -303,11 +303,37 @@
     });
   }
 
+  var STORE_DIR_METADATA_FACT_RE = /^ad\.(?:domain_known|base_dn|domain_sid|trusts)$/;
   function normalizeDomain(name) { return String(name || '').trim().toLowerCase().replace(/\.$/, ''); }
-  function domainsForTarget(eng, ip, hostFacts) {
+  function storeHasConflictingNonAdEvidence(hostFacts, targetObj) {
+    if (targetObj) {
+      if (targetObj.os && /\b(?:linux|unix|ubuntu|debian|centos|freebsd|openbsd|netbsd)\b/i.test(String(targetObj.os))) return true;
+      var tDom = normalizeDomain(targetObj.domain);
+      if (tDom && (tDom === 'workgroup' || tDom.indexOf('.') < 0)) return true;
+    }
+    var hasWinOrAd = false, hasLin = false, hasWg = false;
+    for (var i = 0; i < hostFacts.length; i++) {
+      var f = hostFacts[i];
+      if (!f || f.state !== 'supported') continue;
+      var v = f.value || {};
+      if (/^(?:foothold\.windows|os\.windows|ad\.dc_candidate|ad\.domain_known|(?:kerberos|ldap|winrm|rdp|mssql)\.reachable|port:(?:88|389|636|3268|3269|5985|5986))$/.test(f.kind)) hasWinOrAd = true;
+      if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint' || f.kind === 'host.os') && /windows/i.test(String(v.family || v.os || ''))) hasWinOrAd = true;
+      if (/^(?:foothold\.linux|os\.linux)$/.test(f.kind)) hasLin = true;
+      if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint' || f.kind === 'host.os') && /\b(?:linux|unix|ubuntu|debian|centos|freebsd|openbsd|netbsd)\b/i.test(String(v.family || v.os || ''))) hasLin = true;
+      if (f.kind === 'smb.signing' && v.workgroup === true) hasWg = true;
+      if (f.kind === 'host.domain') {
+        var hd = normalizeDomain(v.domain || v.name);
+        if (hd && (hd === 'workgroup' || hd.indexOf('.') < 0)) hasWg = true;
+      }
+    }
+    return hasWg || (hasLin && !hasWinOrAd);
+  }
+  function cleanStoreAdDomain(name) { return normalizeDomain(String(name || '').trim().replace(/0\.$/, '')); }
+  function domainsForTarget(eng, ip, hostFacts, allFacts) {
     var domains = {};
-    function take(name) { name = normalizeDomain(name); if (name && name !== 'domain') domains[name] = true; }
-    ((eng && eng.targets) || []).forEach(function (t) { if ((t.ip || t.id) === ip) take(t.domain); });
+    function take(name) { name = cleanStoreAdDomain(name); if (name && name !== 'domain' && name !== 'workgroup') domains[name] = true; }
+    var targetObj = null;
+    ((eng && eng.targets) || []).forEach(function (t) { if ((t.ip || t.id) === ip) { targetObj = t; take(t.domain); } });
     hostFacts.forEach(function (f) {
       if (f.state !== 'supported') return;
       var v = f.value || {};
@@ -316,7 +342,47 @@
     });
     // A configured domain applies to its configured host, not every host in the engagement.
     if (!Object.keys(domains).length && eng && (eng.targets || []).length <= 1 && eng.params && eng.params.target === ip) take(eng.params.domain);
+    if (!Object.keys(domains).length && Array.isArray(allFacts) && !storeHasConflictingNonAdEvidence(hostFacts, targetObj)) {
+      var proven = {};
+      allFacts.forEach(function (f) {
+        if (!f || f.state !== 'supported' || f.kind !== 'ad.domain_known') return;
+        var sc = String(f.scope || '');
+        var dn = cleanStoreAdDomain((f.value && (f.value.name || f.value.domain)) || (sc.indexOf('domain:') === 0 ? sc.slice(7) : ''));
+        if (dn && dn !== 'domain' && dn !== 'workgroup' && dn.indexOf('.') > 0) proven[dn] = true;
+      });
+      var pKeys = Object.keys(proven);
+      if (pKeys.length === 1) take(pKeys[0]);
+    }
     return domains;
+  }
+  function storeProjectDirMetadataFacts(allFacts, domainMap) {
+    if (!Array.isArray(allFacts) || !domainMap || !Object.keys(domainMap).length) return [];
+    var hostDom = {};
+    allFacts.forEach(function (f) {
+      if (!f || f.state !== 'supported' || f.kind !== 'ad.domain_known' || String(f.scope || '').indexOf('host:') !== 0) return;
+      var d = cleanStoreAdDomain(f.value && (f.value.domain || f.value.name));
+      if (d && d.indexOf('.') > 0) hostDom[String(f.scope).toLowerCase()] = d;
+    });
+    var out = [];
+    allFacts.forEach(function (f) {
+      if (!f || f.state !== 'supported' || !STORE_DIR_METADATA_FACT_RE.test(f.kind || '')) return;
+      var sc = String(f.scope || ''), v = f.value || {}, fDom = '';
+      if (sc.indexOf('domain:') === 0) fDom = cleanStoreAdDomain(sc.slice(7));
+      if (!fDom || fDom === 'domain') fDom = cleanStoreAdDomain(v.domain || v.name);
+      if (!fDom && f.kind === 'ad.base_dn' && (v.basedn || v.dn)) {
+        var dcs = [], m, re = /\bDC=([A-Za-z0-9-]+)/gi, bdn = String(v.basedn || v.dn);
+        while ((m = re.exec(bdn))) dcs.push(m[1].toLowerCase());
+        if (dcs.length >= 2) fDom = dcs.join('.');
+      }
+      if (!fDom && sc.indexOf('host:') === 0) fDom = hostDom[sc.toLowerCase()] || '';
+      if (!fDom || !domainMap[fDom]) return;
+      if (sc.indexOf('domain:') === 0) {
+        out.push(f);
+      } else {
+        out.push({ kind: f.kind, scope: 'domain:' + fDom, state: 'supported', source: f.source || 'domain-metadata', value: v });
+      }
+    });
+    return out;
   }
 
   var STORE_AUTH_SURFACE_RE = /^(?:port:(?:21|22|23|25|80|88|110|135|139|143|389|443|445|465|587|636|993|995|1433|1521|2222|3268|3269|3306|3389|5432|5900|5901|5985|5986|6379|8000|8080|8443|8888|27017)|(?:http|https|smb|ssh|winrm|rdp|ldap|kerberos|ftp|mssql|mysql|postgres|postgresql|redis|oracle|vnc|mail|imap|pop3|smtp)\.reachable|web\.login_form|http\.(?:login|basic_auth)|ad\.dc_candidate)$/;
@@ -1160,6 +1226,16 @@
           && !((f.kind === 'host.os' || f.kind === 'host.os_hint') && f.source === 'target-edit');
       });
       if (multiTarget && !hasHostActivity) {
+        var isRegTarget = targetList.some(function (t) { return (t.ip || t.id) === ip; });
+        if (isRegTarget) {
+          var unscannedDomains = domainsForTarget(eng, ip, hostFacts, arr);
+          if (Object.keys(unscannedDomains).length) {
+            var dirFacts = storeProjectDirMetadataFacts(arr, unscannedDomains);
+            if (dirFacts.length) {
+              return new OBOL.facts.FactSet(hostFacts.concat(dirFacts).map(OBOL.facts.factFromJson));
+            }
+          }
+        }
         return new OBOL.facts.FactSet(hostFacts.map(OBOL.facts.factFromJson));
       }
       var isLinux = hostFacts.some(function (f) {
@@ -1181,7 +1257,7 @@
         return f.state === 'supported' && /^(kerberos\.reachable|ad\.dc_candidate|port:(88|3268|3269))$/.test(f.kind);
       });
       var DC_ONLY_DOMAIN_RE = /^(access\.admin|loot\.ntds|hash\.krbtgt|persistence\.domain|ad\.(acl_lead|control_paths|attack_paths|group_joined|domain_control)|adcs\.vulnerable)$/;
-      var targetDomains = domainsForTarget(eng, ip, hostFacts);
+      var targetDomains = domainsForTarget(eng, ip, hostFacts, arr);
       var sel = arr.filter(function (f) {
         var s = f.scope || '';
         if (s === hostScope || (!multiTarget && s === 'host:target')) return true;
@@ -1198,6 +1274,15 @@
         return false;
       });
       var mapped = sel.map(OBOL.facts.factFromJson);
+      if (multiTarget && hasHostActivity && !(isLinux && !hasAdOrSmb) && Object.keys(targetDomains).length) {
+        var projDir = storeProjectDirMetadataFacts(arr, targetDomains);
+        for (var pdi = 0; pdi < projDir.length; pdi++) {
+          var pdf = OBOL.facts.factFromJson(projDir[pdi]);
+          if (pdf && !mapped.some(function (mf) { return mf && mf.state === 'supported' && mf.kind === pdf.kind; })) {
+            mapped.push(pdf);
+          }
+        }
+      }
       if (multiTarget && hasHostActivity && OBOL.facts && OBOL.facts.makeFact) {
         var piv = findPivotRoute(arr, ip);
         if (piv && !mapped.some(function (f) { return f && f.state === 'supported' && f.kind === 'tunnel.reachable_via_pivot'; })) {

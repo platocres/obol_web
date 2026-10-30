@@ -116,12 +116,133 @@
     }
   }
 
+  function _isValidChiselRemoteHost(host) {
+    var s = String(host || '').trim();
+    if (!s || /^socks$/i.test(s) || /^\d+$/.test(s)) return false;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(s)) {
+      return s.split('.').every(function (o) { var n = +o; return n >= 0 && n <= 255; });
+    }
+    if (/^\[[0-9a-fA-F:]+\]$/.test(s)) return true;
+    return /[A-Za-z]/.test(s) && /^[A-Za-z0-9_.-]+$/.test(s);
+  }
+
+  function _hasValidChiselForwardSpec(cmdStr) {
+    var re = /(?:^|\s)(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5}):(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+):(\d{1,5})(?=\s|$)/g, fm;
+    while ((fm = re.exec(cmdStr)) !== null) {
+      var lp = +fm[2], rp = +fm[4];
+      if (lp >= 1 && lp <= 65535 && rp >= 1 && rp <= 65535 && _isValidChiselRemoteHost(fm[3])) return true;
+    }
+    return false;
+  }
+
+  function _parse_chisel(text, a1, a2, a3, a4) {
+    var ws, source = 'chisel', facts = [], command = '';
+    if (a1 && typeof a1 === 'object' && !Array.isArray(a1)) {
+      ws = a1;
+      if (Array.isArray(a3)) {
+        source = typeof a2 === 'string' ? a2 : 'chisel';
+        facts = a3;
+        command = typeof a4 === 'string' ? a4 : '';
+      } else if (Array.isArray(a4)) {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'chisel');
+        facts = a4;
+      } else {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'chisel');
+      }
+    } else {
+      command = typeof a1 === 'string' ? a1 : '';
+      facts = Array.isArray(a2) ? a2 : [];
+      var ipM = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(command) || /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(String(text || ''));
+      ws = { target: ipM ? ipM[1] : 'unknown' };
+      source = command || 'chisel';
+    }
+    var t = String(text || ''), cmd = String(command || '');
+    var combined = cmd + '\n' + t;
+    if (/^\s*(?:man|which|whereis|type|help)\s+chisel\b/i.test(cmd) || /\bUsage:\s*chisel\b|--help\b/i.test(combined)) {
+      return facts;
+    }
+    var hasActiveBanner = /(?:(?:client|server):\s+Connected\s*\(Latency|\b(?:c|client|server):\s*Connected\b|session#\d+:\s*tun:|tun:\s*proxy#[^\r\n]*:\s*Listening\b|server:\s+Listening on\s+https?:\/\/|(?:client|server):\s+Connecting to ws:\/\/\S+)/i.test(t);
+    var hasErr = /connection refused|permission denied|authentication failed|timed?\s*out|could not connect|cannot connect|unreachable|fatal|fata\[|server died|exiting|error:/i.test(t);
+    if (hasErr && !/(?:(?:client|server):\s+Connected\s*\(Latency|\b(?:c|client|server):\s*Connected\b|session#\d+:\s*tun:|tun:\s*proxy#[^\r\n]*:\s*Listening\b)/i.test(t)) {
+      return facts;
+    }
+    var isChisel = /\bchisel(?:\.exe)?\b/i.test(cmd) ||
+      /\bchisel(?:\.exe)?\b/i.test(t) ||
+      /\b(?:client|server):\s+(?:Connecting to ws:\/\/|Reverse tunnelling enabled|Fingerprint\s+[0-9a-f]{2}:|Connected\s*\(Latency)|\bsession#\d+:\s*tun:\s*proxy#|\btun:\s*proxy#R:/i.test(t);
+    if (!isChisel) return facts;
+
+    var cmdHasTunnelSpec = /\bchisel(?:\.exe)?\s+(?:client|server)\b/i.test(cmd) &&
+      (/\bR:(?:socks|\d)/i.test(cmd) || /--reverse\b/i.test(cmd) || _hasValidChiselForwardSpec(cmd));
+    var textHasChiselProof = hasActiveBanner ||
+      (/\bchisel(?:\.exe)?\b/i.test(t) && /(?:Connected\b|Connected\s*\(|Listening on|tun:\s|proxy#(?:R:|\d)|session#\d+|R:socks)/i.test(t));
+    if (!textHasChiselProof && !(cmdHasTunnelSpec && !hasErr)) return facts;
+
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var isSocks = /(?:^|[\s:=>])R?(?:(?:\d{1,3}(?:\.\d{1,3}){3}:)?(?:\d{1,5}:)?)?socks\b/i.test(combined);
+    var mode = isSocks ? 'socks' : 'port-forward';
+
+    _add(facts, mkFact('pivot.active', h, { tool: 'chisel', via: 'chisel', mode: mode }, S, source));
+    if (isSocks) {
+      _add(facts, mkFact('tunnel.socks', h, { via: 'chisel' }, S, source));
+    }
+
+    var portSet = {}, forwards = [], fwdSeen = {}, m;
+    function recordFwd(lp, rh, rp) {
+      if (!(lp >= 1 && lp <= 65535 && rp >= 1 && rp <= 65535)) return;
+      var hostStr = rh || '127.0.0.1';
+      if (!_isValidChiselRemoteHost(hostStr)) return;
+      portSet[lp] = 1;
+      portSet[rp] = 1;
+      var fk = lp + '=>' + hostStr.toLowerCase() + ':' + rp;
+      if (!fwdSeen[fk]) {
+        fwdSeen[fk] = 1;
+        forwards.push({ local_port: lp, remote_host: hostStr, remote_port: rp });
+      }
+    }
+
+    var rSpecRe = /(?:^|[\s"'])R:(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5})(?::(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+)(?::(\d{1,5}))?)?(?=$|[\s"'])/gi;
+    while ((m = rSpecRe.exec(combined)) !== null) {
+      if (m[3] && /^socks$/i.test(m[3])) continue;
+      var rLp = +m[2];
+      if (m[3] && m[4]) {
+        if (!_isValidChiselRemoteHost(m[3])) continue;
+        recordFwd(rLp, m[3], +m[4]);
+      } else if (m[3] && /^\d{1,5}$/.test(m[3])) {
+        recordFwd(rLp, '127.0.0.1', +m[3]);
+      } else if (!m[3]) {
+        recordFwd(rLp, '127.0.0.1', rLp);
+      }
+    }
+
+    var proxyRe = /\bproxy#(?:R:)?(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5})=>(?:(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+):)?(\d{1,5})\b/gi;
+    while ((m = proxyRe.exec(t)) !== null) {
+      if (m[3] && !_isValidChiselRemoteHost(m[3])) continue;
+      recordFwd(+m[2], m[3] || '127.0.0.1', +m[4]);
+    }
+
+    if (/\bchisel(?:\.exe)?\s+client\b/i.test(cmd)) {
+      var fwdSpecRe = /(?:^|\s)(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5}):(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+):(\d{1,5})(?=\s|$)/g;
+      while ((m = fwdSpecRe.exec(cmd)) !== null) {
+        if (!_isValidChiselRemoteHost(m[3])) continue;
+        recordFwd(+m[2], m[3], +m[4]);
+      }
+    }
+
+    var uniqPorts = Object.keys(portSet).map(Number).sort(function (a, b) { return a - b; });
+    if (uniqPorts.length) {
+      _add(facts, mkFact('pivot.ports', h, { ports: uniqPorts, forwards: forwards, via: 'chisel' }, S, source));
+    }
+    return facts;
+  }
+
   // The setup / status output that confirms a live pivot channel from this foothold. Recognized from
   // the command where the command is the proof (ssh -D is silent), and from the tool's own success
   // banner so a pasted output alone still counts. Conservative: a tool name plus a real success token.
   function _parse_tunnel(text, ws, source, facts, command) {
     var h = 'host:' + ws.target, lc = String(command || '').toLowerCase(), t = String(text || ''), cmd = String(command || '');
-    var hasPositiveTunnel = /(?:session#\d+.*tun:|Connected \(Latency|\bsession\b.*(?:established|opened)|Agent joined|session \d+ opened|Interface\s+\S+\s+(?:created|up)|\[Tunnel\] Interface ligolo|\bc\s*:\s*Connected\b|client:\s*Connected|Entering interactive session|new session|obol:fact:pivot_active)/i.test(t);
+    var hasPositiveTunnel = /(?:session#\d+.*tun:|tun:\s*proxy#|Connected\s*\(Latency|(?:client|server):\s+(?:Connecting to ws:\/\/|Listening on\s+https?:\/\/)|\bsession\b.*(?:established|opened)|Agent joined|session \d+ opened|Interface\s+\S+\s+(?:created|up)|\[Tunnel\] Interface ligolo|\bc\s*:\s*Connected\b|client:\s*Connected|Entering interactive session|new session|obol:fact:pivot_active)/i.test(t);
     if (/connection refused|permission denied|authentication failed|timed?\s*out|could not connect|cannot connect|unreachable|fatal|fata\[|server died|exiting|error:/i.test(t) && !hasPositiveTunnel) return;
 
     // obol sync token: obol:fact:pivot_active | subnet=... | via=... | host=...
@@ -138,9 +259,8 @@
       _add(facts, mkFact('pivot.active', syncScope, { subnet: sSubnet, via: sVia, host: sHost }, S, source));
     }
 
-    // chisel reverse SOCKS: the command carrying R:socks, or the client/server success banner.
-    if ((/\bchisel\b/.test(lc) && /r:socks/i.test(lc)) || (/\bchisel\b/i.test(t) && /(Connected\b|Connected \(|Listening on|tun:\s|proxy#\d|session|R:socks)/i.test(t)))
-      _add(facts, mkFact('tunnel.socks', h, { via: 'chisel' }, S, source));
+    // chisel reverse SOCKS and reverse/local TCP port-forwards.
+    _parse_chisel(t, ws, source, facts, cmd);
     // ssh dynamic port-forward (-D): silent tool, so the command is the proof.
     if (/\bssh\b[^\n]*\s-[a-z]*d(?:\s+\S+)?\b/i.test(cmd) || /(^|\s)-D\s*\d+/.test(cmd))
       _add(facts, mkFact('tunnel.socks', h, { via: 'ssh-dynamic' }, S, source));
@@ -208,8 +328,20 @@
   }
 
   C._parse_local_net = _parse_local_net;
+  C._parse_chisel = _parse_chisel;
   C._parse_tunnel = _parse_tunnel;
   C._parse_local_neighbors = _parse_local_neighbors;
   C._parse_local_listeners = _parse_local_listeners;
   C._parse_local_dns = _parse_local_dns;
+
+  OBOL.parsers = OBOL.parsers || {};
+  OBOL.parsers.pivot = Object.assign(OBOL.parsers.pivot || {}, {
+    _parse_local_net: _parse_local_net,
+    _parse_chisel: _parse_chisel,
+    _parse_tunnel: _parse_tunnel,
+    _parse_local_neighbors: _parse_local_neighbors,
+    _parse_local_listeners: _parse_local_listeners,
+    _parse_local_dns: _parse_local_dns
+  });
+  if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.parsers.pivot; }
 })(typeof globalThis !== 'undefined' ? globalThis : this);

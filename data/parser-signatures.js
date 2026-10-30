@@ -37,7 +37,7 @@
       emits: ['host.hostname', 'host.fqdn', 'host.domain', 'host.os_family', 'host.os_hint', 'smb.signing', 'smb.smbv1',
         'smb.ms17_010', 'ssh.hostkey', 'ssh.banner', 'ftp.anonymous_login', 'ftp.banner', 'web.title', 'web.server',
         'web.tech', 'http.redirect', 'ad.domain_known', 'ad.base_dn', 'redis.unauth', 'mongo.unauth', 'memcached.open',
-        'x11.unauth', 'smtp.open_relay', 'smtp.users'],
+        'x11.unauth', 'smtp.banner', 'smtp.open_relay', 'smtp.users'],
     },
     'http-metadata': {
       looksFor: 'an HTTP response or a whatweb/curl banner - the status line, the Server header, the tech it reveals, and a product fingerprint (a Jenkins X-Jenkins header or chrome, an NVMS-1000 login page) that gates a specific exploit move.',
@@ -163,12 +163,12 @@
     'banners': {
       looksFor: 'a bare service banner - an SSH version string or an FTP 220/230 line - pasted without the scan around it, or a confirmed FTP upload (STOR / put reaching "226 Transfer complete") that proves the FTP root is writable.',
       regex: 'SSH-2.0-…, 220 (vsFTPd …), STOR … 226 Transfer complete',
-      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write'],
+      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write', 'smtp.banner', 'smtp.reachable', 'mail.reachable', 'vnc.reachable'],
     },
     'websource': {
       looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
       regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, password = "…", DBPassword=…, [... account] + user + pass, ghp_…',
-      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.password', 'credential.available', 'credential.candidate', 'credential.certificate', 'db.creds', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink', 'exploit.versioned_banner', 'vuln.text4shell'],
+      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.password', 'credential.available', 'credential.candidate', 'credential.certificate', 'credential.ssh_key', 'loot.ssh_key', 'db.creds', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink', 'exploit.versioned_banner', 'vuln.text4shell'],
     },
     'shell-exec': {
       looksFor: "a caught shell or a command's result - an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",

@@ -57,7 +57,7 @@ raw.forEach(function (a) {
 });
 var GOAL = {}; (PK.GOALS || []).forEach(function (g) { GOAL[g] = 1; });
 var cap = DM.capability();
-function isEnv(k) { return /^(target\.|host\.up$|ports\.open$|port:|scan\.|service\.|os\.)/.test(k) || /\.reachable$/.test(k) || /^(ad\.dc_candidate|ad\.domain_known|host\.os_hint|host\.fqdn|host\.domain|host\.hostname)$/.test(k); }
+function isEnv(k) { return /^(target\.|host\.up$|ports\.open$|port:|scan\.|service\.|os\.|credential\.reuse_candidate$)/.test(k) || /\.reachable$/.test(k) || /^(ad\.dc_candidate|ad\.domain_known|host\.os_hint|host\.fqdn|host\.domain|host\.hostname)$/.test(k); }
 function parserCovers(k) { if (cap.exact[k]) return true; for (var i = 0; i < cap.pref.length; i++) if (k.indexOf(cap.pref[i]) === 0) return true; return false; }
 function gateSource(k) { var s = []; if (isEnv(k)) s.push('env'); if (producers[k]) s.push('move:' + producers[k].length); if (parserCovers(k)) s.push('parser'); return s.join('+') || 'NONE'; }
 function prodSink(k) { if (GOAL[k]) return 'GOAL'; if (consumers[k]) return consumers[k].length + ' consumers'; if (PK.isEvidenceFact && PK.isEvidenceFact(k)) return 'evidence'; return 'TERMINAL/none'; }

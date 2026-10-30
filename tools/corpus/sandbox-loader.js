@@ -234,7 +234,7 @@ const TIER_RANK = { tier1: 1, tier2_shape: 2, tier3_inference: 3 };
 function classifyFactTier(fact) {
   const v = (fact && fact.value && typeof fact.value === 'object') ? fact.value : {};
   const via = String(v.via || '');
-  if (via === 'shape' || via === 'vulnmatch' || v.shape === true) return 'tier2_shape';
+  if (/^shape(?:-|$)/.test(via) || via === 'vulnmatch' || v.shape === true) return 'tier2_shape';
   if (/^(?:context-|prompt-telemetry|causal-entailment|entailment|inference)/.test(via)) return 'tier3_inference';
   return 'tier1';
 }

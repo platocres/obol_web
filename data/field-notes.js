@@ -9867,6 +9867,19 @@
       ]
     },
     {
+      "when": "Kerberos ticket-authenticated DCSync (-k -no-pass).",
+      "land": [
+        "Export KRB5CCNAME to your forged or delegated ccache and target the DC by FQDN with -dc-ip."
+      ],
+      "look": [
+        "DRSUAPI replication dumping NTDS hashes over Kerberos without a password or NT hash."
+      ],
+      "win": "Full NTDS replication via Kerberos ccache ticket.",
+      "mistakes": [
+        "Passing a raw IP address in the principal target instead of the DC FQDN required for Kerberos SPN matching."
+      ]
+    },
+    {
       "when": "On-host last resort.",
       "land": [
         "A Windows session as the rights-holder replicates via mimikatz."
@@ -10143,6 +10156,19 @@
       "win": "PtH execution.",
       "mistakes": [
         "Pasting the LM half when only NT is needed."
+      ]
+    },
+    {
+      "when": "Kerberos ticket-authenticated execution (-k -no-pass).",
+      "land": [
+        "Set KRB5CCNAME to your ccache ticket and specify the target host FQDN with -dc-ip."
+      ],
+      "look": [
+        "A SYSTEM shell over SMB using the Kerberos ticket without plaintext or NTLM hash."
+      ],
+      "win": "Kerberos ticket lateral execution.",
+      "mistakes": [
+        "Targeting an IP literal instead of the host FQDN when authenticating via Kerberos."
       ]
     },
     {
@@ -12949,6 +12975,20 @@
       "win": "Master password cracked for the KDBX database.",
       "mistakes": [
         "Running keepass2john on a corrupt or incomplete database file."
+      ]
+    },
+    {
+      "when": "Crack an extracted $keepass$ hash with Hashcat mode 13400.",
+      "land": [
+        "Pass the keepass2john hash file (strip any filename: prefix if required) to hashcat -m 13400.",
+        "Run against a standard wordlist or rule set for GPU-accelerated recovery."
+      ],
+      "look": [
+        "Status: Cracked with the plaintext master password appended after the hash."
+      ],
+      "win": "KeePass master password recovered via Hashcat mode 13400.",
+      "mistakes": [
+        "Leaving the leading database filename colon prefix attached when Hashcat expects a bare $keepass$ hash."
       ]
     },
     {

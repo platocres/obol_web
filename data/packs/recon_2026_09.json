@@ -1291,6 +1291,7 @@
       ],
       "requires_any": [
         "port:21",
+        "ftp.reachable",
         "ftp.anonymous_login"
       ],
       "produces": [
@@ -1501,6 +1502,7 @@
       ],
       "requires_any": [
         "port:21",
+        "ftp.reachable",
         "vuln.vsftpd_234"
       ],
       "produces": [
@@ -1556,6 +1558,7 @@
       ],
       "requires_any": [
         "port:21",
+        "ftp.reachable",
         "vuln.proftpd_modcopy"
       ],
       "produces": [

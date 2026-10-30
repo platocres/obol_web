@@ -43,6 +43,21 @@
   ];
 
   var _ANY_PRODUCT_SIG_RE = new RegExp(_PRODUCT_SIGS.map(function (r) { return '(?:' + r[1].source + ')'; }).join('|'), 'i');
+  function _is_outbound_http_request_only(text) {
+    var tr = String(text || '').trim();
+    if (!/^(?:>\s*)?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\S+\s+HTTP\/[12](?:\.\d)?\b/i.test(tr)) return false;
+    return !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(tr);
+  }
+  C._is_outbound_http_request_only = _is_outbound_http_request_only;
+
+  function _is_unix_account_dump(text) {
+    var t = String(text || '');
+    if (/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t) || /<(?:!doctype\s+html|html|head|body|title|meta|form)\b/i.test(t)) return false;
+    return /^(?:[a-z_][a-z0-9_.-]{0,31}):(?:[^:\r\n]*):\d+:\d+:[^:\r\n]*:\/[^\s:]*:[^\r\n]*$/im.test(t)
+      || /^(?:[a-z_][a-z0-9_.-]{0,31}):\$(?:1|2[abxy]|5|6|y)\$[^\s:]+:\d*:\d*:\d*:\d*:/im.test(t);
+  }
+  C._is_unix_account_dump = _is_unix_account_dump;
+
   function _is_sql_session_paste(text, ws, command) {
     if (C && C._is_sql_client_output && C._is_sql_client_output(text, ws, command)) return true;
     var t = String(text || '');
@@ -53,14 +68,14 @@
   }
   function _has_product_signature(text, ws, command) {
     if (!text || !_ANY_PRODUCT_SIG_RE.test(text)) return false;
-    if (_is_sql_session_paste(text, ws, command)) return false;
+    if (_is_outbound_http_request_only(text) || _is_unix_account_dump(text) || _is_sql_session_paste(text, ws, command)) return false;
     return _PRODUCT_SIGS.some(function (r) { return reSearch(r[1], text || ''); });
   }
   C._has_product_signature = _has_product_signature;
 
   function _parse_product_signature(text, ws, command, source, facts) {
     if (Array.isArray(source) && !facts) { facts = source; source = command; command = ''; }
-    if (_is_sql_session_paste(text, ws, command)) return;
+    if (_is_outbound_http_request_only(text) || _is_unix_account_dump(text) || _is_sql_session_paste(text, ws, command)) return;
     for (var i = 0; i < _PRODUCT_SIGS.length; i++) {
       var tech = _PRODUCT_SIGS[i][0], sigRx = _PRODUCT_SIGS[i][1], verRx = _PRODUCT_SIGS[i][2], lead = _PRODUCT_SIGS[i][3];
       if (!reSearch(sigRx, text || '')) continue;
@@ -230,7 +245,7 @@
   function _has_labeled_creds(text) { return _labeled_cred_pairs(text).length > 0; }
   C._has_labeled_creds = _has_labeled_creds;
 
-  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|SqlConnection|DriverManager\.getConnection)\b|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=/i;
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|define\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=/i;
 
   function _has_source_secret(text) {
     var t = text || '';
@@ -330,11 +345,16 @@
 
     // a pasted private key is a key in hand → credential.certificate (lights ssh-key-login).
     if (reSearch(_PRIVKEY_RE, t)) {
-      var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED/i.test(t);
+      var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(t)
+        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(t);
       _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: isEncKey, source: 'source-disclosure' }, S, source));
+      if (!/-----BEGIN PGP PRIVATE KEY-----/.test(t)) {
+        _add(facts, mkFact('loot.ssh_key', scope, { encrypted: isEncKey, via: 'source-disclosure' }, S, source));
+        _add(facts, mkFact('credential.ssh_key', scope, { encrypted: isEncKey, via: 'source-disclosure' }, S, source));
+      }
       if (isEncKey) {
-        _add(facts, mkFact('hash.crackable', scope, { format: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
-        _add(facts, mkFact('hash.candidate', scope, { format: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
+        _add(facts, mkFact('hash.crackable', scope, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
+        _add(facts, mkFact('hash.candidate', scope, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
       }
     }
 
@@ -387,7 +407,7 @@
     return '';
   }
 
-  function _emitConcreteSourceCred(facts, scope, source, seen, user, pw, service, idiom) {
+  function _emitConcreteSourceCred(facts, scope, source, seen, user, pw, service, idiom, emitDbCreds, extra) {
     var u = String(user || '').trim();
     var p = _clean_secret(pw);
     if (!u || !p || !_valid_config_pw(p)) return;
@@ -395,7 +415,15 @@
     var pairKey = 'pair:' + u + ':' + p;
     if (seen[pairKey]) return;
     seen[pairKey] = true;
-    _add(facts, mkFact('credential.available', scope, { user: u, password: p, service: service, method: idiom }, S, source));
+    var avVal = { user: u, password: p, service: service, method: idiom };
+    if (extra && extra.host) avVal.host = extra.host;
+    if (extra && extra.port) avVal.port = extra.port;
+    if (extra && extra.dbname) avVal.database = extra.dbname;
+    _add(facts, mkFact('credential.available', scope, avVal, S, source));
+    if (emitDbCreds) {
+      _add(facts, mkFact('credential.plaintext', scope, avVal, S, source));
+      _add(facts, mkFact('db.creds', scope, Object.assign({ user: u, password: p, service: service, via: idiom }, extra || {}), S, source));
+    }
     if (!seen[p]) {
       seen[p] = true;
       _add(facts, mkFact('credential.candidate', scope, { kind: 'source_db_credential', user: u, password: p, service: service, source: idiom }, S, source));
@@ -426,7 +454,7 @@
       _emitConcreteSourceCred(facts, scope, source, seen, u, p, svc, 'pdo');
     });
 
-    // 3. SqlConnection / ADO.NET / web.config connection strings with both User Id/UID and Password/PWD
+    // 3.SqlConnection / ADO.NET / web.config connection strings with both User Id/UID and Password/PWD
     var adoLines = t.split(/\r?\n/);
     for (var i = 0; i < adoLines.length; i++) {
       var ln = adoLines[i];
@@ -437,11 +465,42 @@
         _emitConcreteSourceCred(facts, scope, source, seen, um[1].trim(), pm[1].trim(), 'mssql', 'sqlconnection');
       }
     }
+
+    // 4. PostgreSQL libpq key-value DSN in pg_connect("host=... dbname=... user=... password=...")
+    var pgRe = /\bpg_p?connect\s*\(\s*(?:(['"])([\s\S]{8,400}?)\1|(\$[A-Za-z_][A-Za-z0-9_]*))/gi;
+    reAll(pgRe, t).forEach(function (m) {
+      var dsnStr = m[2] || (m[3] ? _resolveArgToken(m[3], phpVars) : '');
+      if (!dsnStr) return;
+      var uM = /\buser\s*=\s*(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(dsnStr);
+      var pM = /\bpassword\s*=\s*(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(dsnStr);
+      if (!uM || !pM) return;
+      var pgU = (uM[1] || uM[2] || uM[3] || '').trim();
+      var pgP = (pM[1] || pM[2] || pM[3] || '').trim();
+      var hM = /\bhost\s*=\s*(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(dsnStr);
+      var ptM = /\bport\s*=\s*(\d+)/i.exec(dsnStr);
+      var dbM = /\bdbname\s*=\s*(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(dsnStr);
+      var extra = {};
+      if (hM) extra.host = (hM[1] || hM[2] || hM[3] || '').trim();
+      if (ptM) extra.port = parseInt(ptM[1], 10);
+      if (dbM) extra.dbname = (dbM[1] || dbM[2] || dbM[3] || '').trim();
+      _emitConcreteSourceCred(facts, scope, source, seen, pgU, pgP, 'postgres', 'pg_connect', true, extra);
+    });
+
+    // 5. Paired PHP define('DB_*USER*', '...') + define('DB_*PASS*', '...') constants
+    var defUserM = /\bdefine\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
+    var defPassM = /\bdefine\s*\(\s*['"](?:DB_[A-Z0-9_]*PASS(?:WORD)?|[A-Z0-9_]*DB_PASS(?:WORD)?)['"]\s*,\s*['"]([^'"\r\n]{3,96})['"]\s*\)/i.exec(t);
+    if (defUserM && defPassM) {
+      var defDbM = /\bdefine\s*\(\s*['"](?:DB_NAME|DB_DATABASE|[A-Z0-9_]*DB_NAME)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
+      var defSvc = /\b(?:pgsql|postgres|pg_connect)\b/i.test(t) ? 'postgres' : 'mysql';
+      var defExtra = defDbM ? { dbname: defDbM[1].trim() } : {};
+      _emitConcreteSourceCred(facts, scope, source, seen, defUserM[1].trim(), defPassM[1].trim(), defSvc, 'php-define', true, defExtra);
+    }
   }
 
   var _ORIG_HAS_SOURCE_SECRET = _has_source_secret;
   _has_source_secret = function (text) {
     var t = text || '';
+    if (_is_outbound_http_request_only(t) && /Content-Disposition:\s*form-data;/i.test(t)) return false;
     return _ORIG_HAS_SOURCE_SECRET(t)
       || _DB_CONNECTOR_HINT_RE.test(t)
       || _URI_CRED_RE.test(t)
@@ -451,26 +510,30 @@
 
   // ---- Step 1A: Disclosed web source, HTTP 500 stack traces, and phpinfo() tables ---- //
   var _LOCAL_TOOL_CMD_RE = /^\s*(?:sudo\s+)?(?:python[23]?|pip[23]?|2to3|gcc|g\+\+|impacket-[\w-]+|bloodyad|certipy(?:-ad)?|nxc|netexec|crackmapexec|sqlmap|searchsploit)\b/i;
+  var _CONFIG_SYNTAX_ERR_LINE_RE = /^\s*(?:Error|Fatal|Warning):\s*invalid line \d+ in \S+:[^\r\n]*$/gim;
 
   function _has_web_disclosure(text, command) {
     var t = String(text || '');
     if (!t.trim()) return false;
+    if (_is_outbound_http_request_only(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
+    var tNoCfgErr = t.replace(_CONFIG_SYNTAX_ERR_LINE_RE, '');
+    if (!tNoCfgErr.trim()) return false;
     // phpinfo() table
-    if (/PHP Version\s+\d+\.\d+/i.test(t) && /\b(?:DOCUMENT_ROOT|disable_functions|Loaded Configuration File|PHP Extension)\b/i.test(t)) return true;
+    if (/PHP Version\s+\d+\.\d+/i.test(tNoCfgErr) && /\b(?:DOCUMENT_ROOT|disable_functions|Loaded Configuration File|PHP Extension)\b/i.test(tNoCfgErr)) return true;
     // PHP verbose fatal/warning error with server path
-    if (/\b(?:Fatal error|Parse error|Warning):\s+(?:Uncaught\s+)?[^\r\n]+?\s+in\s+(?:\/(?:var\/www|srv|opt|app|home|usr\/share)\/[^\s:]+\.php|[A-Za-z]:\\(?:inetpub|xampp|wamp|www)[^\r\n:]+\.php)\s+on line\s+\d+/i.test(t)) return true;
+    if (/\b(?:Fatal error|Parse error|Warning):\s+(?:Uncaught\s+)?[^\r\n]+?\s+in\s+(?:\/(?:var\/www|srv|opt|app|home|usr\/share)\/[^\s:]+\.php|[A-Za-z]:\\(?:inetpub|xampp|wamp|www)[^\r\n:]+\.php)\s+on line\s+\d+/i.test(tNoCfgErr)) return true;
     // Stack trace leaking server application path
-    if (!(_LOCAL_TOOL_CMD_RE.test(command || '') && !/^\s*(?:<\s*)?HTTP\/[12]/im.test(t))) {
-      if (/Traceback \(most recent call last\):[\s\S]{1,1600}?File\s+"(\/(?:var\/www|app|srv|opt|usr\/src\/app|home\/[^/]+\/(?:app|web|site))\/[^"]+\.py)"/i.test(t)) return true;
-      if (/(?:HTTP\/[12](?:\.\d)?\s+500\b|500 Internal Server Error|Werkzeug Debugger|Server Error in '\/' Application)[\s\S]{1,2400}?(?:Traceback \(most recent call last\):|\/var\/www\/|\/usr\/src\/app\/|\/app\/|[A-Za-z]:\\inetpub\\|at\s+\S+\s+\(\/[^\r\n)]+:\d+:\d+\))/i.test(t)) return true;
-      if (/^\s*Error:[^\r\n]+\r?\n(?:\s+at\s+[^\r\n(]+\((?:\/(?:var\/www|app|srv|opt|usr\/src\/app)\/|[A-Za-z]:\\(?:inetpub|app|www)\\)[^)\r\n]+:\d+:\d+\)\r?\n?)+/m.test(t)) return true;
+    if (!(_LOCAL_TOOL_CMD_RE.test(command || '') && !/^\s*(?:<\s*)?HTTP\/[12]/im.test(tNoCfgErr))) {
+      if (/Traceback \(most recent call last\):[\s\S]{1,1600}?File\s+"(\/(?:var\/www|app|srv|opt|usr\/src\/app|home\/[^/]+\/(?:app|web|site))\/[^"]+\.py)"/i.test(tNoCfgErr)) return true;
+      if (/(?:HTTP\/[12](?:\.\d)?\s+500\b|500 Internal Server Error|Werkzeug Debugger|Server Error in '\/' Application)[\s\S]{1,2400}?(?:Traceback \(most recent call last\):|\/var\/www\/|\/usr\/src\/app\/|\/app\/|[A-Za-z]:\\inetpub\\|at\s+\S+\s+\(\/[^\r\n)]+:\d+:\d+\))/i.test(tNoCfgErr)) return true;
+      if (/^\s*Error:[^\r\n]+\r?\n(?:\s+at\s+[^\r\n(]+\((?:\/(?:var\/www|app|srv|opt|usr\/src\/app)\/|[A-Za-z]:\\(?:inetpub|app|www)\\)[^)\r\n]+:\d+:\d+\)\r?\n?)+/m.test(tNoCfgErr)) return true;
     }
     // Recovered server-side source (LFI, .git dump, backup file)
-    if (/<\?php\b/i.test(t) && !/\b(?:echo|curl|wget)\b[^\r\n]*<\?php/i.test(command || '')) return true;
-    if (/^\s*(?:from\s+flask\s+import\b|from\s+django\.[A-Za-z0-9_.]+\s+import\b|from\s+fastapi\s+import\b)/m.test(t)) return true;
-    if (/\brequire\s*\(\s*['"]express['"]\s*\)|\bimport\s+express\s+from\s+['"]express['"]/i.test(t)) return true;
-    if (/<configuration\b[^>]*>[\s\S]{0,2000}?<(?:connectionStrings|system\.web)\b/i.test(t)) return true;
+    if (/<\?php\b/i.test(tNoCfgErr) && !/\b(?:echo|curl|wget)\b[^\r\n]*<\?php/i.test(command || '')) return true;
+    if (/^\s*(?:from\s+flask\s+import\b|from\s+django\.[A-Za-z0-9_.]+\s+import\b|from\s+fastapi\s+import\b)/m.test(tNoCfgErr)) return true;
+    if (/\brequire\s*\(\s*['"]express['"]\s*\)|\bimport\s+express\s+from\s+['"]express['"]/i.test(tNoCfgErr)) return true;
+    if (/<configuration\b[^>]*>[\s\S]{0,2000}?<(?:connectionStrings|system\.web)\b/i.test(tNoCfgErr)) return true;
     return false;
   }
   C._has_web_disclosure = _has_web_disclosure;
@@ -655,6 +718,7 @@
   function _has_web_vuln_sinks(text, command) {
     var t = String(text || '');
     if (!t.trim()) return false;
+    if (_is_outbound_http_request_only(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
     if (!_WEB_SOURCE_CONTEXT_RE.test(t)) return false;
     for (var i = 0; i < _WEB_VULN_SINKS.length; i++) {

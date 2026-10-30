@@ -657,6 +657,7 @@
       "requires_all": [],
       "requires_any": [
         "loot.keepass_dump",
+        "hash.crackable",
         "loot.files"
       ],
       "produces": [
@@ -685,6 +686,11 @@
           "tool": "john",
           "run": "keepass2john {{kdbx_file}} > {{kdbx_file}}.hash && john --wordlist={{wordlist}} {{kdbx_file}}.hash",
           "note": "OFFLINE KDBX HASH CRACKING: Extracts the master key hash from an encrypted KeePass database file and cracks with John the Ripper."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 13400 {{hashfile}} {{wordlist}}",
+          "note": "OFFLINE KDBX HASHCAT CRACKING: Cracks an extracted $keepass$ master password hash using Hashcat mode 13400."
         },
         {
           "tool": "python3",
