@@ -120,6 +120,7 @@
           "settled_by": [
             "smb.shares",
             "smb.null_session",
+            "smb.guest_session",
             "blocker.smb_null_denied"
           ]
         },
@@ -611,6 +612,8 @@
         "port:143",
         "port:993",
         "port:995",
+        "mail.reachable",
+        "service.imap.banner",
         "smtp.open_relay"
       ],
       "produces": [

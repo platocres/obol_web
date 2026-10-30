@@ -134,7 +134,8 @@
     var lc = (command || '').toLowerCase();
     var textLow = text.toLowerCase();
     var isHashcatCtx = lc.indexOf('hashcat') >= 0 || /Status\.+:\s*Cracked|Session\.+:\s*hashcat/i.test(text);
-    var isJohnCtx = lc.indexOf('john') >= 0 || !!reSearch(C._JOHN_LOADED_RE, text) || !!reSearch(C._JOHN_CRACKED_FOOTER_RE, text);
+    var johnDoneFooter = /^\s*[1-9]\d*g\s+\d+:\d{2}:\d{2}:\d{2}\s+DONE\b|\bUse the "--show" option to display all of the cracked passwords\b/im.test(text);
+    var isJohnCtx = lc.indexOf('john') >= 0 || !!reSearch(C._JOHN_LOADED_RE, text) || !!reSearch(C._JOHN_CRACKED_FOOTER_RE, text) || johnDoneFooter;
     var zeroCracked = /\b0\s+password\s+hash(?:es)?\s+cracked\b/i.test(text) && !/\b[1-9]\d*\s+password\s+hash(?:es)?\s+cracked\b/i.test(text);
     var unwrappedText = (C._unwrap_kerberos_hashes ? C._unwrap_kerberos_hashes(text) : String(text || ''))
       .replace(/(\$krb5(?:asrep|tgs)\$[^\r\n:]+)\r?\n\s*([0-9a-fA-F]{16,}:[^\r\n]+)/g, '$1$2');
@@ -305,7 +306,7 @@
         }
       }
 
-      if (isJohnCtx && !zeroCracked && reSearch(C._JOHN_LOADED_RE, text)) {
+      if (isJohnCtx && !zeroCracked && (reSearch(C._JOHN_LOADED_RE, text) || reSearch(C._JOHN_CRACKED_FOOTER_RE, text) || johnDoneFooter)) {
         var lm = C._JOHN_CRACKED_LIVE_RE.exec(line);
         if (lm && lm.groups.pw.indexOf(':') < 0 && C._valid_password(lm.groups.pw.trim())) {
           var pwTrim = lm.groups.pw.trim();
@@ -418,10 +419,12 @@
 
   var _LSA_CLEARTEXT_RE = /^\s*(?:(?<domain>[A-Za-z0-9._-]+)\\)?(?<user>[A-Za-z0-9._$-]+):(?<pw>[^\r\n:]+)\s*$/gm;
   var _DPAPI_KEY_RE = /^\s*dpapi_(?<type>machinekey|userkey):(?<key>0x[0-9a-fA-F]{40,})\s*$/gmi;
+  var _SAM_PWDUMP_NOPW_RE = /^(?:[ \t]*(?:(?<domain>[A-Za-z0-9._-]+)\\)?(?<user>[^\s\\:]{1,128})):(?<rid>\d+):(?:NO PASSWORD\*+):(?<nt>[0-9a-fA-F]{32}):::/gmi;
 
   function _parse_ntlm_dump(text, ws, command, source, facts) {
     var entries = [], seen = {}, krbtgtNt = '', domCounts = {};
-    reAll(C._NTDS_HASH_RE, text).forEach(function (m) {
+    var rawHits = reAll(C._NTDS_HASH_RE, text).concat(reAll(_SAM_PWDUMP_NOPW_RE, text));
+    rawHits.forEach(function (m) {
       var user = C._clean_username(m.groups.user);
       if (!user) return;
       var nt = m.groups.nt.toLowerCase();
@@ -432,7 +435,7 @@
       var edom = (m.groups.domain || '').trim();
       entries.push({ user: user, rid: parseInt(m.groups.rid, 10), nthash: nt, domain: edom });
       if (edom && edom.indexOf('.') >= 0) domCounts[edom] = (domCounts[edom] || 0) + 1;
-      if (user.toLowerCase() === 'krbtgt') krbtgtNt = nt;
+      if (user.toLowerCase() === 'krbtgt' && nt !== '31d6cfe0d16ae931b73c59d7e0c089c0') krbtgtNt = nt;
     });
     var hasLsaBanner = /Dumping LSA Secrets|\[\*\]\s*(?:_SC_|DefaultPassword|\$MACHINE\.ACC|DPAPI_SYSTEM)/i.test(text);
     var hasSecretsdumpCtx = /\bsecretsdump\b/i.test((command || '') + '\n' + text);
@@ -494,10 +497,11 @@
     }
   }
   C._parse_ntlm_dump = _parse_ntlm_dump;
+  C._parse_sam_hashes = _parse_ntlm_dump;
 
   function _looks_like_sam_dump(text) {
     if (!text) return false;
-    return /^(?:[a-zA-Z0-9._$-]+:\d{3,5}:(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):[0-9a-fA-F]{32}:::)/m.test(text);
+    return /^(?:(?:[A-Za-z0-9._-]+\\)?[a-zA-Z0-9._$-]+:\d{3,6}:(?:[0-9a-fA-F]{32}|NO PASSWORD\*+|\.{2,4}|\*+):[0-9a-fA-F]{32}:::)/m.test(text);
   }
   C._looks_like_sam_dump = _looks_like_sam_dump;
 
@@ -755,8 +759,51 @@
     return arr.indexOf(kind) >= 0;
   }
 
+  function _unwrap_format_list_lines(s) {
+    var cur = String(s || '');
+    if (cur.indexOf('\n') < 0) return cur;
+    for (var pass = 0; pass < 4; pass++) {
+      var next = cur.replace(/([^\r\n])\r?\n[ \t]{2,}(?![A-Za-z0-9_.-]+[ \t]*:[ \t])([^\s\r\n])/g, function (_m, prevCh, nextCh, offset, full) {
+        var lineStart = full.lastIndexOf('\n', offset) + 1;
+        var prevSeg = full.slice(lineStart, offset + 1);
+        if (/[ \t]$/.test(prevSeg)) return prevCh + nextCh;
+        if (/(?:^|\s)(?:-u|--user(?:name)?|\/u|\/user|-p|--pass(?:word)?|\/p|\/pass(?:word)?)$/i.test(prevSeg)) {
+          return prevCh + ' ' + nextCh;
+        }
+        if (nextCh === '-' || nextCh === '"' || nextCh === "'") {
+          return prevCh + ' ' + nextCh;
+        }
+        if (/^[ \t]*[A-Za-z0-9_.-]+[ \t]*:[ \t]/.test(prevSeg) || (lineStart > 0 && /^[ \t]{2,}/.test(prevSeg))) {
+          return prevCh + nextCh;
+        }
+        return prevCh + ' ' + nextCh;
+      });
+      if (next === cur) break;
+      cur = next;
+    }
+    return cur;
+  }
+
+  function _decode_cli_base64_secret(s) {
+    var tok = String(s || '').trim();
+    if (!/^(?:[A-Za-z0-9+/]{4}){2,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$/.test(tok)) return '';
+    var hasPad = tok.charAt(tok.length - 1) === '=';
+    var dec = '';
+    try {
+      if (C && typeof C.b64decode === 'function') dec = C.b64decode(tok);
+      else if (typeof Buffer !== 'undefined') dec = Buffer.from(tok, 'base64').toString('binary');
+      else if (typeof atob === 'function') dec = atob(tok);
+    } catch (_e) { return ''; }
+    if (!dec) return '';
+    if (hasPad && /^[!-~]{4,64}(?:\r?\n)?$/.test(dec)) return dec.replace(/\r?\n$/, '');
+    if (/^[!-~]{4,64}\r?\n$/.test(dec)) return dec.replace(/\r?\n$/, '');
+    return '';
+  }
+
   function _looks_like_generic_dumped_credentials(text, command, ws) {
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return false;
     var isReadCtx = _FILE_READ_CMD_RE.test(command || '') || _expects_cred_kind(ws, 'credential.plaintext');
+    var unwrappedCmdText = text ? _unwrap_format_list_lines(text) : '';
     return !!text && (
       /(?:^\s*Domain\s*:\s*[^\r\n]+\s*\r?\n\s*)?^\s*User(?:name)?\s*:\s*[^\r\n]+\s*\r?\n\s*(?:Domain\s*:\s*[^\r\n]+\s*\r?\n\s*)?Password\s*:\s*[^\r\n]+/im.test(text) ||
       /^\s*(?:Nthash|Password)\s*:\s*\S+[\s\S]{1,240}?^\s*Login\s*:\s*\S+/im.test(text) ||
@@ -765,7 +812,7 @@
       /\b[A-Za-z0-9_.$-]{2,32}\b[^\r\n]{0,40}?\bNTLM\s*:\s*[0-9a-fA-F]{32}\b/i.test(text) ||
       /\b[A-Za-z0-9_.$-]{1,48}::[A-Za-z0-9_.-]{1,64}:[0-9a-fA-F]{16}:(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{48}):[0-9a-fA-F]{32,}\b/.test(text) ||
       (isReadCtx && /^\s*[A-Za-z0-9_.-]{2,32}(?:[ \t]+[A-Za-z0-9_.-]{1,24}){0,2}\s*:\s*[A-Za-z0-9_.$-]{2,32}\/[^\s\/]{4,64}\s*$/m.test(text)) ||
-      /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?[a-zA-Z0-9._-]+['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?!-)[^\s'"]+['"]?/i.test(text) ||
+      /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?[a-zA-Z0-9._-]+['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?!-)[^\s'"]+['"]?/i.test(unwrappedCmdText) ||
       /"(?:username|user)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"[^"]+"/i.test(text) ||
       /"(?:password|pass)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:username|user)"\s*:\s*"[^"]+"/i.test(text) ||
       /https?:\/\/[a-zA-Z0-9._-]+:[^@\s'"]+@/i.test(text) ||
@@ -822,6 +869,7 @@
 
   function _parse_generic_dumped_credentials(text, ws, command, source, facts) {
     if (!text) return;
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     text = text.replace(C._ANSI_RE, '');
     var hScope = 'host:' + ws.target;
     var hasInteractiveAuthFail = /(?:doesn't have UF_DONT_REQUIRE_PREAUTH set|KDC_ERR_PREAUTH_FAILED|su:\s*Authentication failure|Login incorrect|Sorry,\s*try again|Cannot authenticate)/i.test(text);
@@ -967,7 +1015,7 @@
     }
 
     if (!/access denied|authentication fail|logon failure|login failed|STATUS_LOGON_FAILURE|ERROR 1045/i.test(text)) {
-      text.split(/\r?\n/).forEach(function (line) {
+      _unwrap_format_list_lines(text).split(/\r?\n/).forEach(function (line) {
         if (_ATTACKER_CMD_LINE_RE.test(line)) return;
         _CMD_CRED_RE.lastIndex = 0;
         var cm;
@@ -976,7 +1024,14 @@
           var cPw = (cm.groups.pw || '').trim();
           if (/^(?:controlleduser|targetuser|username|user|victim|<user>)$/i.test(cUser) && (/^(?:itspassword|password|pass|<password>)$/i.test(cPw) || /\bdomain\.local\b/i.test(line))) continue;
           if (/^controlleduser$/i.test(cUser) || /^itspassword$/i.test(cPw)) continue;
-          if (!C._valid_username(cUser, false) || !C._valid_password(cPw)) continue;
+          if (!C._valid_username(cUser, false)) continue;
+          var decCliPw = _decode_cli_base64_secret(cPw);
+          if (decCliPw && C._valid_password(decCliPw)) {
+            _add(facts, mkFact('credential.candidate', hScope, { kind: 'process_cli_secret', user: cUser, password: decCliPw, encoded: cPw, via: 'process-leak' }, S, source));
+            _add_plaintext_credential(facts, ws, source, cUser, decCliPw, C._domain_from_facts(ws), 'process-leak', '');
+            continue;
+          }
+          if (!C._valid_password(cPw)) continue;
           _add_plaintext_credential(facts, ws, source, cUser, cPw, C._domain_from_facts(ws), 'process-leak', '');
         }
       });

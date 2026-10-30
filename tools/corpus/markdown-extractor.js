@@ -77,6 +77,34 @@ const EXPLOIT_DB_HEADER_RE = /(?:^\s*(?:#|\/\/|\/\*+|\*|--|;)\s*Exploit\s+Title\
 
 const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|FolderPerms\s*:)/;
 
+const PEM_ENVELOPE_RE = /-----BEGIN [A-Z0-9 ]+-----[\s\S]+?-----END [A-Z0-9 ]+-----/;
+
+const COMMAND_CAPTION_LINE_RE = /^(?:[>*-]+\s*|#{1,6}\s+(?=.*:))?(?:[*_]{1,3})?\s*(?:commands?|cmd)(?:\s*\([^)\r\n]{1,30}\))?\s*:?\s*(?:[*_]{1,3})?\s*:?\s*$/i;
+const OUTPUT_CAPTION_LINE_RE = /^(?:[>*-]+\s*|#{1,6}\s+(?=.*:))?(?:[*_]{1,3})?\s*(?:(?:key|relevant|partial|truncated|sample|raw)\s+)?(?:outputs?|results?|responses?|stdout|console\s+outputs?|terminal\s+outputs?)(?:\s*\([^)\r\n]{1,30}\))?\s*:?\s*(?:[*_]{1,3})?\s*:?\s*$/i;
+const STANDALONE_LANDING_CONTEXT_RE = /\b(?:outputs?|results?|responses?|shell|reverse|listener|netcat|nc|rce|exploit|foothold|initial\s+access|execution|privilege|escalation|privesc|elevat|admin|system|root|winrm|ssh|connect|callback|session|trigger|payload)\b/i;
+
+const ZERO_ARG_CLI_COMMANDS = new Set([
+  'whoami', 'id', 'hostname', 'uname', 'systeminfo', 'ipconfig', 'ifconfig',
+  'pwd', 'ls', 'dir', 'env', 'printenv', 'set', 'netstat', 'ss', 'ps',
+  'tasklist', 'quser', 'qwinsta', 'klist', 'gpupdate', 'ver', 'date',
+  'history', 'clear', 'cls', 'exit', 'logout'
+]);
+
+const INTERACTIVE_REPL_CLIENT_RE = /\b(?:rpcclient|smbclient|impacket-smbclient|ftp|lftp|sftp|ntdsutil|diskshadow|mssqlclient|impacket-mssqlclient|mysql|psql|redis-cli)\b/i;
+
+const PURE_REPL_SUBCOMMAND_LINE_RE = /^(?:enumdomusers|enumdomgroups|enumalsgroups\s+\S+|querydispinfo|querydominfo|queryuser\s+\S+|querygroup\s+\S+|querygroupmem\s+\S+|queryuseraliases\s+[^\r\n]+|enumprivs|lsaenumsid|lookupsids\s+[^\r\n]+|lookupnames\s+[^\r\n]+|srvinfo|netshareenum(?:all)?|getdompwinfo|getusrdompwinfo\s+\S+|createdomuser\s+\S+|setuserinfo2?\s+[^\r\n]+|chgpasswd2?\s+[^\r\n]+|recurse(?:\s+(?:on|off))?|prompt(?:\s+(?:on|off))?|mask\s+\S+|mget\s+[^\r\n]+|mput\s+[^\r\n]+|get\s+[^\r\n]+|put\s+[^\r\n]+|more\s+\S+|del\s+\S+|rm\s+\S+|mkdir\s+\S+|rmdir\s+\S+|cd\s+[^\r\n]+|lcd\s+[^\r\n]+|pwd|ls(?:\s+\S+)?|dir(?:\s+\S+)?|binary|ascii|passive|epsv4?(?:\s+(?:on|off))?|activate\s+instance\s+\S+|ifm|create\s+full\s+[^\r\n]+|set\s+(?:context|metadata|verbose|option)\s+[^\r\n]+|add\s+volume\s+[^\r\n]+|create|expose\s+[^\r\n]+|exec\s+[^\r\n]+|help|quit|exit|bye)$/i;
+
+const EXTERNAL_REFERENCE_HOST_RE = /^(?:(?:[a-z0-9-]+\.)*google\.[a-z.]{2,6}|(?:[a-z0-9-]+\.)*(?:stackoverflow\.com|stackexchange\.com|serverfault\.com|superuser\.com|askubuntu\.com|github\.com|githubusercontent\.com|gist\.github\.com|gitlab\.com|learn\.microsoft\.com|docs\.microsoft\.com|microsoft\.com|exploit-db\.com|nvd\.nist\.gov|cve\.mitre\.org|cvedetails\.com|gtfobins\.github\.io|lolbas-project\.github\.io|book\.hacktricks\.xyz|hacktricks\.boitatech\.com\.br|payloadsallthethings\.[a-z.]{2,6}|owasp\.org|portswigger\.net|wikipedia\.org|medium\.com|reddit\.com))$/i;
+
+function isExternalReferenceUrlOrCommand(input) {
+  const s = String(input || '').trim();
+  if (!s) return false;
+  const m = /^(?:(?:GET|POST|HEAD|OPTIONS|OPEN|BROWSE)\s+|(?:curl|wget)\s+(?:-[A-Za-z0-9]+\s+)*)?https?:\/\/([^/\s:?#'"]+)/i.exec(s);
+  if (!m) return false;
+  const host = String(m[1] || '').replace(/:\d+$/, '').toLowerCase();
+  return Boolean(host && EXTERNAL_REFERENCE_HOST_RE.test(host));
+}
+
 const STEP_CAPTION_HEADER_RE = /^Step\s+\d+\s*(?:[-:.)]\s*.*)?$/i;
 
 const UNPROMPTED_SETUP_LEAD_RE = /^(?:cd\s+(?:-[LP]\s+)?(?:"[^"]+"|'[^']+'|[^;&|<>\s]+)|git\s+clone\s+(?:-\S+\s+)*\S+(?:\s+\S+)?)\s*$/i;
@@ -210,7 +238,7 @@ function isBareHashCommand(cand) {
   const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
   const knownHead = TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem)
     || CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem) || CAPTION_CLI_EXTRA_BINS.has(archStem)
-    || BARE_HASH_SHELL_BUILTINS.has(base);
+    || BARE_HASH_SHELL_BUILTINS.has(base) || /^impacket-[a-z0-9_-]+$/i.test(base);
   if (!knownHead) return false;
 
   const toks = unwrapped.split(/\s+/).filter(Boolean);
@@ -505,6 +533,19 @@ function hasShellPrompt(text) {
   return false;
 }
 
+function matchStandaloneLandingPromptFence(text) {
+  const nonEmpty = String(text || '')
+    .split(/\r?\n/)
+    .map(l => stripAnsi(l).trim())
+    .filter(Boolean);
+  if (nonEmpty.length !== 1) return null;
+  const mp = matchPromptLine(nonEmpty[0], { suppressBareHash: true });
+  if (!mp || mp.rawCommand) return null;
+  if (mp.kind === 'powershell' || mp.kind === 'cmd') return mp;
+  if (mp.kind === 'unix' && isInteractiveTargetOrReplPrompt(mp)) return mp;
+  return null;
+}
+
 function isCommandLikeLine(line) {
   const trimmed = String(line || '').trim();
   if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
@@ -513,6 +554,7 @@ function isCommandLikeLine(line) {
   if (!s) return false;
   const first = s.split(/[\s|;&><]+/)[0].replace(/^["']|["']$/g, '');
   if (!first) return false;
+  if (first.indexOf(':') >= 0 && !/^[A-Za-z]:[\\/]/.test(first)) return false;
   if (hasTitleCaseEnglishProseLook(first, s)) return false;
   if (/^(?:\.\/|\.\\|\/usr\/|\/bin\/|\/sbin\/|\/opt\/|[A-Za-z]:\\)/.test(first)) return true;
   if (/^(?:Invoke|Get|Set|New|Import|Start|Stop|Enter|Add|Enable|Disable|Test|Select|Out|ConvertTo|ConvertFrom)-[A-Za-z0-9]+$/i.test(first)) {
@@ -521,7 +563,76 @@ function isCommandLikeLine(line) {
   const base = first.split(/[\\/]/).pop().toLowerCase();
   const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
   const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
-  return TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem);
+  return TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem) || /^impacket-[a-z0-9_-]+$/i.test(base);
+}
+
+function isStrictBareCliCommandLine(rawLine) {
+  const raw = String(rawLine || '');
+  if (!raw.trim() || /[\\`]\s*$/.test(raw)) return false;
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
+  if (TERMINAL_CONTENT_SIG_RE.test(trimmed) || RAW_ARTIFACT_HEADER_RE.test(trimmed) || STEP_CAPTION_HEADER_RE.test(trimmed)) {
+    return false;
+  }
+  if (matchPromptLine(raw, { suppressBareHash: true })) return false;
+  if (/\S {4,}\S/.test(trimmed)) return false;
+  if (/[?!]$/.test(trimmed)) return false;
+  if (/^(?:export\s+|set\s+)?[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|[^\s;|&]+)\s*$/i.test(trimmed)) {
+    return true;
+  }
+  if (UNPROMPTED_SETUP_LEAD_RE.test(trimmed)) return true;
+
+  const s = trimmed
+    .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/, '')
+    .replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '')
+    .trim();
+  if (!s) return false;
+  const firstRaw = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
+  if (!firstRaw || firstRaw.endsWith(':')) return false;
+  if (firstRaw.indexOf(':') >= 0 && !/^[A-Za-z]:[\\/]/.test(firstRaw)) return false;
+  if (/^[A-Z]{2,}$/.test(firstRaw)) return false;
+  if (hasTitleCaseEnglishProseLook(firstRaw, s)) return false;
+
+  const toks = s.split(/\s+/).filter(Boolean);
+  const base = firstRaw.split(/[\\/]/).pop().toLowerCase();
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+
+  if (toks.length === 1 && !/[|;&><]/.test(s)) {
+    return (ZERO_ARG_CLI_COMMANDS.has(stem) && !/[\\/]/.test(firstRaw))
+      || /^\.[\\/][A-Za-z0-9_.-]+$/.test(firstRaw);
+  }
+
+  if (!isCommandLikeLine(s) && !isCaptionFollowCliLine(s) && !/^impacket-[a-z0-9_-]+$/i.test(base)) {
+    return false;
+  }
+
+  if (toks.length >= 5 && toks.slice(1).every(w => /^[A-Za-z,.;:!?()]+$/.test(w))) {
+    return false;
+  }
+
+  if (AMBIGUOUS_ENGLISH_CLI_HEADS.has(stem)) {
+    const rest = s.slice(firstRaw.length).trim();
+    const hasCliSyntax = /(?:^|\s)(?:--?[A-Za-z0-9]|\/[A-Za-z0-9?])|[\/\\|;&><=$`"']|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b\w+\.(?:txt|xml|json|yml|yaml|ini|conf|cfg|log|bak|php|asp|aspx|jsp|py|sh|ps1|bat|cmd|exe|dll|zip|tar|gz|7z|rar|kdbx|pfx|key|pem|crt|db|sql|sqlite|pwdump|hash|kirbi|ccache|b64)\b/i.test(rest)
+      || (stem === 'net' && /^(?:users?|localgroup|group|accounts|share|view|use|start|stop|session|config|statistics|time)\b/i.test(rest))
+      || (stem === 'service' && /^\S+\s+(?:status|start|stop|restart|reload)\b/i.test(rest));
+    if (!hasCliSyntax) return false;
+  }
+
+  return true;
+}
+
+function isPureReplSubcommandEchoBlock(firstLine, nonCommentRestLines) {
+  if (!firstLine || !INTERACTIVE_REPL_CLIENT_RE.test(firstLine)) return false;
+  if (!Array.isArray(nonCommentRestLines) || !nonCommentRestLines.length) return false;
+  return nonCommentRestLines.every(l => PURE_REPL_SUBCOMMAND_LINE_RE.test(String(l || '').trim()));
+}
+
+function hasEarlyPemRawArtifact(body, nonEmptyLines) {
+  if (!PEM_ENVELOPE_RE.test(String(body || ''))) return false;
+  const head5 = Array.isArray(nonEmptyLines)
+    ? nonEmptyLines.slice(0, 5)
+    : String(body || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean).slice(0, 5);
+  return head5.some(l => RAW_ARTIFACT_HEADER_RE.test(l));
 }
 
 function classifyFenceBlock(lang, text) {
@@ -550,7 +661,7 @@ function classifyFenceBlock(lang, text) {
   }
 
   // Bare fence or unknown tag: classify via ingest.js-aligned prompt/tool/content signatures
-  if (firstNonEmpty && RAW_ARTIFACT_HEADER_RE.test(firstNonEmpty)) {
+  if ((firstNonEmpty && RAW_ARTIFACT_HEADER_RE.test(firstNonEmpty)) || (!isCommandLikeLine(firstNonEmpty) && hasEarlyPemRawArtifact(body, nonEmptyLines))) {
     return { include: true, reason: 'bare-raw-artifact', lang: normLang };
   }
   if (hasShellPrompt(body)) return { include: true, reason: 'bare-prompt', lang: normLang };
@@ -759,6 +870,7 @@ function extractBlocks(md, opts) {
   const legacySet = new Set(['console', 'shell', 'bash', 'sh', 'terminal']);
 
   const out = [];
+  const forceIncludeIndices = new Set();
   for (let i = 0; i < allBlocks.length; i++) {
     const b = allBlocks[i];
     let keep = false;
@@ -772,28 +884,103 @@ function extractBlocks(md, opts) {
     } else {
       classification = classifyFenceBlock(b.lang, b.text);
       keep = classification.include;
+      if (!keep && forceIncludeIndices.has(i)) {
+        keep = true;
+        classification = { include: true, reason: 'paired-multi-cmd-output', lang: b.lang };
+      }
+      if (!keep && (!b.lang || EXPLICIT_TERMINAL_LANGS.has(b.lang)) && matchStandaloneLandingPromptFence(b.text)) {
+        const prevStart = i > 0 ? allBlocks[i - 1].end : Math.max(0, b.start - 600);
+        const prevRaw = src.slice(prevStart, b.start);
+        const prevLines = prevRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const lastPrev = prevLines.length ? prevLines[prevLines.length - 1] : '';
+        const bHeading = headingAtLine(headings, lineNumberAt(lineStarts, b.start));
+        if (OUTPUT_CAPTION_LINE_RE.test(lastPrev) || STANDALONE_LANDING_CONTEXT_RE.test(bHeading) || STANDALONE_LANDING_CONTEXT_RE.test(cleanProse(prevRaw).slice(-300))) {
+          keep = true;
+          classification = { include: true, reason: 'standalone-landing-prompt', lang: b.lang };
+        }
+      }
     }
     if (!keep) continue;
 
     const lineStart = lineNumberAt(lineStarts, b.start);
-    const lineEnd = lineNumberAt(lineStarts, Math.max(b.start, b.end - 1));
+    const blockHeading = headingAtLine(headings, lineStart);
     const leadStart = i > 0 ? allBlocks[i - 1].end : Math.max(0, b.start - 1200);
-    const followEnd = i < allBlocks.length - 1 ? allBlocks[i + 1].start : Math.min(src.length, b.end + 1200);
+    let effectiveEnd = b.end;
+    let followEnd = i < allBlocks.length - 1 ? allBlocks[i + 1].start : Math.min(src.length, b.end + 1200);
+    let pairedOutputText;
+    let consumeNext = false;
 
-    out.push({
+    if (!legacy0xdfLangsOnly && i + 1 < allBlocks.length && b.sourceFormat === 'commonmark' && allBlocks[i + 1].sourceFormat === 'commonmark') {
+      const nextB = allBlocks[i + 1];
+      const prevRaw = src.slice(i > 0 ? allBlocks[i - 1].end : Math.max(0, b.start - 400), b.start);
+      const prevLines = prevRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const lastPrevLine = prevLines.length ? prevLines[prevLines.length - 1] : '';
+      const precededByCommandCaption = COMMAND_CAPTION_LINE_RE.test(lastPrevLine);
+      const gapRaw = src.slice(b.end, nextB.start);
+
+      if (gapRaw.indexOf('![') < 0) {
+        const gapLines = gapRaw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const gapIsOutputCaption = gapLines.length === 1 && OUTPUT_CAPTION_LINE_RE.test(gapLines[0]);
+        if (gapIsOutputCaption || (precededByCommandCaption && gapLines.length === 0)) {
+          const nextBody = String(nextB.text || '');
+          const nextLang = String(nextB.lang || '').toLowerCase();
+          const nextAllowedLang = !nextLang
+            || EXPLICIT_TERMINAL_LANGS.has(nextLang)
+            || (gapIsOutputCaption && /^(?:json|xml|html|yaml|yml|ini|conf)$/.test(nextLang));
+          const nextActive = nextBody.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('//'));
+          const firstNextActive = nextActive[0] || '';
+          const nextHasPrompt = hasShellPrompt(nextBody) || Boolean(matchStandaloneLandingPromptFence(nextBody));
+          const nextStartsCli = Boolean(
+            firstNextActive &&
+            !TERMINAL_CONTENT_SIG_RE.test(firstNextActive) && (
+              isStrictBareCliCommandLine(firstNextActive) ||
+              /^(?:export|set)\s+[A-Za-z_][A-Za-z0-9_]*=/i.test(firstNextActive)
+            )
+          );
+          const nextLooksStatic = !gapIsOutputCaption && STATIC_SOURCE_LOOK_RE.test(nextBody);
+
+          if (nextBody.trim() && nextAllowedLang && !nextHasPrompt && !nextStartsCli && !nextLooksStatic) {
+            const segB = segmentBlock({
+              text: b.text,
+              lang: b.lang,
+              contentLineStart: b.contentLineStart || lineStart,
+              lineStart: lineStart,
+              heading: blockHeading
+            }, opts);
+
+            if (segB.units.length === 1 && segB.units[0].command && !segB.units[0].stdout.trim() && !segB.units[0].followPrompt) {
+              pairedOutputText = nextBody;
+              effectiveEnd = nextB.end;
+              followEnd = (i + 2 < allBlocks.length) ? allBlocks[i + 2].start : Math.min(src.length, nextB.end + 1200);
+              consumeNext = true;
+            } else if (segB.units.length > 1 && segB.units.every(u => u.command && !u.stdout.trim()) && gapIsOutputCaption) {
+              forceIncludeIndices.add(i + 1);
+            }
+          }
+        }
+      }
+    }
+
+    const lineEnd = lineNumberAt(lineStarts, Math.max(b.start, effectiveEnd - 1));
+    const entryObj = {
       lang: b.lang,
       sourceFormat: b.sourceFormat,
       classificationReason: classification.reason,
       text: b.text,
       start: b.start,
-      end: b.end,
+      end: effectiveEnd,
       lineStart: lineStart,
       contentLineStart: b.contentLineStart || lineStart,
       lineEnd: lineEnd,
-      heading: headingAtLine(headings, lineStart),
+      heading: blockHeading,
       lead: cleanProse(src.slice(leadStart, b.start)).slice(-500),
-      follow: cleanProse(src.slice(b.end, followEnd)).slice(0, 500)
-    });
+      follow: cleanProse(src.slice(effectiveEnd, followEnd)).slice(0, 500)
+    };
+    if (pairedOutputText !== undefined) {
+      entryObj.pairedOutputText = pairedOutputText;
+    }
+    out.push(entryObj);
+    if (consumeNext) i++;
   }
   return out;
 }
@@ -896,8 +1083,11 @@ function segmentBlock(blockOrText, opts) {
         }
       }
       if (cur) rawUnits.push(cur);
-      // Skip trailing empty prompt at the very end of a block if rawCommand === ''
-      if (!p.rawCommand && i === lines.length - 1) {
+      // Preserve standalone landing-prompt fences; skip trailing idle prompts after earlier turns
+      const isSingleLandingFence = !p.rawCommand
+        && rawUnits.length === 0
+        && Boolean(matchStandaloneLandingPromptFence(text));
+      if (!p.rawCommand && i === lines.length - 1 && !isSingleLandingFence) {
         cur = null;
         continue;
       }
@@ -908,7 +1098,7 @@ function segmentBlock(blockOrText, opts) {
       }
       cur = {
         promptLine: p.promptLine,
-        followPrompt: '',
+        followPrompt: isSingleLandingFence ? String(p.promptLine || '').trim() : '',
         tool: p.tool,
         rawCommand: p.rawCommand,
         command: p.command,
@@ -918,6 +1108,7 @@ function segmentBlock(blockOrText, opts) {
         hostHint: p.hostHint || p.host || '',
         lineStart: baseLine + origOffset,
         heading: heading,
+        isLandingPromptOnly: isSingleLandingFence,
         outLines: []
       };
     } else if (cur) {
@@ -982,7 +1173,8 @@ function segmentBlock(blockOrText, opts) {
       const origFirstLine = lines[origFirstIdx].trim();
       const origRestOut = lines.slice(origFirstIdx + 1).join('\n');
 
-      if (RAW_ARTIFACT_HEADER_RE.test(origFirstLine)) {
+      const nonEmptyBlockLines = lines.map(l => l.trim()).filter(Boolean);
+      if (RAW_ARTIFACT_HEADER_RE.test(origFirstLine) || (!isCommandLikeLine(origFirstLine) && hasEarlyPemRawArtifact(text, nonEmptyBlockLines))) {
         const fullOut = lines.join('\n');
         recordLegacyLeadBridge('', fullOut, origFirstLine, origRestOut);
         rawUnits.push({
@@ -1044,11 +1236,12 @@ function segmentBlock(blockOrText, opts) {
         const firstOffset = lineOffsets[firstIdx] != null ? lineOffsets[firstIdx] : firstIdx;
         const shellTagged = /^(?:bash|sh|shell|zsh|console|terminal|powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang);
         if (isCommandLikeLine(firstLine) || ((captionSkipped || sawHashCaption) && isCaptionFollowCliLine(firstLine)) || (shellTagged && !TERMINAL_CONTENT_SIG_RE.test(firstLine) && !EXPLOIT_DB_HEADER_RE.test(text))) {
-          // Check if block is multiple standalone command lines (e.g. a 2-line command snippet with no stdout)
+          // Check if block is multiple standalone command lines (e.g. a 2..8-line command snippet with no stdout)
           const restLines = lines.slice(firstIdx + 1);
           const nonCommentRest = restLines.filter(l => l.trim() && !l.trim().startsWith('#'));
-          const allCommands = shellTagged && nonCommentRest.length > 0 && nonCommentRest.length <= 6
-            && nonCommentRest.every(l => isCommandLikeLine(l));
+          const allCommands = (shellTagged && nonCommentRest.length > 0 && nonCommentRest.length <= 6 && !/[\\`]\s*$/.test(lines[firstIdx]) && nonCommentRest.every(l => !/[\\`]\s*$/.test(l) && isCommandLikeLine(l)))
+            || (!shellTagged && nonCommentRest.length >= 1 && nonCommentRest.length <= 7 && isStrictBareCliCommandLine(lines[firstIdx]) && nonCommentRest.every(l => isStrictBareCliCommandLine(l)));
+          const pureReplEcho = !allCommands && isPureReplSubcommandEchoBlock(firstLine, nonCommentRest);
 
           if (allCommands) {
             if (firstIdx !== origFirstIdx) {
@@ -1074,7 +1267,8 @@ function segmentBlock(blockOrText, opts) {
               });
             }
           } else {
-            const joinedRest = restLines.join('\n');
+            const effectiveRestLines = pureReplEcho ? [] : restLines;
+            const joinedRest = effectiveRestLines.join('\n');
             if (firstIdx !== origFirstIdx) {
               recordLegacyLeadBridge(firstLine, joinedRest, origFirstLine, origRestOut);
             }
@@ -1090,7 +1284,8 @@ function segmentBlock(blockOrText, opts) {
               hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
               lineStart: baseLine + firstOffset,
               heading: heading,
-              outLines: restLines
+              subcommands: pureReplEcho ? nonCommentRest.map(l => l.trim()) : undefined,
+              outLines: effectiveRestLines
             });
           }
         } else {
@@ -1115,14 +1310,15 @@ function segmentBlock(blockOrText, opts) {
   }
 
   const units = rawUnits
-    .filter(u => u.rawCommand || u.command || u.outLines.some(l => l.trim()))
+    .filter(u => u.rawCommand || u.command || u.isLandingPromptOnly || u.outLines.some(l => l.trim()))
     .map(u => {
       const stdout = u.outLines.join('\n');
       const followPrompt = u.followPrompt || '';
-      const promptLine = followPrompt
-        ? ((u.promptLine || '') + '\n' + followPrompt)
-        : (u.promptLine || '');
-      return {
+      const basePromptLine = u.promptLine || '';
+      const promptLine = (followPrompt && basePromptLine.trim() !== followPrompt.trim())
+        ? (basePromptLine ? (basePromptLine + '\n' + followPrompt) : followPrompt)
+        : basePromptLine;
+      const unitObj = {
         source: 'markdown',
         fidelity: 'text',
         promptLine: promptLine,
@@ -1139,7 +1335,15 @@ function segmentBlock(blockOrText, opts) {
         lineStart: u.lineStart || baseLine,
         heading: u.heading || heading
       };
+      if (u.subcommands) unitObj.subcommands = u.subcommands;
+      return unitObj;
     });
+
+  if (isObj && typeof blockOrText.pairedOutputText === 'string' && units.length === 1 && !units[0].stdout.trim()) {
+    const pairedOut = blockOrText.pairedOutputText.replace(/\r\n/g, '\n');
+    units[0].stdout = pairedOut;
+    units[0].output = pairedOut;
+  }
 
   return {
     units: units,
@@ -1174,22 +1378,56 @@ function normalizeOcrSidecarEntries(entries, headings) {
         : (entry.stdout != null ? entry.stdout : (entry.output || ''))
     );
     const h = entry.heading || (headings ? headingAtLine(headings, line) : '') || '';
+    const rawPrompt = String(entry.prompt_line || '');
+    let parsedPrompt = null;
+    if (rawPrompt.trim()) {
+      const pLines = rawPrompt.split(/\r?\n/);
+      for (let pIdx = 0; pIdx < pLines.length; pIdx++) {
+        if (ZSH_TOP_PROMPT_RE.test(pLines[pIdx]) && pIdx + 1 < pLines.length && ZSH_BOT_PROMPT_RE.test(pLines[pIdx + 1])) {
+          const topM = pLines[pIdx].match(ZSH_TOP_PROMPT_RE);
+          parsedPrompt = {
+            kind: 'unix',
+            user: topM[1] || '',
+            host: topM[2] || '',
+            hostHint: topM[2] || '',
+            tool: ''
+          };
+          break;
+        }
+        const mp = matchPromptLine(pLines[pIdx], { suppressBareHash: true });
+        if (mp) {
+          parsedPrompt = mp;
+          break;
+        }
+      }
+    }
+    const derivedHostHint = parsedPrompt
+      ? (parsedPrompt.hostHint === 'windows' ? 'remote-windows' : (parsedPrompt.hostHint || parsedPrompt.host || ''))
+      : '';
+    const entryKindLow = String(entry.kind || '').trim().toLowerCase();
+    const isBrowserKind = entryKindLow === 'browser';
+    const isExternalRef = Boolean(
+      entry.externalReference ||
+      entry.external_reference ||
+      (isBrowserKind && (isExternalReferenceUrlOrCommand(cmd) || isExternalReferenceUrlOrCommand(entry.url || '')))
+    );
     return {
       source: 'ocr-sidecar',
       fidelity: entry.fidelity || 'ocr',
       ocrIndex: idx,
-      ocrKind: entry.kind || 'screenshot',
+      ocrKind: isBrowserKind ? 'browser' : (entry.kind || 'screenshot'),
       visualObservation: entry.visual_observation || '',
-      promptLine: entry.prompt_line || '',
-      tool: '',
+      promptLine: rawPrompt,
+      tool: entry.tool || (parsedPrompt && parsedPrompt.tool) || '',
       rawCommand: cmd,
       command: cmd,
       stdout: out,
       output: out,
-      kind: entry.kind || 'ocr',
-      user: '',
-      host: '',
-      hostHint: entry.host_hint || '',
+      kind: isBrowserKind ? 'browser' : (entry.kind || (parsedPrompt && (parsedPrompt.kind === 'powershell' || parsedPrompt.kind === 'cmd') ? parsedPrompt.kind : 'ocr')),
+      user: entry.user || (parsedPrompt && parsedPrompt.user) || '',
+      host: entry.host || (parsedPrompt && parsedPrompt.host) || '',
+      hostHint: entry.host_hint || derivedHostHint,
+      externalReference: isExternalRef,
       lineStart: line,
       heading: h
     };
@@ -1388,7 +1626,8 @@ function classifyAxis(u, toolLabel) {
   const c = (u && u.command) || '';
   const host = (u && (u.host || u.hostHint)) || '';
   const onHostPrompt = u.kind === 'powershell' || u.kind === 'cmd' || u.kind === 'meterpreter'
-    || (u.kind === 'unix' && host && host !== 'windows' && !ATTACKER_HOST.test(host));
+    || host === 'windows' || host === 'remote-windows'
+    || (u.kind === 'unix' && host && host !== 'windows' && host !== 'remote-windows' && !ATTACKER_HOST.test(host));
   if (FILE_READ.test(c)) return 'loot';
   if (TRANSFER.test(c)) return 'outcome';
   if (SHELL_LAUNCH.test(c)) return 'state-change';
@@ -1606,14 +1845,18 @@ module.exports = {
   STATIC_CODE_LANGS: STATIC_CODE_LANGS,
   FACT_BEARING: FACT_BEARING,
   RAW_ARTIFACT_HEADER_RE: RAW_ARTIFACT_HEADER_RE,
+  PURE_REPL_SUBCOMMAND_LINE_RE: PURE_REPL_SUBCOMMAND_LINE_RE,
   cleanProse: cleanProse,
   classifyFenceBlock: classifyFenceBlock,
   hasShellPrompt: hasShellPrompt,
   isBareHashCommand: isBareHashCommand,
   isCommandLikeLine: isCommandLikeLine,
+  isStrictBareCliCommandLine: isStrictBareCliCommandLine,
+  isExternalReferenceUrlOrCommand: isExternalReferenceUrlOrCommand,
   isPlainEnglishCaptionLine: isPlainEnglishCaptionLine,
   joinWrappedPromptLines: joinWrappedPromptLines,
   matchPromptLine: matchPromptLine,
+  normalizeOcrSidecarEntries: normalizeOcrSidecarEntries,
   extractBlocks: extractBlocks,
   segmentBlock: segmentBlock,
   loadOcrSidecar: loadOcrSidecar,

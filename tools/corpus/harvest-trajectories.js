@@ -46,6 +46,8 @@ const {
 
 const {
   ATTACKER_HOST,
+  PURE_REPL_SUBCOMMAND_LINE_RE,
+  isExternalReferenceUrlOrCommand,
   extractWalkthroughTurns,
   discoverAlternates,
   discoverCorpusEntries
@@ -434,6 +436,30 @@ function inferEngagementNetworking(turns, opts) {
   const selfIps = new Set();
   if (lhost) selfIps.add(lhost);
 
+  const scannedTargetIps = new Set();
+  for (const t of turns || []) {
+    const rawCmd = String((t && t.command) || '').trim();
+    const cleanScanCmd = stripCommandWrappers(rawCmd);
+    const out = String((t && (t.stdout || t.output)) || '');
+    if (/^(?:nmap|rustscan|masscan)\b/i.test(cleanScanCmd)) {
+      const cmdNoSrc = cleanScanCmd.replace(/(?:^|\s)-S\s+\d{1,3}(?:\.\d{1,3}){3}\b/g, ' ');
+      let sm;
+      IPV4_GLOBAL_RE.lastIndex = 0;
+      while ((sm = IPV4_GLOBAL_RE.exec(cmdNoSrc)) !== null) {
+        if (isPrivateLabIpv4(sm[1]) && !ATTACKER_SUBNET_RE.test(sm[1])) {
+          scannedTargetIps.add(sm[1]);
+        }
+      }
+    }
+    const nmapRepRe = /Nmap scan report for (?:[^\r\n(]+\()?(\d{1,3}(?:\.\d{1,3}){3})\)?/gi;
+    let nm;
+    while ((nm = nmapRepRe.exec(out)) !== null) {
+      if (isPrivateLabIpv4(nm[1]) && !ATTACKER_SUBNET_RE.test(nm[1])) {
+        scannedTargetIps.add(nm[1]);
+      }
+    }
+  }
+
   const varMap = Object.create(null);
   const candidateCounts = Object.create(null);
   const candidateOrder = [];
@@ -444,12 +470,13 @@ function inferEngagementNetworking(turns, opts) {
     const out = String(t.stdout || t.output || '');
 
     const pm = LHOST_PROMPT_RE.exec(pLine);
-    if (pm && isPrivateLabIpv4(pm[1])) {
+    if (pm && isPrivateLabIpv4(pm[1]) && !scannedTargetIps.has(pm[1])) {
       if (!lhost) lhost = pm[1];
       selfIps.add(pm[1]);
     }
-    const lm = LHOST_ARG_RE.exec(cmd);
-    if (lm && isPrivateLabIpv4(lm[1])) {
+    const isMsfvenomBindPayload = /\bmsfvenom\b/i.test(cmd) && /\bbind_(?:tcp|udp|ipv6|named_pipe)\b/i.test(cmd);
+    const lm = isMsfvenomBindPayload ? null : LHOST_ARG_RE.exec(cmd);
+    if (lm && isPrivateLabIpv4(lm[1]) && !scannedTargetIps.has(lm[1])) {
       if (!lhost) lhost = lm[1];
       selfIps.add(lm[1]);
     }
@@ -459,7 +486,7 @@ function inferEngagementNetworking(turns, opts) {
       let m;
       IPV4_GLOBAL_RE.lastIndex = 0;
       while ((m = IPV4_GLOBAL_RE.exec(out)) !== null) {
-        if (isPrivateLabIpv4(m[1])) {
+        if (isPrivateLabIpv4(m[1]) && !scannedTargetIps.has(m[1])) {
           selfIps.add(m[1]);
           if (!lhost && ATTACKER_SUBNET_RE.test(m[1])) lhost = m[1];
         }
@@ -469,7 +496,7 @@ function inferEngagementNetworking(turns, opts) {
     let am;
     IPV4_GLOBAL_RE.lastIndex = 0;
     while ((am = IPV4_GLOBAL_RE.exec(cmd + '\n' + out)) !== null) {
-      if (ATTACKER_SUBNET_RE.test(am[1])) {
+      if (ATTACKER_SUBNET_RE.test(am[1]) && !scannedTargetIps.has(am[1])) {
         selfIps.add(am[1]);
         if (!lhost) lhost = am[1];
       }
@@ -563,7 +590,8 @@ function expandShellTargetVars(command, activeTarget, varMap) {
 function isAttackerTurn(turn) {
   if (!turn) return true;
   if (turn.kind === 'powershell' || turn.kind === 'cmd') return false;
-  if (turn.hostHint === 'windows') return false;
+  if (turn.hostHint === 'windows' || turn.hostHint === 'remote-windows' || /^remote-/i.test(turn.hostHint || '')) return false;
+  if (turn.hostHint && !ATTACKER_HOST.test(turn.hostHint)) return false;
   if (turn.host && !ATTACKER_HOST.test(turn.host)) return false;
   if (turn.user && /^(?:www-data|apache|nginx| daemon|nobody|postgres|mysql|mssql|tomcat|jenkins|svc[_-])/i.test(turn.user)) {
     return false;
@@ -574,6 +602,9 @@ function isAttackerTurn(turn) {
 function isHousekeepingTurn(turn) {
   const rawCmd = String((turn && turn.command) || '').trim();
   const out = String((turn && (turn.stdout || turn.output)) || '').trim();
+  if (turn && (turn.externalReference || ((turn.kind === 'browser' || turn.ocrKind === 'browser') && isExternalReferenceUrlOrCommand(rawCmd || turn.url || '')))) {
+    return { housekeeping: true, reason: 'attacker_reference_lookup' };
+  }
   if (!rawCmd) {
     return { housekeeping: !out, reason: out ? 'unprompted_output' : 'empty_turn' };
   }
@@ -761,6 +792,101 @@ function hasExplicitAuthenticatedCreds(cleanCmd) {
   return false;
 }
 
+function hasRequiredMoveSemantics(moveId, cleanCmd) {
+  const raw = String(cleanCmd || '');
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw.replace(/\+/g, ' '));
+  } catch (_e) {
+    decoded = raw
+      .replace(/%20/gi, ' ')
+      .replace(/%27/gi, "'")
+      .replace(/%22/gi, '"')
+      .replace(/%28/gi, '(')
+      .replace(/%29/gi, ')')
+      .replace(/%3d/gi, '=');
+  }
+  const probe = raw + '\n' + decoded;
+  if (moveId === 'laps-read') {
+    return /(?:ms-mcs-admpwd|mslaps-(?:encrypted)?password|\blaps\b|pylaps|get-laps|lapstoolkit|laps\.py)/i.test(probe);
+  }
+  if (moveId === 'manual-sqli-exploitation') {
+    return /(?:\bunion\s+(?:all\s+)?select\b|\bselect\b[\s\S]*?\bfrom\b|\bsleep\s*\(|\bwaitfor\s+delay\b|\bbenchmark\s*\(|\bpg_sleep\s*\(|\binformation_schema\b|\bxp_cmdshell\b|\bload_file\s*\(|\binto\s+(?:outfile|dumpfile)\b|\bextractvalue\s*\(|\bupdatexml\s*\(|'\s*(?:or|and)\b\s*['0-9a-z_]+\s*=|\b(?:or|and)\s+\d+\s*=\s*\d+|\bsqlmap\b)/i.test(probe);
+  }
+  if (moveId === 'authz-abuse') {
+    return /(?:authorization\s*:|bearer\s+[A-Za-z0-9._~+\/-]+|cookie\s*:|(?:^|\s)(?:-b|--cookie)\s+\S+|x-(?:api-key|auth|access-token|forwarded|original-url|rewrite-url|custom-ip-authorization|real-ip)\s*:|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}|(?:[?&]|^|\s|"|'|\{)(?:role|is_admin|isadmin|admin|privilege|priv|group|userid|user_id|uid|account_id|accountid|org_id|tenant_id|owner_id)\s*[:=])/i.test(probe);
+  }
+  return true;
+}
+
+function scoreCommandAgainstVariant(action, cObj, cleanCmd, scoreCtx) {
+  if (!action || !cObj || !cObj.run) return 0;
+  if (!hasRequiredMoveSemantics(action.id, cleanCmd)) return 0;
+
+  const ctx = scoreCtx || {};
+  const rawHeadBin = ctx.rawHeadBin !== undefined
+    ? ctx.rawHeadBin
+    : canonicalTool((String(cleanCmd || '').split(/\s+/)[0] || ''));
+  const cmdTool = ctx.cmdTool !== undefined ? ctx.cmdTool : extractPrimaryTool(cleanCmd);
+  const cmdFlags = ctx.cmdFlags || extractCommandFlags(cleanCmd);
+  const cmdHashcatModes = ctx.cmdHashcatModes || (cmdTool === 'hashcat' ? cmdFlags.filter(f => f.indexOf('-m:') === 0) : []);
+  const hasPassAuth = Boolean(ctx.hasPassAuth);
+  const hasHashAuth = Boolean(ctx.hasHashAuth);
+
+  if (hasPassAuth && !hasHashAuth && /(?:\{\{dahash\}\}|\{\{nthash\}\}|\s-H\s|--hashes|-hashes)/i.test(cObj.run) && !/(?:\{\{password\}\}|\s-p\s)/i.test(cObj.run)) {
+    return 0;
+  }
+
+  let bestVariantScore = 0;
+  const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
+  for (const clause of clauses) {
+    const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
+    if (!cleanClause) continue;
+    const clauseTool = extractPrimaryTool(cleanClause);
+    const declaredTool = canonicalTool(cObj.tool || action.tool || '');
+    const matchedViaClause = Boolean(cmdTool && cmdTool === clauseTool);
+    const matchedViaDeclared = Boolean(
+      cmdTool
+      && !matchedViaClause
+      && cmdTool === declaredTool
+      && !GENERIC_INTERPRETERS.has(declaredTool)
+      && (!clauseTool || GENERIC_INTERPRETERS.has(clauseTool))
+    );
+    if (!matchedViaClause && !matchedViaDeclared) continue;
+
+    const isGenericTool = GENERIC_INTERPRETERS.has(cmdTool) || GENERIC_INTERPRETERS.has(rawHeadBin);
+    let s = isGenericTool ? 2 : 6;
+    const clauseFlags = extractCommandFlags(cleanClause);
+    let hits = 0;
+    let distinctiveHits = 0;
+    let misses = 0;
+    for (const fl of clauseFlags) {
+      if (fl.indexOf('-m:') === 0) {
+        if (cmdFlags.indexOf(fl) >= 0) {
+          hits += 12;
+          distinctiveHits++;
+        } else if (cmdHashcatModes.length > 0) {
+          misses += 10;
+        }
+      } else if (cmdTool === 'hashcat' && HASHCAT_GENERIC_RUNTIME_FLAGS.has(fl)) {
+        if (cmdFlags.indexOf(fl) >= 0) {
+          hits += 1;
+        }
+      } else if (cmdFlags.indexOf(fl) >= 0) {
+        const weight = fl.length > 4 ? 4 : 2;
+        hits += weight;
+        if (fl.length > 4 && fl !== '--cmd') distinctiveHits++;
+      } else if (fl.startsWith('--') && fl.length > 5) {
+        misses += 2;
+      }
+    }
+    if (isGenericTool && distinctiveHits === 0) continue;
+    s += hits - misses;
+    if (s > bestVariantScore) bestVariantScore = s;
+  }
+  return bestVariantScore;
+}
+
 function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   ctx = ctx || {};
   const facts = ctx.facts || null;
@@ -774,7 +900,8 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const rawHeadBin = canonicalTool((cleanCmd.split(/\s+/)[0] || ''));
   const cmdTool = extractPrimaryTool(cleanCmd);
   const cmdFlags = extractCommandFlags(cleanCmd);
-  const onTarget = !isAttackerTurn(turn) || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd));
+  const isUnambiguousWinLocalEnum = /^(?:whoami(?:\.exe)?\s+\/(?:priv|groups|all)\b|cmdkey(?:\.exe)?\s+\/list\b|systeminfo(?:\.exe)?\b)/i.test(cleanCmd);
+  const onTarget = !isAttackerTurn(turn) || isUnambiguousWinLocalEnum || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd));
   const hasAdminOrSystem = !!(facts && (facts.has('access.admin') || facts.has('access.system')));
   const hasNtdsLoot = !!(facts && facts.has('loot.ntds'));
 
@@ -891,6 +1018,18 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const cmdHashcatModes = cmdTool === 'hashcat'
     ? cmdFlags.filter(f => f.indexOf('-m:') === 0)
     : [];
+  if (
+    ((cmdTool === 'hashcat' || /^(?:sudo\s+)?hashcat\b/i.test(cleanCmd))
+      && (/(?:^|\s)(?:-m\s*|--hash-type(?:=|\s+))(?:13100|19600|19700)\b/.test(cleanCmd)
+          || cmdHashcatModes.some(m => m === '-m:13100' || m === '-m:19600' || m === '-m:19700')))
+    || ((cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd)) && /--format=krb5tgs\b/i.test(cleanCmd))
+  ) {
+    bump('crack-kerberoast', 26);
+    bump('crack-tgs', 25);
+  }
+  if ((cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd)) && !/keepass|\.kdbx\b|krb5|netntlm/i.test(cleanCmd)) {
+    bump('crack-modular-hash', 22);
+  }
   if (cmdTool === 'keepass2john' || (cmdTool === 'hashcat' && cmdHashcatModes.indexOf('-m:13400') >= 0)) {
     bump('keepass-dump-recover', 24);
   }
@@ -1101,13 +1240,19 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     bump('linux-enum', 23);
   }
 
-  if (onTarget && (/\bwinpeas/i.test(cleanCmd) || /^whoami(?:\.exe)?\s+\/(?:priv|groups|all)\b/i.test(cleanCmd) || /^systeminfo\b/i.test(cleanCmd) || /^cmdkey\s+\/list\b/i.test(cleanCmd))) {
+  if (isUnambiguousWinLocalEnum || (onTarget && /\bwinpeas/i.test(cleanCmd))) {
     bump('windows-enum', 24);
-    if (/^whoami(?:\.exe)?\s+\/priv\b/i.test(cleanCmd) && facts && facts.has('privesc.se_impersonate')) {
+    if (/^whoami(?:\.exe)?\s+\/priv\b/i.test(cleanCmd) && facts && (facts.has('privesc.se_impersonate') || facts.has('privesc.seimpersonate'))) {
       bump('seimpersonate', 21);
     }
     if (/^whoami(?:\.exe)?\s+\/groups\b/i.test(cleanCmd) && !(facts && facts.has('privesc.uac_bypass')) && !/\b(?:fodhelper|eventvwr|computerdefaults|sdclt|ms-settings)\b/i.test(cleanCmd)) {
       excludedIds.add('uac-bypass');
+    }
+  }
+
+  for (const semMoveId of ['laps-read', 'manual-sqli-exploitation', 'authz-abuse']) {
+    if (!hasRequiredMoveSemantics(semMoveId, cleanCmd)) {
+      excludedIds.add(semMoveId);
     }
   }
 
@@ -1132,63 +1277,22 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   }
 
   // General structural scoring across every sub-clause of every action's commands[]
+  const scoreCtx = {
+    rawHeadBin: rawHeadBin,
+    cmdTool: cmdTool,
+    cmdFlags: cmdFlags,
+    cmdHashcatModes: cmdHashcatModes,
+    hasPassAuth: hasPassAuth,
+    hasHashAuth: hasHashAuth
+  };
   for (const a of actionableMoves) {
     if (excludedIds.has(a.id)) continue;
     const cmds = a.commands || [];
     let bestActionScore = scored[a.id] || 0;
 
     for (let i = 0; i < cmds.length; i++) {
-      const cObj = cmds[i];
-      if (!cObj || !cObj.run) continue;
-      if (hasPassAuth && !hasHashAuth && /(?:\{\{dahash\}\}|\{\{nthash\}\}|\s-H\s|--hashes|-hashes)/i.test(cObj.run) && !/(?:\{\{password\}\}|\s-p\s)/i.test(cObj.run)) {
-        continue;
-      }
-      const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
-      for (const clause of clauses) {
-        const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
-        if (!cleanClause) continue;
-        const clauseTool = extractPrimaryTool(cleanClause);
-        const declaredTool = canonicalTool(cObj.tool || a.tool || '');
-        const matchedViaClause = Boolean(cmdTool && cmdTool === clauseTool);
-        const matchedViaDeclared = Boolean(
-          cmdTool
-          && !matchedViaClause
-          && cmdTool === declaredTool
-          && !GENERIC_INTERPRETERS.has(declaredTool)
-          && (!clauseTool || GENERIC_INTERPRETERS.has(clauseTool))
-        );
-        if (!matchedViaClause && !matchedViaDeclared) continue;
-
-        const isGenericTool = GENERIC_INTERPRETERS.has(cmdTool) || GENERIC_INTERPRETERS.has(rawHeadBin);
-        let s = isGenericTool ? 2 : 6;
-        const clauseFlags = extractCommandFlags(cleanClause);
-        let hits = 0;
-        let distinctiveHits = 0;
-        let misses = 0;
-        for (const fl of clauseFlags) {
-          if (fl.indexOf('-m:') === 0) {
-            if (cmdFlags.indexOf(fl) >= 0) {
-              hits += 12;
-              distinctiveHits++;
-            } else if (cmdHashcatModes.length > 0) {
-              misses += 10;
-            }
-          } else if (cmdTool === 'hashcat' && HASHCAT_GENERIC_RUNTIME_FLAGS.has(fl)) {
-            if (cmdFlags.indexOf(fl) >= 0) {
-              hits += 1;
-            }
-          } else if (cmdFlags.indexOf(fl) >= 0) {
-            const weight = fl.length > 4 ? 4 : 2;
-            hits += weight;
-            if (fl.length > 4 && fl !== '--cmd') distinctiveHits++;
-          } else if (fl.startsWith('--') && fl.length > 5) {
-            misses += 2;
-          }
-        }
-        if (isGenericTool && distinctiveHits === 0) continue;
-        s += hits - misses;
-        if (s > bestActionScore) bestActionScore = s;
-      }
+      const s = scoreCommandAgainstVariant(a, cmds[i], cleanCmd, scoreCtx);
+      if (s > bestActionScore) bestActionScore = s;
     }
 
     if (bestActionScore >= 9 && !excludedIds.has(a.id)) {
@@ -1285,9 +1389,29 @@ function inspectMoveCommandReadiness(OBOL, session, move, facts, targetIp) {
   };
 }
 
+function stripCommentsAndReplEchoes(rawOut) {
+  const s = String(rawOut || '');
+  if (!s.trim()) return '';
+  const nonComment = [];
+  const lines = s.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith('#')) continue;
+    nonComment.push(lines[i]);
+  }
+  if (!nonComment.length) return '';
+  if (nonComment.every(l => PURE_REPL_SUBCOMMAND_LINE_RE.test(l.trim()))) {
+    return '';
+  }
+  return nonComment
+    .filter(l => !PURE_REPL_SUBCOMMAND_LINE_RE.test(l.trim()))
+    .join('\n');
+}
+
 function gateEvidencePresentInHistory(gateOrTokens, historyTurns) {
   if (!historyTurns || !historyTurns.length) return { found: false, reason: '' };
-  const combinedOut = historyTurns.map(h => String(h.stdout || '')).join('\n');
+  const combinedOut = historyTurns.map(h => stripCommentsAndReplEchoes(h.stdout || '')).join('\n');
   if (!combinedOut.trim()) return { found: false, reason: '' };
 
   for (const item of gateOrTokens || []) {
@@ -1333,11 +1457,12 @@ function gateEvidencePresentInHistory(gateOrTokens, historyTurns) {
     'environment-error'
   ]);
   const prev = historyTurns[historyTurns.length - 1];
+  const prevCleanOut = prev ? stripCommentsAndReplEchoes(prev.stdout || '') : '';
   if (
     prev
     && !prev.housekeeping
     && !NEGATIVE_OUTCOME_KINDS.has(String(prev.outcome_kind || ''))
-    && String(prev.stdout || '').trim().length >= 24
+    && prevCleanOut.trim().length >= 24
     && (prev.minted_count || 0) === 0
   ) {
     return { found: true, reason: 'immediately_preceding_turn_had_unminted_stdout' };
@@ -1613,8 +1738,9 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
       (typeof cand.move.settled === 'function' && cand.move.settled(facts)) ||
       (typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
     const isCandEligible = typeof cand.move.eligible === 'function' ? cand.move.eligible(facts) : true;
+    const isCandObsolete = Boolean(cand.move && typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
     const alreadySatisfiedOnTarget = isCandEligible && Boolean(
-      doneIds[cand.id] || allProducesSatisfied || cmdInfo.allSettled || adGraphAlreadyCollected
+      doneIds[cand.id] || allProducesSatisfied || cmdInfo.allSettled || adGraphAlreadyCollected || isCandObsolete
     );
     const priorSubcmdContinuation =
       seenReachableInHistory &&
@@ -2057,7 +2183,16 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     // Execute / ingest turn into stateful engagement session
     let ingestReport = null;
     let matchedActionId = '';
-    const hasPayload = Boolean((expandedCmd && !hk.housekeeping) || String(turn.stdout || '').trim());
+    const isExternalRefLookup = hk.housekeeping && hk.reason === 'attacker_reference_lookup';
+    const hasTargetPromptTelemetry = Boolean(
+      String(turn.followPrompt || '').trim() ||
+      (!isAttackerTurn(turn) && String(turn.promptLine || '').trim())
+    );
+    const hasPayload = !isExternalRefLookup && Boolean(
+      (expandedCmd && !hk.housekeeping) ||
+      String(turn.stdout || '').trim() ||
+      hasTargetPromptTelemetry
+    );
     if (hasPayload) {
       matchedActionId = (reachability && reachability.matched_move_id)
         || (candidates[0] && candidates[0].id)
@@ -2333,6 +2468,7 @@ module.exports = {
   isHousekeepingTurn: isHousekeepingTurn,
   inferEngagementNetworking: inferEngagementNetworking,
   expandShellTargetVars: expandShellTargetVars,
+  scoreCommandAgainstVariant: scoreCommandAgainstVariant,
   matchTurnToCatalogMoves: matchTurnToCatalogMoves,
   gateEvidencePresentInHistory: gateEvidencePresentInHistory,
   simulateRetireMoveInSandbox: simulateRetireMoveInSandbox,

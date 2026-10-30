@@ -649,10 +649,14 @@
   }
 
   // ---- Stage 0: Versioned non-stock product banner -> dynamic searchsploit trigger ----
+  var _PROD_WORD_SRC = '[A-Za-z][A-Za-z0-9_.+-]*(?:\\/(?!v?\\d+\\.\\d+)[A-Za-z0-9_.+-]+)*';
+  var _PROD_VER_STR_RE = new RegExp('^(' + _PROD_WORD_SRC + '(?:[ \\t-]+' + _PROD_WORD_SRC + '){0,3})(?:[ \\t]*\\/[ \\t]*(?=v?\\d+\\.\\d+)|[ \\t]+)v?(\\d+\\.\\d+(?:\\.\\d+)*(?:[-a-zA-Z0-9.]*)?)\\b');
+  var _SLASH_BANNER_TOK_RE = new RegExp('(' + _PROD_WORD_SRC + '(?:[ -]' + _PROD_WORD_SRC + '){0,2})\\/v?(\\d+\\.\\d+(?:\\.\\d+)*(?:[-a-zA-Z0-9.]*)?)\\b', 'g');
+
   function _extractProdVerFromStr(str) {
     var s = String(str || '').trim();
     if (!s) return null;
-    var m = /^([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t-][A-Za-z][A-Za-z0-9_.+-]*){0,3})[\/ \t]+v?(\d+\.\d+(?:\.\d+)*(?:[-a-zA-Z0-9.]*)?)\b/.exec(s);
+    var m = _PROD_VER_STR_RE.exec(s);
     if (!m) return null;
     var prod = _cleanProductName(m[1]);
     var ver = m[2];
@@ -693,6 +697,17 @@
       });
     }
 
+    function pushHeaderCandidates(rawHdr) {
+      var hdrVal = String(rawHdr || '').replace(/\([^)]*\)/g, ' ').trim();
+      if (!hdrVal) return;
+      var slashTokens = C.reAll(_SLASH_BANNER_TOK_RE, hdrVal);
+      for (var sti = 0; sti < slashTokens.length; sti++) {
+        pushCandidate(slashTokens[sti][1], slashTokens[sti][2]);
+      }
+      var spv = _extractProdVerFromStr(hdrVal);
+      if (spv) pushCandidate(spv.product, spv.version);
+    }
+
     // 1. Inspect already-parsed facts (web.tech, service.*, web.server, ftp.banner, ssh.banner)
     for (var i = 0; i < facts.length; i++) {
       var f = facts[i];
@@ -713,6 +728,17 @@
         }
       } else if (f.kind.indexOf('service.') === 0 || f.kind === 'web.server' || f.kind === 'ftp.banner' || f.kind === 'ssh.banner') {
         if (val.product && val.version) pushCandidate(val.product, val.version);
+        if (Array.isArray(val.headers)) {
+          for (var hi = 0; hi < val.headers.length; hi++) {
+            pushHeaderCandidates(val.headers[hi]);
+          }
+        }
+        if (Array.isArray(val.banners)) {
+          for (var bi = 0; bi < val.banners.length; bi++) {
+            var bbpv = _extractProdVerFromStr(val.banners[bi]);
+            if (bbpv) pushCandidate(bbpv.product, bbpv.version);
+          }
+        }
         var rawBanner = val.banner || val.server || val.version || val.info || '';
         if (rawBanner) {
           var bpv = _extractProdVerFromStr(rawBanner);
@@ -744,16 +770,10 @@
       var ln = lines[li2];
       if (!ln || /^\s*(?:User-Agent|Referer|Accept|Starting Nmap|Nmap done|- Nikto)/i.test(ln)) continue;
 
-      // HTTP Server / X-Powered-By / X-Generator header tokens
-      var hdrM = /^\s*(?:<\s*)?(?:Server|X-Powered-By|X-Generator|X-Application)\s*:\s*(.+)$/i.exec(ln);
+      // HTTP Server / X-Powered-By / X-Generator / Nmap http-server-header tokens
+      var hdrM = /^\s*(?:(?:<\s*)?(?:Server|X-Powered-By|X-Generator|X-Application)|(?:[|_][ \t]*)?_?http-server-header)\s*:\s*(.+)$/i.exec(ln);
       if (hdrM) {
-        var hdrVal = hdrM[1].replace(/\([^)]*\)/g, ' ').trim();
-        var slashTokens = C.reAll(/([A-Za-z][A-Za-z0-9_.+-]*(?:[ -][A-Za-z][A-Za-z0-9_.+-]*){0,2})\/v?(\d+\.\d+(?:\.\d+)*)/g, hdrVal);
-        for (var sti = 0; sti < slashTokens.length; sti++) {
-          pushCandidate(slashTokens[sti][1], slashTokens[sti][2]);
-        }
-        var spv = _extractProdVerFromStr(hdrVal);
-        if (spv) pushCandidate(spv.product, spv.version);
+        pushHeaderCandidates(hdrM[1]);
         continue;
       }
 
@@ -767,7 +787,8 @@
       // Nmap -sV open port version column
       var nmapM = /^\s*\d+\/(?:tcp|udp)\s+open\s+\S+\s+(.+)$/i.exec(ln);
       if (nmapM) {
-        var svcCol = nmapM[1].replace(/\([^)]*\)/g, ' ').replace(/\bhttpd\b/gi, '').replace(/\s+/g, ' ').trim();
+        var rawSvcRest = nmapM[1].replace(/^(?:syn-ack|udp-response|localhost-response|reset|arp-response|nd-response|echo-reply|timestamp-reply|proto-response)(?:\s+ttl\s+\d+)?(?:\s+|$)/i, '');
+        var svcCol = rawSvcRest.replace(/\([^)]*\)/g, ' ').replace(/\bhttpd\b/gi, '').replace(/\s+/g, ' ').trim();
         var npv = _extractProdVerFromStr(svcCol);
         if (npv) pushCandidate(npv.product, npv.version);
         continue;

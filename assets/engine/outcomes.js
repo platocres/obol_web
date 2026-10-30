@@ -40,6 +40,7 @@
       else if (f.kind === 'privesc.sudo_binary') message = 'Sudo binary permitted: ' + (v.bin || 'check GTFOBins') + '.';
       else if (f.kind === 'privesc.suid_candidate') message = 'Non-standard SUID binary found: ' + ((v.paths || []).join(', ') || v.bin || 'check GTFOBins') + '.';
       else if (f.kind === 'smb.readable_share') message = 'Readable SMB share confirmed' + (v.share ? ': ' + v.share : '') + '.';
+      else if (f.kind === 'smb.guest_session') message = 'Unauthenticated SMB guest session accepted' + (user ? ' (user: ' + user + ')' : '') + '.';
       else {
         var label = OBOL.pack && OBOL.pack.friendly ? OBOL.pack.friendly(f.kind) : f.kind.replace(/[._]/g, ' ');
         message = 'Observed: ' + String(label || f.kind) + '.';
@@ -69,12 +70,13 @@
     return result;
   }
   var _PROMPT_ONLY_LINE_RE = /^\s*(?:[┌╭]──.*|[└╰]─\s*[#$%>].*|\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[^\]]*\](?:\s*\[[^\]]+\])?|(?:\([^)]+\)\s*)?\[?[\w.\-]+@[\w.\-]+(?::[^\s#$%\]]*|\s+[^\r\n#$%\]]*)\]?\s*[#$%](?:\s+.*)?|(?:\*?Evil-WinRM\*?\s+)?PS\s+[A-Za-z]:[^>]*>(?:\s+.*)?|[A-Za-z]:\\[^>]*>(?:\s+.*)?)$/;
+  var _NEG_EXPLOIT_RE = /^\s*\[-\]\s*(?:Did not find (?:an?\s+)?accessible named pipe|Exploit failed|Failed to (?:exploit|trigger|connect))\b|\bExploit completed,\s*but no session was created\b/im;
   function completion(text, command) {
     var cmd = String(command || '').toLowerCase(), body = String(text || '');
     if (/^\s*\[OBOL:\s*completed with no output\s*\/\s*nothing found\]\s*$/i.test(body)) {
       return { complete: true, negative: true };
     }
-    if (cmd && !body.trim() && /(?:^|[\s;|&])(?:curl|find|grep|egrep|fgrep|rg|getcap|which|whereis)\b/.test(cmd)) {
+    if (cmd && !body.trim() && /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*(?:curl|find|grep|egrep|fgrep|rg|getcap|which|whereis)\b/.test(cmd)) {
       return { complete: true, negative: true };
     }
     if (cmd && body.trim()) {
@@ -100,6 +102,9 @@
       return { complete: impNone || /Impacket v\d|\[\*\]\s*Received\s+\d+\s+endpoints\./i.test(body), negative: impNone };
     }
     if (/doesn't have UF_DONT_REQUIRE_PREAUTH set|\bNo entries found!|\bis not vulnerable\b|\bthis instance is patched\b|\bmay not run sudo\b|\bnot allowed to run sudo\b|\bis not in the sudoers file\b|\[\+\]\s*0 passwords? have been found\b|\b(?:ciphertext length (?:was|is) not divisible by|bad decrypt|wrong final block length|padding (?:error|is invalid)|decryption failed|unable to decrypt)\b/i.test(body)) {
+      return { complete: true, negative: true };
+    }
+    if (_NEG_EXPLOIT_RE.test(body) && !/\b(?:Command shell|Meterpreter)\s+session\s+\d+\s+opened\b|\buid=\d+\([A-Za-z0-9_.-]+\)|\bnt authority\\(?:system|local service|network service)\b/i.test(body)) {
       return { complete: true, negative: true };
     }
     if ((/\bEmpty set\s*\(\d+(?:\.\d+)?\s*sec\)|^\s*\(0 rows?\)\s*$|^\s*0 rows? in set\b/im.test(body)) && !/\b[1-9]\d*\s+rows?\s+in\s+set\b|^\s*\([1-9]\d*\s+rows?\)\s*$/im.test(body)) {
@@ -165,8 +170,12 @@
     var guestDisabled = /\\guest:\S*\s+STATUS_ACCOUNT_DISABLED/i.test(text) || (/\s-u\s+['"]?guest['"]?\b/i.test(command) && /STATUS_ACCOUNT_DISABLED/i.test(text));
     var sudoBadPass = /\bsudo:\s*\d+\s+incorrect\s+password\s+attempts?\b/i.test(text)
       || (/\[sudo\]\s*password\s+for\b/i.test(text) && /(?:^|\n)\s*Sorry,\s*try again\.\s*(?:$|\r?\n)/i.test(text));
+    var isFtpContext = /\b(?:l?ftp(?:-ssl)?|ncftp)\b/i.test(command)
+      || (/\bftp:\/\//i.test(command) && !/\bhttps?:\/\//i.test(command))
+      || /^\s*(?:220|331|530|534)[\s-]/m.test(text);
     var hasHardTransportReject = guestDisabled || sudoBadPass
-      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|\bftp:\s*Login\s+failed\b/i.test(text)
+      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login(?:\s+or\s+password)?\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|(?:^|\n)\s*534[\s-]+(?:Policy\s+requires\s+SSL|Local\s+policy\s+on\s+server\s+does\s+not\s+allow\s+TLS|Could\s+not\s+connect\s+to\s+SNI)\b|\bftp:\s*Login\s+failed\b/i.test(text)
+      || (isFtpContext && /(?:^|\n)\s*(?:ftp:\s*)?Login\s+failed\.?\s*(?:$|\r?\n)/i.test(text))
       || facts.some(function (f) { return f && f.kind === 'credential.validation' && (f.state === 'refuted' || (f.value || {}).status === 'rejected'); });
     var isHttpResp = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
     var isHttp401or407 = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+40[17]\b/im.test(text) || /\bWWW-Authenticate:/i.test(text);
@@ -197,13 +206,18 @@
       return false;
     }
     var nonAmbientProof = proof.filter(function (f) { return !isAmbientOrPreExistingAccess(f); });
+    var hasPositiveAccess = nonAmbientProof.some(function (f) { return /^(?:foothold\.|access\.)/.test(f.kind || ''); });
+    if (done.negative && hasPositiveAccess && _NEG_EXPLOIT_RE.test(text)) {
+      done = { complete: done.complete, negative: false };
+    }
     var kinds = unique(proof.map(function (f) { return f.kind; }));
     var auth = nonAmbientProof.some(function (f) { return /^(?:(?:smb|ldap|winrm|rdp|ssh|mssql|ftp|wmi)\.authenticated|db\.session|credential\.validated|ad\.anonymous_bind|smb\.(?:null_session|guest_session))$/.test(f.kind); });
     var mixedAuth = obs.some(function (o) { return o.authentication === 'accepted'; }) && obs.some(function (o) { return o.authentication === 'rejected'; });
     var operation = /\b(?:nxc|netexec|crackmapexec|cme)\b/i.test(command) && /(?:\s--(?:users|groups|local-groups|shares|rid-brute|pass-pol|loggedon-users|sessions|disks|computers|ntds|sam|lsa|dpapi|mkfile|put-file|get-file|spider|gmsa|laps|kerberoasting|asreproast|bloodhound)\b|\s-(?:M|[xX])\s)/i.test(command);
-    var resultProof = nonAmbientProof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi)\.(?:reachable|authenticated)$|(?:ftp|ssh|smtp|http|https|snmp|dns|vnc|mysql|mssql)\.banner$|db\.(?:session|reachable)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
+    var resultProof = nonAmbientProof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi)\.(?:reachable|authenticated)$|(?:ftp|ssh|smtp|http|https|snmp|dns|vnc|mysql|mssql)\.banner$|exploit\.versioned_banner$|db\.(?:session|reachable)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
     var substantiveProof = resultProof || nonAmbientProof.some(function (f) {
-      return /^(?:hash\.|credential\.(?:available|plaintext|candidate|ntlm_hash|ssh_key|certificate)|privesc\.|loot\.|vuln\.|exploit\.|db\.(?:tables|databases|hashes|creds))/.test(f.kind || '');
+      return /^(?:hash\.|credential\.(?:available|plaintext|candidate|ntlm_hash|ssh_key|certificate)|privesc\.|loot\.|vuln\.|exploit\.|db\.(?:tables|databases|hashes|creds))/.test(f.kind || '')
+        || (!operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind || ''));
     });
     if (httpAppLoginFailure) {
       var hasNewWebSurface = resultProof || nonAmbientProof.some(function (f) {
@@ -221,7 +235,13 @@
       || (!guestDisabled && /(?:^|\n)\s*Error:\s*invalid line \d+ in \/\S+:/i.test(text))
       || (!guestDisabled && !isHttpResp && /\b(?:SSLCertVerificationError|CERTIFICATE_VERIFY_FAILED|ProxyError)\b/.test(text))
       || facts.some(function (f) { return /^blocker\.(?:clock_skew|name_resolution|no_tty|crlf|hash_format|hashcat_env|web_wildcard|tls_scheme|kerberos_spn|xp_cmdshell_disabled|password_change|ntlm_disabled|nxc_c_share_denied|nxc_spider_usage|account_restricted|winrm_closed|py2_syntax_or_module|python_dep_or_pep668|hardcoded_proxy|tls_cert_verify|glibc_or_arch_mismatch)$/.test(f.kind); });
-    var usageSignal = !guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?\busage:/i.test(text);
+    var textForUsage = text.replace(/^\s*(?:#+|\/\/+|\/\*+|\*(?!\]))[^\r\n]*?\busage:[^\r\n]*$/gim, '');
+    var hasExecProgressOrSocketOpen = /^\s*\[\+\]\s+(?:Payload|Exploit|Connected|Connection|Sending|Sent|Shell|Target|Success|Authenticated|Logged\s+in|Bind|Trigger)\b/im.test(text)
+      || /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\b/im.test(text)
+      || /\bConnection to \S+ \d+ port \[[^\]]+\] succeeded!/i.test(text)
+      || /\bconnect to \[\d{1,3}(?:\.\d{1,3}){3}\]\s+from\b|\bConnection received on\s+\S+\s+\d+\b/i.test(text)
+      || /\b(?:Command shell|Meterpreter)\s+session\s+\d+\s+opened\b/i.test(text);
+    var usageSignal = !guestDisabled && !hasExecProgressOrSocketOpen && /(?:^|\n)(?:[^\n]{0,150})?\busage:/i.test(textForUsage);
     var environment = hardEnvironment || (usageSignal && !substantiveProof);
     var winAdminMutationCmd = /\b(?:net1?(?:\.exe)?\s+(?:user|localgroup|group)\b|reg(?:\.exe)?\s+(?:save|add|delete)\b|sc(?:\.exe)?\s+config\b|schtasks(?:\.exe)?\s+\/create\b)/i.test(command || text);
     var winAdminMutationSuccess = winAdminMutationCmd

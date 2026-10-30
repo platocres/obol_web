@@ -124,13 +124,35 @@
     if (/^(?:ServicePrincipalName\s+Name|Name\s+MemberOf\s+PasswordLastSet)/im.test(text) && !hasKind(facts, 'ad.user_list') && C._parse_impacket_roast_table) {
       C._parse_impacket_roast_table(text, ws, source, facts);
     }
+    if (!isCrack && !hasKind(facts, 'hash.ntlm') && !hasKind(facts, 'loot.sam')
+        && /^(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9_.$-]+:\d{3,6}:(?:[0-9a-fA-F]{32}|NO PASSWORD\*+|\.{2,4}|\*+):[0-9a-fA-F]{32}:::/m.test(text)) {
+      var samParser = C._parse_sam_hashes || C._parse_ntlm_dump;
+      if (samParser) samParser(text, ws, '', source, facts);
+    }
 
-    // (4) Share download output or GPP cpassword XML/grep without command
-    if (text.indexOf('getting file ') >= 0 && !hasKind(facts, 'loot.files') && C._parse_share_inventory) {
+    // (4) Share download/upload output or GPP cpassword XML/grep without command
+    if (((text.indexOf('getting file ') >= 0 && !hasKind(facts, 'loot.files'))
+        || (text.indexOf('putting file ') >= 0 && !hasKind(facts, 'smb.writable_share')))
+        && C._parse_share_inventory) {
       C._parse_share_inventory(text, ws, 'smbclient', source, facts);
     }
     if ((text.indexOf('cpassword=') >= 0 || text.indexOf('cpassword =') >= 0) && !facts.some(function (f) { return f && (f.kind === 'loot.gpp' || (f.kind === 'credential.candidate' && f.value && (f.value.kind === 'gpp' || f.value.kind === 'gpp_cpassword'))); }) && C._parse_gpp_artifacts) {
       C._parse_gpp_artifacts(text, ws, source, facts);
+    }
+
+    // (4b) Commandless PowerUp Write-HijackDll / Write-UserAddMSI / HijackablePath stanzas and DPAPI SecureString blobs
+    if ((/\bAbuseFunction\s*:\s*(?:Write-HijackDll|Write-UserAddMSI)\b|\bHijackablePath\s*:/i.test(text))
+        && !hasKind(facts, 'privesc.dll_hijack_candidate') && !hasKind(facts, 'privesc.always_install_elevated')
+        && C._parse_privesc_output) {
+      C._parse_privesc_output('windows-enum', text, ws, '', source, facts);
+    }
+    if (/\b01000000d08c9ddf0115d1118c7a00c04fc297eb[0-9a-fA-F]{160,}\b/i.test(text) && !hasKind(facts, 'privesc.stored_credentials')) {
+      if (C._parse_windows_creds) {
+        C._parse_windows_creds(text, ws, '', source, facts);
+      } else {
+        _add(facts, mkFact('privesc.stored_credentials', h, { kinds: ['dpapi'], count: 1, via: 'shape' }, S, source));
+        _add(facts, mkFact('credential.candidate', h, { kind: 'dpapi_securestring', via: 'shape' }, S, source));
+      }
     }
 
     // (5) Ligolo-ng or Chisel tunnel establishment / session shape pasted without command
@@ -174,7 +196,7 @@
         for (var rli = 0; rli < maxDumpScan; rli++) {
           var rLn = rawShapeLines[rli].trim();
           if (!rLn || rLn.indexOf(dCh) < 0 || /^[+\-=|\s]+$/.test(rLn)) continue;
-          if (/^[0-9a-fA-F]{32,64}\s{2,}\S/.test(rLn) || /^[A-Za-z0-9_.$-]+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/.test(rLn)) continue;
+          if (/^[0-9a-fA-F]{32,64}\s{2,}\S/.test(rLn) || /^(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9_.$-]+:\d+:(?:[0-9a-fA-F]{32}|NO PASSWORD\*+|\.{2,4}|\*+):[0-9a-fA-F]{32}:::/.test(rLn)) continue;
           var dTrim = dCh === '|' ? rLn.replace(/^\||\|$/g, '') : rLn;
           var dCells = dTrim.split(dCh).map(function (c) { return c.trim().replace(/^['"]|['"]$/g, '').trim(); });
           if (dCells.length < 2 || dCells.length > 12) continue;

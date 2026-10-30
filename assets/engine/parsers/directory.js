@@ -628,6 +628,17 @@
         }
       });
     }
+    if (text.indexOf('putting file ') >= 0) {
+      var putShareM = /(?:\/\/[^/\s"']+\/|\\\\[^\\\s"']+\\)([^/\\\s"']+)/.exec((command || '') + ' ' + (source || ''));
+      var putShare = putShareM ? putShareM[1].trim() : '';
+      var mPutRe = /putting file\s+([^\r\n]+?)\s+as\s+\\([^\r\n(]+?)\s+\([\d.]+\s*kb\/s\)/gi;
+      var putMatch;
+      while ((putMatch = mPutRe.exec(text)) !== null) {
+        var putVal = { uploaded: putMatch[2].trim(), local: putMatch[1].trim(), tool: 'smbclient' };
+        if (putShare) putVal.share = putShare;
+        _add(facts, mkFact('smb.writable_share', h, putVal, S, source));
+      }
+    }
     if (!files.length && (text.indexOf('getting file ') >= 0 || cmd.indexOf('smbclient') >= 0)) {
       var mGetRe = /getting file\s+([^\r\n]+?)\s+of size\s+(\d+)/gi;
       var match;
@@ -862,8 +873,15 @@
     if (signMatch && signMatch[1]) {
       _add(facts, mkFact('smb.signing', h, { required: signMatch[1].toLowerCase() === 'true' }, S, source));
     }
-    if (/\[\+\]\s*Server allows authentication via username '' and password ''/i.test(text)) {
-      _add(facts, mkFact('smb.null_session', h, { tool: 'enum4linux-ng' }, S, source));
+    var e4lSessM = /\[\+\]\s*Server(?:\s+\S+)?\s+allows (?:authentication via|sessions?\s+using) username ['"]([^'"]*)['"](?:,\s*|\s+and\s+)password ['"]['"]/i.exec(text);
+    if (e4lSessM) {
+      var e4lUser = (e4lSessM[1] || '').trim();
+      if (!e4lUser) {
+        _add(facts, mkFact('smb.null_session', h, { tool: 'enum4linux-ng' }, S, source));
+      } else {
+        _add(facts, mkFact('smb.guest_session', h, { user: e4lUser, tool: 'enum4linux-ng' }, S, source));
+      }
+      _add(facts, mkFact('smb.reachable', h, { port: 445, tool: 'enum4linux-ng' }, S, source));
     }
     var buildMatch = reSearch(/^\s*OS build\s*:\s*['"]?(\d+)['"]?\s*$/im, text);
     if (buildMatch && buildMatch[1]) {

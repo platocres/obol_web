@@ -39,7 +39,8 @@
       "nist": "AC-3",
       "match": {
         "facts_any": [
-          "smb.null_session"
+          "smb.null_session",
+          "smb.guest_session"
         ]
       }
     },

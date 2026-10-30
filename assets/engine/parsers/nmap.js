@@ -15,7 +15,7 @@
   var _PORTLINE_RE = /^\s*\d+\/(?:tcp|udp)\b/i;
   var _NON_HTTP_WIRE_SVC_RE = /^(?:mongodb|mysql|mysqlx|postgresql|redis|memcached|amqp|jdwp|msrpc|ms-sql-s|netbios-ssn|microsoft-ds|ssh|ftp|smtp|pop3|imap|ldap|ldaps|kerberos(?:-sec)?|rdp|ms-wbt-server|vnc)$/i;
   var _DRIVER_PORT_HTTP_DIAG_RE = /trying to access MongoDB over HTTP on the native driver port/i;
-  var _HTTP_SERVER_VER_RE = /^(Apache httpd|nginx|Microsoft IIS httpd|Jetty|lighttpd|Caddy|Cherokee|MiniServ|Werkzeug|gunicorn|TornadoServer|SimpleHTTPServer)\s+v?([0-9][0-9A-Za-z._-]*)/i;
+  var _HTTP_SERVER_VER_RE = /^(Apache httpd|Apache Tomcat(?:\/Coyote JSP engine)?|nginx|Microsoft IIS httpd|Jetty|lighttpd|Caddy|Cherokee|MiniServ|Werkzeug|gunicorn|TornadoServer|SimpleHTTPServer)\s+v?([0-9][0-9A-Za-z._-]*)/i;
 
   function _extract_http_ls_paths(blockText) {
     if (!/http-ls:/i.test(blockText || '')) return [];
@@ -145,10 +145,74 @@
   }
   C._parse_service_reachability = _parse_service_reachability;
 
+  function _normalize_nmap_ldap_domain(rawDom) {
+    var d = String(rawDom || '').trim().toLowerCase();
+    if (!d) return '';
+    if (/0\.$/.test(d)) {
+      var cand0 = d.slice(0, -2);
+      if (/^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/.test(cand0) && /\.[a-z]{2,}$/.test(cand0) && !C._IPV4_RE.test(cand0)) {
+        return cand0;
+      }
+    }
+    if (/\.$/.test(d)) {
+      var candDot = d.slice(0, -1);
+      if (/^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/.test(candDot) && !C._IPV4_RE.test(candDot)) {
+        return candDot;
+      }
+    }
+    return (/^[a-z0-9_-]+(?:\.[a-z0-9_-]+)+$/.test(d) && !C._IPV4_RE.test(d)) ? d : '';
+  }
+
+  function _extract_positive_nse_cves(text) {
+    if (!text || !/\bState:\s*VULNERABLE\b/i.test(text)) return [];
+    var blocks = [];
+    var cur = [];
+    String(text).split(/\r?\n/).forEach(function (ln) {
+      if (/^[ \t]*\|(?:_[ \t]?|[ \t])[a-z0-9]+-[a-z0-9_-]+:(?!\/\/)/i.test(ln)) {
+        if (cur.length) blocks.push(cur.join('\n'));
+        cur = [ln];
+      } else if (/^[ \t]*\|/.test(ln)) {
+        if (cur.length) cur.push(ln);
+        else cur = [ln];
+      } else {
+        if (cur.length) { blocks.push(cur.join('\n')); cur = []; }
+      }
+    });
+    if (cur.length) blocks.push(cur.join('\n'));
+    if (/<script\b/i.test(text)) {
+      (String(text).match(/<script\b[^>]*>/gi) || []).forEach(function (el) {
+        var out = xmlAttr(el, 'output');
+        if (out) blocks.push(out);
+      });
+    }
+    var cves = [];
+    blocks.forEach(function (blk) {
+      if (!/\bState:\s*VULNERABLE\b/i.test(blk)) return;
+      var subBlocks = [blk];
+      if (/\bState:\s*NOT\s+VULNERABLE\b/i.test(blk)) {
+        var parts = blk.split(/(?=^[ \t]*\|?[_ ]?[ \t]*(?:NOT[ \t]+)?VULNERABLE:[ \t]*$)/im);
+        subBlocks = parts.length > 1 ? parts : [];
+      }
+      subBlocks.forEach(function (sb) {
+        if (!/\bState:\s*VULNERABLE\b/i.test(sb) || /\bState:\s*NOT\s+VULNERABLE\b/i.test(sb)) return;
+        reAll(/\bCVE-\d{4}-\d{4,7}\b/i, sb).forEach(function (m) {
+          cves.push(m[0].toUpperCase());
+        });
+      });
+    });
+    return C.uniqueSortedCI(cves);
+  }
+
   function _parse_nmap_script_facts(text, ws, source, facts, extraHeaders) {
     var context = {}, h = 'host:' + ws.target;
     var domains = {};
     reAll(C._NMAP_DOMAIN_NAME_RE, text).forEach(function (m) { domains[m.groups.domain.trim().toLowerCase()] = true; });
+    if (C._NMAP_LDAP_BANNER_DOMAIN_RE) {
+      reAll(C._NMAP_LDAP_BANNER_DOMAIN_RE, text).forEach(function (m) {
+        var normDom = _normalize_nmap_ldap_domain(m.groups && m.groups.domain);
+        if (normDom) domains[normDom] = true;
+      });
+    }
     var fqdns = {};
     reAll(C._NMAP_FQDN_RE, text).forEach(function (m) { fqdns[m.groups.fqdn.trim().toLowerCase()] = true; });
     reAll(C._NMAP_FQDN_RE, text).forEach(function (m) {
@@ -193,6 +257,10 @@
     }
     if (_has_positive_ms17_010(text)) {
       _add(facts, mkFact('smb.ms17_010', h, { cve: 'CVE-2017-0144', via: 'nmap-nse' }, S, source));
+    }
+    var nseCves = _extract_positive_nse_cves(text);
+    if (nseCves.length) {
+      _add(facts, mkFact('exploit.candidate', h, { cves: nseCves, via: 'nmap-nse' }, S, source));
     }
     if (/\bSMBv1\b[^\r\n]{0,120}?\b(?:enabled|true|dangerous)\b|\bNT LM 0\.12\s*\(SMBv1\)/i.test(text)) {
       _add(facts, mkFact('smb.smbv1', h, { enabled: true, tool: 'nmap' }, S, source));
@@ -480,7 +548,7 @@
     var nFlags = _nmap_flags(rawCmdAll);
     var hasVersionInfo = Object.keys(openPorts).some(function (k) { return openPorts[k].version; }) || /^[ \t]*\|[_ ]/m.test(text);
     var hasUdpOpen = Object.keys(openPorts).some(function (k) { return openPorts[k].protocol === 'udp'; });
-    var hasVulnScript = /--script[=\s]+[^\r\n]*vuln/i.test(cmdL) || /\bVULNERABLE:\b|\|\s*_?(?:http|smb|ssl|ftp|rdp|rmi)-vuln-[a-z0-9-]+:/i.test(text);
+    var hasVulnScript = /--script[=\s]+[^\r\n]*vuln/i.test(cmdL) || /\bState:\s*VULNERABLE\b|^\s*\|\s*VULNERABLE:\s*$|\|\s*_?(?:http|smb|ssl|ftp|rdp|rmi)-vuln-[a-z0-9-]+:/im.test(text);
     // any scan that found open ports IS port discovery (see XML path) - so a targeted -p/-sV paste
     // still retires the basic-port-scan move instead of leaving it in "ready now".
     if (Object.keys(openPorts).length > 0 || (scanSeen && (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || nFlags.allPorts || cmdL.indexOf('-p-') >= 0))) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));

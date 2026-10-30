@@ -59,7 +59,7 @@
   C._ASREP_USER_RE = /\$krb5asrep\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})(?<user>[^:@$\s)]+)(?:[@$](?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?(?=[:$)\s]|$)/i;
   C._TGS_RE = /(\$krb5tgs\$[^\s]+)/i;
   C._TGS_USER_RE = /\$krb5tgs\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})\*?(?<user>[^$*:\s)]+)(?:\$(?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?/i;
-  C._NTDS_HASH_RE = /(?<![^\s\\:])(?:(?<domain>[^\s\\:]{1,128})\\)?(?<user>[^\s\\:]{1,128}):(?<rid>\d+):(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):(?<nt>[0-9a-fA-F]{32}):::/;
+  C._NTDS_HASH_RE = /(?<![^\s\\:])(?:(?<domain>[^\s\\:]{1,128})\\)?(?<user>[^\s\\:]{1,128}):(?<rid>\d+):(?:[0-9a-fA-F]{32}|(?:NO PASSWORD|no password)\*+|\.{2,4}|\*+):(?<nt>[0-9a-fA-F]{32}):::/;
   var NXC_ROW_PREFIX = '(?:(?:SMB|WINRM|WMI|RPC|SSH)\\s+\\S+\\s+\\d+\\s+\\S+\\s+)?';
   C._SYSTEM_ID_RE = /\bnt authority\\system\b/i;
   C._WHOAMI_ID_RE = new RegExp('^' + NXC_ROW_PREFIX + '(?<id>(?:nt authority|nt service|iis apppool|window manager|font driver host)\\\\[A-Za-z0-9_.$-](?:[A-Za-z0-9_.$ -]{0,62}[A-Za-z0-9_.$-])?|[A-Za-z0-9][A-Za-z0-9.-]*\\\\[A-Za-z0-9._$-]{2,})\\s*$', 'im');
@@ -93,11 +93,12 @@
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
   // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
   // newline and skip the next port row when iterated globally (reAll). A port row is always one line.
-  C._NMAP_OPEN_RE = /^[ \t]*(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>[^\r\n]*?))?[ \t]*$/im;
+  C._NMAP_OPEN_RE = /^[ \t]*(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?:syn-ack|udp-response|localhost-response|reset|arp-response|nd-response|echo-reply|timestamp-reply|proto-response)(?:[ \t]+ttl[ \t]+\d+)?(?=[ \t]|$))?(?:[ \t]+(?<version>[^\r\n]*?))?[ \t]*$/im;
   C._NMAP_DISCOVERED_RE = /Discovered open port (?<port>\d+)\/(?<proto>tcp|udp) on (?<host>\S+)/i;
   // The leading "| "/"|_" pipe is nmap's TEXT formatter; the -oX XML carries the same smb-os-discovery
   // lines WITHOUT it (just indentation) inside the <script output="..."> attribute, so the pipe is optional.
   C._NMAP_DOMAIN_NAME_RE = /^\s*\|?_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
+  C._NMAP_LDAP_BANNER_DOMAIN_RE = /\bActive Directory LDAP(?:\s*\(|[^\r\n]{0,80}?\bextrainfo=["'])\s*Domain:\s*(?<domain>[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\.?)\s*(?:,|;|\)|["'])/im;
   C._NMAP_FQDN_RE = /^\s*\|?_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?|message_signing:\s*(?<mode>disabled|required|supported)/i;

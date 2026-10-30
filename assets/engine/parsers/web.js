@@ -437,6 +437,8 @@
 
   function _parse_web_surface(text, ws, command, source, facts) {
     if (_is_sql_client_output(text, ws, command)) return;
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
+    if (/\bftp:\/\/[^\s'"]+/i.test(command || '') && !/\bhttps?:\/\/[^\s'"]+/i.test(command || '') && !/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')) return;
     var t = text || '', cmd = command || '', h = 'host:' + ws.target;
     var cmdAndText = cmd + '\n' + t;
     var hasOcrLogin = reSearch(_OCR_USER_INPUT_RE, t) && reSearch(_OCR_PASS_INPUT_RE, t);
@@ -840,6 +842,7 @@
   C._parse_web_lfi = _parse_web_lfi;
 
   function _parse_web_cmdi(actionId, text, ws, command, source, facts) {
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var h = 'host:' + ws.target;
     var cmdAndText = (command || '') + '\n' + (text || '');
     // SSTI math / config evaluation check (e.g., {{7*7}} -> 49 or 7777777)
@@ -856,8 +859,9 @@
         _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: C._line_for_match(text, upHit) }, S, source));
       }
     }
-    var uid = reSearch(C._CMDI_UID_RE, text);
-    var win = reSearch(C._CMDI_WIN_RE, text);
+    var uid = reSearch(C._CMDI_UID_RE, text) || reSearch(C._LINUX_ID_RE, text);
+    var win = reSearch(C._CMDI_WIN_RE, text)
+      || reSearch(/\b(?:nt authority\\(?:system|network service|local service)|iis apppool\\[a-z0-9_.-]+)\b/i, text);
     if (!uid && !win) return;
     var effId = actionId;
     if (!effId || effId === 'operator-ingest') {
@@ -872,6 +876,16 @@
     var osFamily = uid ? 'linux' : 'windows';
     var evidence = C._line_for_match(text, uid || win);
     _add(facts, mkFact('web.cmdi_confirmed', h, { os: osFamily, method: method, evidence: evidence }, S, source));
+    var hasHttpTransport = /\bhttps?:\/\/[^\s'"]+/i.test(command || '')
+      || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')
+      || (/\b(?:curl|wget|httpie)\b/i.test(command || '') && !/\bftp:\/\/[^\s'"]+/i.test(command || ''));
+    if (hasHttpTransport && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+      var hrMeta = _extract_web_origin(text, command, ws);
+      var hrVal = { via: 'web-cmdi' };
+      if (hrMeta.port) hrVal.port = hrMeta.port;
+      if (hrMeta.origin) hrVal.origin = hrMeta.origin;
+      _add(facts, mkFact('http.reachable', h, hrVal, S, source));
+    }
     if (method === 'template_injection') _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: evidence }, S, source));
     else if (method === 'insecure_deserialization') _add(facts, mkFact('web.deserial_confirmed', h, { method: 'insecure_deserialization', evidence: evidence }, S, source));
     if (effId === 'file-upload') _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: evidence }, S, source));
@@ -1027,9 +1041,10 @@
 
   function _parse_web_exploit_output(actionId, text, ws, command, source, facts) {
     if (!text.trim()) return;
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var isGeneric = !actionId || actionId === 'operator-ingest';
     if (isGeneric || C._WEB_LFI_ACTION_IDS.has(actionId)) _parse_web_lfi(actionId, text, ws, command, source, facts);
-    if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (isGeneric && /\b(?:curl|wget|httpie|burp|ysoserial)\b|^HTTP\/[12]\./im.test((command || '') + '\n' + text))) {
+    if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (isGeneric && (/\b(?:curl|wget|httpie|burp|ysoserial)\b|\bhttps?:\/\/[^\s'"]+/i.test(command || '') || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b|<\/?(?:!doctype|html|head|body|pre)\b/im.test(text)))) {
       _parse_web_cmdi(actionId, text, ws, command, source, facts);
     }
     if (isGeneric || C._WEB_SQLI_ACTION_IDS.has(actionId)) _parse_web_sqli_manual(text, ws, source, facts);

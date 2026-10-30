@@ -1,0 +1,1214 @@
+{
+  "version": 2,
+  "schema_version": 2,
+  "description": "Schema v2 FACTS, OUTCOME, and TIER-ATTRIBUTION ground-truth labels for OffSec Proving Grounds Practice corpus. Stores zero verbatim corpus output and sanitizes all target identifiers per CORPUS-MINING.md Principles 5 and 7.",
+  "cases": [
+    {
+      "id": "021bcbda1665",
+      "file": "access.md",
+      "command": "nmap -sC -p- -n -Pn -sV --min-rate=9362 <target>",
+      "note": "Command-only Nmap code fence with omitted stdout must classify as unknown and never hallucinate host reachability, open ports, or Active Directory roles from CLI flags alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "kerberos.reachable",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "652be3a59cac",
+      "file": "access.md",
+      "command": "(commandless setspn output)",
+      "note": "Command-less Windows SPN enumeration line (SPN(1) = MSSQLSvc/<fqdn>) must extract host.fqdn, host.domain, and ad.domain_known without claiming a Kerberos TGS ticket hash or credential.",
+      "expected_kinds": [
+        "host.fqdn",
+        "host.domain",
+        "ad.domain_known"
+      ],
+      "forbidden_kinds": [
+        "hash.tgs",
+        "credential.available",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "4078234c7cb1",
+      "file": "algernon.md",
+      "command": "nmap",
+      "note": "Nmap version and NSE scan of a standalone Windows mail and web host exposing anonymous FTP, IIS HTTP, SMB, and port 9998 HTTP must mint service reachability and anonymous FTP facts without promoting to ad.dc_candidate.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "http.reachable",
+        "smb.reachable",
+        "web.server",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "edb6c5cac9e3",
+      "file": "algernon.md",
+      "command": "ftp <target>",
+      "note": "Interactive FTP session returning 220 Microsoft FTP Service and 230 User logged in for anonymous must mint ftp.reachable, ftp.banner, ftp.anonymous_login, and Windows OS family without claiming write access.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner",
+        "ftp.anonymous_login",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ftp.anon_write",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "920368ff6763",
+      "file": "algernon.md",
+      "command": "whoami",
+      "note": "Elevated Windows PowerShell prompt running whoami and returning nt authority\\system must establish foothold.windows and access.system without Linux foothold false positives.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.system",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "efd3ad1b5784",
+      "file": "authby.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC output with verbose syn-ack REASON column disclosing zFTPServer, Apache httpd 2.2.21 on port 242, and RDP must strip syn-ack before extracting service.version and exploit.versioned_banner.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "http.reachable",
+        "rdp.reachable",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "66740fa5ffae",
+      "file": "authby.md",
+      "command": "ftp get .htpasswd .htaccess",
+      "note": "Retrieved Apache .htpasswd ($apr1$ hash) and .htaccess (AuthUserFile c:\\\\wamp\\www\\.htpasswd) must mint crackable hash facts and must not misparse an escaped local Windows drive path (c:\\\\...) as an SMB UNC share.",
+      "expected_kinds": [
+        "credential.candidate",
+        "hash.candidate",
+        "hash.crackable"
+      ],
+      "forbidden_kinds": [
+        "smb.shares",
+        "smb.reachable",
+        "port:445",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "29f154af04b2",
+      "file": "authby.md",
+      "command": "john htpasswd --wordlist=/home/kali/rockyou.txt",
+      "note": "John the Ripper live md5crypt cracking session recovering a username and cleartext password must mint credential.candidate, credential.plaintext, credential.password, and credential.available.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "blocker.cracking_exhausted",
+        "credential.validated"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7676db817d34",
+      "file": "authby.md",
+      "command": "systeminfo",
+      "note": "Truncated Windows systeminfo output (ending at OS Version before System Type) where codepage trademark rendering prints Microsoftr Windows Serverr 2008 Standard must trigger stateless Windows enum detection and mint host.kernel without fabricating host.arch.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "host.kernel"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0cc14dff4895",
+      "file": "billyboss.md",
+      "command": "nmap",
+      "note": "Nmap scan reporting IIS 10.0 on port 80 and Sonatype Nexus/3.21.0-05 (OSS) via http-server-header NSE output on port 8081 must mint exploit.versioned_banner so Stage 1 searchsploit lookup unlocks.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "http.reachable",
+        "web.server",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "2b3756f02c21",
+      "file": "billyboss.md",
+      "command": "ftp-ssl <target>",
+      "note": "FTP login attempt rejected with 534 Local policy on server does not allow TLS secure connections, 534 Policy requires SSL, and Login failed must classify as rejected rather than success and never mint ftp.anonymous_login.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "ftp.authenticated",
+        "credential.validated"
+      ],
+      "outcome_expected": "rejected"
+    },
+    {
+      "id": "0ff235b387a2",
+      "file": "billyboss.md",
+      "command": "(commandless PowerUp output)",
+      "note": "Command-less PowerUp writable PATH DLL hijack stanza (HijackablePath and AbuseFunction : Write-HijackDll) must mint privesc.dll_hijack_candidate and privesc.leads.",
+      "expected_kinds": [
+        "privesc.dll_hijack_candidate",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "261d84ff9a47",
+      "file": "craft.md",
+      "command": "nmap",
+      "note": "Nmap scan of a single-port Windows Apache 2.4.48 (Win64) PHP/8.0.7 server must mint host.up, ports.open, port:80, http.reachable, web.server, service.version, and Windows host.os_family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:80",
+        "http.reachable",
+        "web.server",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "foothold.linux",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a9847228953d",
+      "file": "craft.md",
+      "command": "whoami",
+      "note": "Unprompted multi-command bare fence listing whoami and hostname without inline stdout must not treat the sibling command token hostname as a POSIX username or mint false-positive foothold.linux.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "5e39e83cc267",
+      "file": "craft.md",
+      "command": "(commandless whoami /priv output)",
+      "note": "Command-less Windows token privilege table showing SeImpersonatePrivilege Enabled must mint privesc.windows_privilege, privesc.seimpersonate, and privesc.leads.",
+      "expected_kinds": [
+        "privesc.windows_privilege",
+        "privesc.seimpersonate",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "2fa14bfd5f01",
+      "file": "dvr4.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC scan with syn-ack REASON column disclosing Bitvise WinSSHD 8.48, SMB, and Argus Surveillance DVR HTTP title on port 8080 must mint reachability, service.version, and exploit.versioned_banner.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "smb.reachable",
+        "http.reachable",
+        "web.title",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows",
+        "ssh.authenticated"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7ad0f184662d",
+      "file": "dvr4.md",
+      "command": "ssh -i id_rsa <user>@<target>",
+      "note": "Key-based SSH login whose empty stdout transitions directly into a Windows cmd prompt line (C:\\Users\\<user>\\Desktop>) must mint ssh.authenticated, foothold.windows, and host.os_family via prompt telemetry.",
+      "expected_kinds": [
+        "ssh.authenticated",
+        "foothold.windows",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "382f66a9940b",
+      "file": "dvr4.md",
+      "command": "crackmapexec smb <target> -u <user> -p <redacted> --continue-on-success",
+      "note": "CrackMapExec SMB credential check confirming local Administrator authentication with (Pwn3d!) must mint smb.authenticated, credential.available, credential.validated, and access.admin without promoting to ad.dc_candidate.",
+      "expected_kinds": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.available",
+        "credential.validated",
+        "access.admin"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "access.system",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "da614f908c61",
+      "file": "heist.md",
+      "command": "nmap -sV -p- <target>",
+      "note": "Command-only Nmap block with omitted stdout must classify as unknown and mint zero host or service facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "smb.reachable",
+        "winrm.reachable",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "fd7f06a26aa9",
+      "file": "heist.md",
+      "command": "(outbound HTTP SSRF UNC payload URL)",
+      "note": "Standalone HTTP URL containing an attacker UNC callback query parameter (?url=\\\\<lhost>\\test) must not misclassify the query parameter as an enumerated target SMB share or mint smb.shares.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "smb.shares",
+        "smb.reachable",
+        "port:445",
+        "credential.netntlm",
+        "http.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "b3a00e963212",
+      "file": "helpdesk.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC output with syn-ack REASON column on a standalone WORKGROUP Windows Server 2008 host running Apache Tomcat/Coyote JSP engine 1.1 on port 8080 must extract service.version without promoting WORKGROUP to ad.dc_candidate.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "smb.reachable",
+        "rdp.reachable",
+        "http.reachable",
+        "web.server",
+        "web.title",
+        "host.os_family",
+        "service.version"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "89280225fa84",
+      "file": "helpdesk.md",
+      "command": "whoami",
+      "note": "Windows cmd prompt inside C:\\ManageEngine\\ServiceDesk\\bin running whoami and returning nt authority\\system must mint foothold.windows, access.system, and Windows host.os_family.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.system",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7d10721f330b",
+      "file": "hepet.md",
+      "command": "nmap -p- <target> -sC -sV --open",
+      "note": "Full TCP Nmap version and default-script scan discovering anonymous FTP on non-standard port 20001 (FileZilla ftpd 0.9.41 beta), Mercury/32 imapd 4.62 on port 143, SMTP on port 25, VNC on port 11100, SMB on 139/445, and HTTP on 443/2224/8000 must mint reachability and versioned-banner facts without minting a phantom port:21.",
+      "expected_kinds": [
+        "host.up",
+        "scan.nmap.version",
+        "ports.open",
+        "port:20001",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "mail.reachable",
+        "smtp.reachable",
+        "vnc.reachable",
+        "smb.reachable",
+        "http.reachable",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "port:21",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "8fe51ce0a7d0",
+      "file": "hepet.md",
+      "command": "nc <target> 143",
+      "note": "OCR-spliced raw Netcat IMAP4rev1 transcript showing server greeting banner, tagged LOGIN command acceptance (OK LOGIN completed), and LIST mailbox enumeration must mint mail reachability, IMAP banner, and credential validation.",
+      "expected_kinds": [
+        "mail.reachable",
+        "service.imap.banner",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "blocker.logon_failure",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0f86c57212fa",
+      "file": "hokkaido.md",
+      "command": "nmap -p- <target> -sC -sV --open",
+      "note": "Full TCP Nmap version scan of an Active Directory Domain Controller exposing Kerberos 88, LDAP 389/3268 with inline Domain banner metadata, SMB 445, MSSQL 1433, RDP 3389, HTTP 80, and WinRM 5985 must mint DC candidacy, AD domain/base-DN linkage, and service reachabilities.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "ports.open",
+        "ad.dc_candidate",
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "kerberos.reachable",
+        "ldap.reachable",
+        "smb.reachable",
+        "mssql.reachable",
+        "winrm.reachable",
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "bff6cda2d34f",
+      "file": "hokkaido.md",
+      "command": "netexec smb <target> -u users.txt -p passwords.txt",
+      "note": "OCR-spliced NetExec SMB password-spray output with cropped leading protocol/IP columns must recover SMB authentication and plaintext credential facts via Tier-3 structural inference without falsely minting administrative access.",
+      "expected_kinds": [
+        "smb.authenticated",
+        "credential.available",
+        "credential.plaintext"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "blocker.logon_failure"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier3_inference"
+    },
+    {
+      "id": "15a9cdb57697",
+      "file": "hokkaido.md",
+      "command": "rpcclient -U '<domain>\\<user>' --password='<redacted>' <target>",
+      "note": "OCR-spliced authenticated rpcclient session running enumdomgroups and queryuser must mint Active Directory group and user lists.",
+      "expected_kinds": [
+        "ad.group_list",
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "blocker.samr_null_denied",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "c6859205a1ba",
+      "file": "internal.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts default",
+      "note": "RustScan/Nmap service-version scan with syn-ack REASON column identifying Windows Server 2008 SP1 MSRPC, SMB (139/445), RDP (3389), and baseline Microsoft-HTTPAPI/2.0 (5357) must mint Windows OS family and reachability facts without false DC or HTTPAPI exploit-banner promotion.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "ports.open",
+        "smb.reachable",
+        "rdp.reachable"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "e25e6c47e22a",
+      "file": "internal.md",
+      "command": "nmap -T4 -p445 --script smb-vuln* <target>",
+      "note": "Nmap SMB vulnerability NSE scan reporting positive State: VULNERABLE for CVE-2009-3103 alongside negative ms10-054 and ms10-061 checks must mint scan.nmap.vuln and exploit.candidate without misclassifying the host as MS17-010.",
+      "expected_kinds": [
+        "scan.nmap.vuln",
+        "smb.reachable",
+        "exploit.candidate"
+      ],
+      "forbidden_kinds": [
+        "smb.ms17_010",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "accd46526432",
+      "file": "internal.md",
+      "command": "whoami",
+      "note": "Interactive Windows system32 command prompt turn returning nt authority\\system must mint Windows foothold, OS family, and SYSTEM privilege facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "access.system"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "f42517793681",
+      "file": "jacko.md",
+      "command": "nmap -p- -sC -sV <target>",
+      "note": "Nmap service-version and script scan identifying IIS 10.0 on port 80, SMB signing not required on 139/445, and Jetty H2 Database Console on port 8082 must mint vuln.h2_console and service reachability facts.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "ports.open",
+        "http.reachable",
+        "smb.reachable",
+        "smb.signing",
+        "web.title",
+        "vuln.h2_console"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "7603026846df",
+      "file": "jacko.md",
+      "command": "whoami /priv",
+      "note": "On-host privilege enumeration showing enabled SeImpersonatePrivilege followed by JuicyPotato COM CLSID negotiation failure and WinPEAS NetNTLMv2 output must mint SeImpersonate leads, blocker.potato, and crackable NetNTLMv2 hash facts without claiming SYSTEM.",
+      "expected_kinds": [
+        "foothold.windows",
+        "privesc.windows_privilege",
+        "privesc.seimpersonate",
+        "blocker.potato",
+        "credential.netntlm",
+        "hash.crackable"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "64eeaf3246a9",
+      "file": "jacko.md",
+      "command": "more 127.0.0.1.pwdump",
+      "note": "Local pwdump SAM hash dump formatted with NO PASSWORD*** in the disabled LM-hash field and 32-hex NT hashes must mint loot.sam, hash.ntlm, credential.candidate, and actionable credential.available without minting loot.ntds.",
+      "expected_kinds": [
+        "loot.sam",
+        "hash.ntlm",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "d305cfdd7efa",
+      "file": "kevin.md",
+      "command": "nmap -p- -sV --script vuln <target>",
+      "note": "Nmap version and vulnerability-script scan reporting positive smb-vuln-ms17-010 (CVE-2017-0144), RDP CVE-2012-0002, and GoAhead HP Power Manager HTTP title on port 80 must mint smb.ms17_010 and service reachability facts.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "scan.nmap.vuln",
+        "smb.ms17_010",
+        "smb.reachable",
+        "rdp.reachable",
+        "http.reachable",
+        "web.title"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "420e34ee511f",
+      "file": "kevin.md",
+      "command": "python zzz_exploit.py <target>",
+      "note": "MS17-010 named-pipe exploit run that connects over SMB but terminates with '[-] Did not find accessible named pipe!' must classify as a negative/failed attempt and never mint foothold or administrative access.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "e2deed9595fc",
+      "file": "kevin.md",
+      "command": "python hpm_exploit.py <target>",
+      "note": "Buffer-overflow exploit script printing a comment-prefixed Usage banner line before firing payload and opening an outbound Netcat bind-shell session showing Microsoft Windows Version 6.1.7600 must mint foothold.windows and classify as success rather than environment-error.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "host.kernel"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0b581c397a38",
+      "file": "medjed.md",
+      "command": "nmap -p- -sC -sV <target>",
+      "note": "Full TCP Nmap version and script scan identifying anonymous FTP on non-standard port 30021, MariaDB host-not-allowed on 3306, HTTP on 33033, and BarracudaServer.exe 6.5 on 45332/45443 must mint port:30021, ftp.anonymous_login, and exploit.versioned_banner without minting port:21.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "ports.open",
+        "port:30021",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "smb.reachable",
+        "http.reachable",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "port:21",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "85b8b5a7b0d4",
+      "file": "medjed.md",
+      "command": "curl ftp://<target>:30021",
+      "note": "Anonymous FTP root directory listing retrieved via curl ftp:// URL returning Unix ls -l rows for a Rails application tree must mint ftp.reachable and loot.files without minting port:21.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "port:21",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "8ff52023ec0d",
+      "file": "medjed.md",
+      "command": "curl ftp://<target>:30021/config/secrets.yml",
+      "note": "Disclosed Ruby on Rails config/secrets.yml retrieved over FTP containing an unquoted 128-hex production secret_key_base value must mint web.source_disclosed and credential.candidate.",
+      "expected_kinds": [
+        "web.source_disclosed",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "b0d1999a9956",
+      "file": "medjed.md",
+      "command": "",
+      "note": "Command-less PowerUp enumeration block reporting ModifiableServiceFile / Write-HijackDll service DLL hijacking alongside Winlogon Autologon DefaultUserName and DefaultPassword entries must mint privesc.dll_hijack_candidate, privesc.stored_credentials, and recovered plaintext credential facts.",
+      "expected_kinds": [
+        "privesc.stored_credentials",
+        "privesc.dll_hijack_candidate",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "8be9d61f1939",
+      "file": "nagoya.md",
+      "command": "",
+      "note": "Command-less Windows token-privilege output block showing enabled SeImpersonatePrivilege must mint privesc.windows_privilege, privesc.seimpersonate, and privesc.leads without claiming SYSTEM.",
+      "expected_kinds": [
+        "privesc.windows_privilege",
+        "privesc.seimpersonate",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "60cedbad558e",
+      "file": "nagoya.md",
+      "command": "",
+      "note": "Command-less Windows identity output block returning NT AUTHORITY\\SYSTEM after token impersonation must mint foothold.windows, host.os_family, and access.system without Linux or DC false positives.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "access.system"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "5f4a6c3a80a7",
+      "file": "nara.md",
+      "command": "nmap -p- -sC -sV <target>",
+      "note": "Full TCP Nmap version scan of an Active Directory Domain Controller exposing DNS 53, Kerberos 88, LDAP 389/3268 with inline Domain banner metadata, SMB 445, RDP 3389, and WinRM 5985 must mint DC candidacy and AD domain/base-DN facts without minting http.reachable from WinRM HTTPAPI.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "scan.nmap.version",
+        "ports.open",
+        "ad.dc_candidate",
+        "ad.domain_known",
+        "ad.base_dn",
+        "host.domain",
+        "dns.reachable",
+        "kerberos.reachable",
+        "ldap.reachable",
+        "smb.reachable",
+        "rdp.reachable",
+        "winrm.reachable"
+      ],
+      "forbidden_kinds": [
+        "http.reachable",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "961072a22127",
+      "file": "nara.md",
+      "command": "smbclient //<target>/<share> -U <domain>/guest%",
+      "note": "OCR-spliced interactive smbclient guest session listing share contents and executing put reverse.exe (putting file reverse.exe as \\reverse.exe) must mint smb.reachable, loot.files, and smb.writable_share.",
+      "expected_kinds": [
+        "smb.reachable",
+        "loot.files",
+        "smb.writable_share"
+      ],
+      "forbidden_kinds": [
+        "blocker.access_denied",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ae7693312e61",
+      "file": "nara.md",
+      "command": "dir; type automation.txt",
+      "note": "OCR-spliced Evil-WinRM PowerShell turn listing automation scripts and dumping a 342-hex Windows DPAPI ConvertFrom-SecureString blob must mint WinRM foothold/authentication, loot.files, privesc.stored_credentials, and credential.candidate.",
+      "expected_kinds": [
+        "foothold.windows",
+        "winrm.authenticated",
+        "credential.validated",
+        "loot.files",
+        "privesc.stored_credentials",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "c6f77e6e08f0",
+      "file": "nara.md",
+      "command": "GET https://www.google.com/search?q=how+to+decrypt+secure+string+file+powershell",
+      "note": "OCR-spliced external web-search and StackOverflow reference screenshot containing tutorial placeholder strings (TestPassword, P@ssw0rd) must never mint target credential.candidate, credential.available, or http.reachable facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "credential.candidate",
+        "credential.available",
+        "credential.plaintext",
+        "credential.validated",
+        "http.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "2f50209343fa",
+      "file": "nickel.md",
+      "command": "rustscan -a <target> --ulimit 5000 -- -sC -sV",
+      "note": "Full RustScan and Nmap version/script sweep disclosing FTP, OpenSSH for Windows, HTTP, MSRPC, SMB, RDP, and high HTTP API ports. Must emit host reachability, open port inventory, service reachabilities, and OS hint without promoting a standalone Windows server to ad.dc_candidate or minting foothold/credential facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ftp.reachable",
+        "ssh.reachable",
+        "http.reachable",
+        "smb.reachable",
+        "rdp.reachable",
+        "host.os_hint"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "credential.available",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "bb56093e59de",
+      "file": "nickel.md",
+      "command": "curl -X POST -H 'content-length: 1000' http://<target>:33333/list-running-procs",
+      "note": "HTTP POST response returning PowerShell Format-List process properties where commandline wraps across an indented continuation line containing --user <user> and -p \"<base64_secret>\" for an outbound SSH command. Must unwrap the continuation line and decode/emit candidate and available credential material without minting foothold or web.authz_bypass.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "web.authz_bypass",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ca035b7baff2",
+      "file": "nickel.md",
+      "command": "curl http://<target>/?whoami",
+      "note": "Headerless curl response body returning HTML <pre> tags wrapping nt authority\\system from an internal command-execution web endpoint. Must confirm OS command injection (web.cmdi_confirmed) alongside http.reachable without misclassifying the turn as SQL injection.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.cmdi_confirmed"
+      ],
+      "forbidden_kinds": [
+        "web.sqli_confirmed",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "af4705fbb6b0",
+      "file": "resourced.md",
+      "command": "nmap -p- -sC -sV <target> -oN nmap.txt",
+      "note": "Command-only Nmap invocation turn with zero terminal stdout bytes where open ports are summarized only in surrounding Markdown prose. Must emit zero facts and classify outcome as unknown.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "ad.dc_candidate",
+        "smb.reachable",
+        "ldap.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "363a8d7179cf",
+      "file": "resourced.md",
+      "command": "ldapsearch -x -H ldap://<target> -s base namingContexts",
+      "note": "Unprompted code fence containing two unexecuted ldapsearch CLI lines and zero LDIF response lines. Must never extract ad.domain_known, ad.base_dn, or ldap.reachable from the -b base-DN argument of the second CLI command line.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "ad.domain_known",
+        "ad.base_dn",
+        "ldap.reachable",
+        "ldap.authenticated",
+        "ad.user_list"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "2a024a167feb",
+      "file": "resourced.md",
+      "command": "evil-winrm -i <target> -u <user> -H <hash>",
+      "note": "Command-only Evil-WinRM pass-the-hash invocation with empty stdout and no interactive *Evil-WinRM* prompt telemetry. Must never infer credential validation or Windows shell foothold from CLI flags alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "winrm.authenticated",
+        "foothold.windows",
+        "access.shell",
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "ac97a934bf4d",
+      "file": "shenzi.md",
+      "command": "more wp-config.php",
+      "note": "PowerShell session turn reading wp-config.php where DB_USER is defined with an empty DB_PASSWORD (''). Must retain Windows foothold from prompt telemetry while strictly suppressing plaintext password facts on an empty password literal.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "credential.password",
+        "credential.plaintext",
+        "credential.available",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "c71ddacacc53",
+      "file": "shenzi.md",
+      "command": "(commandless PowerUp.ps1 output)",
+      "note": "Commandless PowerUp.ps1 enumeration snippet reporting a %PATH% HijackablePath (AbuseFunction: Write-HijackDll) and AlwaysInstallElevated registry check (AbuseFunction: Write-UserAddMSI). Must emit privesc.always_install_elevated, privesc.dll_hijack_candidate, and privesc.leads without minting administrative access.",
+      "expected_kinds": [
+        "privesc.always_install_elevated",
+        "privesc.dll_hijack_candidate",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "b62bb257b928",
+      "file": "shenzi.md",
+      "command": "more <target>.pwdump",
+      "note": "Windows shell turn displaying fgdump/pwdump local SAM output where the LM hash column contains the 32-char placeholder NO PASSWORD********************* followed by valid 32-hex NT hashes. Must extract local NTLM hash credentials without misclassifying a local pwdump file as loot.ntds or hash.krbtgt.",
+      "expected_kinds": [
+        "foothold.windows",
+        "loot.sam",
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "hash.krbtgt"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "82843efae86b",
+      "file": "slort.md",
+      "command": "ftp <target>",
+      "note": "Interactive FTP client turn receiving a 220 FileZilla Server version banner followed by '530 Login or password incorrect!' and 'Login failed.'. Must record FTP reachability and banner version while classifying outcome as rejected and forbidding anonymous login or credential validation.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner",
+        "service.version"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "ftp.anon_write",
+        "credential.validated",
+        "foothold.windows"
+      ],
+      "outcome_expected": "rejected",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "f54eb3c45d0d",
+      "file": "slort.md",
+      "command": "python windows-exploit-suggester.py -d <date>-mssb.xls -i sys.txt",
+      "note": "Windows-Exploit-Suggester output listing [E] and [M] MSxx-xxx security bulletin rows against systeminfo patch inventory without same-line CVE identifiers. Must emit privesc.patch_gap and exploit.candidate without minting target foothold or administrative access.",
+      "expected_kinds": [
+        "privesc.patch_gap",
+        "exploit.candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "63462f6450ee",
+      "file": "slort.md",
+      "command": "whoami",
+      "note": "Elevated Windows command shell whoami output returning <hostname>\\administrator after scheduled-task binary replacement. Must confirm foothold.windows and access.admin without over-promoting local Administrator to access.system or ad.dc_candidate.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "ad.dc_candidate",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "1c74efa3ec21",
+      "file": "squid.md",
+      "command": "(commandless nmap port table)",
+      "note": "Commandless Nmap open-port table separated from its Command heading fence, listing MSRPC, NetBIOS/SMB, and 3128/tcp open http-proxy Squid http proxy. Must recognize open ports, Squid HTTP proxy service on 3128, and SMB reachability without minting AD DC or foothold facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:3128",
+        "service.http-proxy",
+        "smb.reachable"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "3b74d2878fb2",
+      "file": "squid.md",
+      "command": "(commandless whoami /priv row)",
+      "note": "Commandless single-row Windows token privilege line showing SeImpersonatePrivilege in Enabled state. Must emit privesc.windows_privilege, privesc.seimpersonate, and privesc.leads without assuming SYSTEM elevation prior to token-impersonation execution.",
+      "expected_kinds": [
+        "privesc.windows_privilege",
+        "privesc.seimpersonate",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "1778bd943c0a",
+      "file": "squid.md",
+      "command": "whoami",
+      "note": "Post-exploitation whoami output returning nt authority\\system after PrintSpoofer named-pipe impersonation. Must confirm foothold.windows and access.system without minting domain-controller or NTDS loot facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.system",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ca9bdaa9acea",
+      "file": "vault.md",
+      "command": "python3 enum4linux-ng.py <target> -A",
+      "note": "enum4linux-ng session probe where null session fails with STATUS_ACCESS_DENIED but random-username blank-password authentication succeeds ('[+] Server allows session using username ..., password \"\"'). Must emit smb.reachable and smb.guest_session while forbidding smb.null_session and authenticated credential validation.",
+      "expected_kinds": [
+        "smb.reachable",
+        "smb.guest_session"
+      ],
+      "forbidden_kinds": [
+        "smb.null_session",
+        "smb.authenticated",
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "71f92ac7aad1",
+      "file": "vault.md",
+      "command": "evil-winrm -i <target> -u <user> -p <redacted>",
+      "note": "Evil-WinRM connection turn with empty intermediate stdout followed directly by an interactive *Evil-WinRM* PS C:\\Users\\<user>\\Desktop> prompt. Must derive winrm.authenticated, foothold.windows, access.shell, and credential.validated from prompt telemetry without promoting a non-admin user profile to access.admin.",
+      "expected_kinds": [
+        "winrm.authenticated",
+        "foothold.windows",
+        "access.shell",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "2af012db6af7",
+      "file": "vault.md",
+      "command": "net user <user>",
+      "note": "Pre-escalation net user inspection inside an Evil-WinRM session showing membership in Remote Management Users and Server Operators (without Administrators). Must emit privesc.privileged_group along with user/group listing facts while forbidding access.admin prior to local Administrators group addition.",
+      "expected_kinds": [
+        "foothold.windows",
+        "privesc.privileged_group",
+        "ad.user_list",
+        "ad.group_list"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "34331880d300",
+      "file": "vault.md",
+      "command": "impacket-secretsdump <domain>/<user>:<redacted>@<target>",
+      "note": "Remote Impacket secretsdump DRSUAPI extraction dumping Domain Controller NTDS hashes including Administrator and krbtgt. Must emit loot.ntds, hash.ntlm, hash.krbtgt, and credential.available without conflating remote DRSUAPI extraction with an interactive Windows shell foothold.",
+      "expected_kinds": [
+        "loot.ntds",
+        "hash.ntlm",
+        "hash.krbtgt",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.shell"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "52f7b4d739e8",
+      "file": "vault-2.md",
+      "command": "smbclient -L //<target>/",
+      "note": "Command-only smbclient share-listing turn with zero terminal stdout bytes in a prose-summarized writeup. Must emit zero SMB facts and classify outcome as unknown.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "smb.reachable",
+        "smb.shares",
+        "smb.null_session",
+        "smb.guest_session"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "989483459403",
+      "file": "vault-2.md",
+      "command": "impacket-psexec <domain>/<user>:<redacted>@<target>",
+      "note": "Command-only Impacket PsExec invocation with empty stdout and no service-creation or cmd.exe banner proof. Must never emit foothold.windows, access.admin, access.system, or credential.validated from command arguments alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "access.system",
+        "credential.validated",
+        "credential.available"
+      ],
+      "outcome_expected": "unknown"
+    }
+  ]
+}

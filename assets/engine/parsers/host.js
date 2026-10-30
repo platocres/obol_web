@@ -772,8 +772,13 @@
       _add_host_privesc_fact(facts, ws, source, 'privesc.privileged_group', { groups: C.uniqueSortedCI(privGroups), count: privGroups.length }, leadKinds);
     }
 
+    if (/\bAbuseFunction\s*:\s*Write-UserAddMSI\b/i.test(text)) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.always_install_elevated', { hklm: true, hkcu: true, via: 'powerup' }, leadKinds);
+    }
     if (lowered.indexOf('alwaysinstallelevated') >= 0) {
       var aieHklm = false, aieHkcu = false, currentHive = '';
+      if (/\b(?:HKLM|HKEY_LOCAL_MACHINE)\b/i.test(command || '') && !/\b(?:HKCU|HKEY_CURRENT_USER)\b/i.test(command || '')) currentHive = 'hklm';
+      else if (/\b(?:HKCU|HKEY_CURRENT_USER)\b/i.test(command || '') && !/\b(?:HKLM|HKEY_LOCAL_MACHINE)\b/i.test(command || '')) currentHive = 'hkcu';
       text.split(/\r?\n/).forEach(function (raw) {
         if (reSearch(C._HKLM_HEADER_RE, raw)) currentHive = 'hklm';
         else if (reSearch(C._HKCU_HEADER_RE, raw)) currentHive = 'hkcu';
@@ -783,7 +788,20 @@
         if (currentHive === 'hklm') aieHklm = enabled;
         else if (currentHive === 'hkcu') aieHkcu = enabled;
       });
-      if (aieHklm && aieHkcu) _add_host_privesc_fact(facts, ws, source, 'privesc.always_install_elevated', { hklm: true, hkcu: true }, leadKinds);
+      var priorFacts = (ws && (ws.facts || ws.seedFacts)) || [];
+      var hasPriorHklm = priorFacts.some(function (pf) {
+        return pf && pf.state === 'supported' && pf.scope === h && pf.kind === 'config.review' && pf.value && pf.value.kind === 'always_install_elevated_hive' && pf.value.aie_hklm === true;
+      });
+      var hasPriorHkcu = priorFacts.some(function (pf) {
+        return pf && pf.state === 'supported' && pf.scope === h && pf.kind === 'config.review' && pf.value && pf.value.kind === 'always_install_elevated_hive' && pf.value.aie_hkcu === true;
+      });
+      if ((aieHklm || hasPriorHklm) && (aieHkcu || hasPriorHkcu)) {
+        _add_host_privesc_fact(facts, ws, source, 'privesc.always_install_elevated', { hklm: true, hkcu: true }, leadKinds);
+      } else if (aieHklm) {
+        _add(facts, mkFact('config.review', h, { kind: 'always_install_elevated_hive', hive: 'hklm', aie_hklm: true, enabled: true }, S, source));
+      } else if (aieHkcu) {
+        _add(facts, mkFact('config.review', h, { kind: 'always_install_elevated_hive', hive: 'hkcu', aie_hkcu: true, enabled: true }, S, source));
+      }
     }
 
     var unquoted = [];
@@ -817,15 +835,17 @@
       if (reSearch(C._WEAK_SVC_ACCESS_RE, line) || reSearch(C._LOWPRIV_WRITE_ACE_RE, line) || (C._WEAK_SERVICE_PERM_RE && reSearch(C._WEAK_SERVICE_PERM_RE, line))) weakService.push(line.slice(0, 220));
     });
     var powerUpAbuseBins = [];
-    if (/AbuseFunction\s*:/i.test(text)) {
+    if (/AbuseFunction\s*:|\bCheck\s*:\s*ModifiableServiceFile\b/i.test(text)) {
       String(text).split(/\r?\n\s*\r?\n/).forEach(function (stanza) {
         var abM = /^\s*AbuseFunction\s*:\s*(Install-ServiceBinary|Write-ServiceBinary|Invoke-ServiceAbuse)\b([^\r\n]*)/im.exec(stanza);
-        if (!abM) return;
+        var modCheck = !abM && /^\s*Check\s*:\s*ModifiableServiceFile\b/im.test(stanza);
+        if (!abM && !modCheck) return;
         var fileM = /^\s*(?:ModifiableFile|UnquotedService|Path)\s*:\s*['"]?([A-Za-z]:\\[^\r\n'"]+?\.exe)\b/im.exec(stanza);
-        var abEv = (fileM ? (fileM[1] + ' -> ') : '') + abM[1] + (abM[2] || '').trim();
+        var fnName = abM ? abM[1] : 'ModifiableServiceFile';
+        var abEv = (fileM ? (fileM[1] + ' -> ') : '') + fnName + ((abM && abM[2]) || '').trim();
         weakService.push(abEv.slice(0, 220));
         if (fileM && fileM[1]) {
-          powerUpAbuseBins.push({ path: fileM[1].trim(), abuseFunction: abM[1] });
+          powerUpAbuseBins.push({ path: fileM[1].trim(), abuseFunction: fnName });
         }
       });
     }
@@ -838,12 +858,26 @@
       if (pair[0] === 'DefaultPassword' && !/DefaultPassword\s+REG_SZ\s+\S+/i.test(text)) return;
       if (lowered.indexOf(pair[0].toLowerCase()) >= 0) stored.push(pair[1]);
     });
+    var hasDpapiBlob = /\b01000000d08c9ddf0115d1118c7a00c04fc297eb[0-9a-fA-F]{160,}\b/i.test(text);
+    if (hasDpapiBlob) stored.push('dpapi');
     if (stored.length) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.stored_credentials', { kinds: C.uniqueSortedCI(stored), count: C.uniqueSortedCI(stored).length }, leadKinds);
-      _add(facts, mkFact('credential.candidate', h, { kind: 'stored_windows_credentials' }, S, source));
+      if (hasDpapiBlob) {
+        _add(facts, mkFact('credential.candidate', h, { kind: 'dpapi_securestring', via: 'dpapi-blob' }, S, source));
+      }
+      if (!hasDpapiBlob || stored.length > 1) {
+        _add(facts, mkFact('credential.candidate', h, { kind: 'stored_windows_credentials' }, S, source));
+      }
     }
 
     var dllHits = text.split(/\r?\n/).filter(function (raw) { var l = raw.toLowerCase(); return l.indexOf('.dll') >= 0 && (l.indexOf('name not found') >= 0 || l.indexOf('path not found') >= 0); }).map(function (raw) { return raw.trim().slice(0, 220); });
+    reAll(/^\s*HijackablePath\s*:\s*([^\r\n]+)/gim, text).forEach(function (hm) {
+      var hp = hm[1].trim().replace(/^['"]|['"]$/g, '');
+      if (hp) dllHits.push(('HijackablePath: ' + hp).slice(0, 220));
+    });
+    reAll(/^\s*AbuseFunction\s*:\s*(Write-HijackDll\b[^\r\n]*)/gim, text).forEach(function (am) {
+      dllHits.push(am[1].trim().slice(0, 220));
+    });
     if (dllHits.length) _add_host_privesc_fact(facts, ws, source, 'privesc.dll_hijack_candidate', { evidence: C.uniqueSortedCI(dllHits).slice(0, 20), count: C.uniqueSortedCI(dllHits).length }, leadKinds);
 
     // Step 1: OS-Baseline Subtraction + Location Anomaly -> privesc.custom_binary (Windows)
@@ -881,6 +915,26 @@
       var baseName = cleanP.split(/[\\/]/).pop() || cleanP;
       winCustom.push({ custom_bin: cleanP, path: cleanP, binary: baseName, context: 'powerup-service', abuse_function: item.abuseFunction, os: 'windows' });
     });
+    var isDirQCmd = /\bdir\b[^\r\n]*\/q\b/i.test(command || '');
+    var curDirQ = '';
+    text.split(/\r?\n/).forEach(function (raw) {
+      var dirHdrM = /^\s*Directory of\s+([A-Za-z]:\\[^\r\n]+?)\s*$/i.exec(raw);
+      if (dirHdrM) { curDirQ = dirHdrM[1].trim(); return; }
+      var dqM = isDirQCmd
+        ? /^\s*\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?!<)([\d,]+)\s+((?:NT AUTHORITY|BUILTIN|NT SERVICE|[A-Za-z0-9_.-]+)\\[A-Za-z0-9_. $-]+?|[A-Za-z0-9_.$-]+)\s+([^\r\n\\/:*?"<>|]+?\.(?:exe|bat|ps1))\s*$/i.exec(raw)
+        : /^\s*\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?!<)([\d,]+)\s+((?:NT AUTHORITY|BUILTIN|NT SERVICE|[A-Za-z0-9_.-]+)\\[A-Za-z0-9_.$-]+)\s+([^\r\n\\/:*?"<>|]+?\.(?:exe|bat|ps1))\s*$/i.exec(raw);
+      if (!dqM) return;
+      var dqOwner = dqM[2].trim();
+      var dqFile = dqM[3].trim();
+      if (/^(?:NT AUTHORITY\\(?:SYSTEM|LOCAL SERVICE|NETWORK SERVICE|TrustedInstaller)|BUILTIN\\Administrators|NT SERVICE\\TrustedInstaller|(?:[^\\]+\\)?(?:Administrator|SYSTEM|TrustedInstaller))$/i.test(dqOwner)) return;
+      if (/^(?:nc64?|ncat|netcat|socat|chisel|plink|pscp|ligolo|agent|winpeas\S*|seatbelt|sharphound|rubeus|mimikatz|powercat|juicypotato\S*|sweetpotato\S*|godpotato\S*|printspoofer\S*|roguepotato\S*|efspotato\S*|accesschk\S*)\.(?:exe|bat|ps1)$/i.test(dqFile)) return;
+      var dqFull = curDirQ ? (C.stripChars(curDirQ, '\\/') + '\\' + dqFile) : dqFile;
+      if (/^[A-Za-z]:\\(?:Windows|Program Files(?: \(x86\))?)(?:\\|$)/i.test(dqFull)) return;
+      var dqKey = dqFull.toLowerCase();
+      if (seenWinCustom[dqKey]) return;
+      seenWinCustom[dqKey] = 1;
+      winCustom.push({ custom_bin: dqFull, path: dqFull, binary: dqFile, owner: dqOwner, context: 'dir-q-owner', os: 'windows' });
+    });
     if (winCustom.length) {
       var topWin = winCustom[0];
       _add_host_privesc_fact(facts, ws, source, 'privesc.custom_binary', {
@@ -894,7 +948,7 @@
     }
 
     var patchLines = text.split(/\r?\n/).filter(function (l) { return /\bMS\d{2}-\d{3}\b|CVE-\d{4}-\d+|missing patches?|exploit/i.test(l); }).map(function (l) { return l.trim(); });
-    if (patchLines.length && (/wes(?:\.py|ng)?|windows[- ]exploit[- ]suggester|missing patches?|found vulnerabilities/i.test((command || '') + '\n' + text))) {
+    if (patchLines.length && (/wes(?:\.py|ng)?|windows[- ]exploit[- ]suggester|missing patches?|found vulnerabilities|\[\*\]\s*initiating winsploit|\[\s*[EM]\s*\]\s*MS\d{2}-\d{3}\s*:|\[\*\]\s*Appears vulnerable to\s+CVE-\d{4}-\d{4,7}|\[!\]\s*(?:CVE-\d{4}-\d{4,7}|MS\d{2}-\d{3})\s*:/i.test((command || '') + '\n' + text))) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.patch_gap', { evidence: patchLines.slice(0, 30) }, leadKinds);
       _add(facts, mkFact('exploit.candidate', h, { tool: 'windows-exploit-suggester', findings: patchLines.slice(0, 30) }, S, source));
     }
@@ -939,17 +993,21 @@
     var t = String(text || '');
     if (!t.trim()) return false;
     return !!(
-      /^\s*OS Name:\s*Microsoft Windows/im.test(t) ||
+      /^\s*OS Name:\s*Microsoft(?:\s*\(R\)|r|\u00ae)?\s+Windows\b/im.test(t) ||
+      (/\bOS Version:\s*\d+\.\d+\.\d+/i.test(t) && /\bSystem Type:\s*(?:x64|x86)/i.test(t)) ||
       /Microsoft Windows \[Version\s+[0-9.]+\]/i.test(t) ||
       /Saved [A-Z0-9_-]+ credentials|Currently stored credentials:/i.test(t) ||
+      /\b01000000d08c9ddf0115d1118c7a00c04fc297eb[0-9a-fA-F]{160,}\b/i.test(t) ||
       /ServiceName\s*:\s*\S+[\s\S]{1,200}?PathName\s*:/i.test(t) ||
       /\b(?:BINARY_PATH_NAME|Binary Path Name|PathName|Image Path|Launch String)\s*[:=]\s*["']?[A-Za-z]:\\/i.test(t) ||
       /^\s*[A-Za-z0-9_.-]{2,64}\s+(?:"[A-Za-z]:\\[^"\r\n]+\.(?:exe|bat|cmd|ps1|vbs)"|[A-Za-z]:\\[^\r\n]+?\.(?:exe|bat|cmd|ps1|vbs))\s+(?:Auto|Manual|Disabled|Running|Stopped)\b/im.test(t) ||
+      /^\s*\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}\s+\d{1,2}:\d{2}(?:\s*[AP]M)?\s+(?!<)[\d,]+\s+(?:NT AUTHORITY|BUILTIN|NT SERVICE|[A-Za-z0-9_.-]+)\\[A-Za-z0-9_.$-]+\s+[^\r\n\\/:*?"<>|]+?\.(?:exe|bat|ps1)\s*$/im.test(t) ||
       /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t) ||
       /^\s*(?:BUILTIN\\Administrators|[^\r\n]*\bS-1-5-32-544\b)\s+.*?\b(?:Enabled group|Group used for deny only)\b/im.test(t) ||
       /^\s*Privilege\s*:\s*Se[A-Za-z0-9]+Privilege\b/im.test(t) ||
-      /\bAbuseFunction\s*:\s*(?:Install-ServiceBinary|Write-ServiceBinary|Invoke-ServiceAbuse)\b/i.test(t) ||
-      /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+/i.test(t) ||
+      /\bAbuseFunction\s*:\s*(?:Install-ServiceBinary|Write-ServiceBinary|Invoke-ServiceAbuse|Write-UserAddMSI|Write-HijackDll)\b/i.test(t) ||
+      /\bHijackablePath\s*:|Checking for AlwaysInstallElevated|\bCheck\s*:\s*(?:ModifiableServiceFile|DLL Hijacking)/i.test(t) ||
+      /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+|\[\*\]\s*initiating winsploit|\[\s*[EM]\s*\]\s*MS\d{2}-\d{3}\s*:|\[\*\]\s*Appears vulnerable to\s+CVE-\d{4}-\d{4,7}|\[!\]\s*(?:CVE-\d{4}-\d{4,7}|MS\d{2}-\d{3})\s*:/i.test(t) ||
       /\.dll\b.*(?:NAME NOT FOUND|PATH NOT FOUND)/i.test(t) ||
       reSearch(C._WIN_PRIV_RE, t) ||
       (C._WEAK_SERVICE_PERM_RE && reSearch(C._WEAK_SERVICE_PERM_RE, t)) ||
@@ -1054,6 +1112,38 @@
     return C.uniqueSortedCI(out);
   }
 
+  function _norm_principal_name(s) {
+    return String(s || '').trim().replace(/^.*[\\/]/, '').replace(/@.*$/, '').toLowerCase();
+  }
+
+  function _is_owned_principal(user, ws, currentFacts) {
+    var targetUser = _norm_principal_name(user);
+    if (!targetUser) return false;
+    var promptStr = [
+      ws && ws.context && ws.context.promptLine,
+      ws && ws.context && ws.context.followPrompt
+    ].filter(Boolean).join('\n');
+    if (promptStr) {
+      var winProfM = /[A-Za-z]:\\Users\\([A-Za-z0-9_.$-]+)(?:[\\>]|$)/i.exec(promptStr);
+      if (winProfM && _norm_principal_name(winProfM[1]) === targetUser) return true;
+      var promptUserM = /^\s*(?:\([^)]+\)\s*)?\[?(?:[A-Za-z0-9_.-]+\\)?([A-Za-z0-9_.$-]+)@[A-Za-z0-9_.-]+/m.exec(promptStr);
+      if (promptUserM && _norm_principal_name(promptUserM[1]) === targetUser) return true;
+    }
+    var all = [].concat((ws && (ws.facts || ws.seedFacts)) || [], currentFacts || []);
+    for (var i = 0; i < all.length; i++) {
+      var f = all[i];
+      if (!f || f.state !== 'supported' || !f.value) continue;
+      var k = f.kind || '';
+      var v = f.value;
+      if (k === 'foothold.windows' || k === 'foothold.linux' || k === 'access.shell'
+          || /\.authenticated$/.test(k) || k === 'credential.available' || k === 'credential.validated') {
+        var cand = _norm_principal_name(v.user || v.identity || v.username || v.principal || '');
+        if (cand && cand === targetUser) return true;
+      }
+    }
+    return false;
+  }
+
   function _parse_net_accounts(text, ws, command, source, facts) {
     if (!text || !text.trim()) return;
     var h = 'host:' + ws.target, lc = (command || '').toLowerCase();
@@ -1101,6 +1191,12 @@
       });
       if (hostPrivGroups.length && C._valid_username(user, false)) {
         _add(facts, mkFact('privesc.privileged_group', h, { user: user, group: hostPrivGroups[0], groups: hostPrivGroups, via: 'net-user' }, S, source));
+      }
+      var adminGroups = userGroups.filter(function (g) {
+        return /^(?:Administrators|Domain Admins|Enterprise Admins)$/i.test(g);
+      });
+      if (adminGroups.length && C._valid_username(user, false) && _is_owned_principal(user, ws, facts)) {
+        _add(facts, mkFact('access.admin', h, { user: user, identity: user, group: adminGroups[0], groups: adminGroups, via: 'net-user' }, S, source));
       }
     }
     // 3) net group "<name>" /domain members listing → ad.user_list (domain group members)
@@ -1287,15 +1383,19 @@
     return c;
   }
 
+  var _PS_TUTORIAL_PW_DENY_RE = /^(?:testpassword|mysecretpassword|yourpassword|enterpassword|p@ssw0rd|passw0rd|password|changeme|secret|placeholder|example)$/i;
+  var _DPAPI_HEX_BLOB_RE = /\b01000000d08c9ddf0115d1118c7a00c04fc297eb[0-9a-fA-F]{160,}\b/i;
+
   function _has_windows_creds(text, command) {
     text = text || '';
-    if (reSearch(_PS_SECURESTRING_RE, text) || reSearch(_PUTTY_PROXYPW_RE, text) || _PLINK_PW_LINE_RE.test(text)) return true;
+    if (reSearch(_PS_SECURESTRING_RE, text) || reSearch(_PUTTY_PROXYPW_RE, text) || _PLINK_PW_LINE_RE.test(text) || _DPAPI_HEX_BLOB_RE.test(text)) return true;
     if ((_HIST_CMD_RE.test(command || '') || _HIST_CUSTOM_BIN_LINE_RE.test(text)) && _HIST_CUSTOM_BIN_LINE_RE.test(text)) return true;
     return _WIN_CRED_RES.some(function (pair) { return reSearch(pair[1], text); });
   }
   C._has_windows_creds = _has_windows_creds;
 
   function _parse_windows_creds(text, ws, command, source, facts) {
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     text = text || '';
     var h = 'host:' + ws.target, seen = {};
     _WIN_CRED_RES.forEach(function (pair) {
@@ -1372,11 +1472,21 @@
       });
     });
     reAll(_PS_SECURESTRING_RE, text).forEach(function (m) {
-      var pw = m.groups.pw, key = '|' + pw;
+      var pw = (m.groups.pw || '').trim();
+      if (!pw || _PS_TUTORIAL_PW_DENY_RE.test(pw) || /^\$[A-Za-z_]|^<[^>]+>$/.test(pw)) return;
+      var key = '|' + pw;
       if (seen[key]) return;
       seen[key] = true;
       _add(facts, mkFact('credential.candidate', h, { password: pw, via: 'convertto-securestring' }, S, source));
     });
+    if (_DPAPI_HEX_BLOB_RE.test(text)) {
+      _add(facts, mkFact('credential.candidate', h, { kind: 'dpapi_securestring', via: 'dpapi-blob' }, S, source));
+      if (!facts.some(function (f) { return f && f.kind === 'privesc.stored_credentials' && f.scope === h; })) {
+        var dpLeadKinds = {};
+        _add_host_privesc_fact(facts, ws, source, 'privesc.stored_credentials', { kinds: ['dpapi'], count: 1 }, dpLeadKinds);
+        _add_privesc_leads(facts, ws, source, dpLeadKinds);
+      }
+    }
     // PuTTY stored proxy credential - pair the ProxyPassword value with the nearest ProxyUsername.
     var pwm = reSearch(_PUTTY_PROXYPW_RE, text);
     if (pwm) {
@@ -1405,14 +1515,134 @@
   var _NOTABLE_USER_LOC_RE = /[A-Za-z]:\\Users\\[^\\\r\n]+\\(?:Desktop|Documents|Downloads|Public|Scripts)|\/home\/[^/\r\n]+\/|\/root\/|\/opt\/|\/tmp\/|\/srv\/|\/usr\/local\//i;
   var _NOTABLE_WIN_EXT_RE = /\.(?:exe|bat|cmd|ps1|vbs)$/i;
 
+  var _SW_TABLE_HDR_RE = /^(?!.*\b(?:ModuleType|CommandType|ExportedCommands)\b)\s*(?:ProgramName|DisplayName|Name)(?:\s{2,}|\t+)(?:DisplayVersion|Version)\b/im;
+  var _SW_FL_CHECK_RE = /^\s*(?:ProgramName|DisplayName)\s*:\s*\S+[\s\S]{1,240}?^\s*(?:DisplayVersion|Version)\s*:\s*\d+\.\d+/im;
+  var _SW_BASELINE_IGNORE_RE = /^(?:Microsoft\s+(?:Visual\s+C\+\+|Windows\b|\.NET\b|Edge\b|Update\b|OneDrive\b|Silverlight\b|Office\b|SQL\s+Server\s+\d*\s*(?:Native\s+Client|Setup|T-SQL|Transact-SQL|Browser|System\s+CLR)|ASP\.NET\b|Application\s+Error\s+Reporting|SDK\b|System\s+Center|VC\+\+|PowerShell|GameInput|WebView2)|Windows\s+(?:Software\s+Development\s+Kit|SDK|Driver\s+Package|App\s+Certification|Defender|PC\s+Health)|\.NET\s+Framework|VMware\s+Tools|VirtualBox\s+Guest\s+Additions|QEMU\s+guest\s+agent|Spice\s+Guest\s+Tools|XenServer\s+Tools|Google\s+(?:Chrome|Update)|Mozilla\s+(?:Firefox|Maintenance\s+Service)|PowerShellGet|PackageManagement|PSReadLine|Pester|ThreadJob|CimCmdlets)(?:\b|(?=\s|$|[().,/:-]))/i;
+
   function _re_escape(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-  function _has_notable_programs(text) { return !!(text && reSearch(_NOTABLE_EXE_RE, text)); }
+  function _has_notable_programs(text) {
+    return !!(text && (reSearch(_NOTABLE_EXE_RE, text) || _SW_TABLE_HDR_RE.test(text) || _SW_FL_CHECK_RE.test(text)));
+  }
   C._has_notable_programs = _has_notable_programs;
 
+  function _emit_installed_software_row(facts, h, source, rawName, rawVer, seenSw) {
+    var progName = String(rawName || '').trim().replace(/^["']|["']$/g, '');
+    var progVerRaw = String(rawVer || '').trim().replace(/^["']|["']$/g, '');
+    if (!progName || progName.length < 2 || progName.length > 120 || /^-+$/.test(progName) || !/[A-Za-z]{2,}/.test(progName)) return;
+    if (_SW_BASELINE_IGNORE_RE.test(progName)) return;
+    var verM = /\b(\d+\.\d+(?:\.\d+)*)\b/.exec(progVerRaw);
+    if (!verM) return;
+    var verTok = verM[1];
+    var swKey = progName.toLowerCase() + '|' + verTok;
+    if (seenSw[swKey]) return;
+    seenSw[swKey] = 1;
+    var cleanProd = progName
+      .replace(/\s*\((?:x64|x86|64-bit|32-bit|amd64)[^)]*\)\s*/gi, ' ')
+      .replace(/\s+v?\d+(?:\.\d+)+\b.*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim() || progName;
+    var mmVerM = /^(\d+\.\d+)/.exec(verTok);
+    var shortVer = mmVerM ? mmVerM[1] : verTok;
+    _add(facts, mkFact('host.notable_program', h, { name: progName, version: verTok, reason: 'installed third-party software', os: 'windows' }, S, source));
+    _add(facts, mkFact('exploit.versioned_banner', h, { product: cleanProd, version: verTok, search_query: (cleanProd + ' ' + shortVer).trim(), os: 'windows', via: 'installed-software' }, S, source));
+  }
+
+  function _split_sw_row_by_spaces(rLn, nameCol, verCol) {
+    var parts = rLn.trim().split(/\s{2,}/);
+    if (parts.length < 2) return null;
+    if (verCol < nameCol) {
+      return { name: parts.slice(1).join(' '), ver: parts[0] };
+    }
+    var vIdx = -1;
+    for (var pi = 1; pi < parts.length; pi++) {
+      if (/^["']?[vV]?\d+\.\d+/.test(parts[pi].trim())) { vIdx = pi; break; }
+    }
+    if (vIdx < 0) {
+      if (verCol < parts.length && /\d+\.\d+/.test(parts[verCol])) vIdx = verCol;
+      else vIdx = 1;
+    }
+    return { name: parts.slice(0, vIdx).join(' '), ver: parts[vIdx] };
+  }
+
+  function _sw_col_boundary_ok(rLn, colIdx, colStart, hasDash) {
+    if (colStart === 0) return true;
+    if (colStart >= rLn.length) return false;
+    if (colIdx === 0) return /^\s*$/.test(rLn.slice(0, colStart));
+    return hasDash ? /\s/.test(rLn.charAt(colStart - 1)) : (colStart >= 2 && /\s{2}$/.test(rLn.slice(0, colStart)));
+  }
+
   function _parse_notable_programs(text, ws, source, facts) {
-    var seen = {}, currentDir = '', h = 'host:' + ws.target;
+    var seen = {}, seenSw = {}, currentDir = '', h = 'host:' + ws.target;
     var lines = String(text || '').split(/\r?\n/);
+    if (_SW_TABLE_HDR_RE.test(text)) {
+      for (var ti = 0; ti < lines.length; ti++) {
+        var hdr = lines[ti];
+        if (!/^(?!.*\b(?:ModuleType|CommandType|ExportedCommands)\b)\s*(?:ProgramName|DisplayName|Name)(?:\s{2,}|\t+)(?:DisplayVersion|Version)\b/i.test(hdr)) continue;
+        var hasDash = (ti + 1 < lines.length) && /^\s*-+(?:\s+-+)+\s*$/.test(lines[ti + 1]);
+        var colStarts = [], colNames = [];
+        if (hasDash) {
+          var dLine = lines[ti + 1], dm2, dRe = /-+/g;
+          while ((dm2 = dRe.exec(dLine)) !== null) colStarts.push(dm2.index);
+          for (var ci = 0; ci < colStarts.length; ci++) {
+            var ce = (ci + 1 < colStarts.length) ? colStarts[ci + 1] : hdr.length;
+            colNames.push(hdr.slice(colStarts[ci], ce).trim().toLowerCase());
+          }
+        } else {
+          var hRe = /\S+/g, hm2;
+          while ((hm2 = hRe.exec(hdr)) !== null) {
+            colStarts.push(hm2.index);
+            colNames.push(hm2[0].trim().toLowerCase());
+          }
+        }
+        var nameCol = -1, verCol = -1;
+        for (var cni = 0; cni < colNames.length; cni++) {
+          if (nameCol < 0 && /^(?:programname|displayname|name)$/.test(colNames[cni])) nameCol = cni;
+          if (verCol < 0 && /^(?:displayversion|version)$/.test(colNames[cni])) verCol = cni;
+        }
+        if (nameCol < 0 || verCol < 0) continue;
+        var rowStart = hasDash ? ti + 2 : ti + 1;
+        for (var ri = rowStart; ri < lines.length; ri++) {
+          var rLn = lines[ri];
+          if (!rLn.trim()) break;
+          if (/^\s*(?:PS\s+[A-Za-z]:\\|\*Evil-WinRM\*\s+PS\b|[A-Za-z]:\\[^>\r\n]*>)/i.test(rLn)) break;
+          var rName = '', rVer = '';
+          if (rLn.trim().indexOf('\t') >= 0) {
+            var tParts = rLn.trim().split(/\t+/);
+            rName = tParts[nameCol] || '';
+            rVer = tParts[verCol] || '';
+          } else if (colStarts[verCol] < rLn.length && (!hasDash ? /\s{2,}/.test(rLn.trim()) : true)) {
+            var nStart = colStarts[nameCol], vStart = colStarts[verCol];
+            var nEnd = (nameCol + 1 < colStarts.length) ? colStarts[nameCol + 1] : rLn.length;
+            var vEnd = (verCol + 1 < colStarts.length) ? colStarts[verCol + 1] : rLn.length;
+            var boundaryOk = _sw_col_boundary_ok(rLn, nameCol, nStart, hasDash) &&
+                             _sw_col_boundary_ok(rLn, verCol, vStart, hasDash);
+            if (boundaryOk) {
+              rName = rLn.slice(nStart, Math.min(nEnd, rLn.length)).trim();
+              rVer = rLn.slice(vStart, Math.min(vEnd, rLn.length)).trim();
+            }
+            var verValid = !!rName && !!rVer && /^["']?[vV]?\d+\.\d+/.test(rVer) &&
+                           (verCol + 1 < colStarts.length || !/\s{2,}/.test(rVer)) &&
+                           !/\s{2,}["']?[vV]?\d+\.\d+/.test(rName);
+            if (!boundaryOk || !verValid) {
+              var spFallback = _split_sw_row_by_spaces(rLn, nameCol, verCol);
+              if (spFallback) { rName = spFallback.name; rVer = spFallback.ver; }
+            }
+          } else {
+            var spFallback2 = _split_sw_row_by_spaces(rLn, nameCol, verCol);
+            if (spFallback2) { rName = spFallback2.name; rVer = spFallback2.ver; }
+          }
+          _emit_installed_software_row(facts, h, source, rName, rVer, seenSw);
+        }
+      }
+    }
+    if (_SW_FL_CHECK_RE.test(text)) {
+      String(text || '').split(/\r?\n\s*\r?\n/).forEach(function (blk) {
+        var nmM = /^\s*(?:ProgramName|DisplayName)\s*:\s*(.+)$/im.exec(blk);
+        var vrM = /^\s*(?:DisplayVersion|Version)\s*:\s*(.+)$/im.exec(blk);
+        if (nmM && vrM) _emit_installed_software_row(facts, h, source, nmM[1], vrM[1], seenSw);
+      });
+    }
     for (var li = 0; li < lines.length; li++) {
       var line = lines[li];
       if (/\bin\s+[\w.]+\s*\(|^\s*File\s+"[^"]+",\s+line\s+\d+|^\s*Traceback\b|\b[\w]+\.run\s*\(/i.test(line)) continue;
@@ -1806,6 +2036,7 @@
 
   var _LISTENER_OPEN_RE = /\bListening on\s+(?:\[?(?<host>[0-9a-fA-F.:*]+|any)\]?\s+(?:\([^)\r\n]*\)\s+)?)?(?:port\s+|:)?(?<port>\d{2,5})\b/i;
   var _LISTENER_CONN_RE = /\b(?:connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from\s+\S+)/i;
+  var _OUTBOUND_NC_OPEN_RE = /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\s*$/im;
 
   function _parse_listener_output(text, ws, command, source, facts) {
     if (!text) return;
@@ -1819,16 +2050,24 @@
         _add(facts, mkFact('listener.open', hScope, { host: lh, port: p }, S, source));
       }
     }
-    var connM = _LISTENER_CONN_RE.exec(text);
+    var connM = _LISTENER_CONN_RE.exec(text) || _OUTBOUND_NC_OPEN_RE.exec(text);
     if (connM) {
+      var isBindConn = /^\(UNKNOWN\)/i.test(connM[0].trim());
+      var shellMethod = isBindConn ? 'bind-shell' : 'reverse-shell';
       var afterConn = text.slice(connM.index + connM[0].length);
       var isWinShell = /Microsoft Windows \[Version\s+[0-9.]+\]/i.test(afterConn)
         || /(?:^|\n)\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/i.test(afterConn)
         || (C._WHOAMI_ID_RE && C._WHOAMI_ID_RE.test(afterConn));
       if (isWinShell) {
-        _add(facts, mkFact('access.shell', hScope, { handler: 'listener', os: 'windows' }, S, source));
-        _add(facts, mkFact('foothold.windows', hScope, { method: 'reverse-shell' }, S, source));
-        C._add_os_observation(facts, ws, source, 'windows', 'reverse shell callback established', 'high', 'listener', true);
+        _add(facts, mkFact('access.shell', hScope, { handler: isBindConn ? 'netcat' : 'listener', os: 'windows' }, S, source));
+        _add(facts, mkFact('foothold.windows', hScope, { method: shellMethod }, S, source));
+        var winVerM = /Microsoft Windows \[Version\s+([0-9.]+)\]/i.exec(afterConn);
+        if (winVerM && winVerM[1]) {
+          _add(facts, mkFact('host.kernel', hScope, { kernel: winVerM[1].trim(), tool: 'ver' }, S, source));
+          C._add_os_observation(facts, ws, source, 'windows', winVerM[0], 'high', 'listener', true, 'Windows ' + winVerM[1].trim());
+        } else {
+          C._add_os_observation(facts, ws, source, 'windows', shellMethod + ' callback established', 'high', 'listener', true);
+        }
         _parse_command_execution(afterConn, ws, command, source, facts);
       } else {
         var linIdM = C._LINUX_ID_RE ? reSearch(C._LINUX_ID_RE, afterConn) : null;
@@ -1840,16 +2079,16 @@
           || /(?:^|\n)\s*(?:[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+:[^$#\r\n]*[$#]|(?:ba|da|z|k|a)?sh-[0-9.]+[$#]|\$\s+\S|#\s+(?:id|whoami|uname|pwd|ls|cat)\b)/i.test(afterConn)
           || !!reSearch(C._UNAME_RE, afterConn);
         if (isUnixShell) {
-          var fhVal = { service: 'reverse-shell' };
+          var fhVal = { service: shellMethod };
           var shellUser = (linIdM && linIdM.groups && linIdM.groups.user) ? linIdM.groups.user.trim()
             : ((promptlessWhoamiM && promptlessWhoamiM.groups && promptlessWhoamiM.groups.shellUser !== 'whoami') ? promptlessWhoamiM.groups.shellUser : '');
           if (shellUser) fhVal.identity = shellUser;
-          _add(facts, mkFact('access.shell', hScope, { handler: 'listener', os: 'linux' }, S, source));
+          _add(facts, mkFact('access.shell', hScope, { handler: isBindConn ? 'netcat' : 'listener', os: 'linux' }, S, source));
           _add(facts, mkFact('foothold.linux', hScope, fhVal, S, source));
-          C._add_os_observation(facts, ws, source, 'linux', 'reverse shell callback established', 'high', 'listener', true);
+          C._add_os_observation(facts, ws, source, 'linux', shellMethod + ' callback established', 'high', 'listener', true);
           if ((linIdM && linIdM.groups.uid === '0') || shellUser === 'root' || /(?:^|\n)\s*(?:root@[A-Za-z0-9_.-]+:[^#\r\n]*#|(?:ba|da)?sh-[0-9.]+#)/i.test(afterConn)) {
-            _add(facts, mkFact('access.admin', hScope, { service: 'reverse-shell', identity: 'root', uid: 0 }, S, source));
-            _add(facts, mkFact('access.root', hScope, { method: 'reverse-shell' }, S, source));
+            _add(facts, mkFact('access.admin', hScope, { service: shellMethod, identity: 'root', uid: 0 }, S, source));
+            _add(facts, mkFact('access.root', hScope, { method: shellMethod }, S, source));
           }
         }
       }
@@ -2085,7 +2324,7 @@
   C._parse_binary_inspection = _parse_binary_inspection;
 
   // ---- POSIX/BSD whoami & doas/sudo/su subshell escalation ----
-  var _POSIX_WHOAMI_NOISE_RE = /^(?:whoami|error|denied|failed|failure|unknown|none|null|invalid|unauthorized|not|command|usage|help)$/i;
+  var _POSIX_WHOAMI_NOISE_RE = /^(?:whoami|hostname|id|uname|pwd|ls|dir|groups|env|set|ver|date|ipconfig|ifconfig|netstat|ss|systeminfo|tasklist|ps|w|last|cat|type|echo|clear|exit|error|denied|failed|failure|unknown|none|null|invalid|unauthorized|not|command|usage|help)$/i;
   function _parse_posix_whoami_escalation(text, ws, command, source, facts) {
     if (!text) return;
     var clean = String(text).replace(C._ANSI_RE, '');

@@ -37,7 +37,7 @@
       emits: ['host.hostname', 'host.fqdn', 'host.domain', 'host.os_family', 'host.os_hint', 'smb.signing', 'smb.smbv1',
         'smb.ms17_010', 'ssh.hostkey', 'ssh.banner', 'ftp.anonymous_login', 'ftp.banner', 'web.title', 'web.server',
         'web.tech', 'http.redirect', 'ad.domain_known', 'ad.base_dn', 'redis.unauth', 'mongo.unauth', 'memcached.open',
-        'x11.unauth', 'smtp.banner', 'smtp.open_relay', 'smtp.users'],
+        'x11.unauth', 'smtp.banner', 'smtp.open_relay', 'smtp.users', 'exploit.candidate'],
     },
     'http-metadata': {
       looksFor: 'an HTTP response or a whatweb/curl banner - the status line, the Server header, the tech it reveals, and a product fingerprint (a Jenkins X-Jenkins header or chrome, an NVMS-1000 login page) that gates a specific exploit move.',
@@ -143,7 +143,7 @@
       looksFor: "a privilege-escalation sweep on the host - winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd groups, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, kernel/sudo/pkexec exploit versions, and a reachable desktop.",
       regex: 'NOPASSWD, SeImpersonatePrivilege, -rwsr-xr-x, nsclient.ini password=',
       emits: ['privesc.', 'config.review', 'defense.control', 'host.notable_program', 'host.arch', 'access.desktop',
-        'host.os_family', 'credential.candidate', 'file.nsclient_ini', 'vuln.dirtycow', 'vuln.dirtypipe', 'vuln.baron_samedit', 'vuln.polkit'],
+        'host.os_family', 'credential.candidate', 'file.nsclient_ini', 'exploit.versioned_banner', 'exploit.candidate', 'vuln.dirtycow', 'vuln.dirtypipe', 'vuln.baron_samedit', 'vuln.polkit'],
     },
     'flags': {
       looksFor: 'an on-host flag read - a clean flag token on its own line from a `type`/`cat ...proof.txt`, or a ===FLAG marker, tied to its slot.',
@@ -161,9 +161,9 @@
       emits: ['snmp.info', 'snmp.community', 'snmp.reachable', 'ad.user_list', 'credential.candidate', 'host.hostname'],
     },
     'banners': {
-      looksFor: 'a bare service banner - an SSH version string or an FTP 220/230 line - pasted without the scan around it, or a confirmed FTP upload (STOR / put reaching "226 Transfer complete") that proves the FTP root is writable.',
+      looksFor: 'a bare service banner - an SSH version string, an FTP 220/230 line, or a raw IMAP4rev1 greeting and tagged LOGIN transcript - pasted without the scan around it, or a confirmed FTP upload (STOR / put reaching "226 Transfer complete") that proves the FTP root is writable.',
       regex: 'SSH-2.0-…, 220 (vsFTPd …), STOR … 226 Transfer complete',
-      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write', 'smtp.banner', 'smtp.reachable', 'mail.reachable', 'vnc.reachable'],
+      emits: ['ssh.banner', 'ssh.reachable', 'ftp.banner', 'ftp.reachable', 'ftp.anonymous_login', 'ftp.anon_write', 'smtp.banner', 'smtp.reachable', 'mail.reachable', 'service.imap.banner', 'credential.validated', 'credential.available', 'credential.plaintext', 'blocker.logon_failure', 'vnc.reachable'],
     },
     'websource': {
       looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',

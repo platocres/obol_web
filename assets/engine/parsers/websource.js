@@ -154,11 +154,12 @@
   var _SECRET_DENY = {
     changeme: 1, change_me: 1, password: 1, secret: 1, 'your-256-bit-secret': 1, yoursecret: 1,
     xxx: 1, xxxx: 1, todo: 1, none: 1, null: 1, example: 1, placeholder: 1, redacted: 1,
+    testpassword: 1, mysecretpassword: 1, yourpassword: 1, enterpassword: 1, 'p@ssw0rd': 1, passw0rd: 1
   };
   var _PLACEHOLDER_RE = /^\$\{.*\}$|^<.*>$|^%.*%$|^\$\w+$|^\{\{.*\}\}$/;
   var _GETBYTES_RE = /GetBytes\(\s*["'](?<s>[^"']{6,})["']/g;
   var _SIGNING_MARK_RE = /SymmetricSecurityKey|SigningCredentials|JwtSecurityToken|HmacSha\d|new HMAC|jwt\.sign/i;
-  var _SECRET_KEY_RE = /SECRET_KEY['"]?\]?\s*[:=]\s*["'](?<s>[^"']{6,})["']/gi;
+  var _SECRET_KEY_RE = /\b(?:SECRET_KEY(?:_BASE)?|secret_key_base|app_secret|jwt_secret)['"]?\]?\s*[:=]\s*(?:["'](?<s>[^"'\r\n]{6,})["']|(?<uval>[0-9a-fA-F]{32,256})\b)/gi;
   var _JWT_SIGN_RE = /jwt\.sign\([^,]+,\s*["'](?<s>[^"']{6,})["']/gi;
   var _CONFIG_PW_RE = /(?<key>hibernate\.connection\.password|spring\.datasource\.password|jdbc\.password|datasource\.password|connection\.password)\s*[:=]\s*["']?(?<s>[^\s"';]{3,})/gi;
   // Field-style DB/service credential (decompiled jar / source): `sqlPass = "…"`, `dbPassword = "…"`.
@@ -192,7 +193,7 @@
 
   function _clean_secret(val) {
     val = (val || '').trim();
-    if (!val || _SECRET_DENY[val.toLowerCase()] || _PLACEHOLDER_RE.test(val)) return '';
+    if (!val || _SECRET_DENY[val.toLowerCase()] || _PLACEHOLDER_RE.test(val) || /<%|%>/.test(val)) return '';
     return val;
   }
   C._clean_secret = _clean_secret;
@@ -262,6 +263,7 @@
   C._has_source_secret = _has_source_secret;
 
   function _parse_source_secret(text, ws, command, source, facts) {
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var t = text || '', scope = _scope(ws), seen = {};
 
     if (C && C._extract_diff_cred_pairs) {
@@ -298,10 +300,16 @@
 
     // A generic SECRET_KEY assignment is app signing material, a candidate lead, not a JWT claim.
     reAll(_SECRET_KEY_RE, t).forEach(function (m) {
-      var s = _clean_secret(m.groups.s);
+      var rawS = (m.groups && (m.groups.s || m.groups.uval)) || '';
+      var s = _clean_secret(rawS);
       if (!s || seen[s]) return;
       seen[s] = true;
       _add(facts, mkFact('credential.candidate', scope, { kind: 'app_signing_secret', secret: s, source: 'source-disclosure' }, S, source));
+      if (/\bsecret_key_base\b/i.test(m[0]) || (m.groups && m.groups.uval)) {
+        var sdVal = { kind: 'config_file' };
+        if (/\bsecret_key_base\b/i.test(m[0])) sdVal.framework = 'rails';
+        _add(facts, mkFact('web.source_disclosed', scope, sdVal, S, source));
+      }
     });
 
     [_CONFIG_PW_RE, _FIELD_CRED_RE, _PHP_PW_RE, _DEFINE_PW_RE, _ENV_PW_RE].forEach(function (rx) {
@@ -596,6 +604,9 @@
     if (_COMMONS_TEXT_VULN_RE.test(t)) return true;
     var reqLines = t.match(/^[ \t]*[A-Za-z0-9][A-Za-z0-9_.-]{1,50}[ \t]*(?:==|~=)[ \t]*\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*[ \t]*(?:#.*)?$/gm);
     if (reqLines && (reqLines.length >= 2 || (reqLines.length >= 1 && /requirements[^\s/]*\.txt\b/i.test(command || '')))) return true;
+    var gemLines = t.match(/^[ \t]*gem[ \t]+['"][A-Za-z0-9_.-]+['"](?:[ \t]*,[ \t]*['"][^'"]+['"])?/gm);
+    if (gemLines && (gemLines.length >= 2 || (/^[ \t]*source[ \t]+['"]https?:\/\/rubygems\.org/im.test(t) && gemLines.length >= 1) || (/\bgemfile\b/i.test(command || '') && gemLines.length >= 1))) return true;
+    if (/^GEM\r?\n[ \t]+remote:[ \t]+https?:\/\/rubygems\.org/m.test(t) && /^[ \t]{4}[A-Za-z0-9_.-]+[ \t]+\(\d+\.\d+[^)]*\)[ \t]*$/m.test(t)) return true;
     return false;
   }
   C._has_web_manifest = _has_web_manifest;
@@ -654,6 +665,22 @@
       }
     }
 
+    // 4b. Ruby Gemfile / Gemfile.lock
+    if (!packages.length && /^GEM\r?\n[ \t]+remote:[ \t]+https?:\/\/rubygems\.org/m.test(t)) {
+      var glMatches = reAll(/^[ \t]{4}([A-Za-z0-9_.-]+)[ \t]+\(([0-9][A-Za-z0-9_.-]*)\)[ \t]*$/gm, t);
+      if (glMatches.length) {
+        manifestType = 'Gemfile.lock';
+        glMatches.forEach(function (glm) { addPkg(glm[1], glm[2]); });
+      }
+    }
+    if (!packages.length && /^[ \t]*gem[ \t]+['"][A-Za-z0-9_.-]+['"]/m.test(t)) {
+      var gemMatches = reAll(/^[ \t]*gem[ \t]+['"]([A-Za-z0-9_.-]+)['"](?:[ \t]*,[ \t]*['"]([^'"]+)['"])?/gm, t);
+      if (gemMatches.length) {
+        manifestType = 'Gemfile';
+        gemMatches.forEach(function (gm) { addPkg(gm[1], gm[2] || 'unpinned'); });
+      }
+    }
+
     // 5. CHANGELOG / release-note vulnerable library disclosure (Apache Commons Text 1.5 - 1.9)
     var ctM = _COMMONS_TEXT_VULN_RE.exec(t);
     if (ctM) {
@@ -664,8 +691,8 @@
     if (!packages.length) return;
     var manifestPath = '';
     if (command) {
-      var mpM = /https?:\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml|build\.gradle|changelog[^\s"'?#]*))/i.exec(command)
-        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml|build\.gradle|changelog[^\s"']*))/i.exec(command);
+      var mpM = /(?:https?|ftp):\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"'?#]*))/i.exec(command)
+        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"']*))/i.exec(command);
       if (mpM) manifestPath = mpM[1];
     }
     var mVal = {

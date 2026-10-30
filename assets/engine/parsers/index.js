@@ -37,6 +37,27 @@
 
   function has(name) { return typeof C[name] === 'function'; }
 
+  var _PUBLIC_REF_HOST_RE = /(?:^|\.)(?:google\.[a-z.]{2,6}|stackoverflow\.com|stackexchange\.com|github\.com|githubusercontent\.com|microsoft\.com|learn\.microsoft\.com|exploit-db\.com)$/i;
+  function _is_public_reference_http_cmd(command, ws) {
+    var cmd = String(command || '').trim();
+    if (!/^(?:sudo\s+|proxychains4?\s+)?(?:GET|POST|HEAD|curl|wget)\b/i.test(cmd)) return false;
+    var urlMatches = cmd.match(/https?:\/\/([^/\s:'"?#]+)/gi);
+    if (!urlMatches || !urlMatches.length) return false;
+    var targetLow = String((ws && ws.target) || '').trim().toLowerCase().replace(/\.$/, '');
+    var domLow = String((ws && ws.domainSeed) || '').trim().toLowerCase().replace(/\.$/, '');
+    for (var i = 0; i < urlMatches.length; i++) {
+      var hm = /^https?:\/\/([^/\s:'"?#]+)/i.exec(urlMatches[i]);
+      var host = hm ? hm[1].trim().toLowerCase().replace(/\.$/, '') : '';
+      if (!host) continue;
+      if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host) || host === 'localhost') return false;
+      if (targetLow && (host === targetLow || host.slice(-(targetLow.length + 1)) === '.' + targetLow)) return false;
+      if (domLow && (host === domLow || host.slice(-(domLow.length + 1)) === '.' + domLow)) return false;
+      if (!_PUBLIC_REF_HOST_RE.test(host)) return false;
+    }
+    return true;
+  }
+  if (C) C._is_public_reference_http_cmd = _is_public_reference_http_cmd;
+
   function _stripAnsi(s) {
     if (C && typeof C.stripAnsi === 'function') return C.stripAnsi(s);
     return String(s || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g, '');
@@ -104,6 +125,10 @@
       };
     });
     var lc = command.toLowerCase();
+    var isPublicRefHttp = _is_public_reference_http_cmd(command, ws);
+    var hasFtpUri = /\bftp:\/\/[^\s'"]+/i.test(command);
+    var isFtpOnlyUriCmd = hasFtpUri && !/\bhttps?:\/\/[^\s'"]+/i.test(command) && !/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
+    var hasFtpOwnerListing = (text.match(/^\s*[-d][rwxstST-]{9}\s+\d+\s+ftp\s+ftp\s+\d+\s+/gim) || []).length >= 2;
     var domainHint = '';
     var actObj = { id: actionId };
     try {
@@ -172,7 +197,7 @@
     // least two "name ATTR size Day Mon DD HH:MM:SS YYYY" listing rows.
     var _smbLsFooter = text.indexOf('blocks available') >= 0 && /\d+\s+blocks of size\s+\d+\.\s+\d+\s+blocks available/i.test(text);
     var _smbLsRows = (!_smbLsFooter && /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4}/i.test(text) && /^[ \t]+\S(?:[^\r\n]*?\S)?[ \t]+[DAHSRNCETI]+\s+\d+\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4}\s*$/im.test(text)) ? 1 : 0;
-    if (lc.indexOf('spider_plus') >= 0 || (lc.indexOf('smbmap') >= 0 && (' ' + lc).indexOf(' -r') >= 0) || lc.indexOf('smbclient') >= 0 || text.indexOf('getting file ') >= 0 || _smbLsFooter || _smbLsRows >= 1 || /stream:\s*\[:[^\]]+:\$DATA\]/i.test(text) || (isSmbEnum && /\b(?:unattend|sysprep|groups|services|scheduledtasks)\.xml\b|\bweb\.config\b|(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]{1,120}\.(?:kdbx|ppk|ovpn|pfx|vmdk)\b/i.test(text))) {
+    if (lc.indexOf('spider_plus') >= 0 || (lc.indexOf('smbmap') >= 0 && (' ' + lc).indexOf(' -r') >= 0) || lc.indexOf('smbclient') >= 0 || text.indexOf('getting file ') >= 0 || text.indexOf('putting file ') >= 0 || _smbLsFooter || _smbLsRows >= 1 || /stream:\s*\[:[^\]]+:\$DATA\]/i.test(text) || (isSmbEnum && /\b(?:unattend|sysprep|groups|services|scheduledtasks)\.xml\b|\bweb\.config\b|(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]{1,120}\.(?:kdbx|ppk|ovpn|pfx|vmdk)\b/i.test(text))) {
       guarded._parse_share_inventory(text, ws, command, source, facts);
     }
 
@@ -215,7 +240,7 @@
     if (lc.indexOf('getnpusers') >= 0 || lc.indexOf('asreproast') >= 0 || text.indexOf('$krb5asrep$') >= 0 || (/^Name\s+MemberOf\s+PasswordLastSet/im.test(text) && /UF_DONT_REQUIRE_PREAUTH|DONT_REQ_PREAUTH/i.test(text))) guarded._parse_asrep_hashes(text, ws, source, facts);
     if (lc.indexOf('getuserspns') >= 0 || lc.indexOf('kerberoast') >= 0 || text.indexOf('$krb5tgs$') >= 0 || /^ServicePrincipalName\s+Name\s+MemberOf/im.test(text)) guarded._parse_tgs_hashes(text, ws, source, facts);
 
-    if (lc.indexOf('secretsdump') >= 0 || /\bsecretsdump\b/i.test(text) || lc.indexOf('hashdump') >= 0 || lc.indexOf('samdump2') >= 0 || actionId === 'vhd-mount-sam-extract' || (lc.indexOf('volatility') >= 0 && lc.indexOf('dump') >= 0) || (isNxc && ['--ntds', '--sam', '--lsa'].some(function (f) { return lc.indexOf(f) >= 0; })) || (C._looks_like_sam_dump && guarded._looks_like_sam_dump(text)) || /Dumping (?:local )?SAM hashes|Dumping LSA Secrets|Dumping Domain Credentials|_SC_[A-Za-z0-9_.-]+/i.test(text)) {
+    if (lc.indexOf('secretsdump') >= 0 || /\bsecretsdump\b/i.test(text) || lc.indexOf('hashdump') >= 0 || lc.indexOf('samdump2') >= 0 || lc.indexOf('pwdump') >= 0 || lc.indexOf('fgdump') >= 0 || actionId === 'vhd-mount-sam-extract' || (lc.indexOf('volatility') >= 0 && lc.indexOf('dump') >= 0) || (isNxc && ['--ntds', '--sam', '--lsa'].some(function (f) { return lc.indexOf(f) >= 0; })) || (C._looks_like_sam_dump && guarded._looks_like_sam_dump(text)) || /^(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9._$-]+:\d{3,6}:NO PASSWORD\*+:[0-9a-fA-F]{32}:::/im.test(text) || /Dumping (?:local )?SAM hashes|Dumping LSA Secrets|Dumping Domain Credentials|_SC_[A-Za-z0-9_.-]+/i.test(text)) {
       guarded._parse_ntlm_dump(text, ws, command, source, facts);
     }
 
@@ -232,7 +257,7 @@
     if (has('_looks_like_timeroast') && guarded._looks_like_timeroast(text)) guarded._parse_timeroast(text, ws, command, source, facts);
 
     // Structured cleartext credential blocks (Domain: ... Username: ... Password: ...) and process leaks.
-    if (has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(text, command, ws)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
+    if (!isPublicRefHttp && has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(text, command, ws)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
     if (has('_looks_like_tshark_http') && guarded._looks_like_tshark_http(text, command) && has('_parse_tshark_http_creds')) guarded._parse_tshark_http_creds(text, ws, command, source, facts);
 
     if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0 || /\b\d{8,14}_(?:bloodhound|computers|users|groups|domains)\.zip\b|Done in \d+M \d+S/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts);
@@ -254,9 +279,24 @@
     // Operational blockers (recon/exec/privesc/web traps) - all content-first, any tool.
     if (C._parse_op_blockers) guarded._parse_op_blockers(text, ws, command, source, facts);
 
-    var isWebExploitCmd = (C._WEB_EXPLOIT_ACTION_IDS && C._WEB_EXPLOIT_ACTION_IDS.has(actionId))
-      || (/\b(?:curl|wget|httpie|python3?)\b/.test(lc) && (/cmd=|exec=|shell\.php|cmd\.jsp|cmd\.asp|evil\.|reverse|payload|\.\.\/|%2e%2e|php:\/\/filter|expect:\/\/|data:\/\//i.test(command) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) && ((C._LINUX_ID_RE && C._LINUX_ID_RE.test(text)) || /root:x:0:0:/i.test(text)))))
-      || (!command && (/^root:x:0:0:/im.test(text) || (C._LFI_WIN_INI_RE && C._LFI_WIN_INI_RE.test(text)) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) && C._LINUX_ID_RE && C._LINUX_ID_RE.test(text))));
+    var isHttpContext = !isPublicRefHttp && !isFtpOnlyUriCmd && (
+      /^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text)
+      || /<(?:!doctype\s+html|html|head|body|pre)\b/i.test(text)
+      || /\bhttps?:\/\/[^\s'"]+/i.test(command)
+    );
+    var isHttpClientTurn = !isPublicRefHttp && !isFtpOnlyUriCmd && (
+      /\b(?:curl|wget|httpie)\b/i.test(lc)
+      || (/\b(?:http|python3?|ruby|perl|php)\b/i.test(lc) && (isHttpContext || /\b(?:requests|urllib|httpx|aiohttp|http\.client|curl_init)\b/i.test(command)))
+      || isHttpContext
+    );
+    var hasWebCmdiBody = !!((C._LINUX_ID_RE && C._LINUX_ID_RE.test(text))
+      || (C._CMDI_UID_RE && C._CMDI_UID_RE.test(text))
+      || (C._CMDI_WIN_RE && C._CMDI_WIN_RE.test(text))
+      || /<(?:pre|body|html|p|div)\b[\s\S]{0,400}?\b(?:nt authority\\(?:system|network service|local service)|iis apppool\\[a-z0-9_.-]+)\b/i.test(text));
+    var isWebExploitCmd = !isPublicRefHttp && ((C._WEB_EXPLOIT_ACTION_IDS && C._WEB_EXPLOIT_ACTION_IDS.has(actionId))
+      || (isHttpClientTurn && hasWebCmdiBody)
+      || (/\b(?:curl|wget|httpie|python3?)\b/.test(lc) && !isFtpOnlyUriCmd && (/cmd=|exec=|shell\.php|cmd\.jsp|cmd\.asp|evil\.|reverse|payload|\.\.\/|%2e%2e|php:\/\/filter|expect:\/\/|data:\/\//i.test(command) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) && /root:x:0:0:/i.test(text))))
+      || (!command && (/^root:x:0:0:/im.test(text) || (C._LFI_WIN_INI_RE && C._LFI_WIN_INI_RE.test(text)) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) && hasWebCmdiBody))));
 
     // Service login / DB-RCE / bare `id` output that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus
     // COPY..PROGRAM and friends, or a bare uid=... gid=... paste): reuse the ssh-exec reader to mint the
@@ -268,6 +308,8 @@
 
     var looksLikeCracked = C._is_cracking_command(command) || text.indexOf('$keepass$*') >= 0
       || (C._JOHN_LOADED_RE && C._JOHN_LOADED_RE.test(text))
+      || (C._JOHN_CRACKED_FOOTER_RE && C._JOHN_CRACKED_FOOTER_RE.test(text))
+      || /^\s*[1-9]\d*g\s+\d+:\d{2}:\d{2}:\d{2}\s+DONE\b|\bUse the "--show" option to display all of the cracked passwords\b/im.test(text)
       || /Session\.+:\s*hashcat|Status\.+:\s*Cracked|\b\d+\s+password\s+hash(?:es)?\s+cracked,\s+\d+\s+left\b/i.test(text)
       || (text.indexOf(':') >= 0 && (text.indexOf('$') >= 0 || text.indexOf('pbkdf2_') >= 0 || text.indexOf('sha256:') >= 0 || /\.kdbx|\.psafe3/i.test(text)) && /^(?:\$krb5(?:tgs|asrep)\$[^\r\n:]+|\$DCC2\$\d+#[^#\r\n]+#[0-9a-fA-F]{32}|\$(?:1|2[abxy]|5|6|y|apr1|sha1|NT|S|ansible|PEM)\$[^\s:]+|pbkdf2_sha(?:1|256|512)\$[^\s:]+|sha256:\d+:[^\s:]+|\S+\.(?:kdbx|psafe3)):[^\r\n]+$/im.test(text));
     if (looksLikeCracked) guarded._parse_cracked_credentials(text, ws, command, source, facts);
@@ -304,7 +346,7 @@
     if ((/\b(?:certutil|wget|scp|bitsadmin|xcopy|smbclient|upload)\b/i.test(lc) || /\bcopy\b/i.test(lc) || /putting file\s+\S+\s+as\s+\\|CertUtil:\s*-\w[\w-]*\s*command completed successfully|\bsaved\s+\[\d|\b\d+\s+file\(s\)\s+copied\b/i.test(text)) && has('_parse_transfer_success')) guarded._parse_transfer_success(text, ws, command, source, facts);
 
     if (lc.indexOf('penelope') >= 0 || (C._PENELOPE_GOT_RE && C._PENELOPE_GOT_RE.test(text)) || (C._PENELOPE_UPGRADE_RE && C._PENELOPE_UPGRADE_RE.test(text))) guarded._parse_penelope(text, ws, source, facts);
-    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(text)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
+    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(text) || /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\s*$/im.test(text)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
     if (has('_looks_like_meterpreter') && guarded._looks_like_meterpreter(text, command) && has('_parse_meterpreter')) guarded._parse_meterpreter(text, ws, command, source, facts);
     if (has('_parse_posix_whoami_escalation') && /\b(?:whoami|doas|sudo|su)\b/i.test((command || '') + '\n' + text)) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
     if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
@@ -312,7 +354,7 @@
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) {
       guarded._parse_privesc_output(actionId, text, ws, command, source, facts);
     } else if (has('_parse_privesc_output')) {
-      var isRemoteScanner = /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc) || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
+      var isRemoteScanner = hasFtpOwnerListing || /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc) || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
       if (!isRemoteScanner && has('_looks_like_linux_enum') && (guarded._looks_like_linux_enum(text) || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b/i.test(lc) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
@@ -391,12 +433,12 @@
     var isOutboundHttpReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(text));
     var isNonHttpAccountOrOutbound = !!(C._is_unix_account_dump && C._is_unix_account_dump(text)) || isOutboundHttpReqOnly;
     if (isWebExploitCmd && !isOutboundHttpReqOnly) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
-    if (!isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text))) guarded._parse_http_metadata(text, ws, source, facts);
+    if (!isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text))) guarded._parse_http_metadata(text, ws, source, facts);
     // Product fingerprints (Jenkins, NVMS-1000) run content-first on any web-ish
     // paste (nmap http-* scripts, curl -I, whatweb, a pasted page/headers). The
     // parser self-gates on a definitive signature, so an unrelated paste mints
     // nothing; a hit lights the precise exploit move instead of a bare port gate.
-    if (!isSqlClientSession && !isNonHttpAccountOrOutbound && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
+    if (!isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
     // LAPS read (nxc -M laps / --laps, ldapsearch/Get-ADComputer ms-MCS-AdmPwd):
     // content-gated on a LAPS signature, and self-gated to require a real
     // Password:/attribute value so the "No result found" failure mints nothing.
@@ -406,7 +448,7 @@
     if (has('_parse_nsclient_ini') && (lc.indexOf('nsclient') >= 0 || /nsclient|\[\/settings\//i.test(text))) guarded._parse_nsclient_ini(text, ws, command, source, facts);
     // KeePass database/dump in hand (.kdbx, $keepass$ hash, master-key dump).
     if (has('_parse_keepass_dump') && (/keepass|\.kdbx/i.test(lc) || /\$keepass\$|\.kdbx/i.test(text))) guarded._parse_keepass_dump(text, ws, command, source, facts);
-    if (!isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(text) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+/im.test(text))) guarded._parse_web_surface(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(text) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+/im.test(text))) guarded._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(text)) guarded._parse_snmp_output(text, ws, command, source, facts);
     var dbSessionCheckText = [text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
     var looksLikeDbQueryOrHashRow = /\b(?:pg_database|pg_tables|pg_shadow|pg_authid)\b|^\s*\\(?:l|list|dt)\+?(?:\s|;|$)|^\s*List of (?:databases|relations)\s*$/im.test(dbSessionCheckText)
@@ -414,10 +456,20 @@
     if (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || looksLikeDbQueryOrHashRow) guarded._parse_database_output(text, ws, command, source, facts);
     if ((lc.indexOf('sqlite3') >= 0 || ((text.indexOf('|') >= 0 || /CREATE TABLE\s+/i.test(text)) && /CREATE TABLE\s+|^\s*\d+\|[^|\r\n]+\|[^|\r\n]+/im.test(text))) && has('_parse_sqlite_dump')) guarded._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
-    if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0 || /^\s*(?:200 PORT command successful|2(?:27|29) Entering (?:Passive|Extended Passive) Mode|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting))/im.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
+    if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0 || hasFtpUri || hasFtpOwnerListing || /^\s*(?:200 PORT command successful|2(?:27|29) Entering (?:Passive|Extended Passive) Mode|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting))/im.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
     if (C._SSH_BANNER_RE.test(text)) guarded._parse_ssh_banner(text, ws, source, facts);
     if (((' ' + lc + ' ').indexOf(' 21') >= 0 || lc.indexOf('ftp') >= 0 || C._FTP_BANNER_RE.test(text)) && C._FTP_BANNER_RE.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
     if (has('_parse_smtp_output') && (/\b(?:swaks|smtp-user-enum|sendmail)\b/i.test(lc) || /^(?:<-|<--)?\s*220[\s-][^\r\n]*\bE?SMTP\b/im.test(text) || (/^\s*(?:->|-->)?\s*(?:EHLO|HELO|AUTH\s+LOGIN|MAIL\s+FROM:|RCPT\s+TO:|VRFY\s)/im.test(text) && /^\s*(?:<-|<--)?\s*2(?:20|35|50)[\s-]/im.test(text)))) guarded._parse_smtp_output(text, ws, command, source, facts);
+    var isImapTranscript = /^\*\s+OK\b[^\r\n]*?\bIMAP4/im.test(text)
+      || (/^[A-Za-z0-9._-]+\s+(?:LOGIN|AUTHENTICATE|SELECT|EXAMINE|FETCH|UID\s+FETCH)\b/im.test(text)
+        && (/^[A-Za-z0-9._-]+\s+(?:OK|NO|BAD)\b[^\r\n]*\bLOGIN\b/im.test(text) || /^\*\s+\d+\s+(?:EXISTS|FETCH)\b/im.test(text)));
+    if (isImapTranscript) {
+      if (has('_parse_imap_output')) guarded._parse_imap_output(text, ws, command, source, facts);
+      else if (OBOL.parsers && typeof OBOL.parsers._parse_imap_output === 'function') {
+        try { OBOL.parsers._parse_imap_output(text, ws, command, source, facts); }
+        catch (imapErr) { diagnostics.push({ parser: '_parse_imap_output', message: (imapErr && imapErr.message) || String(imapErr) }); }
+      }
+    }
     if (has('_parse_rsync_nfs') && (/\b(?:rsync|showmount)\b/.test(lc) || /^Export list for\s+\S+:|^NFS\s+\d{1,3}(?:\.\d{1,3}){3}\s+2049\b/im.test(text))) guarded._parse_rsync_nfs(text, ws, command, source, facts);
 
     if (((lc.indexOf('rubeus') >= 0 && (lc.indexOf('asktgt') >= 0 || lc.indexOf('tgtdeleg') >= 0)) || /ServiceName\s*:\s*krbtgt\/[\s\S]{1,400}?Base64EncodedTicket/i.test(text)) && has('_parse_rubeus_asktgt')) guarded._parse_rubeus_asktgt(text, ws, source, facts);
@@ -438,22 +490,22 @@
     if (has('_parse_flags')) guarded._parse_flags(text, ws, command, source, facts);
 
     // Section 33 content-gated OSWE parsers (only the ported ones run)
-    if (!isOutboundHttpReqOnly && has('_has_source_secret') && C._has_source_secret(text)) guarded._parse_source_secret(text, ws, command, source, facts);
-    if (has('_has_windows_creds') && C._has_windows_creds(text, command)) guarded._parse_windows_creds(text, ws, command, source, facts);
-    if (!isOutboundHttpReqOnly && has('_has_product_signature') && C._has_product_signature(text, ws, command)) guarded._parse_product_signature(text, ws, command, source, facts);
-    if (!isOutboundHttpReqOnly && has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
-    if (!isOutboundHttpReqOnly && has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
-    if (!isOutboundHttpReqOnly && has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
-    if (!isOutboundHttpReqOnly && has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_source_secret') && C._has_source_secret(text)) guarded._parse_source_secret(text, ws, command, source, facts);
+    if (!isPublicRefHttp && has('_has_windows_creds') && C._has_windows_creds(text, command)) guarded._parse_windows_creds(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_product_signature') && C._has_product_signature(text, ws, command)) guarded._parse_product_signature(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
+    if (!isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
 
     // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
     // action-id, each parser is content-gated so an unrelated paste mints nothing.
-    if ((actionId === 'check-web-headers' || (/\bcurl\b/.test(lc) && /\s-(?:I|-head|[a-zA-Z]*i)\b/.test(' ' + command))) && has('_parse_http_headers')) guarded._parse_http_headers(text, ws, source, facts);
-    if ((actionId === 'check-http-methods' || /^\s*(allow|public):/im.test(text)) && has('_parse_http_methods')) guarded._parse_http_methods(text, ws, source, facts);
-    if ((actionId === 'check-cors' || /access-control-allow-origin:/i.test(text)) && has('_parse_http_cors')) guarded._parse_http_cors(text, ws, source, facts);
-    if (actionId === 'check-web-body' && has('_parse_http_body')) guarded._parse_http_body(text, ws, source, facts);
-    if ((actionId === 'check-tls-config' || lc.indexOf('sslscan') >= 0 || lc.indexOf('testssl') >= 0 || lc.indexOf('ssl-enum-ciphers') >= 0 || /TLSv1\.[01]\s+enabled|Heartbleed\s+vulnerable/i.test(text)) && has('_parse_tls_info')) guarded._parse_tls_info(text, ws, source, facts);
-    if ((actionId === 'check-exposed-files' || /(?:Index of \/\s*<\/title>|\[To Parent Directory\]|^User-agent:\s*\*[\s\S]{1,200}?Disallow:\s*\/)/im.test(text)) && has('_parse_http_exposed')) guarded._parse_http_exposed(text, ws, source, facts);
+    if (!isPublicRefHttp && (actionId === 'check-web-headers' || (/\bcurl\b/.test(lc) && !isFtpOnlyUriCmd && /\s-(?:I|-head|[a-zA-Z]*i)\b/.test(' ' + command))) && has('_parse_http_headers')) guarded._parse_http_headers(text, ws, source, facts);
+    if (!isPublicRefHttp && (actionId === 'check-http-methods' || /^\s*(allow|public):/im.test(text)) && has('_parse_http_methods')) guarded._parse_http_methods(text, ws, source, facts);
+    if (!isPublicRefHttp && (actionId === 'check-cors' || /access-control-allow-origin:/i.test(text)) && has('_parse_http_cors')) guarded._parse_http_cors(text, ws, source, facts);
+    if (!isPublicRefHttp && actionId === 'check-web-body' && has('_parse_http_body')) guarded._parse_http_body(text, ws, source, facts);
+    if (!isPublicRefHttp && (actionId === 'check-tls-config' || lc.indexOf('sslscan') >= 0 || lc.indexOf('testssl') >= 0 || lc.indexOf('ssl-enum-ciphers') >= 0 || /TLSv1\.[01]\s+enabled|Heartbleed\s+vulnerable/i.test(text)) && has('_parse_tls_info')) guarded._parse_tls_info(text, ws, source, facts);
+    if (!isPublicRefHttp && (actionId === 'check-exposed-files' || /(?:Index of \/\s*<\/title>|\[To Parent Directory\]|^User-agent:\s*\*[\s\S]{1,200}?Disallow:\s*\/)/im.test(text)) && has('_parse_http_exposed')) guarded._parse_http_exposed(text, ws, source, facts);
     if ((actionId === 'recon-dns' || lc.indexOf('axfr') >= 0) && has('_parse_dns_zone')) guarded._parse_dns_zone(text, ws, source, facts, command);
     if ((actionId === 'check-dns-email' || /v=spf1\s|v=DMARC1\s/i.test(text)) && has('_parse_dns_email')) guarded._parse_dns_email(text, ws, source, facts);
     if ((actionId === 'check-subdomain-takeover' || (/is\s+an\s+alias\s+for|\bIN\s+CNAME\b/i.test(text) && /github\.io|herokuapp\.com|s3\.amazonaws\.com|azurewebsites\.net|cloudfront\.net|pantheonsite\.io|zendesk\.com|fastly\.net|ghost\.io|myshopify\.com|surge\.sh|bitbucket\.io|unbouncepages\.com|wordpress\.com|tumblr\.com/i.test(text))) && has('_parse_dns_takeover')) guarded._parse_dns_takeover(text, ws, source, facts);
@@ -502,13 +554,31 @@
     if (has('_parse_shape')) guarded._parse_shape(text, ws, source, facts);
 
     // Stage 0 Exploit-DB versioned non-stock banner recognizer (yields whenever any vuln.* matched).
-    if (has('_parse_versioned_banner_for_edb')) guarded._parse_versioned_banner_for_edb(text, ws, command, source, facts);
+    if (!isPublicRefHttp && has('_parse_versioned_banner_for_edb')) guarded._parse_versioned_banner_for_edb(text, ws, command, source, facts);
 
     // Wittgensteinian Contextual Inference (Tier 3) & Causal Entailment Gate Synchronizer:
     // combines atomic primitives, 2D table/KV geometry, Operator Attention Frame, and global entities
     // when Tier 1 & Tier 2 did not match, and backfills entailed prerequisite gates on out-of-order jumps.
     if (has('_parse_inference')) guarded._parse_inference(text, ws, command, source, facts, actionId, opts);
+    if (isPublicRefHttp) {
+      var pubTargetScope = 'host:' + ws.target;
+      for (var pri = facts.length - 1; pri >= 0; pri--) {
+        var prf = facts[pri];
+        if (prf && prf.scope === pubTargetScope && (prf.kind === 'http.reachable' || /^web\./.test(prf.kind || '') || /^credential\./.test(prf.kind || '') || /^hash\./.test(prf.kind || ''))) {
+          facts.splice(pri, 1);
+        }
+      }
+    }
     if (has('_apply_causal_entailment')) guarded._apply_causal_entailment(facts, ws, command, text, source, opts);
+    if (isPublicRefHttp) {
+      var pubTargetScope2 = 'host:' + ws.target;
+      for (var prj = facts.length - 1; prj >= 0; prj--) {
+        var prf2 = facts[prj];
+        if (prf2 && prf2.scope === pubTargetScope2 && (prf2.kind === 'http.reachable' || /^web\./.test(prf2.kind || '') || /^credential\./.test(prf2.kind || '') || /^hash\./.test(prf2.kind || ''))) {
+          facts.splice(prj, 1);
+        }
+      }
+    }
 
     // Ensure twin facts required by packs are always co-minted
     if (C._add && C.mkFact) {

@@ -777,6 +777,7 @@
       "requires_any": [
         "smb.shares",
         "smb.null_session",
+        "smb.guest_session",
         "smb.readable_share",
         "smb.writable_share",
         "smb.content_accessible",
@@ -1237,7 +1238,7 @@
             "ad.attack_paths"
           ],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u {{user}} -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt — then submit that .txt file in the Evidence tab.",
+          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt, then submit that .txt file in the Evidence tab.",
           "note": "LANE 1 companion to the nxc queries above (also remote, no foothold): the single highest-signal writable-objects question, what objects can THIS account write to? Every writable group/user/computer is a candidate edge (join a group, reset a password, add a shadow cred, grant DCSync). Reach for this when nxc's daclread needs a wider sweep."
         },
         {
@@ -2726,7 +2727,7 @@
         {
           "tool": "bloodyad",
           "run": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get object \"{{user}}\" --attr memberOf",
-          "note": "Check whether the group membership is still present on '{{user}}'. If \"{{joined_group}}\" is missing from memberOf, a lab cleanup script reverted the group — run Command 1 above to re-join and grant DCSync in one shot."
+          "note": "Check whether the group membership is still present on '{{user}}'. If \"{{joined_group}}\" is missing from memberOf, a lab cleanup script reverted the group; run Command 1 above to re-join and grant DCSync in one shot."
         },
         {
           "tool": "kdestroy",
@@ -2938,7 +2939,7 @@
             "ad.attack_paths"
           ],
           "web": "bloodyAD -d {{domain}} --host {{target}} -u '{{user}}' -p '{{password}}' get writable --detail | tee {{scandir}}/bloodyad-writable.txt",
-          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt — then submit that .txt file in the Evidence tab.",
+          "web_note": "Heads up: --detail generates tens of thousands of lines of output (too large to paste). Run this command in its own terminal tab; it saves directly to scans/bloodyad-writable.txt, then submit that .txt file in the Evidence tab.",
           "note": "Begin here: what can your account genuinely write to? The detailed output is your menu of options."
         },
         {

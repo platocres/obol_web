@@ -104,7 +104,7 @@
     if (!clean || clean.length < 3 || clean.length > 256) return true;
     if (/[\x00-\x08\x0e-\x1f\x7f-\x9f\ufffd]/.test(clean)) return true;
     if (echoSet && echoSet[clean.toLowerCase()]) return true;
-    if (/^(?:null|none|false|true|empty|nil|undefined|n\/a|na|tbd|todo|changeme|change_me|password|passwd|secret|user|username|account|login|domain|host|server|your_password|password_here|secret_here|api_key_here|token_here|example|sample|test|placeholder|redacted|hidden|masked|encrypted|not\s*set|write|read|create_child|delete_child|full_control|generic_all|generic_write|\*+|\.+|-+|_+|<[^>]+>|\[[^\]]+\]|\{[^}]+\}|0x0+)$/i.test(clean)) return true;
+    if (/^(?:null|none|false|true|empty|nil|undefined|n\/a|na|tbd|todo|changeme|change_me|password|passwd|secret|user|username|account|login|domain|host|server|your_password|password_here|secret_here|api_key_here|token_here|testpassword|mysecretpassword|yourpassword|enterpassword|p@ssw0rd|passw0rd|example|sample|test|placeholder|redacted|hidden|masked|encrypted|not\s*set|write|read|create_child|delete_child|full_control|generic_all|generic_write|\*+|\.+|-+|_+|<[^>]+>|\[[^\]]+\]|\{[^}]+\}|0x0+)$/i.test(clean)) return true;
     if (/^(?:https?:\/\/|#[0-9a-fA-F]{3,8}$|\d+(?:px|em|rem|ms|s|%|pt|vh|vw)$)/.test(clean)) return true;
     if (/^(?:document\.|window\.|navigator\.|location\.|localStorage\.|sessionStorage\.|form\.|this\.|self\.|process\.env\b|os\.environ\b|os\.getenv\b|System\.getenv\b|\$_(?:POST|GET|REQUEST|COOKIE|SERVER|ENV|SESSION)\b|req\.(?:body|query|params|headers|cookies)\b|request\.(?:form|args|json|values|POST|GET|DATA)\b|[A-Za-z_$][A-Za-z0-9_$.]*\s*\(|[A-Za-z_$][A-Za-z0-9_$.]*\[|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){2,}$)/i.test(clean)) return true;
     return false;
@@ -133,7 +133,7 @@
     if (!nt && rawHash && /^[0-9a-fA-F]{32}$/.test(rawHash)) {
       nt = rawHash.toLowerCase();
       rawHash = '';
-    } else if (!nt && rawHash && /^(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}):([0-9a-fA-F]{32})$/i.test(rawHash)) {
+    } else if (!nt && rawHash && /^(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}|NO PASSWORD\*+):([0-9a-fA-F]{32})$/i.test(rawHash)) {
       nt = rawHash.split(':')[1].toLowerCase();
       rawHash = '';
     }
@@ -764,9 +764,9 @@
   var _ATOM_POSIX_ID_RE = /\buid=(\d+)\(([^)\r\n]{1,48})\)\s+gid=(\d+)\(([^)\r\n]{1,48})\)(?:\s+euid=(\d+)\(([^)\r\n]{1,48})\))?/i;
   var _ATOM_WIN_SID_RE = /\bS-1-5-21-\d+-\d+-\d+(?:-\d+)?\b/g;
   var _ATOM_LDAP_DN_RE = /\b(?:CN|OU|DC)=[^,\r\n]{1,64}(?:,(?:CN|OU|DC)=[^,\r\n]{1,64})+\b/gi;
-  var _ATOM_SPN_RE = /\b(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB|termsrv|vnc|nfs|ipp|restrictedkrbhost|wsmansvc)\/(?![0-9]+(?:\.[0-9]+)?\b)([A-Za-z0-9_.\-]*[A-Za-z][A-Za-z0-9_.\-]*(?::\d{1,5})?)\b/gi;
+  var _ATOM_SPN_RE = /(?<![\/\\.A-Za-z0-9_-])(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB|termsrv|vnc|nfs|ipp|restrictedkrbhost|wsmansvc|dns|gc|smtp|imap|pop3?|kadmin|netlogon)\/(?![0-9]+(?:\.[0-9]+)?\b)([A-Za-z0-9_.\-]*[A-Za-z][A-Za-z0-9_.\-]*(?::\d{1,5})?)\b/gi;
   var _ATOM_MOD_HASH_RE = /(?:\$krb5(?:tgs|asrep)\$[^\s"']+|(?:\$DCC2\$\d+#[^#\s]+#[0-9a-fA-F]{32})|\$(?:2[abxy]|5|6|1|y|NT|apr1|keepass|pfx|pkzip2?|rar5|pdf|office|sntp-ms|rakp)\$[^\s"':]+|pbkdf2_sha(?:1|256|512)\$[^\s"']+)/gi;
-  var _ATOM_NTHASH_PAIR_RE = /\b(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}):([0-9a-fA-F]{32})\b/g;
+  var _ATOM_NTHASH_PAIR_RE = /(?:^|\b|:)(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}|NO PASSWORD\*+):([0-9a-fA-F]{32})\b/gi;
   var _ATOM_HEX32_RE = /\b([0-9a-fA-F]{32})\b/g;
   var _ATOM_JWT_RE = /\beyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*\b/g;
   var _ATOM_KV_SECRET_RE = /\b(?:[A-Za-z0-9_]*(?:pass(?:word|wd)?|pwd)|[A-Za-z0-9_]*[a-z0-9_]pw|pw|secret|api[_-]?key|access[_-]?token|auth[_-]?token|ms-?mcs-?admpwd|mslaps-password|cleartext)\s*[:=]\s*(?:"([^"\r\n]{3,128})"|'([^'\r\n]{3,128})'|(?![ \t]*["'])([^\s'"\r\n,;]{3,128})(?=[ \t]*(?:[,;#]|\/\/|$)))/gi;
@@ -983,10 +983,26 @@
     }
     if (s.indexOf('\\\\') >= 0) {
       _ATOM_UNC_PATH_RE.lastIndex = 0;
+      var lhostNorm = String(lhost || '').trim().toLowerCase();
       while ((m = _ATOM_UNC_PATH_RE.exec(s)) !== null) {
         if (uncPaths.length >= MAX_ATOM_ITEMS) break;
+        var uIdx = m.index;
+        if (uIdx >= 2 && /[A-Za-z]:$/.test(s.slice(uIdx - 2, uIdx))) continue;
+        if (uIdx >= 1 && /[\\\/]/.test(s.charAt(uIdx - 1))) continue;
+        if (uIdx > 0) {
+          var preUnc = s.slice(Math.max(0, uIdx - 240), uIdx);
+          if (/[?&#][A-Za-z0-9_.\-\[\]]+=['"]?$/.test(preUnc)
+              || /https?:\/\/[^\s"']*?[?&#][A-Za-z0-9_.\-\[\]]+=[^\s"'&#]*$/i.test(preUnc)) continue;
+        }
         var upParts = m[0].replace(/^\\\\/, '').split('\\');
-        if (upParts[0] === '.' || (upParts[1] && upParts[1].toLowerCase() === 'pipe')) continue;
+        var uncHost = String(upParts[0] || '').trim();
+        var uncHostLow = uncHost.toLowerCase();
+        if (!uncHost || uncHost === '.' || uncHostLow === 'localhost' || uncHost === '127.0.0.1' || (upParts[1] && upParts[1].toLowerCase() === 'pipe')) continue;
+        if (lhostNorm && uncHostLow === lhostNorm) continue;
+        if (_isPrivateIpv4(uncHost, false) && target && uncHost !== target) {
+          var uncSub = _subnet24(uncHost);
+          if ((lhostSub && uncSub === lhostSub) || (_isPrivateIpv4(target, false) && uncSub !== targetSub)) continue;
+        }
         pushUniq(uncPaths, m[0]);
       }
     }
@@ -1054,7 +1070,13 @@
     var cmdLow = _strip_cmd_wrappers(command).toLowerCase();
     if (!cmdLow) return null;
 
+    var cmdForWords = cmdLow
+      .replace(/\b[a-z]:\\[^\s"']*/gi, ' ')
+      .replace(/(?:^|[\s"'=])\/(?:users|home|var|opt|tmp|etc|usr|windows|program)[^\s"']*/gi, ' ');
+    var hasExploitOrAuthOp = /\b(?:select|union|sleep|waitfor|information_schema)\b|(?:authorization|cookie)\s*:|bearer\s+/i.test(cmdLow);
+
     var cmdTool = _canonicalToolName(cmdLow.split(/\s+/)[0]);
+    var isHttpTool = cmdTool === 'curl' || cmdTool === 'wget' || cmdTool === 'httpie';
     var bestMove = null, bestScore = 0;
 
     for (var i = 0; i < packs.length; i++) {
@@ -1076,11 +1098,17 @@
           var flagHits = 0, flagMisses = 0;
           for (var f = 0; f < tmplFlags.length; f++) {
             var fl = tmplFlags[f];
-            if (fl.length < 2 || /^-(?:u|p|d|H|i|t|o|v)$/.test(fl) || seenFl[fl]) continue;
+            if (fl.length < 2 || /^-(?:u|p|d|h|i|t|o|v)$/i.test(fl) || (isHttpTool && /^-(?:x|s|k|l|b|c)$/i.test(fl)) || seenFl[fl]) continue;
             seenFl[fl] = 1;
-            if (cmdLow.indexOf(fl) >= 0) {
-              flagHits += (fl.length > 4 ? 3 : 1);
-            } else if (fl.length > 4 && fl.indexOf('-') === 0) {
+            var isFlag = fl.charAt(0) === '-';
+            if (!isFlag && /^(?:users|admin|login|index)$/i.test(fl) && !hasExploitOrAuthOp) continue;
+            var flEsc = fl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            var hit = isFlag
+              ? (cmdLow.indexOf(fl) >= 0)
+              : new RegExp('(?:^|[^a-z0-9_\\\\/])' + flEsc + '(?:$|[^a-z0-9_\\\\/])', 'i').test(cmdForWords);
+            if (hit) {
+              flagHits += (fl.length > 4 ? 3 : ((isHttpTool && fl === '-f') ? 2 : 1));
+            } else if (fl.length > 4 && isFlag) {
               flagMisses += 2;
             }
           }
@@ -1307,6 +1335,47 @@
       _add(facts, _tagPromptFact(mkFact('db.reachable', h, { engine: promptMeta.subshell, via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
     }
     if (!text.trim()) return;
+    if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
+
+    // 2B. SPN FQDN & Domain Extraction (`SPN(n) = <Service>/<host>.<domain>` / `setspn` / `atoms.spns`)
+    var isKnownLinuxCtx = globalIdx.osFamily === 'linux' || facts.some(function (f) {
+      return f && (f.kind === 'foothold.linux' || f.kind === 'access.root'
+        || (f.kind === 'host.os_family' && f.value && String(f.value.family || '').toLowerCase() === 'linux'));
+    });
+    if (!isKnownLinuxCtx && (atoms.spns.length > 0 || /^\s*SPN\(\d+\)\s*=/im.test(analysisText))
+        && (!isWebClient || /\b(?:SPN\(\d+\)\s*=|servicePrincipalName|setspn|\$krb5tgs\$)/i.test(analysisText))) {
+      var spnCands = atoms.spns.slice();
+      var spnLineRe = /^\s*SPN\(\d+\)\s*=\s*([A-Za-z][A-Za-z0-9_.-]*\/[^\s"']+)/gim, spnLm;
+      while ((spnLm = spnLineRe.exec(analysisText)) !== null) {
+        if (spnCands.indexOf(spnLm[1]) < 0) spnCands.push(spnLm[1]);
+      }
+      var publicSpnDomainRe = /(?:^|\.)(?:cloudfront\.net|amazonaws\.com|azurewebsites\.net|akamai[a-z0-9-]*\.net|fastly\.net|cloudflare\.com|jsdelivr\.net|unpkg\.com|googleapis\.com|gstatic\.com|bootstrapcdn\.com|jquery\.com|fontawesome\.com|github\.io|githubusercontent\.com|microsoft\.com|windows\.net|office\.com|live\.com|msecnd\.net|w3\.org|schema\.org|mozilla\.org|wordpress\.org|wordpress\.com|gravatar\.com|wp\.com|digicert\.com|verisign\.com|letsencrypt\.org)$/i;
+      for (var spi = 0; spi < spnCands.length; spi++) {
+        var spnRaw = String(spnCands[spi] || '').trim();
+        var spnSlash = spnRaw.indexOf('/');
+        if (spnSlash <= 0) continue;
+        var spnSvc = spnRaw.slice(0, spnSlash).toLowerCase();
+        if (spnSvc === 'krbtgt') continue;
+        var spnHostPart = spnRaw.slice(spnSlash + 1).split('/')[0].split(':')[0].replace(/\.$/, '').trim();
+        if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?){2,}$/.test(spnHostPart)) continue;
+        if (!/\.[A-Za-z]{2,24}$/.test(spnHostPart)) continue;
+        var spnFqdn = spnHostPart.toLowerCase();
+        var spnDomain = spnFqdn.slice(spnFqdn.indexOf('.') + 1);
+        if (_PUBLIC_EMAIL_DOMAINS.test(spnDomain) || publicSpnDomainRe.test(spnDomain)) continue;
+        if (!hasKind(facts, 'host.fqdn')) {
+          _add(facts, mkFact('host.fqdn', h, { fqdn: spnFqdn, via: 'spn' }, S, source));
+        }
+        if (!hasKind(facts, 'host.domain')) {
+          _add(facts, mkFact('host.domain', h, { domain: spnDomain, via: 'spn' }, S, source));
+        }
+        var spnDomScope = 'domain:' + spnDomain;
+        if (!facts.some(function (f) { return f && f.kind === 'ad.domain_known' && f.scope === spnDomScope; })) {
+          _add(facts, mkFact('ad.domain_known', spnDomScope, { domain: spnDomain, name: spnDomain, via: 'spn' }, S, source));
+        }
+        if (domScope === h) domScope = spnDomScope;
+        break;
+      }
+    }
 
     var hasEngagementCtx = !!(opts && (opts.entail || (opts.context && (opts.context.target || opts.context.attentionFrame || opts.context.selectionSource))));
     var hasTier1CredOrHash = facts.some(function (f) {
@@ -1828,7 +1897,7 @@
         var kLn = lines[kli];
         if (!kLn || kLn.length > 2048 || !/\bkrbtgt\b/i.test(kLn) || _lineHasNegPolarity(lines, kli)) continue;
         if (/^\s*(?:impacket-)?(?:ticketer|getTGT|getST|Rubeus)\b/i.test(kLn)) continue;
-        var kNtM = /\bkrbtgt:(?:\d+:)?(?:[0-9a-fA-F]{32}|\.{2,4}|\*+):([0-9a-fA-F]{32}):::/i.exec(kLn)
+        var kNtM = /\bkrbtgt:(?:\d+:)?(?:[0-9a-fA-F]{32}|NO PASSWORD\*+|\.{2,4}|\*+):([0-9a-fA-F]{32}):::/i.exec(kLn)
           || /(?:^|[\s\\])krbtgt\s*[:=]\s*([0-9a-fA-F]{32})\b/i.exec(kLn)
           || /\bkrbtgt:rc4_hmac:([0-9a-fA-F]{32})\b/i.exec(kLn)
           || (/\b(?:ntlm|nthash|rc4)\b/i.test(kLn) && /\b([0-9a-fA-F]{32})\b/.exec(kLn));
@@ -1947,7 +2016,7 @@
         var aSec = authPairM[3];
         if (isBoilerplateUser(aUsr) || isPlaceholderSecret(aSec, null)) continue;
         // Guard against LM:NT or RID:LM:NT hash dump rows matching 7F when prefixed with `[+]`
-        var isHashPairSec = /^(?:\d+:)?(?:[0-9a-fA-F]{32}:)?([0-9a-fA-F]{32})(?:::.*)?$/.exec(aSec);
+        var isHashPairSec = /^(?:\d+:)?(?:(?:[0-9a-fA-F]{32}|NO PASSWORD\*+):)?([0-9a-fA-F]{32})(?:::.*)?$/i.exec(aSec);
         var hasExplicitAuthVerdict = /\b(?:Pwn3d!|AUTHENTICATED|LOGIN\s+OK|STATUS_SUCCESS|SUCCESS(?:FUL|FULLY)?|VALID\s+CREDENTIALS?)\b/i.test(aLine);
         if (isHashPairSec) {
           var ntCandidate = isHashPairSec[1].toLowerCase();
@@ -1990,9 +2059,20 @@
     // 7G. UNC Share Path Co-Occurrence (`\\host\ShareName\...`)
     if (atoms.uncPaths.length > 0 && !hasKind(facts, 'smb.shares')) {
       var uncShares = [];
+      var gLhost = String((ws && ws.context && ws.context.params && ws.context.params.lhost) || '').trim().toLowerCase();
+      var gLhostSub = _subnet24(gLhost);
+      var gTarget = String(ws.target || '').trim();
+      var gTargetSub = _subnet24(gTarget);
       for (var uci = 0; uci < atoms.uncPaths.length; uci++) {
         var uncParts = atoms.uncPaths[uci].replace(/^\\\\/, '').split('\\');
-        if (uncParts[0] === '.' || (uncParts[1] && uncParts[1].toLowerCase() === 'pipe')) continue;
+        var gUncHost = String(uncParts[0] || '').trim();
+        var gUncHostLow = gUncHost.toLowerCase();
+        if (!gUncHost || gUncHost === '.' || gUncHostLow === 'localhost' || gUncHost === '127.0.0.1' || (uncParts[1] && uncParts[1].toLowerCase() === 'pipe')) continue;
+        if (gLhost && gUncHostLow === gLhost) continue;
+        if (_isPrivateIpv4(gUncHost, false) && gTarget && gUncHost !== gTarget) {
+          var gUncSub = _subnet24(gUncHost);
+          if ((gLhostSub && gUncSub === gLhostSub) || (_isPrivateIpv4(gTarget, false) && gUncSub !== gTargetSub)) continue;
+        }
         if (uncParts.length >= 2 && uncParts[1] && uncShares.indexOf(uncParts[1]) < 0) {
           uncShares.push(uncParts[1]);
         }
@@ -2091,6 +2171,45 @@
       if (alreadyHeld(kind, scope)) return;
       _add(facts, mkFact(kind, scope, Object.assign({ via: 'causal-entailment' }, val || {}), S, source));
     }
+    function resolveEntailedPort(proto, defaultPort, svcMatchRe, factVal) {
+      if (factVal && Number(factVal.port) > 0) return Number(factVal.port);
+      var allFacts = facts.concat(existing);
+      for (var pi = 0; pi < allFacts.length; pi++) {
+        var pf = allFacts[pi];
+        if (!pf || pf.state !== 'supported' || pf.scope !== h) continue;
+        if ((pf.kind === proto + '.reachable' || pf.kind === 'service.' + proto) && pf.value && Number(pf.value.port) > 0) {
+          return Number(pf.value.port);
+        }
+      }
+      for (var pti = 0; pti < allFacts.length; pti++) {
+        var ptf = allFacts[pti];
+        if (!ptf || ptf.state !== 'supported' || ptf.scope !== h || !/^port:\d+$/.test(ptf.kind || '')) continue;
+        if (ptf.value && svcMatchRe.test(String(ptf.value.service || ''))) {
+          var pNum = Number(ptf.value.port) || parseInt(ptf.kind.slice(5), 10);
+          if (pNum > 0) return pNum;
+        }
+      }
+      var cmdStr = String(command || '');
+      if (cmdStr) {
+        var uriPm = new RegExp('\\b' + proto + ':\\/\\/[^/\\s"\':]+:(\\d{1,5})\\b', 'i').exec(cmdStr);
+        if (uriPm && Number(uriPm[1]) > 0 && Number(uriPm[1]) <= 65535) return Number(uriPm[1]);
+        if (proto === 'ftp') {
+          var ftpPm = /\bftp(?:-ssl)?\s+(?:-[A-Za-z]+\s+)*\S+\s+(\d{2,5})\b/i.exec(cmdStr)
+            || /\blftp\b[^\r\n]*?\s-p\s*(\d{1,5})\b/i.exec(cmdStr);
+          if (ftpPm && Number(ftpPm[1]) > 0 && Number(ftpPm[1]) <= 65535) return Number(ftpPm[1]);
+        } else if (proto === 'ssh') {
+          var sshPm = /\bssh\b[^\r\n]*?\s-p\s*(\d{1,5})\b/i.exec(cmdStr);
+          if (sshPm && Number(sshPm[1]) > 0 && Number(sshPm[1]) <= 65535) return Number(sshPm[1]);
+        } else if (proto === 'winrm') {
+          var winrmPm = /\bevil-winrm\b[^\r\n]*?\s-P\s*(\d{1,5})\b/i.exec(cmdStr);
+          if (winrmPm && Number(winrmPm[1]) > 0 && Number(winrmPm[1]) <= 65535) return Number(winrmPm[1]);
+        }
+      }
+      return defaultPort;
+    }
+    var isFtpOnlyEntCmd = /\bftp:\/\/[^\s'"]+/i.test(command || '')
+      && !/\bhttps?:\/\/[^\s'"]+/i.test(command || '')
+      && !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '');
 
     var isKnownLinuxHost = facts.concat(existing).some(function (ef) {
       if (!ef || ef.state !== 'supported' || ef.scope !== h) return false;
@@ -2187,25 +2306,34 @@
       }
       else if (/^web\.|^http\.reachable$|^vuln\.(?:shellshock|drupalgeddon2|phpmyadmin_lfi|webmin|cacti|zabbix|ofbiz|solr|web_sink)/.test(k)) {
         ensureFact('host.up', h, { target: ws.target });
-        ensureFact('http.reachable', h, {});
+        if (isFtpOnlyEntCmd && k !== 'http.reachable') {
+          var ftpWebPort = resolveEntailedPort('ftp', 21, /^ftp\b/i, v);
+          ensureFact('port:' + ftpWebPort, h, { port: ftpWebPort, protocol: 'tcp', service: 'ftp' });
+          ensureFact('ftp.reachable', h, { port: ftpWebPort });
+        } else {
+          ensureFact('http.reachable', h, {});
+        }
       }
       else if (k === 'winrm.authenticated') {
+        var winrmPort = resolveEntailedPort('winrm', 5985, /^(?:wsman|winrm|httpapi)\b/i, v);
         ensureFact('host.up', h, { target: ws.target });
-        ensureFact('port:5985', h, { port: 5985, protocol: 'tcp', service: 'wsman' });
-        ensureFact('winrm.reachable', h, { port: 5985 });
+        ensureFact('port:' + winrmPort, h, { port: winrmPort, protocol: 'tcp', service: 'wsman' });
+        ensureFact('winrm.reachable', h, { port: winrmPort });
         if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
           C._add_os_observation(facts, ws, source, 'windows', 'Entailed by WinRM authentication', 'high', 'entailment', true);
         }
       }
       else if (k === 'ssh.authenticated' || k === 'ssh.banner' || k === 'ssh.hostkey') {
+        var sshPort = resolveEntailedPort('ssh', 22, /^ssh\b/i, v);
         ensureFact('host.up', h, { target: ws.target });
-        ensureFact('port:22', h, { port: 22, protocol: 'tcp', service: 'ssh' });
-        ensureFact('ssh.reachable', h, { port: 22 });
+        ensureFact('port:' + sshPort, h, { port: sshPort, protocol: 'tcp', service: 'ssh' });
+        ensureFact('ssh.reachable', h, { port: sshPort });
       }
       else if (k === 'ftp.authenticated' || k === 'ftp.anonymous_login' || k === 'ftp.banner') {
+        var ftpPort = resolveEntailedPort('ftp', 21, /^ftp\b/i, v);
         ensureFact('host.up', h, { target: ws.target });
-        ensureFact('port:21', h, { port: 21, protocol: 'tcp', service: 'ftp' });
-        ensureFact('ftp.reachable', h, { port: 21 });
+        ensureFact('port:' + ftpPort, h, { port: ftpPort, protocol: 'tcp', service: 'ftp' });
+        ensureFact('ftp.reachable', h, { port: ftpPort });
       }
       else if (/^db\./.test(k)) {
         ensureFact('host.up', h, { target: ws.target });
@@ -2262,9 +2390,10 @@
 
       // 2. Protocol-Rejection Entailment
       else if (k === 'ssh.key_rejected') {
+        var sshRejPort = resolveEntailedPort('ssh', 22, /^ssh\b/i, v);
         ensureFact('host.up', h, { target: ws.target });
-        ensureFact('port:22', h, { port: 22, protocol: 'tcp', service: 'ssh' });
-        ensureFact('ssh.reachable', h, { port: 22 });
+        ensureFact('port:' + sshRejPort, h, { port: sshRejPort, protocol: 'tcp', service: 'ssh' });
+        ensureFact('ssh.reachable', h, { port: sshRejPort });
       }
       else if (k === 'blocker.ldap_anonymous_disabled') {
         hasAdEvidence = true;
@@ -2296,17 +2425,20 @@
           ensureFact('port:389', h, { port: 389, protocol: 'tcp', service: 'ldap' });
           ensureFact('ldap.reachable', h, { port: 389 });
         } else if (svc === 'winrm') {
+          var winrmBlkPort = resolveEntailedPort('winrm', 5985, /^(?:wsman|winrm|httpapi)\b/i, v);
           ensureFact('host.up', h, { target: ws.target });
-          ensureFact('port:5985', h, { port: 5985, protocol: 'tcp', service: 'wsman' });
-          ensureFact('winrm.reachable', h, { port: 5985 });
+          ensureFact('port:' + winrmBlkPort, h, { port: winrmBlkPort, protocol: 'tcp', service: 'wsman' });
+          ensureFact('winrm.reachable', h, { port: winrmBlkPort });
         } else if (svc === 'ssh') {
+          var sshBlkPort = resolveEntailedPort('ssh', 22, /^ssh\b/i, v);
           ensureFact('host.up', h, { target: ws.target });
-          ensureFact('port:22', h, { port: 22, protocol: 'tcp', service: 'ssh' });
-          ensureFact('ssh.reachable', h, { port: 22 });
+          ensureFact('port:' + sshBlkPort, h, { port: sshBlkPort, protocol: 'tcp', service: 'ssh' });
+          ensureFact('ssh.reachable', h, { port: sshBlkPort });
         } else if (svc === 'ftp') {
+          var ftpBlkPort = resolveEntailedPort('ftp', 21, /^ftp\b/i, v);
           ensureFact('host.up', h, { target: ws.target });
-          ensureFact('port:21', h, { port: 21, protocol: 'tcp', service: 'ftp' });
-          ensureFact('ftp.reachable', h, { port: 21 });
+          ensureFact('port:' + ftpBlkPort, h, { port: ftpBlkPort, protocol: 'tcp', service: 'ftp' });
+          ensureFact('ftp.reachable', h, { port: ftpBlkPort });
         } else if (svc === 'mysql' || svc === 'mssql' || svc === 'psql') {
           ensureFact('host.up', h, { target: ws.target });
           ensureFact('db.reachable', h, { engine: svc });

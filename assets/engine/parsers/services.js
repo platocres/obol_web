@@ -117,7 +117,7 @@
   // FTP transfer context (the dispatcher gates this parser), so a stray date or permission line never
   // mints on its own.
   var _FTP_IIS_ROW_RE = /^\s*(?<date>\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}(?:AM|PM)\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
-  var _FTP_UNIX_ROW_RE = /^\s*(?<perm>[-dlbcps](?:[-rwxsStT]{9}))\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+(?<name>\S.*?)\s*$/;
+  var _FTP_UNIX_ROW_RE = /^\s*(?<perm>[-dlbcps](?:[-rwxsStT]{9})[@+.]?)\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+(?<name>\S.*?)\s*$/;
   var _FTP_WEBROOT_MARKER_RE = /^(?:iisstart\.(?:htm|html|png)|aspnet_client|web\.config|index\.(?:php|html?|aspx?|jsp)|default\.(?:aspx?|htm|html)|wp-config\.php|wwwroot|public_html|htdocs)$/i;
 
   function _parse_ftp_output(text, ws, command, source, facts) {
@@ -127,8 +127,14 @@
       if (banner) banners.push(banner);
       if (m.groups.login) loginSuccess = true;
     });
+    var cmdStr = String(command || '');
+    var ftpUriM = /\bftps?:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?(?=[\/'"\s]|$)/i.exec(cmdStr);
+    var hasFtpUri = !!ftpUriM;
+    var ftpUriPort = (ftpUriM && ftpUriM[1]) ? parseInt(ftpUriM[1], 10) : 0;
+    if (ftpUriPort < 1 || ftpUriPort > 65535) ftpUriPort = 0;
+    var hasFtpListingShape = reAll(/^\s*[-dlbcps][-rwxsStT]{9}[@+.]?\s+\d+\s+ftp\s+ftp\s+\d+\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+\S/gm, text).length >= 2;
     var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
-    var hasFtpSession = !!(banners.length || loginSuccess || writeOk || /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|20|26|27|29|30)[ -]|331[ -]|Connected to\b)/im.test(text));
+    var hasFtpSession = !!(banners.length || loginSuccess || writeOk || hasFtpUri || hasFtpListingShape || /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|20|26|27|29|30)[ -]|331[ -]|Connected to\b)/im.test(text));
     var ftpFiles = [], webrootMarkers = [];
     text.split(/\r?\n/).forEach(function (line) {
       if (!hasFtpSession) return;
@@ -158,13 +164,15 @@
       .replace(/^\s*Remote system type is [^\r\n]*$/gim, '')
       .replace(/^\s*215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
     C._add_os_from_text(ftpOsText, ws, source, facts, 'ftp', 'medium', true);
-    _add(facts, mkFact('ftp.reachable', h, { tool: 'ftp-client' }, S, source));
+    var ftpReachVal = { tool: 'ftp-client' };
+    if (ftpUriPort) ftpReachVal.port = ftpUriPort;
+    _add(facts, mkFact('ftp.reachable', h, ftpReachVal, S, source));
     if (banners.length) _add(facts, mkFact('ftp.banner', h, { banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
     var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
     var isAnon = /\banonymous\b/i.test(command) || anonInText;
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
-    if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', 'ftp-listing', text, ws, source);
+    if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', (hasFtpUri && !banners.length) ? 'ftp-list' : 'ftp-listing', text, ws, source);
     if (webrootMarkers.length) {
       _add(facts, mkFact('config.review', h, { kind: 'ftp_webroot_exposed', files: C.uniqueSortedCI(webrootMarkers), via: 'ftp' }, S, source));
     }
@@ -586,6 +594,129 @@
   }
   C._parse_smtp_output = _parse_smtp_output;
 
+  var _IMAP_BANNER_RE = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?\*\s+OK\b(?<banner>[^\r\n]*?\b(?:IMAP4(?:rev1)?|IMAPrev1)\b[^\r\n]*)$/im;
+  var _IMAP_LOGIN_CMD_RE = /^\s*(?:(?:[-~*]{1,3}>|C:|>)\s*)?(?<tag>[A-Za-z0-9._?-]+)\s+LOGIN\s+(?:"(?<qu>[^"\r\n]+)"|'(?<su>[^'\r\n]+)'|(?<u>\S+))\s+(?:"(?<qp>[^"\r\n]*)"|'(?<sp>[^'\r\n]*)'|(?<p>\S+))[ \t]*$/gim;
+  var _IMAP_TAGGED_RES_RE = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?(?<tag>[A-Za-z0-9._?-]+)\s+(?<status>OK|NO|BAD)\b(?<rest>[^\r\n]*)$/gim;
+  C._IMAP_BANNER_RE = _IMAP_BANNER_RE;
+
+  function _inferImapPort(command) {
+    var cmd = String(command || '');
+    if (!cmd) return 143;
+    var imapsM = /\bimaps:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?/i.exec(cmd);
+    if (imapsM) {
+      var sp = imapsM[1] ? parseInt(imapsM[1], 10) : 993;
+      return (sp >= 1 && sp <= 65535) ? sp : 993;
+    }
+    var imapM = /\bimap:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?/i.exec(cmd);
+    if (imapM) {
+      var ip = imapM[1] ? parseInt(imapM[1], 10) : 143;
+      return (ip >= 1 && ip <= 65535) ? ip : 143;
+    }
+    var connM = /(?:-connect|TCP4?:)\s*(?:\[[^\]]+\]|[^:\s'"]+):(\d{1,5})\b/i.exec(cmd);
+    if (connM) {
+      var cp = parseInt(connM[1], 10);
+      if (cp >= 1 && cp <= 65535) return cp;
+    }
+    var ncM = /\b(?:nc|ncat|netcat|telnet)\b[^\r\n]*?\s(\d{1,5})\s*$/i.exec(cmd);
+    if (ncM) {
+      var np = parseInt(ncM[1], 10);
+      if (np >= 1 && np <= 65535) return np;
+    }
+    return 143;
+  }
+
+  function _parse_imap_output(text, a1, a2, a3, a4) {
+    var ws, command = '', source = 'imap', facts = [];
+    if (a1 && typeof a1 === 'object' && !Array.isArray(a1)) {
+      ws = a1;
+      if (Array.isArray(a4)) {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'imap');
+        facts = a4;
+      } else if (Array.isArray(a3)) {
+        source = typeof a2 === 'string' ? a2 : 'imap';
+        facts = a3;
+        command = typeof a4 === 'string' ? a4 : '';
+      } else {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || 'imap');
+      }
+    } else {
+      command = typeof a1 === 'string' ? a1 : '';
+      facts = Array.isArray(a2) ? a2 : [];
+      var ipM = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(command) || /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(String(text || ''));
+      ws = { target: ipM ? ipM[1] : 'unknown' };
+      source = command || 'imap';
+    }
+    var t = String(text || '');
+    if (!t) return facts;
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var port = _inferImapPort(command);
+    var banners = [];
+    reAll(_IMAP_BANNER_RE, t).forEach(function (m) {
+      var b = ((m.groups && m.groups.banner) || m[0] || '').trim();
+      if (b) banners.push(b);
+    });
+
+    var resByTag = {};
+    reAll(_IMAP_TAGGED_RES_RE, t).forEach(function (m) {
+      var tag = ((m.groups && m.groups.tag) || '').toLowerCase();
+      if (!tag) return;
+      resByTag[tag] = {
+        status: ((m.groups && m.groups.status) || '').toUpperCase(),
+        rest: ((m.groups && m.groups.rest) || '').trim()
+      };
+    });
+
+    var loginMatches = reAll(_IMAP_LOGIN_CMD_RE, t);
+    var sawImapAuthOutcome = false;
+
+    if (banners.length) {
+      C._add_os_from_text(banners.join('\n'), ws, source, facts, 'imap', 'medium', true);
+      _add(facts, mkFact('mail.reachable', h, { protocol: 'imap', port: port }, S, source));
+      _add(facts, mkFact('service.imap.banner', h, { port: port, banner: banners[0], banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
+    }
+
+    loginMatches.forEach(function (m) {
+      var g = m.groups || {};
+      var tag = (g.tag || '').toLowerCase();
+      var res = tag ? resByTag[tag] : null;
+      if (!res) return;
+      var rawUser = (g.qu || g.su || g.u || '').trim();
+      var rawPass = (g.qp !== undefined ? g.qp : (g.sp !== undefined ? g.sp : (g.p || ''))).trim();
+      var cleanUser = C._clean_username ? C._clean_username(rawUser) : rawUser;
+      if (res.status === 'OK') {
+        sawImapAuthOutcome = true;
+        _add(facts, mkFact('mail.reachable', h, { protocol: 'imap', port: port }, S, source));
+        var credVal = { service: 'imap', protocol: 'imap', port: port, outcome: 'accepted' };
+        if (cleanUser || rawUser) credVal.user = cleanUser || rawUser;
+        _add(facts, mkFact('credential.validated', h, credVal, S, source));
+        if (cleanUser && rawPass && (!C._valid_password || C._valid_password(rawPass))) {
+          if (C._add_plaintext_credential) {
+            C._add_plaintext_credential(facts, ws, source, cleanUser, rawPass, '', 'imap-login', '');
+          } else {
+            var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+            _add(facts, mkFact('credential.plaintext', h, { user: cleanUser, password: rawPass, via: 'imap-login' }, S, source));
+            _add(facts, mkFact('credential.available', domScope, { user: cleanUser, password: rawPass, method: 'imap-login' }, S, source));
+          }
+        }
+      } else if (res.status === 'NO') {
+        sawImapAuthOutcome = true;
+        if (banners.length) _add(facts, mkFact('mail.reachable', h, { protocol: 'imap', port: port }, S, source));
+        var failVal = { service: 'imap', protocol: 'imap', port: port, reason: res.rest || 'LOGIN failed' };
+        if (cleanUser || rawUser) failVal.user = cleanUser || rawUser;
+        _add(facts, mkFact('blocker.logon_failure', h, failVal, S, source));
+      }
+    });
+
+    if (!sawImapAuthOutcome && banners.length && /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?[A-Za-z0-9._?-]+\s+NO\b[^\r\n]*\b(?:LOGIN|AUTHENTICATIONFAILED|auth(?:entication)?\s+failed|invalid\s+(?:user|credentials|password|login))\b/im.test(t)) {
+      _add(facts, mkFact('blocker.logon_failure', h, { service: 'imap', protocol: 'imap', port: port, reason: 'LOGIN failed' }, S, source));
+    }
+
+    return facts;
+  }
+  C._parse_imap_output = _parse_imap_output;
+
   OBOL.parsers = OBOL.parsers || {};
   OBOL.parsers.services = Object.assign(OBOL.parsers.services || {}, {
     _parse_http_metadata: _parse_http_metadata,
@@ -593,7 +724,8 @@
     _parse_ftp_output: _parse_ftp_output,
     _parse_sqlite_dump: _parse_sqlite_dump,
     _parse_rsync_nfs: _parse_rsync_nfs,
-    _parse_smtp_output: _parse_smtp_output
+    _parse_smtp_output: _parse_smtp_output,
+    _parse_imap_output: _parse_imap_output
   });
   if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.parsers.services; }
 

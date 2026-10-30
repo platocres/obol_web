@@ -418,7 +418,10 @@
   // empty result is "it broke", not "it ran and found nothing" - obol must not retire the move on these.
   // Kept specific so a benign "Container not found" / "No results found" is NOT read as an error.
   var ERR_MARKERS = /\busage:|\btraceback\b|command not found|no such file|unrecognized option|invalid option|\bmissing option\b|permission denied|access is denied|status_access_denied|status_logon_failure|nt_status_[a-z0-9_]+|error enumerating|ldaperr:|operationserror|successful bind must be completed|\bunauthorized\b|logon failure|connection refused|could not connect|connection reset|name or service not known|\berror:/i;
-  function looksLikeError(text) { return ERR_MARKERS.test(String(text || '')); }
+  function looksLikeError(text) {
+    var cleaned = String(text || '').replace(/^\s*(?:#+|\/\/+|\/\*+|\*+)[^\r\n]*?\busage:[^\r\n]*$/gim, '');
+    return ERR_MARKERS.test(cleaned);
+  }
 
   function outputIdentity(text) {
     var clean = _stripProxychains(text);
@@ -448,7 +451,11 @@
     opts = opts || {}; eng = eng || {};
     var text = String(opts.text || ''), params = eng.params || {}, explicit = String(opts.command || '').trim();
     if (OBOL._parserCommon && OBOL._parserCommon._normalize_cr) text = OBOL._parserCommon._normalize_cr(text);
-    var derived = deriveCommand(text, explicit), revealed = sniffCommand(text), signature = contentSignatures(text);
+    var derived = deriveCommand(text, explicit);
+    if (!derived && !explicit && !text.trim() && opts.promptLine) {
+      derived = deriveCommand(String(opts.promptLine), '');
+    }
+    var revealed = sniffCommand(text), signature = contentSignatures(text);
     var observed = outputIdentity(text), known = (eng.targets || []).map(function (t) { return t.ip || t.id; }).filter(Boolean);
     var observedTarget = detectTarget('', text, { known: known, lhost: params.lhost || '' });
     var observedService = observed && observed.service || (OBOL.context && OBOL.context.serviceOf ? OBOL.context.serviceOf(signature) : '');
@@ -894,7 +901,8 @@
     opts = opts || {};
     var text = opts.text || opts.stdout || '';
     if (OBOL._parserCommon && OBOL._parserCommon._normalize_cr) text = OBOL._parserCommon._normalize_cr(text);
-    if (!text.trim()) return { ok: false, reason: 'empty' };
+    var hasPromptTelemetry = Boolean(opts && ((opts.promptLine && String(opts.promptLine).trim()) || (opts.followPrompt && String(opts.followPrompt).trim())));
+    if (!text.trim() && !hasPromptTelemetry) return { ok: false, reason: 'empty' };
     var ar = null, ws = null;
     if (!opts.fromSession) {
       ar = _tryArsenalIngest(text);
@@ -959,7 +967,7 @@
     // Learn the operator's LHOST from the paste's own prompt (`[tun0:10.10.14.191]`) when not already set,
     // so {{lhost}} stops reading "needs: lhost" the moment a real terminal capture goes through.
     if (!params.lhost) {
-      var lh = detectLhost(text);
+      var lh = detectLhost(text || opts.promptLine || '');
       if (lh) { OBOL.store.update(function (e) { e.params = e.params || {}; e.params.lhost = lh; }, 'params'); params = (OBOL.store.active() || {}).params || params; }
     }
     // Scope the facts to a specific host. A whole-session import passes the per-command host it auto-routed
@@ -985,7 +993,7 @@
         rawPromptOpt = pParts.slice(0, -1).join('\n');
       }
     }
-    if (rawPromptOpt) resolvedContext.promptLine = rawPromptOpt;
+    if (rawPromptOpt.trim()) resolvedContext.promptLine = rawPromptOpt;
     if (rawFollowOpt) resolvedContext.followPrompt = rawFollowOpt;
     var routing = { mode: opts.forceTarget ? 'forced' : 'observed', target: scopeIp, sourceTargets: observedTargets(trimmedText) };
     if (opts.forceTarget) resolvedContext = Object.assign({}, resolvedContext, { forceTarget: scopeIp });
