@@ -1809,8 +1809,10 @@
       }
     }
 
-    var isWebOrRemoteCmd = /\b(?:curl|wget|httpie|sqlmap|nmap|masscan|rustscan|ffuf|gobuster|feroxbuster|nikto|snmpwalk)\b/i.test(command || '')
-      || /^HTTP\/[12]\./im.test(text || '');
+    var isWebOrRemoteCmd = /\b(?:curl|wget|httpie|whatweb|httpx|nuclei|wpscan|dirb|dirsearch|wfuzz|sqlmap|nmap|masscan|rustscan|ffuf|gobuster|feroxbuster|nikto|snmpwalk|snmpbulkwalk|searchsploit)\b/i.test(command || '')
+      || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')
+      || /<!doctype\s+html|<\/?(?:html|head|body|pre)\b|<\?(?:php|=)|<%@?\s|\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b/i.test(text || '')
+      || (!command && facts.some(function (sf) { return sf && sf.state === 'supported' && /^web\.(?:source_disclosed|vuln_sink|manifest_disclosed)$/.test(sf.kind || ''); }));
 
     var hasAdEvidence = false;
     var snapshot = facts.slice();
@@ -1862,7 +1864,7 @@
           }
         }
       }
-      else if (/^web\.|^http\.reachable$|^vuln\.(?:shellshock|drupalgeddon2|phpmyadmin_lfi|webmin|cacti|zabbix|ofbiz|solr)/.test(k)) {
+      else if (/^web\.|^http\.reachable$|^vuln\.(?:shellshock|drupalgeddon2|phpmyadmin_lfi|webmin|cacti|zabbix|ofbiz|solr|web_sink)/.test(k)) {
         ensureFact('host.up', h, { target: ws.target });
         ensureFact('http.reachable', h, {});
       }
@@ -1900,6 +1902,24 @@
         ensureFact('foothold.windows', h, { method: 'entailed-by-privesc' });
         if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
           C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows local privilege enumeration', 'high', 'entailment', true);
+        }
+      }
+      else if (/^privesc\.(?:custom_binary|path_hijack_candidate|library_or_script_hijack)$/.test(k) && !isWebOrRemoteCmd) {
+        ensureFact('host.up', h, { target: ws.target });
+        var isWinArtifact = v.os === 'windows'
+          || alreadyHeld('foothold.windows', h)
+          || /^[A-Za-z]:\\|\.(?:dll|ps1|bat|cmd|vbs|exe)$/i.test(String(v.path || v.via_binary || v.target || v.hijack_bin || ''))
+          || /\b(?:Process\.Start|ProcessStartInfo|DllImport|LoadLibrary|ilspycmd)\b/i.test(String(v.call || command || text || ''));
+        if (isWinArtifact && !isKnownLinuxHost) {
+          ensureFact('foothold.windows', h, { method: 'entailed-by-privesc' });
+          if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+            C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows custom binary triage', 'high', 'entailment', true);
+          }
+        } else {
+          ensureFact('foothold.linux', h, { method: 'entailed-by-privesc' });
+          if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+            C._add_os_observation(facts, ws, source, 'linux', 'Entailed by Linux custom binary triage', 'high', 'entailment', true);
+          }
         }
       }
 

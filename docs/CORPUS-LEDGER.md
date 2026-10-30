@@ -470,6 +470,60 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
   Stage 3 vision/OCR calibration and extraction are complete and locked by regression suites. See
   Section 9 and Section 10 in [CORPUS-MINING.md](CORPUS-MINING.md).
 
+### OffSec Proving Grounds Practice Collection (Snapshot 2026-10-29)
+
+- **Location**: `E:\KaliFiles\obol\obol-site\corpus\pg-practice-2026-10-29\` (normalized staged corpus; raw shallow clones with full provenance preserved under `E:\KaliFiles\obol\obol-site\corpus\_upstream\`, builder at `E:\KaliFiles\obol\obol-site\corpus\stage-pg-practice.js`).
+- **Upstream Sources & Provenance (retrieved 2026-10-29)**:
+  - `pika5164/Offsec_Proving_Grounds` (`@ 32540a5`, `PG_Practice/` only; `PG_Play/` excluded)
+  - `iamkashz/pg-writeups` (`@ 429d323`, numbered per-box chapters merged)
+  - `santhoshkite/PG-write-up` (`@ 0f053c0`, `Active Directory/`, `Linux/`, `Windows/`)
+  - `randalltr/oscp-pg-practice-writeups` (`@ 97d8af4`, `[PGP ...]` entries only; `41` `[HTB ...]` entries skipped)
+  - `bipbopbup/bipbopbup` (`@ 4aa9f35`, `PG/AD/`, `PG/Linux/`, `PG/Windows/` + `Media/`)
+  - `ajcriado/htb-writeups` (`@ 7885d9a`, `Boxes/Proving-Grounds/` extracted via `git cat-file` + merged per box)
+  - `AaronCaiii/OSCP-Prepare-Proving-grounds-Practice` (`@ 8345230`, `PG/` fallback)
+  - `Bsal13/Offensive-Security-Proving-Grounds-Boxes` (`@ 2ab3323`, fallback)
+  - `G1xbro/OSCP-LABS` (`@ 3cd92dd`, fallback)
+  - `MAX-P0W3R/OSCP-machine-generator` (`@ bca54fe`, `database1.txt` LainKusanagi PG Practice list + `database5.txt` PG Play exclusion list)
+- **Scale & Deduplication**: **120 unique OffSec PG Practice machines** staged in `walkthroughs/<slug>.md` (plus **44** additional zero-screenshot pure-text alternate writeups in `alternates/<slug>--<repo>.md` for cross-operator command/tool variance), covering **60 / 61 (98.4%)** of the LainKusanagi PEN-200 / OSCP PG Practice list (only `Marketing` absent). **21** PG Play (VulnHub free tier) candidates across mixed repos were strictly quarantined in `excluded-non-practice.json`, and **41** HTB entries in `randalltr` were skipped.
+  - **Tier A (0-screenshot pure terminal text & fenced-code Markdown)**: **101** boxes (`84.2%`)
+  - **Tier B (fenced-code primary with supplementary screenshots)**: **8** boxes
+  - **Tier C (screenshot-reliant fallback, queued for OCR)**: **11** boxes (`0` Tier D stubs)
+  - **OCR Staging**: All **57** unbacked screenshot captures across **11** boxes (`no_step_adjacent_code`) are resolved locally (`0` unresolved paths) under `assets/<slug>/capture-*.png` with SHA-256 digests and surrounding prose/heading context in `ocr-worklist.json`. Inventory: `corpus-manifest.json` and `INDEX.md`.
+- **Axes mined**:
+  - **output**: NOT YET
+  - **facts**: NOT YET
+  - **failures**: NOT YET
+  - **flow**: NOT YET
+  - **vision / screenshot variance**: COMPLETE (`57 / 57` captures across `11` boxes visually transcribed into chronological Pass-2 `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-practice-screenshots-ocr.json`, schema-validated `57/57` + pixel-audited across 21 raw PNGs)
+- **Derived so far**: `tools/corpus/labels/pg-practice-screenshots-ocr.json` (`57` OCR records).
+- **Status**: STAGED (OCR pre-flight complete; ready for Dual-Pass `v13.0` mining).
+
+### OffSec PEN-200 Challenge Labs Collection (Snapshot 2026-10-29)
+
+- **Location**: `E:\KaliFiles\obol\obol-site\corpus\pg-challenge-labs-2026-10-29\` (normalized multi-host staged corpus; raw shallow clones preserved under `E:\KaliFiles\obol\obol-site\corpus\_upstream\`, builder at `E:\KaliFiles\obol\obol-site\corpus\stage-challenge-labs.js`).
+- **Upstream Sources & Provenance (retrieved 2026-10-29)**:
+  - `santiagosj/Notas-OSCP` (`@ cafbf85`, Tier A pure-text winners for `Secura`, `Medtech`, `Relia` + alternates for `OSCP-A/B/C`)
+  - `stephandellis/OSCP-Challenge-Labs` (`@ 60aea28`, Tier A pure-text winners for `Skylark`, `OSCP-A`, `OSCP-B`, `OSCP-C` + alternates for `Medtech`, `Relia`)
+  - `wmshearer/Penetration-Testing` (`@ c13f5c8`, Tier B winners + locally resolved assets for `Zeus`, `Poseidon`, `Laser` + per-host breakdown for `OSCP-C`)
+  - `w4rth0rtl3/Pentest` (`@ bae44e3`, SharpHound v5 BloodHound JSON collections for `Secura`, `Relia`, `OSCP-A`, `Zeus`, `Poseidon` + terminal logs)
+  - `ajcriado/htb-writeups` (`@ 7885d9a`, `Boxes/Challenge-Labs/` per-host breakdown for `Skylark` + SharpHound bundles for `Medtech`, `Relia`, `OSCP-C`)
+  - `n0veride/pwk` (`@ 9fee24b`, per-host breakdowns for `Secura`, `Medtech` + alternates)
+  - `Hypothesis556/OSCP` (`@ f9d53d8`, per-host breakdown for `Relia` + `Laser` alternate)
+  - `brito101/OSCP` (`@ 51be783`, per-host breakdowns for `OSCP-A`, `OSCP-B`)
+  - `BJ1995/OSCP_PREP` (`@ 3f42f4b`), `AskCloud66/tech-blog` (`@ c56d578`), `cyb0rg-se/OSCP-notes` (`@ aef7379`), `fatalxs/oscp-cheatsheet` (`@ 713717e`), `laisongqing/OffSEC_OSCP_Challenge` (`@ 732379b`), `Nautilloid/bloggy` (`@ c1bce2f`)
+- **Scale & Network Topology**: **10 / 10 official PEN-200 Challenge Labs** (`Secura` [3 hosts], `Medtech` [10 hosts], `Relia` [16 hosts], `Skylark` [21 hosts], `OSCP-A` [6 hosts], `OSCP-B` [6 hosts], `OSCP-C` [6 hosts], `Zeus` [3 hosts], `Poseidon` [3 hosts across `poseidon.yzx` + `sub.poseidon.yzx`], `Laser` [3 hosts]) covering **77 / 77 (100%) canonical target machines** with both unified lab `labs/<slug>/walkthrough.md` trajectories and per-host `labs/<slug>/hosts/<host>.md` files, **68** alternate writeup bundles (`19` pure-text `0`-image alternates), and **84** validated SharpHound v5 BloodHound JSON files across **7 / 10** labs (`11` collections).
+  - **Tier A (0-screenshot pure terminal text & fenced-code Markdown)**: **7** labs (`secura`, `medtech`, `relia`, `skylark`, `oscp-a`, `oscp-b`, `oscp-c`)
+  - **Tier B (fenced-code primary with 100% locally resolved supplementary screenshots)**: **3** labs (`zeus`, `poseidon`, `laser`; `0` Tier C, `0` Tier D)
+  - **OCR Staging**: `0` unbacked screenshots in winning `walkthrough.md` files; **3** unbacked screenshots in supplementary per-host files (`medtech/hosts/web02-121.md` [1], `skylark/hosts/singapore06-225.md` [2]) staged locally (`0` unresolved paths) in `ocr-worklist.json`.
+- **Axes mined**:
+  - **output**: NOT YET
+  - **facts**: NOT YET
+  - **failures**: NOT YET
+  - **flow**: NOT YET
+  - **vision / screenshot variance**: COMPLETE (`24 / 24` staged captures visually inspected across `medtech`, `skylark`, `zeus`, `poseidon`, and `laser`; `18` unique-signal captures transcribed into chronological `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-challenge-screenshots-ocr.json`, schema-validated `18/18`)
+- **Derived so far**: `tools/corpus/labels/pg-challenge-screenshots-ocr.json` (`18` OCR records).
+- **Status**: STAGED (2026-10-29).
+
 ---
 
 ## Source Backlog (Where We Want To Pull From)

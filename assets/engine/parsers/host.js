@@ -287,13 +287,60 @@
     'passwd', 'su', 'sudo', 'mount', 'umount', 'chsh', 'chfn', 'newgrp', 'gpasswd',
     'fusermount', 'fusermount3', 'pkexec', 'polkit-agent-helper-1', 'ssh-keysign',
     'dbus-daemon-launch-helper', 'unix_chkpwd', 'chage', 'expiry', 'ping', 'ping6',
-    'traceroute6.iputils', 'pppd', 'ntfs-3g', 'xorg.wrap', 'snap-confine', 'bwrap',
+    'traceroute6.iputils', 'pppd', 'ntfs-3g', 'xorg.wrap', 'snap-confine', 'snap-device-helper', 'bwrap',
     'mount.cifs', 'mount.nfs', 'umount.nfs', 'at', 'crontab', 'pam_timestamp_check', 'pt_chown'
   ]);
+  var _STOCK_SNAP_RUNTIME_RE = /^\/snap\/(?:core\d*|snapd|bare|gtk-common-themes|gnome-[^/]+)\//i;
 
   function _is_stock_suid(p) {
-    var base = String(p || '').split('/').pop().toLowerCase();
-    return _STOCK_SUID_BINS.has(base) && /^\/(?:usr\/)?(?:bin|sbin|lib|lib64|libexec)\//i.test(p);
+    var s = String(p || '').trim();
+    if (_STOCK_SNAP_RUNTIME_RE.test(s)) return true;
+    var base = s.split('/').pop().toLowerCase();
+    return _STOCK_SUID_BINS.has(base) && /^\/(?:usr\/)?(?:bin|sbin|lib|lib64|libexec)\//i.test(s);
+  }
+
+  var _STOCK_LINUX_BINS_RE = /^(?:systemd(?:-[a-z0-9_-]+)?|init|kthreadd|kworker|ksoftirqd|migration|rcu_[a-z_]+|watchdog|dbus-daemon|dbus-broker|sshd|cron|crond|atd|anacron|rsyslogd|syslogd|journald|udevd|NetworkManager|wpa_supplicant|dhclient|dhcpcd|ntpd|chronyd|timesyncd|irqbalance|acpid|polkitd|accounts-daemon|udisksd|upowerd|ModemManager|avahi-daemon|cupsd|thermald|snapd|containerd|containerd-shim[^\s]*|dockerd|kubelet|agetty|getty|login|auditd|multipathd|lvmetad|lvm|mdadm|smartd|postfix|master|qmgr|pickup|tlsmgr|dovecot|exim4?|mysqld|mariadbd|postgres|postmaster|redis-server|memcached|mongod|nginx|apache2|httpd|lighttpd|php-fpm[0-9.]*|smbd|nmbd|winbindd|rpcbind|rpc\.[a-z0-9_-]+|nfsd|named|dnsmasq|unbound|Xorg|Xwayland|gdm[0-9-]*|lightdm|VBoxService|VBoxClient|vmtoolsd|VGAuthService|qemu-ga|hv_[a-z0-9_]+|cloud-init|unattended-upgrade[a-z-]*|apt|apt-get|dpkg|yum|dnf|rpm|logrotate|run-parts|test|\[|true|false|echo|printf|sleep|date|uname|hostname|id|whoami|groups|ls|dir|vdir|grep|egrep|fgrep|rg|wc|sort|uniq|head|tail|tr|cut|paste|join|split|stat|readlink|realpath|dirname|basename|which|whereis|file|strings|ldd|objdump|readelf|nm|strip|ip|ifconfig|netstat|ss|route|arp|ping|ping6|ps|top|htop|kill|pkill|pgrep|df|du|free|lsblk|blkid|fdisk|mount|umount|mkfs(?:\.[a-z0-9]+)?|fsck(?:\.[a-z0-9]+)?|e2scrub[a-z_]*|fstrim|wall|write|mesg|screen(?:-4\.[0-9.]+)?|linpeas(?:\.sh)?|pspy(?:32|64)?(?:s)?|les\.sh|linux-exploit-suggester(?:\.sh)?|chisel|ligolo[a-z0-9_-]*|agent)$/i;
+
+  var _LINUX_CUSTOM_DIR_RE = /^\/(?:opt|usr\/local|srv|var\/backups|home|root|var\/tmp|tmp|dev\/shm|var\/www)\//i;
+  var _NON_EXEC_EXT_RE = /\.(?:conf|cfg|ini|json|xml|ya?ml|txt|log|md|rst|csv|pid|sock|lock|service|timer|target|mount|socket|path|slice|scope|gz|bz2|xz|zst|zip|tar|tgz|bak|old|orig|swp|pem|crt|cer|key|pub|db|sqlite3?|sql|html?|css|png|jpe?g|gif|svg|ico|pdf)$/i;
+
+  function _check_linux_custom_binary(rawPath) {
+    var p = String(rawPath || '').trim().replace(/^['"]+|['",;)]+$/g, '');
+    if (!p || p.charAt(0) !== '/' || p.slice(-1) === '/') return null;
+    if (_STOCK_SNAP_RUNTIME_RE.test(p)) return null;
+    if (/^\/(?:proc|sys|dev\/(?!shm\/)|run|etc\/(?:passwd|shadow|group|hosts|fstab|crontab|sudoers|resolv\.conf|issue|motd)|var\/log|var\/lib|var\/spool|var\/cache|var\/run)\b/i.test(p)) return null;
+    var base = p.split('/').pop();
+    if (!base || base === '.' || base === '..' || base.indexOf('*') >= 0) return null;
+    if (_NON_EXEC_EXT_RE.test(base)) return null;
+    var lowBase = base.toLowerCase();
+    if (_STOCK_SUID_BINS.has(lowBase)) return null;
+    if (_normalize_gtfobin(lowBase)) return null;
+    var inCustomDir = _LINUX_CUSTOM_DIR_RE.test(p);
+    if (!inCustomDir && _STOCK_LINUX_BINS_RE.test(lowBase)) return null;
+    if (inCustomDir && /^(?:linpeas|pspy|les\.sh|linux-exploit-suggester|chisel|agent)/i.test(lowBase)) return null;
+    if (!inCustomDir && /^\/(?:lib|lib64|usr\/lib|usr\/lib64|usr\/share)\//i.test(p)) return null;
+    return { path: p, binary: base };
+  }
+
+  var _WIN_STOCK_PATH_RE = /^[A-Za-z]:\\(?:Windows\\|(?:Program Files(?: \(x86\))?|ProgramData)\\(?:Windows Defender(?: Advanced Threat Protection)?|Windows Mail|Windows Media Player|Windows NT|Windows Photo Viewer|Windows Portable Devices|Windows Security|Windows Sidebar|WindowsPowerShell|PowerShell|Microsoft(?:\b|\s|\.)[^\\]*|Common Files\\Microsoft Shared|Internet Explorer|MSBuild|Reference Assemblies|dotnet|PackageManagement|VMware\\VMware Tools|Oracle\\VirtualBox Guest Additions|Amazon\\(?:EC2ConfigService|SSM|Xen|PV Drivers)|Google\\Compute Engine|QEMU-GA|Cloudbase Solutions)\\)/i;
+  var _WIN_TOOL_IGNORE_RE = /(?:^|\\)(?:winpeas[A-Za-z0-9_-]*|privesccheck|seatbelt|sharphound|rubeus|mimikatz|accesschk(?:64)?|procdump(?:64)?|godpotato|printspoofer|juicypotato|sweetpotato|roguepotato|efspotato|nc(?:64)?|chisel|plink|agent)\.(?:exe|ps1|bat)$/i;
+
+  function _check_windows_custom_binary(rawLine) {
+    var s = String(rawLine || '').trim();
+    if (!s) return null;
+    var matches = reAll(/(?:"([A-Za-z]:\\[^"\r\n|<>?*]+?\.(?:exe|bat|cmd|ps1|vbs|jar))"|'([A-Za-z]:\\[^'\r\n|<>?*]+?\.(?:exe|bat|cmd|ps1|vbs|jar))'|([A-Za-z]:\\(?:[^"\r\n|<>?*:\s]+\\)*[^"\r\n|<>?*:\\]+?\.(?:exe|bat|cmd|ps1|vbs|jar))\b)/gi, s);
+    for (var i = 0; i < matches.length; i++) {
+      var cand = (matches[i][1] || matches[i][2] || matches[i][3] || '').trim();
+      if (!cand) continue;
+      // If the outer launcher is cmd.exe / powershell.exe / wscript.exe / cscript.exe, continue to inspect the script argument
+      if (/\\(?:cmd|powershell|pwsh|wscript|cscript|conhost|rundll32|regsvr32|msiexec|schtasks|sc)\.exe$/i.test(cand) && matches.length > i + 1) {
+        continue;
+      }
+      if (_WIN_STOCK_PATH_RE.test(cand) || _WIN_TOOL_IGNORE_RE.test(cand)) continue;
+      var bin = cand.split('\\').pop();
+      return { path: cand, binary: bin };
+    }
+    return null;
   }
 
   function _parse_kernel_exploits(text, ws, command, source, facts, leadKinds) {
@@ -436,8 +483,8 @@
     }
 
     var suidPaths = {};
-    var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bfind\s+\/.*-perm\b/i.test(text);
-    var bareSuidList = (text.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
+    var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s', '-perm -2000', '-perm -g=s', '-perm /6000', '-perm -6000'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bfind\s+\/.*-perm\b/i.test(text);
+    var bareSuidList = (text.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
     if (suidFind || lowered.indexOf('suid') >= 0 || lowered.indexOf('rws') >= 0 || bareSuidList) {
       text.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
@@ -503,6 +550,51 @@
       return /\bUID=0(?!\()\b|\broot\b.*\bCMD\b|\bCMD:/i.test(l);
     }).map(function (l) { return l.trim(); });
     if (!isInteractiveExploitCmd && processLines.length && (lc.indexOf('pspy') >= 0 || lowered.indexOf('uid=0') >= 0 || lowered.indexOf('cmd:') >= 0)) _add_host_privesc_fact(facts, ws, source, 'privesc.process_lead', { commands: processLines.slice(0, 30) }, leadKinds);
+
+    // Step 1: OS-Baseline Subtraction + Location Anomaly -> privesc.custom_binary (Linux)
+    var linCustom = [], seenLinCustom = {};
+    function pushLinCustom(rawPath, ctxName) {
+      var hit = _check_linux_custom_binary(rawPath);
+      if (!hit) return;
+      var k = hit.path + '|' + ctxName;
+      if (seenLinCustom[k]) return;
+      seenLinCustom[k] = 1;
+      linCustom.push({ custom_bin: hit.path, path: hit.path, binary: hit.binary, context: ctxName, os: 'linux' });
+    }
+    suidKeys.forEach(function (p) { pushLinCustom(p, 'suid'); });
+    caps.forEach(function (c) { pushLinCustom(c.path, 'cap'); });
+    sudoEntries.forEach(function (entry) {
+      reAll(/(\/[^\s,;'"|&]+)/g, entry).forEach(function (m) { pushLinCustom(m[1], 'sudo'); });
+    });
+    cronLines.forEach(function (cl) {
+      reAll(/(\/[^\s,;'"|&>#]+)/g, cl).forEach(function (m) { pushLinCustom(m[1], 'cron'); });
+    });
+    text.split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line) return;
+      var sysM = /^\s*Exec(?:Start|StartPre|StartPost|Reload)\s*=\s*[-+@!]*(\/[^\s;'"|&]+)/i.exec(line);
+      if (sysM) { pushLinCustom(sysM[1], 'service'); return; }
+      var psM = /^root\s+\d+\s+(?:\d+(?:\.\d+)?\s+){2,8}(?:[\w?:.-]+\s+){1,5}(\/[^\s;'"|&\]]+)(?:\s+([^\r\n]+))?$/i.exec(line)
+        || /^root\s+\d+\s+\d+\s+\d+\s+\S+\s+\S+\s+[\d:]+\s+(\/[^\s;'"|&\]]+)(?:\s+([^\r\n]+))?$/i.exec(line);
+      if (psM) {
+        pushLinCustom(psM[1], 'service');
+        if (psM[2]) reAll(/(\/(?:opt|usr\/local|srv|var\/backups|home)\/[^\s;'"|&]+)/g, psM[2]).forEach(function (am) { pushLinCustom(am[1], 'service'); });
+      }
+    });
+    processLines.forEach(function (pl) {
+      reAll(/(\/[^\s,;'"|&>#]+)/g, pl).forEach(function (m) { pushLinCustom(m[1], 'service'); });
+    });
+    if (linCustom.length) {
+      var topLin = linCustom[0];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.custom_binary', {
+        custom_bin: topLin.path,
+        path: topLin.path,
+        binary: topLin.binary,
+        context: topLin.context,
+        os: 'linux',
+        candidates: linCustom.slice(0, 20)
+      }, leadKinds);
+    }
 
     if (reSearch(C._LOCAL_FILE_SECRET_RE, text)) _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'local_file_secret', evidence: 'local loot output' }, S, source));
 
@@ -611,6 +703,44 @@
     var dllHits = text.split(/\r?\n/).filter(function (raw) { var l = raw.toLowerCase(); return l.indexOf('.dll') >= 0 && (l.indexOf('name not found') >= 0 || l.indexOf('path not found') >= 0); }).map(function (raw) { return raw.trim().slice(0, 220); });
     if (dllHits.length) _add_host_privesc_fact(facts, ws, source, 'privesc.dll_hijack_candidate', { evidence: C.uniqueSortedCI(dllHits).slice(0, 20), count: C.uniqueSortedCI(dllHits).length }, leadKinds);
 
+    // Step 1: OS-Baseline Subtraction + Location Anomaly -> privesc.custom_binary (Windows)
+    var winCustom = [], seenWinCustom = {};
+    function pushWinCustom(rawStr, ctxName) {
+      var hit = _check_windows_custom_binary(rawStr);
+      if (!hit) return;
+      var k = hit.path.toLowerCase();
+      if (seenWinCustom[k]) return;
+      seenWinCustom[k] = 1;
+      winCustom.push({ custom_bin: hit.path, path: hit.path, binary: hit.binary, context: ctxName, os: 'windows' });
+    }
+    text.split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || !/[A-Za-z]:\\/i.test(line)) return;
+      if (/\b(?:BINARY_PATH_NAME|Binary Path Name|PathName|ImagePath|Image Path|Launch String|Task To Run)\s*[:=]/i.test(line)) {
+        var ctx = /Launch String|Image Path|Autorun/i.test(line) ? 'autorun' : (/Task To Run/i.test(line) ? 'task' : 'service');
+        pushWinCustom(line, ctx);
+        return;
+      }
+      if (/^[A-Za-z0-9_.-]{2,64}\s+(?:"[A-Za-z]:\\[^"\r\n]+\.(?:exe|bat|cmd|ps1|vbs)"|[A-Za-z]:\\[^\r\n]+?\.(?:exe|bat|cmd|ps1|vbs))\s+(?:Auto|Manual|Disabled|Running|Stopped)\b/i.test(line)) {
+        pushWinCustom(line, 'service');
+        return;
+      }
+      if (/\b(?:sc\s+qc|wmic\s+service|win32_service|autorun)/i.test((command || '') + '\n' + text) && /\.(?:exe|bat|cmd|ps1|vbs)\b/i.test(line)) {
+        pushWinCustom(line, 'service');
+      }
+    });
+    if (winCustom.length) {
+      var topWin = winCustom[0];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.custom_binary', {
+        custom_bin: topWin.path,
+        path: topWin.path,
+        binary: topWin.binary,
+        context: topWin.context,
+        os: 'windows',
+        candidates: winCustom.slice(0, 20)
+      }, leadKinds);
+    }
+
     var patchLines = text.split(/\r?\n/).filter(function (l) { return /\bMS\d{2}-\d{3}\b|CVE-\d{4}-\d+|missing patches?|exploit/i.test(l); }).map(function (l) { return l.trim(); });
     if (patchLines.length && (/wes(?:\.py|ng)?|windows[- ]exploit[- ]suggester|missing patches?|found vulnerabilities/i.test((command || '') + '\n' + text))) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.patch_gap', { evidence: patchLines.slice(0, 30) }, leadKinds);
@@ -637,10 +767,12 @@
       /no_root_squash/i.test(t) ||
       /\bUID=0\b.*\bCMD\b|\bCMD:\s*UID=0\b/i.test(t) ||
       /^\s*(?:[0-9*,/-]+\s+){5}(?:root\s+)?\/(?:opt|home|tmp|var|srv|etc|usr\/local)\//m.test(t) ||
+      /^\s*ExecStart\s*=\s*[-+@!]*\/(?:opt|usr\/local|srv|var\/backups|home)\//im.test(t) ||
+      /^root\s+\d+\s+(?:\d+(?:\.\d+)?\s+){2,8}(?:[\w?:.-]+\s+){1,5}\/(?:opt|usr\/local|srv|var\/backups|home)\/\S+/im.test(t) ||
       /\bpermit\s+nopass\b/i.test(t) ||
       /\bfind\s+\/.*-perm\b/i.test(t) ||
       /\bgetcap\b/i.test(t) ||
-      /(?:^|\r?\n)\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+\s*\r?\n\s*\/(?:usr\/|bin\/|sbin\/|opt\/)[A-Za-z0-9._\/-]+/.test(t) ||
+      /(?:^|\r?\n)[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+[ \t]*\r?\n[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+(?=[ \t]*(?:\r?\n|$))/.test(t) ||
       /^\s*-[rwxstST-]{9}\s+\d+\s+root\s+/m.test(t) ||
       /CVE-\d{4}-\d{4,7}.*?\b(?:dirty|pwnkit|polkit|samedit|overlayfs)/i.test(t) ||
       /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+\d/i.test(t) ||
@@ -658,7 +790,8 @@
       /Microsoft Windows \[Version\s+[0-9.]+\]/i.test(t) ||
       /Saved [A-Z0-9_-]+ credentials|Currently stored credentials:/i.test(t) ||
       /ServiceName\s*:\s*\S+[\s\S]{1,200}?PathName\s*:/i.test(t) ||
-      /\b(?:BINARY_PATH_NAME|Binary Path Name|PathName)\s*[:=]\s*["']?[A-Za-z]:\\/i.test(t) ||
+      /\b(?:BINARY_PATH_NAME|Binary Path Name|PathName|Image Path|Launch String)\s*[:=]\s*["']?[A-Za-z]:\\/i.test(t) ||
+      /^\s*[A-Za-z0-9_.-]{2,64}\s+(?:"[A-Za-z]:\\[^"\r\n]+\.(?:exe|bat|cmd|ps1|vbs)"|[A-Za-z]:\\[^\r\n]+?\.(?:exe|bat|cmd|ps1|vbs))\s+(?:Auto|Manual|Disabled|Running|Stopped)\b/im.test(t) ||
       /\b(?:Backup Operators|DnsAdmins|Server Operators|Print Operators)\b[\s\S]{0,80}?\bS-1-5-/i.test(t) ||
       /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+/i.test(t) ||
       /\.dll\b.*(?:NAME NOT FOUND|PATH NOT FOUND)/i.test(t) ||
@@ -1023,6 +1156,26 @@
     if (!leads.length) return;
     var leadKinds = {};
     _add_host_privesc_fact(facts, ws, source, 'privesc.scheduled_task', { tasks: leads.slice(0, 20), count: leads.length }, leadKinds);
+    var taskCustom = [], seenTaskCustom = {};
+    leads.forEach(function (item) {
+      var hit = _check_windows_custom_binary(item.path);
+      if (!hit) return;
+      var k = hit.path.toLowerCase();
+      if (seenTaskCustom[k]) return;
+      seenTaskCustom[k] = 1;
+      taskCustom.push({ custom_bin: hit.path, path: hit.path, binary: hit.binary, context: 'task', task: item.task, os: 'windows' });
+    });
+    if (taskCustom.length) {
+      var topTask = taskCustom[0];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.custom_binary', {
+        custom_bin: topTask.path,
+        path: topTask.path,
+        binary: topTask.binary,
+        context: 'task',
+        os: 'windows',
+        candidates: taskCustom.slice(0, 20)
+      }, leadKinds);
+    }
     _add_privesc_leads(facts, ws, source, leadKinds);
   }
   C._parse_schtasks = _parse_schtasks;
@@ -1242,5 +1395,232 @@
     _add(facts, mkFact('listener.open', 'host:' + ws.target, { host: h, port: p }, S, source));
   }
   C._parse_listener_output = _parse_listener_output;
+
+  // ---- Step 2: Universal Bug & Sink Grammars on Binary / Decompiler Inspection Output ----
+  var _BIN_INSPECT_CMD_RE = /\b(?:strings|ltrace|strace|ldd|readelf|objdump|nm|ilspycmd|monodis|javap|rabin2|radare2)\b/i;
+  var _SHELL_BUILTINS_RE = /^(?:cd|pwd|exit|return|export|unset|set|umask|ulimit|alias|unalias|eval|exec|echo|printf|true|false|test|\[|wait|shift|local|readonly|source|\.|break|continue|trap|read|type|hash|times|cls|rem|call|setlocal|endlocal|pushd|popd|dir|md|mkdir|rd|rmdir|del|erase|ren|rename|ver|vol)$/i;
+  var _PROSE_FIRST_WORD_RE = /^(?:error|errors|warning|warnings|usage|failed|failure|cannot|unable|could|please|invalid|unknown|missing|note|info|debug|trace|fatal|panic|version|copyright|license|author|welcome|starting|stopping|running|checking|loading|reading|writing|opening|closing|connecting|connected|disconnected|usage:|http|https|glibc|gcc|clang|linux|windows|ubuntu|debian|system|popen|execl|execlp|execvp|execve|dlopen|setuid|setgid|geteuid|printf|puts|fopen|fread|fwrite|fclose|malloc|free|exit|main)$/i;
+  var _STOCK_WIN32_DLL_RE = /^(?:kernel32|kernelbase|advapi32|user32|ntdll|ws2_32|wsock32|msvcrt|ucrtbase|vcruntime\d*|msvcp\d*|secur32|shell32|ole32|oleaut32|crypt32|rpcrt4|iphlpapi|netapi32|wtsapi32|psapi|shlwapi|gdi32|comctl32|comdlg32|wininet|winhttp|bcrypt|ncrypt|dbghelp|version|mscoree|msi|cabinet|setupapi|cfgmgr32|powrprof|userenv|samlib|logoncli|dnsapi|wldap32|sspicli|api-ms-win-[a-z0-9-]+|ext-ms-win-[a-z0-9-]+)(?:\.dll)?$/i;
+
+  var _REMOTE_OR_WEB_FETCH_CMD_RE = /\b(?:curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan|sqlmap|nmap|masscan|rustscan|searchsploit)\b/i;
+  var _HTML_OR_WEB_SOURCE_RE = /^(?:\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b)|<!doctype\s+html|<\/?(?:html|head|body|pre|div|span|script|style|p|h[1-6]|table|form|ul|ol|li)\b|<\?(?:php|=)|\?>|<%@?\s|(?:^|\n)\s*(?:from\s+(?:flask|django|fastapi|bottle|tornado)\s+import|import\s+(?:flask|django|fastapi)|const\s+\w+\s*=\s*require\s*\(\s*['"](?:express|koa|fastify|http|https)['"]\)|\bexpress\s*\(\s*\)|\bapp\.(?:get|post|put|delete|use|route|listen)\s*\(|\$_(?:GET|POST|REQUEST|COOKIE|SERVER|FILES|SESSION)\b|document\.(?:getElementById|querySelector|cookie)|window\.location)|^\s*(?:body|html|\.[A-Za-z_-]+|#[A-Za-z_-]+)\s*\{[^}]*\b(?:color|margin|padding|font|background|display)\s*:/im;
+
+  function _looks_like_binary_inspection(text, command) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    if (!t.trim()) return false;
+    if (C._looks_like_edb_script && C._looks_like_edb_script(t, cmd)) return false;
+    if (_REMOTE_OR_WEB_FETCH_CMD_RE.test(cmd) && !_BIN_INSPECT_CMD_RE.test(cmd)) return false;
+    if (_HTML_OR_WEB_SOURCE_RE.test(t)) return false;
+    if (_BIN_INSPECT_CMD_RE.test(cmd)) return true;
+    if (/^(?:\[pid \d+\]\s+)?(?:__libc_start_main|system|popen|execlp?|execvp|dlopen)\s*\(/m.test(t)) return true;
+    if (/^(?:\[pid \d+\]\s+)?(?:execve|openat|open|access)\s*\(\s*"[^"]+"/m.test(t) && /\b(?:ENOENT|O_RDONLY)\b/.test(t)) return true;
+    if (/^\s*[A-Za-z0-9_.+-]+\.so(?:\.\d+)*\s*=>\s*(?:not found|\/\S+)/m.test(t)) return true;
+    if (/\b(?:RPATH|RUNPATH|Library rpath|Library runpath)\b[^\r\n]*\[[^\]]+\]/i.test(t)) return true;
+    if (/\b(?:Process\.Start\s*\(|ProcessStartInfo\b|\[DllImport\s*\(|LoadLibrary(?:Ex)?[AW]?\s*\(|\bsystem\s*\(\s*"[^"\r\n]+"|\bpopen\s*\(\s*"[^"\r\n]+"|\bexec[lv]p\s*\(\s*"[^"\r\n]+")/.test(t)) return true;
+    if (/\.(?:dll|so|ps1|py|sh)\b[^\r\n]*(?:NAME NOT FOUND|PATH NOT FOUND|FileNotFoundException)/i.test(t)) return true;
+    return false;
+  }
+  C._looks_like_binary_inspection = _looks_like_binary_inspection;
+
+  function _extractUnqualifiedBinsFromShellCmd(cmdStr) {
+    var bins = [];
+    var s = String(cmdStr || '').trim();
+    if (!s) return bins;
+    // Unwrap sh -c / bash -c / cmd /c wrappers
+    var wrapM = /^(?:\/(?:usr\/)?s?bin\/)?(?:ba|da|z|k)?sh\s+-c\s+(['"]?)(.+)\1$/i.exec(s)
+      || /^(?:[A-Za-z]:\\Windows\\System32\\)?cmd(?:\.exe)?\s+\/[cCkK]\s+(['"]?)(.+)\1$/i.exec(s);
+    if (wrapM && wrapM[2]) s = wrapM[2].trim();
+
+    var segments = s.split(/\s*(?:;|&&|\|\||\|)\s*/);
+    for (var i = 0; i < segments.length; i++) {
+      var seg = segments[i].trim().replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)+/, '').replace(/^[\s(]+/, '');
+      if (!seg) continue;
+      var firstTok = seg.split(/\s+/)[0].replace(/^['"]+|['"]+$/g, '');
+      if (!firstTok) continue;
+      if (firstTok.indexOf('/') >= 0 || firstTok.indexOf('\\') >= 0 || firstTok.indexOf(':') >= 0) continue;
+      if (firstTok.charAt(0) === '.' || firstTok.charAt(0) === '$' || firstTok.charAt(0) === '-' || firstTok.charAt(0) === '%') continue;
+      if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(firstTok)) continue;
+      var strippedExt = firstTok.replace(/\.(?:exe|bat|cmd)$/i, '');
+      if (_SHELL_BUILTINS_RE.test(strippedExt)) continue;
+      bins.push(firstTok);
+    }
+    return bins;
+  }
+
+  function _inferInspectedBinary(command, ws, facts) {
+    var cmd = String(command || '');
+    var mLin = /\b(?:strings|ltrace|strace|ldd|readelf|objdump|nm|rabin2|radare2)\b[^\r\n]*?\s(\/[A-Za-z0-9_./-]+)/i.exec(cmd);
+    if (mLin) return mLin[1];
+    var mWin = /\b(?:strings|ilspycmd|monodis|objdump)\b[^\r\n]*?\s["']?([A-Za-z]:\\[^"'\s\r\n]+|\S+\.(?:exe|dll))["']?/i.exec(cmd);
+    if (mWin) return mWin[1];
+    var pools = [facts || [], (ws && ws.seedFacts) || []];
+    for (var pi = 0; pi < pools.length; pi++) {
+      var list = pools[pi];
+      for (var i = 0; i < list.length; i++) {
+        var f = list[i];
+        if (f && f.kind === 'privesc.custom_binary' && f.value && f.value.path) return f.value.path;
+      }
+    }
+    return '';
+  }
+
+  function _parse_binary_inspection(text, ws, command, source, facts) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    if (!_looks_like_binary_inspection(t, cmd)) return;
+    var viaBin = _inferInspectedBinary(cmd, ws, facts);
+    var leadKinds = {};
+
+    var pathHijacks = [], seenHijack = {};
+    function addPathHijack(binName, callExpr) {
+      var b = String(binName || '').trim();
+      if (!b || seenHijack[b.toLowerCase()]) return;
+      seenHijack[b.toLowerCase()] = 1;
+      pathHijacks.push({ hijack_bin: b, call: String(callExpr || b).slice(0, 140) });
+    }
+
+    // 1A. Explicit C / ltrace / decompiled C calls: system("..."), popen("..."), execlp("..."), execvp("...")
+    reAll(/\b(?:system|popen)\s*\(\s*"([^"\r\n]{1,220})"/g, t).forEach(function (m) {
+      _extractUnqualifiedBinsFromShellCmd(m[1]).forEach(function (b) { addPathHijack(b, m[0]); });
+    });
+    reAll(/\bexec[lv]p(?:e)?\s*\(\s*"([^"\r\n\/\\:]{1,64})"/g, t).forEach(function (m) {
+      var b = m[1].trim();
+      if (/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(b) && !_SHELL_BUILTINS_RE.test(b)) addPathHijack(b, m[0]);
+    });
+
+    // 1B. .NET / C# decompiled Process.Start / ProcessStartInfo
+    reAll(/\bProcess\.Start\s*\(\s*@?"([^"\r\n]{1,220})"(?:\s*,\s*@?"([^"\r\n]{0,220})")?/g, t).forEach(function (m) {
+      var fn = m[1].trim(), args = (m[2] || '').trim();
+      if (/^(?:cmd(?:\.exe)?|powershell(?:\.exe)?)$/i.test(fn) && args) {
+        _extractUnqualifiedBinsFromShellCmd(fn + ' ' + args).forEach(function (b) { addPathHijack(b, m[0]); });
+      } else {
+        _extractUnqualifiedBinsFromShellCmd(fn).forEach(function (b) { addPathHijack(b, m[0]); });
+      }
+    });
+    var psiBlocks = reAll(/\bFileName\s*=\s*@?"([^"\r\n]{1,160})"([\s\S]{0,220})/g, t);
+    psiBlocks.forEach(function (m) {
+      var fn = m[1].trim();
+      var argM = /\bArguments\s*=\s*@?"([^"\r\n]{1,220})"/.exec(m[2] || '');
+      if (/^(?:cmd(?:\.exe)?|powershell(?:\.exe)?)$/i.test(fn) && argM) {
+        _extractUnqualifiedBinsFromShellCmd(fn + ' ' + argM[1]).forEach(function (b) { addPathHijack(b, fn + ' ' + argM[1]); });
+      } else {
+        _extractUnqualifiedBinsFromShellCmd(fn).forEach(function (b) { addPathHijack(b, m[0].split(/\r?\n/)[0]); });
+      }
+    });
+
+    // 1C. Raw `strings` ELF .rodata command lines when `strings` command or ELF exec symbol context is present
+    var isStringsPaste = /\bstrings\b/i.test(cmd) || (/(?:__libc_start_main|GLIBC_2\.\d+|libc\.so\.6)/.test(t) && /^\s*(?:system|popen|execlp|execvp)\s*$/m.test(t));
+    if (isStringsPaste && !pathHijacks.length) {
+      var sLines = t.split(/\r?\n/);
+      for (var si = 0; si < sLines.length; si++) {
+        var sl = sLines[si].trim();
+        if (!sl || sl.length > 180 || /^[._@\[]/.test(sl)) continue;
+        // Require unmistakable CLI structure: flag (-x / --long), pipe (|), redirect (>), or absolute/relative path argument (/...)
+        if (!/(?:\s-[A-Za-z0-9-]|\s\|\s|[12]?>[>&]?|\s\/[A-Za-z0-9_./-]{2,})/.test(sl)) continue;
+        var firstW = sl.split(/\s+/)[0];
+        if (!/^[a-z][a-z0-9_.-]{1,23}$/.test(firstW)) continue;
+        if (_PROSE_FIRST_WORD_RE.test(firstW) || _SHELL_BUILTINS_RE.test(firstW)) continue;
+        _extractUnqualifiedBinsFromShellCmd(sl).forEach(function (b) {
+          if (!_PROSE_FIRST_WORD_RE.test(b)) addPathHijack(b, sl);
+        });
+      }
+    }
+
+    if (pathHijacks.length) {
+      var topPh = pathHijacks[0];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.path_hijack_candidate', {
+        hijack_bin: topPh.hijack_bin,
+        via_binary: viaBin || null,
+        call: topPh.call,
+        candidates: pathHijacks.slice(0, 10)
+      }, leadKinds);
+    }
+
+    // 2. Missing or user-writable shared libraries, DLLs, and helper scripts -> privesc.library_or_script_hijack
+    var libHijacks = [], seenLib = {};
+    function addLibHijack(target, tType, reason) {
+      var tg = String(target || '').trim();
+      if (!tg) return;
+      var k = tg.toLowerCase();
+      if (seenLib[k]) return;
+      seenLib[k] = 1;
+      libHijacks.push({ target: tg, target_type: tType, reason: reason });
+    }
+
+    // 2A. ldd missing or custom-directory shared object
+    reAll(/^\s*([A-Za-z0-9_.+-]+\.so(?:\.\d+)*)\s*=>\s*not found\b/gm, t).forEach(function (m) {
+      addLibHijack(m[1], 'so', 'ldd_not_found');
+    });
+    reAll(/^\s*([A-Za-z0-9_.+-]+\.so(?:\.\d+)*)\s*=>\s*(\/(?:opt|home|tmp|var\/tmp|dev\/shm|srv|var\/backups|usr\/local)\/\S+)/gim, t).forEach(function (m) {
+      addLibHijack(m[2], 'so', 'custom_shared_library_path');
+    });
+
+    // 2B. readelf / objdump custom or relative RPATH / RUNPATH
+    reAll(/\b(?:RPATH|RUNPATH|Library rpath|Library runpath)\b[^\r\n]*\[\s*([^\]]+)\]/gi, t).forEach(function (m) {
+      m[1].split(':').forEach(function (rp) {
+        var cleanRp = rp.trim();
+        if (!cleanRp) return;
+        if (/^(?:\/(?:opt|home|tmp|var\/tmp|dev\/shm|srv|var\/backups|usr\/local)\b|\$ORIGIN\b|\.(?:\/|$))/i.test(cleanRp)) {
+          addLibHijack(cleanRp, 'so', 'custom_rpath');
+        }
+      });
+    });
+
+    // 2C. strace / ltrace ENOENT or dlopen on non-stock .so / .py / .sh / .pl / .rb
+    reAll(/\bdlopen\s*\(\s*"([^"\r\n]+\.so(?:\.\d+)*)"/gi, t).forEach(function (m) {
+      if (!/^\/(?:usr\/)?lib(?:32|64|x32)?\//i.test(m[1])) addLibHijack(m[1], 'so', 'dlopen_non_system');
+    });
+    reAll(/\b(?:open(?:at)?|access|stat|lstat|execve)\s*\([^"\r\n]*"([^"\r\n]+\.(so(?:\.\d+)*|py|sh|pl|rb|ps1|dll))"[^\r\n]*\bENOENT\b/gi, t).forEach(function (m) {
+      var p = m[1], ext = m[2].toLowerCase().split('.')[0];
+      if (/^\/(?:etc\/ld\.so|(?:usr\/)?lib(?:32|64)?\/|usr\/share\/locale)/i.test(p)) return;
+      addLibHijack(p, ext, 'missing_referenced_target');
+    });
+
+    // 2D. C# / C non-stock [DllImport] or LoadLibrary, or Procmon / exception missing DLL/script
+    reAll(/\[\s*DllImport\s*\(\s*@?"([^"\r\n]+)"/gi, t).forEach(function (m) {
+      var dll = m[1].trim();
+      var base = dll.split(/[\\/]/).pop();
+      if (!_STOCK_WIN32_DLL_RE.test(base)) addLibHijack(dll.indexOf('.') >= 0 ? dll : (dll + '.dll'), 'dll', 'custom_dllimport');
+    });
+    reAll(/\bLoadLibrary(?:Ex)?[AW]?\s*\(\s*@?"([^"\r\n]+)"/gi, t).forEach(function (m) {
+      var dll = m[1].trim();
+      var base = dll.split(/[\\/]/).pop();
+      if (!_STOCK_WIN32_DLL_RE.test(base)) addLibHijack(dll, 'dll', 'loadlibrary_custom');
+    });
+    reAll(/([A-Za-z]:\\[^"\r\n|<>?*]+?\.(dll|ps1|py|bat|cmd|vbs)|\/[A-Za-z0-9_./-]+?\.(so(?:\.\d+)*|py|sh|pl|rb))[^\r\n]*(?:NAME NOT FOUND|PATH NOT FOUND|FileNotFoundException|No such file or directory)/gi, t).forEach(function (m) {
+      var p = m[1], ext = (m[2] || m[3] || '').toLowerCase().split('.')[0];
+      if (/^[A-Za-z]:\\Windows\\/i.test(p) || /^\/(?:usr\/)?lib/i.test(p)) return;
+      addLibHijack(p, ext, 'missing_target_path');
+    });
+
+    // 2E. Custom-location helper script/DLL/SO invoked or loaded by inspected binary
+    reAll(/(?:["'\s]|^)(\/(?:opt|var\/backups|var\/tmp|tmp|dev\/shm|home|srv|usr\/local)\/[A-Za-z0-9_./-]+\.(sh|py|pl|rb|so(?:\.\d+)*)|[A-Za-z]:\\(?:tools|scripts|backups|dev|temp|tmp|Users|ProgramData|inetpub)\\[^"'\r\n|<>?*\s]+\.(ps1|bat|cmd|py|dll|vbs))(?=["'\s);]|$)/gim, t).forEach(function (m) {
+      var p = m[1].trim();
+      if (viaBin && p.toLowerCase() === viaBin.toLowerCase()) return;
+      var ext = (m[2] || m[3] || '').toLowerCase().split('.')[0];
+      addLibHijack(p, ext, 'referenced_custom_script_or_lib');
+    });
+
+    if (libHijacks.length) {
+      var topLh = libHijacks[0];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.library_or_script_hijack', {
+        target: topLh.target,
+        target_type: topLh.target_type,
+        reason: topLh.reason,
+        via_binary: viaBin || null,
+        targets: libHijacks.slice(0, 15)
+      }, leadKinds);
+      if (topLh.target_type === 'dll') {
+        _add_host_privesc_fact(facts, ws, source, 'privesc.dll_hijack_candidate', {
+          evidence: [topLh.target],
+          count: 1
+        }, leadKinds);
+      }
+    }
+
+    _add_privesc_leads(facts, ws, source, leadKinds);
+  }
+  C._parse_binary_inspection = _parse_binary_inspection;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

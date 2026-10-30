@@ -86,6 +86,16 @@
     { kind: 'blocker.certutil_usage', re: /CertUtil:\s*(?:Too many arguments|Too few arguments|Missing \w+ argument|The parameter is incorrect)|Expected no more than \d+ args?, received \d+|Expected at least \d+ args?/i },
     // password change rejected by domain password policy (minimum length, complexity, history, or minimum password age).
     { kind: 'blocker.password_restriction', re: /(?:NT_)?STATUS_PASSWORD_RESTRICTION|0xc000006c|password does not meet the password policy requirements/i },
+    // legacy Python 2 PoC executed under Python 3: print without parens, PEP 263 non-ASCII byte, removed py2 stdlib module, or str/bytes mismatch.
+    { kind: 'blocker.py2_syntax_or_module', re: /SyntaxError:\s*Missing parentheses in call to 'print'|SyntaxError:\s*Non-ASCII character '\\x[0-9a-fA-F]{2}'|(?:ModuleNotFoundError|ImportError):\s*No module named ['"]?(?:urllib2|urlparse|cookielib|httplib|Queue|commands|cPickle|ConfigParser|SocketServer)['"]?|TypeError:\s*(?:a bytes-like object is required, not 'str'|cannot use a string pattern on a bytes-like object)/ },
+    // Kali / Debian PEP 668 externally-managed pip error or missing third-party PoC dependency (pycryptodome Crypto, bs4, pwntools, impacket, etc.).
+    { kind: 'blocker.python_dep_or_pep668', re: /error:\s*externally-managed-environment|(?:ModuleNotFoundError|ImportError):\s*No module named ['"]?(?:Crypto|Cryptodome|bs4|requests_toolbelt|pwn|pwntools|impacket|colorama|termcolor|jwt|yaml)['"]?/ },
+    // exploit script failing at runtime because the author left a hardcoded localhost:8080/8081/8888 debug proxy in requests/urllib.
+    { kind: 'blocker.hardcoded_proxy', re: /ProxyError[^\r\n]*(?:127\.0\.0\.1|localhost)[^\r\n]*(?:8080|8081|8000|8888)|(?:127\.0\.0\.1|localhost)[^\r\n]*(?:8080|8081|8000|8888)[^\r\n]*ProxyError|Cannot connect to proxy[^\r\n]*(?:127\.0\.0\.1|localhost)(?::|,?\s*port=)(?:8080|8081|8000|8888)/i },
+    // TLS handshake failing on a self-signed or mismatched lab certificate in Python requests/urllib/OpenSSL.
+    { kind: 'blocker.tls_cert_verify', re: /\bSSLCertVerificationError\b|\bCERTIFICATE_VERIFY_FAILED\b/ },
+    // compiled C/C++ exploit failing on target due to host/target GLIBC version skew, missing 32-bit multilib headers, or wrong ELF architecture.
+    { kind: 'blocker.glibc_or_arch_mismatch', re: /version ['`"]?GLIBC_2\.\d+(?:\.\d+)?['`"]? not found|gnu\/stubs-32\.h:\s*No such file or directory|cannot execute binary file:\s*Exec format error/i },
   ];
 
   function _parse_op_blockers(text, ws, command, source, facts) {

@@ -15,7 +15,7 @@
   // These tokens deliberately contain authored shell syntax, rather than one argument.
   var EXPRESSION_TOKENS = { command: true, kerberos_command: true, sudo_command: true,
     abuse_groups_quoted: true, shares_readable_quoted: true, flag_inames_linux: true, flag_names_windows: true };
-  var PATH_TOKENS = /(?:dir|file|path|list|script|binary|archive|keyfile|export)$/i;
+  var PATH_TOKENS = /(?:dir|file|path|list|script|binary|bin|archive|keyfile|export)$/i;
   var LIT_OPEN = '\x00OBOL_LBRACE\x00';
   var LIT_CLOSE = '\x00OBOL_RBRACE\x00';
 
@@ -802,11 +802,12 @@
       else ctx.sid = 'XE';
     }
     if (!ctx.keyfile && !ctx.key_file) {
-      var sshKeys = fvals('loot.ssh_key').concat(fvals('credential.ssh_key')).concat(fvals('credential.certificate'));
+      var sshKeys = fvals('loot.ssh_key').concat(fvals('credential.ssh_key')).concat(fvals('ssh.private_key')).concat(fvals('credential.certificate'));
       var kf = '';
       for (var ski = 0; ski < sshKeys.length; ski++) {
         var skv = sshKeys[ski] || {};
-        if (skv.path || skv.file || skv.keyfile) { kf = String(skv.path || skv.file || skv.keyfile); break; }
+        var skCandidate = skv.ssh_key_path || skv.sshKeyPath || skv.keyPath || skv.key_path || skv.path || skv.file || skv.keyfile;
+        if (skCandidate) { kf = String(skCandidate); break; }
       }
       ctx.keyfile = kf || 'id_rsa';
       ctx.key_file = ctx.keyfile;
@@ -919,6 +920,200 @@
       }
       ctx.target_user = pickedUser || 'Administrator';
     }
+    if (!ctx.edb_id || !ctx.edb_file || !ctx.edb_path) {
+      var edbItems = [];
+      fvals('exploit.script_inspected').concat(fvals('exploit.edb_candidate')).forEach(function (ev) {
+        if (!ev || typeof ev !== 'object') return;
+        edbItems.push(ev);
+        ['candidates', 'exploits', 'matches'].forEach(function (arrKey) {
+          if (Array.isArray(ev[arrKey])) {
+            ev[arrKey].forEach(function (sub) { if (sub && typeof sub === 'object') edbItems.push(sub); });
+          }
+        });
+      });
+      var foundEdbId = ctx.edb_id ? String(ctx.edb_id).trim() : '';
+      var foundEdbFile = ctx.edb_file ? String(ctx.edb_file).trim() : '';
+      var foundEdbPath = ctx.edb_path ? String(ctx.edb_path).trim() : '';
+      var foundEdbExt = '';
+      for (var edi = 0; edi < edbItems.length; edi++) {
+        var edv = edbItems[edi];
+        var rawEdbId = edv.edb_id || edv.edbId || edv.exploit_id || edv.id || '';
+        var normEdbId = rawEdbId ? String(rawEdbId).trim().replace(/^edb(?:-id)?[:\s-]*/i, '') : '';
+        var rawEdbPath = edv.edb_path || edv.edbPath || edv.full_path || edv.fullPath || edv.script_path || edv.path || '';
+        var rawEdbFile = edv.edb_file || edv.edbFile || edv.filename || edv.file || edv.script || '';
+        if (!rawEdbPath && rawEdbFile && /[\\\/]/.test(String(rawEdbFile))) rawEdbPath = String(rawEdbFile);
+        var cleanEdbFile = rawEdbFile ? String(rawEdbFile).trim().replace(/^.*[\\\/]/, '') : '';
+        if (!cleanEdbFile && rawEdbPath) cleanEdbFile = String(rawEdbPath).trim().replace(/^.*[\\\/]/, '');
+        if (!normEdbId && cleanEdbFile) {
+          var idMatch = /^(?:edb[_-]?)?(\d{3,7})(?:\.[A-Za-z0-9]+)?$/i.exec(cleanEdbFile);
+          if (idMatch) normEdbId = idMatch[1];
+        }
+        if (!foundEdbId && normEdbId) foundEdbId = normEdbId;
+        var isGenericEdbFallback = /^exploit\.[A-Za-z0-9]+$/i.test(cleanEdbFile);
+        if ((!foundEdbFile || (/^exploit\.[A-Za-z0-9]+$/i.test(foundEdbFile) && !isGenericEdbFallback)) && cleanEdbFile && (!foundEdbId || !normEdbId || normEdbId === foundEdbId)) foundEdbFile = cleanEdbFile;
+        if (!foundEdbPath && rawEdbPath && !/^exploit\.[A-Za-z0-9]+$/i.test(String(rawEdbPath).trim()) && (!foundEdbId || !normEdbId || normEdbId === foundEdbId)) foundEdbPath = String(rawEdbPath).trim();
+        if (!foundEdbExt && (edv.ext || edv.extension)) foundEdbExt = String(edv.ext || edv.extension).trim().replace(/^\./, '');
+      }
+      if (!foundEdbPath) {
+        for (var edp = 0; edp < edbItems.length; edp++) {
+          var epVal = edbItems[edp].edb_path || edbItems[edp].edbPath || edbItems[edp].full_path || edbItems[edp].fullPath || edbItems[edp].script_path || edbItems[edp].path || '';
+          if (epVal) { foundEdbPath = String(epVal).trim(); break; }
+        }
+      }
+      if (!foundEdbFile && foundEdbPath) foundEdbFile = foundEdbPath.replace(/^.*[\\\/]/, '');
+      if (!foundEdbFile && foundEdbId && foundEdbExt) foundEdbFile = foundEdbId + '.' + foundEdbExt;
+      if (!foundEdbPath && foundEdbFile) foundEdbPath = foundEdbFile;
+      if (!ctx.edb_id && foundEdbId) ctx.edb_id = foundEdbId;
+      if (!ctx.edb_file && foundEdbFile) ctx.edb_file = foundEdbFile;
+      if (!ctx.edb_path && foundEdbPath) ctx.edb_path = foundEdbPath;
+    }
+    if (!ctx.custom_bin) {
+      var cbItems = [];
+      fvals('privesc.custom_binary').concat(fvals('host.custom_artifact')).forEach(function (cv) {
+        if (!cv) return;
+        if (typeof cv === 'string') { cbItems.push(cv); return; }
+        cbItems.push(cv);
+        ['binaries', 'artifacts', 'paths', 'files', 'items'].forEach(function (ak) {
+          if (Array.isArray(cv[ak])) cv[ak].forEach(function (sub) { if (sub) cbItems.push(sub); });
+        });
+      });
+      for (var cbi = 0; cbi < cbItems.length; cbi++) {
+        var cbv = cbItems[cbi];
+        var cbPick = typeof cbv === 'string'
+          ? cbv
+          : (cbv.custom_bin || cbv.customBin || cbv.path || cbv.full_path || cbv.fullPath || cbv.file || cbv.artifact || cbv.exe || cbv.binary || cbv.bin || cbv.command || cbv.target || cbv.name || '');
+        if (cbPick && String(cbPick).trim()) { ctx.custom_bin = String(cbPick).trim(); break; }
+      }
+    }
+    if (!ctx.source_path || !ctx.app_base_path) {
+      var srcItems = [];
+      fvals('web.source_disclosed').concat(fvals('web.manifest_disclosed')).forEach(function (sv) {
+        if (!sv) return;
+        if (typeof sv === 'string') { srcItems.push({ path: sv }); return; }
+        srcItems.push(sv);
+        ['paths', 'files', 'manifests', 'items'].forEach(function (ak) {
+          if (Array.isArray(sv[ak])) {
+            sv[ak].forEach(function (sub) {
+              if (!sub) return;
+              srcItems.push(typeof sub === 'string' ? { path: sub } : sub);
+            });
+          }
+        });
+      });
+      fvals('exploit.script_inspected').concat(fvals('http.path')).forEach(function (hv) {
+        if (!hv || typeof hv !== 'object') return;
+        if (hv.source_path || hv.sourcePath || hv.manifest_path || hv.manifestPath || hv.app_base_path || hv.appBasePath) {
+          srcItems.push(hv);
+        }
+      });
+      var foundSrcPath = ctx.source_path ? String(ctx.source_path).trim() : '';
+      var foundBasePath = ctx.app_base_path ? String(ctx.app_base_path).trim() : '';
+      for (var sri = 0; sri < srcItems.length; sri++) {
+        var srv = srcItems[sri];
+        if (!foundSrcPath) {
+          var rawSp = srv.source_path || srv.sourcePath || srv.manifest_path || srv.manifestPath || srv.target_path || srv.remote_path || srv.file_path || srv.path || srv.file || srv.uri || srv.endpoint || srv.url || '';
+          if (rawSp && String(rawSp).trim()) {
+            var spClean = String(rawSp).trim();
+            var urlPathMatch = /^https?:\/\/[^\/]+(\/.*)$/i.exec(spClean);
+            if (urlPathMatch) spClean = urlPathMatch[1];
+            else if (/^https?:\/\/[^\/]+$/i.test(spClean)) spClean = '/';
+            foundSrcPath = spClean;
+          }
+        }
+        if (!foundBasePath) {
+          var rawBp = srv.app_base_path || srv.appBasePath || srv.base_path || srv.basePath || srv.app_root || srv.appRoot || srv.docroot || srv.webroot || srv.root_dir || srv.dir || srv.directory || '';
+          if (rawBp && String(rawBp).trim()) foundBasePath = String(rawBp).trim();
+        }
+        if (foundSrcPath && foundBasePath) break;
+      }
+      if (!foundBasePath && foundSrcPath) {
+        if (foundSrcPath.indexOf('/') >= 0) {
+          var trimmedSp = foundSrcPath.replace(/\/+$/, '');
+          var lastSlash = trimmedSp.lastIndexOf('/');
+          foundBasePath = lastSlash > 0 ? trimmedSp.slice(0, lastSlash) : '/';
+        } else if (foundSrcPath.indexOf('\\') >= 0) {
+          var trimmedWin = foundSrcPath.replace(/\\+$/, '');
+          var lastBs = trimmedWin.lastIndexOf('\\');
+          if (lastBs > 0) foundBasePath = trimmedWin.slice(0, lastBs);
+        } else {
+          foundBasePath = '/';
+        }
+      }
+      if (!ctx.source_path && foundSrcPath) ctx.source_path = foundSrcPath;
+      if (!ctx.app_base_path && foundBasePath) ctx.app_base_path = foundBasePath;
+    }
+    if (!ctx.ssh_key_path) {
+      var keyItems = [];
+      fvals('loot.ssh_key').concat(fvals('credential.ssh_key')).concat(fvals('ssh.private_key')).forEach(function (kv) {
+        if (kv) keyItems.push(typeof kv === 'string' ? { path: kv } : kv);
+      });
+      fvals('credential.reuse_candidate').forEach(function (rv) {
+        if (rv && (rv.ssh_key_path || rv.sshKeyPath || rv.keyPath || rv.key_path || rv.keyfile)) keyItems.push(rv);
+      });
+      fvals('credential.certificate').forEach(function (cv) {
+        if (cv && (cv.kind === 'private_key' || cv.ssh_key_path || cv.sshKeyPath || cv.keyPath || cv.key_path || cv.keyfile)) keyItems.push(cv);
+      });
+      if (keyItems.length) {
+        var pickedKeyPath = '';
+        for (var kpi = 0; kpi < keyItems.length; kpi++) {
+          var kpv = keyItems[kpi] || {};
+          var rawKp = kpv.ssh_key_path || kpv.sshKeyPath || kpv.keyPath || kpv.key_path || kpv.keyfile || kpv.path || kpv.file || '';
+          if (rawKp && String(rawKp).trim()) { pickedKeyPath = String(rawKp).trim(); break; }
+        }
+        ctx.ssh_key_path = pickedKeyPath || 'id_rsa';
+      }
+    }
+    if (!ctx.reuse_user || !ctx.reuse_secret) {
+      var reuseVals = fvals('credential.reuse_candidate');
+      fvals('credential.available').forEach(function (av) {
+        if (av && av.unvalidatedOnTarget && av.reuseFrom) reuseVals = reuseVals.concat([av]);
+      });
+      if (reuseVals.length) {
+        var failedUsers = Object.create(null);
+        fvals('blocker.logon_failure').forEach(function (bv) {
+          var bu = String((bv && (bv.user || bv.username || bv.principal)) || '').trim().toLowerCase().replace(/^.*\\/, '');
+          if (bu) failedUsers[bu] = (failedUsers[bu] || 0) + 1;
+        });
+        var activeUserLower = String(ctx.user || ctx.username || '').trim().toLowerCase();
+        var scoredCands = [];
+        var keyOnlyUser = '';
+        for (var rci = 0; rci < reuseVals.length; rci++) {
+          var rcv = reuseVals[rci] || {};
+          var rUser = String(rcv.reuse_user || rcv.user || rcv.username || '').trim();
+          var rPw = rcv.reuse_secret != null && rcv.reuse_secret !== ''
+            ? String(rcv.reuse_secret)
+            : (rcv.password != null && rcv.password !== '' ? String(rcv.password) : (rcv.secret != null && rcv.secret !== '' ? String(rcv.secret) : ''));
+          var rNt = String(rcv.nthash || rcv.hash || '').trim();
+          var rSec = rPw || rNt;
+          if (rUser && rSec) {
+            scoredCands.push({
+              user: rUser,
+              secret: rSec,
+              isNtOnly: !rPw && /^[0-9a-f]{32}$/i.test(rNt),
+              fails: failedUsers[rUser.toLowerCase()] || 0,
+              matchesActive: activeUserLower && rUser.toLowerCase() === activeUserLower ? 1 : 0,
+              idx: rci
+            });
+          } else if (rUser && !keyOnlyUser) {
+            keyOnlyUser = rUser;
+          }
+        }
+        if (scoredCands.length) {
+          scoredCands.sort(function (a, b) {
+            if (a.fails !== b.fails) return a.fails - b.fails;
+            if (b.matchesActive !== a.matchesActive) return b.matchesActive - a.matchesActive;
+            return a.idx - b.idx;
+          });
+          if (!ctx.reuse_user) ctx.reuse_user = scoredCands[0].user;
+          if (!ctx.reuse_secret) {
+            ctx.reuse_secret = scoredCands[0].secret;
+            if (scoredCands[0].isNtOnly) ctx._reuseSecretIsNtHash = true;
+          }
+        } else if (!ctx.reuse_user && keyOnlyUser) {
+          ctx.reuse_user = keyOnlyUser;
+        }
+      }
+    }
     if (projObj) {
       if (!projMap) { projMap = Object.create(null); _baseCtxCache.set(projObj, projMap); }
       projMap[baseKey] = Object.assign({}, ctx);
@@ -1030,6 +1225,11 @@
           return ident + (outAt || '') + " -hashes ':{{nthash}}'";
         });
         cmd = cmd.replace(/(\s)-p\s+(?:'\{\{password\}\}'|"\{\{password\}\}"|\{\{password\}\})/g, "$1-hashes ':{{nthash}}'");
+      }
+    }
+    if (ctx._reuseSecretIsNtHash && cmd.indexOf('{{reuse_secret}}') >= 0) {
+      if (/\b(?:nxc|netexec|crackmapexec|cme|smbmap|evil-winrm|pywhisker(?:\.py)?|targetedKerberoast(?:\.py)?)\b/i.test(cmd)) {
+        cmd = cmd.replace(/(\s)-p\s+(?:'\{\{reuse_secret\}\}'|"\{\{reuse_secret\}\}"|\{\{reuse_secret\}\})/g, "$1-H '{{reuse_secret}}'");
       }
     }
     cmd = cmd.replace(/\{\{([a-zA-Z0-9_]+)(?:\|((?:\{\{[a-zA-Z0-9_]+\}\}|[^{}])*))?\}\}/g, function (placeholder, key, defVal, offset) {
@@ -1350,7 +1550,8 @@
   var EARNED_TOKENS = {
     domain: 1, basedn: 1, dc: 1, dc_netbios: 1, dc_account: 1, user: 1, password: 1,
     nthash: 1, userlist: 1, hashfile: 1, domain_sid: 1, target_sam: 1, group: 1, abuse_groups_quoted: 1, ca_name: 1, template: 1,
-    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_smb_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1
+    pfx: 1, nmap_ports: 1, krbtgt_hash: 1, dahash: 1, dauser: 1, flag_path_local: 1, flag_smb_path_local: 1, flag_path_root: 1, share: 1, cpassword: 1,
+    edb_id: 1, edb_file: 1, edb_path: 1, custom_bin: 1, source_path: 1, app_base_path: 1, ssh_key_path: 1, reuse_user: 1, reuse_secret: 1
   };
 
   function _normCmd(s) {

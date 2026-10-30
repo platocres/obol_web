@@ -105,14 +105,23 @@ schema is the enforcement mechanism for the Whole-Asset Rule.
   Banked for the move/ordering audit; not acted on early.
 - `notes`: anything else of value, so nothing is lost before the asset is marked done.
 
-This record is locked as a machine-checkable contract in `tools/corpus/extraction-schema.js` (Stage 1):
+This record is locked as a machine-checkable contract in `tools/corpus/extraction-schema.js` (Stage 1, extended in `v13.0` Schema v2):
 `validateRecord()` enforces the field set, the `asset.type` / `fidelity` enums, the dedup key
 (`contentHash`, sha256 over CRLF-normalized text), the provenance floor (source url + retrieval date), the
 output-block shape, and the Whole-Asset Rule (at least one axis present). `validateLabelsFile()` enforces the
 facts-axis label sub-contract, and `buildKindVocabulary()` validates every referenced fact kind against the
 live engine vocabulary (the union of `PARSER_SIGNATURES` emits, exact or prefix-wildcard, plus environmental
-facts, mirroring `assets/engine/decisionmap.js`). `tests/engine/corpus-extraction-schema-smoke.js` ratchets
-all of it and validates the real label file (corpus-optional).
+facts, mirroring `assets/engine/decisionmap.js`). Schema v2 adds optional backward-compatible grading fields on
+records and label cases while keeping all v1 label files 100% valid:
+- `outcome_expected`: expected `OBOL.outcomes.classify` verdict (`completed-negative` | `authorization-denied` |
+  `rejected` | `environment-error` | `success` | `partial`).
+- `tier_attribution`: expected parser tier (`tier1` | `tier2_shape` | `tier3_inference`), or a `{ fact_kind: tier }`
+  map validated against the live kind vocabulary.
+- `trajectory_checkpoints[]`: stateful replay assertions (`{ step_index, target_ip, expected_move_ids,
+  required_gates, earned_tokens, require_closed_loop_top1, retired_dry_moves }`).
+
+`tests/engine/corpus-extraction-schema-smoke.js` and `tests/engine/dual-pass-harvester-smoke.js` ratchet all of it
+and validate the real label file (corpus-optional).
 
 ## 5. The Source Portfolio (Matched To Need)
 
@@ -529,3 +538,104 @@ read before that box is marked done. The move/technique axis is already banked i
     Actionable enumeration coverage across the 194 walkthroughs reached 97.5% (1796 minted / 46 blind of 1842
     units), locked corpus-free by `tests/engine/stage5-corpus-remining-smoke.js`.
 - All stages (Stage 0 through Stage 7) on the 0xdf OffSec snapshot are now complete.
+
+## 11. v13.0 Dual-Pass And Multi-Target Corpus Architecture
+
+Starting in `v13.0`, OBOL upgrades its corpus harness from single-source `0xdf` HTML block probing to a
+source-agnostic **Dual-Pass + Multi-Target Harness** covering OffSec Proving Grounds Practice, multi-host
+Challenge Labs, cross-author Markdown writeups, and spliced OCR screenshot sidecars.
+
+### 11.1 Shared Runtime And Unified Markdown Extraction
+
+- **`tools/corpus/sandbox-loader.js` (Unified `v13.0` VM Sandbox):** Loads the full OBOL `v13.0` engine and UI
+  store/ingest/coach stack in exact browser dependency order (matching `tests/engine/adversarial-stateful-replays-smoke.js`,
+  plus conditional loading of optional `assets/engine/tunnels.js`, `assets/engine/tool-staging.js`, and
+  `assets/engine/parsers/edb.js` before `assets/engine/parsers/index.js`). Exposes `probeBlockStateless()` for
+  Pass 1 and `createEngagementSession()` for Pass 2, including multi-target registration and switching
+  (`registerTarget`, `setActiveTarget`, `factSetForTarget`), `snapshot()` / `restore()` transactions, and
+  SharpHound/BloodHound JSON bundle ingestion (`OBOL.bloodhound.parseJson` + `toFacts`).
+- **`tools/corpus/markdown-extractor.js` (Unified Extractor, Prompt Splitter, And OCR Splicer):** Replaces
+  duplicated HTML-only regexes across harvesters while preserving 100% SHA-1 `blockId` compatibility with
+  `tools/corpus/labels/0xdf-facts.json`:
+  1. Extracts both `0xdf` `<div class="language-...">` blocks and standard CommonMark ```` ``` ```` / `~~~`
+     fenced blocks (case-insensitive terminal/output tags plus bare fences classified by prompt, tool, and
+     output signatures; excludes static source fences such as `python`, `c`, `php`, `html`, `json`, and `xml`
+     unless they contain an interactive shell prompt or an Exploit-DB header).
+  2. Segments multi-command captures into ordered chronological turns (`{ promptLine, command, stdout,
+     lineStart, heading, hostHint }`) across two-line Kali/Parrot zsh prompts, `[user@host cwd]$`,
+     `user@host:cwd$`, `sh-5.1$`, `PS C:\...>`, `C:\...>`, `*Evil-WinRM* PS ...>`, `smb: \>`, `ftp>`,
+     `mysql>`, `postgres=#`, `sqlite>`, `127.0.0.1:6379>`, `rpcclient $>`, `meterpreter >`, `msf6 >`,
+     `mimikatz #`, and bare `$` / `#`.
+  3. Splices `<corpusDir>/ocr-sidecars/<slug>.json` entries (`{ line, fidelity: 'ocr', command, stdout }`) into
+     the extracted turn list at their exact 1-based Markdown `line` positions.
+  4. Discovers cross-author writeups under `<corpusDir>/alternates/<slug>--*.md` so independent operator tool
+     choices on the same box can be compared without overfitting to one author's style.
+
+### 11.2 Pass 1: Stateless Block, Shape, Inference, And Negative-Outcome Sweep
+
+- **`tools/corpus/harvest-markdown.js` And `tools/corpus/facts-axis.js`:** Both tools accept `--corpus-dir <dir>`
+  (plus `--slugs`, `--limit`, and `--include-alternates`) and run through `sandbox-loader.js` and
+  `markdown-extractor.js`.
+- **Three-Tier Fact Attribution:** Every minted fact is attributed to its actual engine layer:
+  - `tier1`: tool-specific parser branches (`nmap.js`, `directory.js`, `services.js`, `creds.js`, `host.js`,
+    `database.js`, `web.js`, `websource.js`, `dns.js`, `pivot.js`, `blockers.js`).
+  - `tier2_shape`: structural protocol and vulnerability shape matchers (`via: 'shape'` / `'vulnmatch'` from
+    `shape.js`).
+  - `tier3_inference`: 45-atom family-resemblance co-occurrence, prompt telemetry, and stateful causal
+    entailment (`via: 'context-*'` / `'prompt-telemetry'` / `'causal-entailment'` from `inference.js`).
+- **Negative And Empty Probe Grading:** Short, empty, or negative turns (`< 20` chars or zero minted facts) are
+  never silently discarded; they are graded through `OBOL.outcomes.classify` so `completed-negative`,
+  `authorization-denied`, `rejected`, and `environment-error` probes are measured alongside positive mints.
+
+### 11.3 Pass 2: Stateful Kill-Chain And Closed-Loop `#1` Retirement Replay
+
+- **`tools/corpus/harvest-trajectories.js`:** Replays ordered walkthrough turns `b_1 .. b_T` (including spliced
+  OCR turns and optional BloodHound JSON bundles) into a stateful engagement session (`--corpus-dir`, `--slugs`,
+  `--multi-target`, `--include-alternates`, `--limit`, `--out`).
+- **Closed-Loop `#1` Reachability Contract:** Before executing each actionable operator turn `b_t` (skipping pure
+  local shell housekeeping such as `cd`, `pwd`, `mkdir`, editor opens, and local staging listeners), the
+  harvester maps `b_t` to its matching catalog move(s) `a` and checks whether:
+  1. `a.eligible(facts)` holds and at least one command variant has zero unfilled `EARNED_TOKENS` in `command.js`.
+  2. Either:
+     - `a` sits directly at `#1` in `Ready Now` (`coach.onFlow[0]`), or within Top-4 (`#1..#4`) at an unprobed
+       initial multi-port recon fork (`>= 2` open ports in the `anon` epoch before service probes run), OR
+     - `a` sits at `#k` (`k > 1`) in `Ready Now`, and simulating immediate flag settlement (for objective flag
+       collection cards) or Cockpit `.mi-empty` `completed-negative` dry-probe retirement on preceding cards
+       `1..k-1` inside a `snapshot()` / `restore()` transaction promotes `a` to `#1`.
+- **Five-Bucket Stall Taxonomy:** Every unreachable step is attributed to its exact causal failure mode:
+  1. `PARSE_OR_SHAPE_MISS`: `a` is ineligible or lacks an earned token because prior raw terminal output held
+     evidence that `parsers/` failed to mint.
+  2. `GATE_DEADLOCK_OR_UNDERGATED_GAMBLE`: `a` is ineligible due to unmet `requires_all` / `requires_any` or
+     OS/scope gates without a preceding parser miss (out-of-order jump gap or over-narrow move gate).
+  3. `UNFILLED_EARNED_TOKEN`: `a.eligible(facts)` passed, yet every eligible command variant remains blocked by
+     unfilled `EARNED_TOKENS` in `command.js`.
+  4. `OUTCOME_OR_RETIREMENT_STALL`: `a` is in `Ready Now` at `#k > 1`, and simulating `completed-negative`
+     dry-probe ingestion on a preceding card `1..k-1` failed to retire or demote that preceding card.
+  5. `CLOSED_LOOP_RANK_STALL`: all original preceding cards `1..k-1` retired cleanly (or `a` is eligible with
+     runnable tokens in `Coming Up`), yet `a` still failed to reach `#1`.
+
+### 11.4 Three-Role Adversarial Red-Team Loop And Anti-Overfitting Gate
+
+Every corpus-driven improvement must pass a three-role separation of concerns:
+
+1. **Role 1 (Harvester And Diagnostician):** Runs Pass 1 (`harvest-markdown.js`, `facts-axis.js`) and Pass 2
+   (`harvest-trajectories.js`) on offline corpora to isolate reproducible parser misses and 5-bucket trajectory
+   stalls, abstracting away box identities into pure protocol/tool output shapes.
+2. **Role 2 (Generalization Engineer):** Fixes root causes using general protocol grammars, OS-baseline
+   subtraction, `shape.js` structural shapes, `inference.js` atom clusters, honest causal move gates
+   (`requires_all`, `requires_any`, `produces`, `transition`, `eliminates`), and `outcomes.js` dry-probe
+   retirement, locking every fix with 100% synthetic, randomized fixtures in `tests/engine/*-smoke.js`. Never
+   inflates `priority` numbers to mask missing gates or broken retirement.
+3. **Role 3 (Anti-Overfitting Red-Team Auditor - `tools/corpus/verify-no-overfit.js`):** Dynamically loads all
+   staged corpus manifests (`pg-practice-2026-10-29`, `0xdf-offsec-complete-2026-08-20`, Challenge Labs, and any
+   future `corpus/*/corpus-manifest.json`) plus walkthrough prose paragraphs and scans `git diff` (or `--all` /
+   `--files`) across `qa/assets/`, `qa/data/`, and `qa/tests/`, exiting non-zero on:
+   - `HARDCODED_BOX_IDENTITY`: any distinctive box/lab slug, Challenge Lab hostname, manifest IP, or author
+     repository handle (with a principled English/protocol dictionary allowlist so normal words such as `access`,
+     `internal`, `vault`, `squid`, and `administrator` pass cleanly).
+   - `SUSPICIOUS_BOX_LOOKUP_TABLE`: any explicit box qualifier (`HTB: <Name>`, `PG Practice: <Name>`,
+     `<slug>.htb`) or multi-slug lookup list (`>= 4` quoted corpus slugs on one line).
+   - `VERBATIM_WALKTHROUGH_PROSE`: any `>= 48`-character verbatim walkthrough prose substring leaked into
+     `qa/tests/`.
+   - `HOUSE_STYLE_VIOLATION`: any em dash, en dash, or decorative emoji.
+

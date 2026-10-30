@@ -2380,6 +2380,128 @@
           ]
         }
       ]
+    },
+    {
+      "id": "edb-searchsploit-lookup",
+      "title": "Exploit-DB Lookup for Versioned Third-Party Service (searchsploit)",
+      "hypothesis": "When a scan, banner, or disclosed package manifest reveals a concrete version for a non-stock third-party application or daemon (for example an appliance UI, CMS, mail server, or pinned library) and no dedicated CVE module already owns it, query the local Exploit-DB index with searchsploit. Ignore denial-of-service entries and rank standalone Python, Bash, or HTTP PoCs ahead of Metasploit-only modules.",
+      "tool": "searchsploit",
+      "tools": [
+        "searchsploit"
+      ],
+      "locus": "R",
+      "diagnostic": true,
+      "phase": "enum",
+      "requires_all": [],
+      "requires_any": [
+        "exploit.versioned_banner",
+        "service.version",
+        "web.manifest_disclosed"
+      ],
+      "produces": [
+        "exploit.edb_candidate"
+      ],
+      "settled_by": [
+        "exploit.edb_candidate"
+      ],
+      "obsoleted_by": [
+        "exploit.edb_candidate",
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "whether Exploit-DB carries a public RCE, auth-bypass, SQLi, LFI, or privilege-escalation PoC matching the fingerprinted product and version",
+      "does_not_prove": "that the target is exploitable until the mirrored script is inspected, adapted to the target parameters, and executed",
+      "report": {
+        "finding": "Outdated Third-Party Software Version Matched in Exploit-DB",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://www.exploit-db.com/searchsploit"
+      ],
+      "commands": [
+        {
+          "tool": "searchsploit",
+          "run": "searchsploit --exclude=\"/dos/\" {{search_query|product version}}",
+          "note": "Query the offline Exploit-DB mirror for the fingerprinted product and major.minor version while filtering out denial-of-service entries. Paste the table back so obol ranks the best non-Metasploit PoC."
+        },
+        {
+          "tool": "searchsploit",
+          "run": "searchsploit -j {{search_query|product version}}",
+          "note": "JSON output mode (-j): includes full EDB-ID metadata, verified flags, and exact local exploit paths for automated triage."
+        }
+      ]
+    },
+    {
+      "id": "edb-mirror-and-inspect",
+      "title": "Mirror & Inspect Exploit-DB PoC Before Firing",
+      "hypothesis": "Public Exploit-DB scripts almost never work blindly out of the box: they ship with Python 2 print/urllib2 syntax, hardcoded 127.0.0.1:8080 debug proxies, placeholder RHOST/LHOST/LPORT constants, or C headers targeting a different libc. Mirror the ranked PoC into your working directory with searchsploit -m and read its header, CLI parser, and hardcoded constants before running a single packet.",
+      "tool": "searchsploit",
+      "tools": [
+        "searchsploit",
+        "sh",
+        "grep"
+      ],
+      "locus": "R",
+      "sequence": true,
+      "phase": "enum",
+      "requires_all": [
+        "exploit.edb_candidate"
+      ],
+      "requires_any": [],
+      "produces": [
+        "exploit.script_inspected",
+        "vuln.edb_poc_inspected"
+      ],
+      "settled_by": [
+        "exploit.script_inspected"
+      ],
+      "obsoleted_by": [
+        "exploit.script_inspected",
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 80,
+      "proves": "the exact CLI flags, positional argv contract, hardcoded target/callback constants, and pre-flight runtime hazards (Python 2, debug proxy, C compilation) of the mirrored PoC",
+      "does_not_prove": "remote code execution until the adapted exploit runs against the target",
+      "report": {
+        "finding": "Exploit-DB PoC Mirrored and Audited for Target Adaptation",
+        "severity": "low"
+      },
+      "refs": [
+        "https://www.exploit-db.com/searchsploit"
+      ],
+      "commands": [
+        {
+          "tool": "searchsploit",
+          "run": "searchsploit -m {{edb_id|48506}}",
+          "note": "Copy the selected Exploit-DB PoC into your current working directory so you can inspect and edit a local copy safely."
+        },
+        {
+          "tool": "sh",
+          "run": "head -n 80 {{edb_file|48506.py}}",
+          "note": "Read the PoC header, imports, hardcoded URL/proxy/LHOST constants, and usage block. Paste the output so obol extracts its CLI flags and flags any Python 2, proxy, or compile hazards."
+        },
+        {
+          "tool": "grep",
+          "run": "grep -nE 'argparse|add_argument|sys\\.argv|Usage:|proxies|urllib2|LHOST|LPORT|RHOST|target|url' {{edb_file|48506.py}}",
+          "note": "Quickly surface every argument parser definition, hardcoded callback constant, and proxy dictionary in longer exploit scripts."
+        }
+      ]
     }
   ]
 }

@@ -743,6 +743,10 @@
         if (k === 'blocker.nxc_bh_config' && (facts.has('ad.graph.collected') || facts.has('ad.attack_paths'))) {
           return;
         }
+        // Pre-flight Stage 2 hazard cards yield once the corresponding Stage 3 runtime blocker card is active
+        if (k === 'exploit.hazard_py2' && facts.has('blocker.py2_syntax_or_module')) return;
+        if (k === 'exploit.hazard_burp_proxy' && facts.has('blocker.hardcoded_proxy')) return;
+        if (k === 'exploit.hazard_c_compile' && facts.has('blocker.glibc_or_arch_mismatch')) return;
         var scopes = {};
         (facts.facts || []).forEach(function (f) { if (f.kind === k && f.state === 'supported') scopes[f.scope] = true; });
         Object.keys(scopes).forEach(function (scope) {
@@ -756,8 +760,25 @@
             .replace(/<group>/g, '{{joined_group}}')
             .replace(/<host\.domain>/g, '{{dc_fqdn|{{domain}}}}')
             .replace(/<share>/g, '{{share}}')
-            .replace(/<hashfile>/g, '{{hashfile}}');
-          d.code = nsFill(tmpl, facts, Object.assign({}, params, /^host:/.test(scope) ? { target: scope.slice(5) } : {}));
+            .replace(/<hashfile>/g, '{{hashfile}}')
+            .replace(/<lhost>/g, '{{lhost}}')
+            .replace(/<exploit\.py>/g, '{{edb_file|exploit.py}}')
+            .replace(/<exploit\.c>/g, '{{edb_file|exploit.c}}')
+            .replace(/<script>/g, '{{edb_file|script.sh}}');
+          var scopeTarget = /^host:/.test(scope) ? scope.slice(5) : '';
+          var scopeFacts = (scopeTarget && OBOL.store && OBOL.store.factSetForTarget)
+            ? OBOL.store.factSetForTarget(scopeTarget)
+            : facts;
+          var fillParams = Object.assign({}, params, scopeTarget ? { target: scopeTarget } : {});
+          if (OBOL.command && OBOL.command.fillTemplate) {
+            d.code = OBOL.command.fillTemplate(tmpl, scopeFacts, Object.assign({
+              params: fillParams,
+              profile: eng.profile,
+              workspace: (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {}
+            }, fillParams));
+          } else {
+            d.code = nsFill(tmpl, scopeFacts, fillParams);
+          }
         }
         out.push(d);
         });

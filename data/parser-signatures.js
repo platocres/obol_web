@@ -168,7 +168,7 @@
     'websource': {
       looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
       regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, password = "…", DBPassword=…, [... account] + user + pass, ghp_…',
-      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'web.exposed_artifact'],
+      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.available', 'credential.candidate', 'credential.certificate', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink'],
     },
     'shell-exec': {
       looksFor: "a caught shell or a command's result - an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",
@@ -183,7 +183,7 @@
     'op-blocker': {
       looksFor: "a classic operational wall from a pasted error - nmap 'host seems down' (needs -Pn), 'could not resolve host' (needs /etc/hosts), a CRLF 'bad interpreter', 'sudo: no tty present', Defender/AMSI blocking a payload, a SeImpersonate potato that failed, HTTP fuzzing rate-limited (429), or an http/https scheme mismatch (WRONG_VERSION_NUMBER).",
       regex: 'Host seems down | Could not resolve host | bad interpreter | no tty present | contains malicious content | the handle is invalid | 429 Too Many Requests | WRONG_VERSION_NUMBER',
-      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config', 'blocker.maq_zero', 'blocker.certutil_usage', 'blocker.password_restriction'],
+      emits: ['blocker.host_down', 'blocker.name_resolution', 'blocker.crlf', 'blocker.no_tty', 'blocker.amsi', 'blocker.potato', 'blocker.rate_limited', 'blocker.tls_scheme', 'blocker.hash_format', 'blocker.egress_blocked', 'blocker.smb_signing', 'blocker.kerberos_spn', 'blocker.responder_quiet', 'blocker.web_wildcard', 'blocker.hashcat_env', 'blocker.xp_cmdshell_disabled', 'blocker.cracking_exhausted', 'blocker.dcsync_denied', 'blocker.nxc_bh_config', 'blocker.maq_zero', 'blocker.certutil_usage', 'blocker.password_restriction', 'blocker.py2_syntax_or_module', 'blocker.python_dep_or_pep668', 'blocker.hardcoded_proxy', 'blocker.tls_cert_verify', 'blocker.glibc_or_arch_mismatch'],
     },
     'ssh-key-rejected': {
       looksFor: "an SSH key login that failed, and why - unprotected key perms, a passphrase prompt, the OpenSSH 8.8+ ssh-rsa block (no mutual signature algorithm), an invalid key format, or a bare \"Permission denied (publickey)\" (often target-side StrictModes).",
@@ -219,6 +219,11 @@
       looksFor: "a foothold's own interface / route dump (ip a, ifconfig, ipconfig, ip route, route print) - the subnets it sits on, and whether it is a dual-homed pivot; its ARP/neighbour cache (ip neigh, arp -a) for adjacent hosts, its listening services (netstat -ano, ss -tlnp) and its internal resolvers (resolv.conf, DNS Servers); and a pivot tool's setup or status output that confirms a live tunnel (chisel R:socks, ssh -D, ligolo agent-joined, sshuttle connected, dnscat2 session).",
       regex: 'inet <ip>/<pfx> | Subnet Mask | <net>/<pfx> dev|via | <ip> ... lladdr|dynamic | LISTENING | nameserver <ip> | Agent joined | R:socks | Connected to server',
       emits: ['scan.local.interfaces', 'scan.local.routes', 'scan.local.neighbors', 'scan.local.listeners', 'scan.local.dns', 'host.multihomed', 'host.arp_neighbor', 'listener.open', 'network.subnet_candidate', 'pivot.candidate', 'pivot.ports', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
+    },
+    'edb': {
+      looksFor: 'a non-stock versioned third-party product banner (after subtracting stock OS/server/framework baselines), a searchsploit ASCII table or JSON result (filtering DoS/shellcodes and demoting Metasploit-only modules), and a mirrored Exploit-DB PoC script (extracting argparse/sys.argv CLI flags, hardcoded target/LHOST constants, and Python 2, Burp proxy, or C compile hazards).',
+      regex: 'Exploit Title | Path (/usr/share/exploitdb/exploits/...), RESULTS_EXPLOIT, # Exploit Title: / # EDB-ID: + add_argument / sys.argv',
+      emits: ['service.version', 'exploit.versioned_banner', 'exploit.edb_candidate', 'exploit.script_inspected', 'vuln.edb_poc_inspected', 'exploit.hazard_py2', 'exploit.hazard_burp_proxy', 'exploit.hazard_c_compile'],
     },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -319,6 +319,205 @@
     return domains;
   }
 
+  var STORE_AUTH_SURFACE_RE = /^(?:port:(?:21|22|23|25|80|88|110|135|139|143|389|443|445|465|587|636|993|995|1433|1521|2222|3268|3269|3306|3389|5432|5900|5901|5985|5986|6379|8000|8080|8443|8888|27017)|(?:http|https|smb|ssh|winrm|rdp|ldap|kerberos|ftp|mssql|mysql|postgres|postgresql|redis|oracle|vnc|mail|imap|pop3|smtp)\.reachable|web\.login_form|http\.(?:login|basic_auth)|ad\.dc_candidate)$/;
+
+  function parseIpv4Bits(ipStr) {
+    var m = /^\s*(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\s*$/.exec(String(ipStr || ''));
+    if (!m) return null;
+    var a = +m[1], b = +m[2], c = +m[3], d = +m[4];
+    if (a > 255 || b > 255 || c > 255 || d > 255) return null;
+    return ((a * 16777216) + (b * 65536) + (c * 256) + d) >>> 0;
+  }
+
+  function parseCidrSpec(cidrStr) {
+    var m = /^\s*(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})\s*$/.exec(String(cidrStr || ''));
+    if (!m) return null;
+    var bits = parseIpv4Bits(m[1]), pfx = +m[2];
+    if (bits === null || pfx < 1 || pfx > 32) return null;
+    var mask = pfx === 32 ? 0xFFFFFFFF : ((0xFFFFFFFF << (32 - pfx)) >>> 0);
+    var net = (bits & mask) >>> 0;
+    return {
+      cidr: [(net >>> 24) & 255, (net >>> 16) & 255, (net >>> 8) & 255, net & 255].join('.') + '/' + pfx,
+      net: net,
+      mask: mask,
+      pfx: pfx
+    };
+  }
+
+  function ipMatchesCidr(ipStr, cidrStr) {
+    var ipBits = parseIpv4Bits(ipStr);
+    if (ipBits === null) return false;
+    var spec = parseCidrSpec(cidrStr);
+    if (!spec) return false;
+    return ((ipBits & spec.mask) >>> 0) === spec.net;
+  }
+
+  function findPivotRoute(arr, ip) {
+    var ipBits = parseIpv4Bits(ip);
+    if (ipBits === null || !Array.isArray(arr) || !arr.length) return null;
+    var byHost = Object.create(null);
+    function ensureHost(h) {
+      if (!byHost[h]) byHost[h] = { cidrs: Object.create(null), peers: Object.create(null), active: false, multihomed: false, explicitPeer: false, via: '' };
+      return byHost[h];
+    }
+    function recordCidr(rec, raw, explicitTunnel, explicitDiscovered) {
+      var spec = parseCidrSpec(raw);
+      if (!spec) return;
+      var prev = rec.cidrs[spec.cidr];
+      if (!prev) {
+        rec.cidrs[spec.cidr] = { cidr: spec.cidr, pfx: spec.pfx, explicitTunnel: !!explicitTunnel, explicitDiscovered: !!explicitDiscovered };
+      } else {
+        if (explicitTunnel) prev.explicitTunnel = true;
+        if (explicitDiscovered) prev.explicitDiscovered = true;
+      }
+    }
+    function recordPeer(rec, rawIp) {
+      var s = String(rawIp || '').trim();
+      if (parseIpv4Bits(s) !== null) rec.peers[s] = true;
+    }
+    for (var i = 0; i < arr.length; i++) {
+      var f = arr[i];
+      if (!f || f.state !== 'supported' || !f.scope || f.scope.indexOf('host:') !== 0) continue;
+      var pHost = f.scope.slice(5);
+      if (!pHost || pHost === ip || pHost === 'target') continue;
+      var k = f.kind || '', v = f.value || {};
+      if (/^(?:pivot\.active|tunnel\.(?:route|socks|established|dns))$/.test(k)) {
+        var r1 = ensureHost(pHost);
+        r1.active = true;
+        if (!r1.via && (v.via || v.tool)) r1.via = String(v.via || v.tool);
+        if (v.subnet) recordCidr(r1, v.subnet, true, false);
+        if (v.cidr) recordCidr(r1, v.cidr, true, false);
+        if (Array.isArray(v.subnets)) v.subnets.forEach(function (s) { recordCidr(r1, s, true, false); });
+        if (Array.isArray(v.cidrs)) v.cidrs.forEach(function (s) { recordCidr(r1, s, true, false); });
+      } else if (/^(?:pivot\.(?:subnet_discovered|candidate)|network\.subnet_candidate)$/.test(k)) {
+        var r2 = ensureHost(pHost);
+        var isExplicitSub = k === 'pivot.subnet_discovered' || k === 'network.subnet_candidate';
+        if (v.subnet) recordCidr(r2, v.subnet, false, isExplicitSub);
+        if (v.cidr) recordCidr(r2, v.cidr, false, isExplicitSub);
+        if (Array.isArray(v.subnets)) v.subnets.forEach(function (s) { recordCidr(r2, s, false, isExplicitSub); });
+        if (Array.isArray(v.cidrs)) v.cidrs.forEach(function (s) { recordCidr(r2, s, false, isExplicitSub); });
+      } else if (/^(?:scan\.local\.(?:routes|interfaces)|host\.route)$/.test(k)) {
+        var r3 = ensureHost(pHost);
+        if (v.subnet) recordCidr(r3, v.subnet, false, false);
+        if (v.cidr) recordCidr(r3, v.cidr, false, false);
+        if (v.destination) recordCidr(r3, v.destination, false, false);
+        if (Array.isArray(v.subnets)) v.subnets.forEach(function (s) { recordCidr(r3, s, false, false); });
+        if (Array.isArray(v.cidrs)) v.cidrs.forEach(function (s) { recordCidr(r3, s, false, false); });
+        if (Array.isArray(v.routes)) v.routes.forEach(function (rt) { recordCidr(r3, typeof rt === 'string' ? rt : (rt && (rt.cidr || rt.subnet || rt.destination)), false, false); });
+        if (Array.isArray(v.interfaces)) v.interfaces.forEach(function (ifc) {
+          if (ifc && ifc.cidr) recordCidr(r3, ifc.cidr, false, false);
+          else if (ifc && ifc.ip && ifc.prefix) recordCidr(r3, ifc.ip + '/' + ifc.prefix, false, false);
+        });
+      } else if (k === 'host.multihomed') {
+        ensureHost(pHost).multihomed = true;
+      } else if (/^(?:host\.arp_(?:peer|neighbor)|scan\.local\.neighbors)$/.test(k)) {
+        var r4 = ensureHost(pHost);
+        if (/^host\.arp_(?:peer|neighbor)$/.test(k)) r4.explicitPeer = true;
+        if (v.ip) recordPeer(r4, v.ip);
+        if (v.peer) recordPeer(r4, v.peer);
+        if (v.host) recordPeer(r4, v.host);
+        if (Array.isArray(v.hosts)) v.hosts.forEach(function (p) { recordPeer(r4, p); });
+        if (Array.isArray(v.peers)) v.peers.forEach(function (p) { recordPeer(r4, p); });
+        if (Array.isArray(v.neighbors)) v.neighbors.forEach(function (p) { recordPeer(r4, typeof p === 'string' ? p : (p && p.ip)); });
+      }
+    }
+    var best = null;
+    Object.keys(byHost).forEach(function (pHost) {
+      var rec = byHost[pHost];
+      Object.keys(rec.cidrs).forEach(function (cidrKey) {
+        var entry = rec.cidrs[cidrKey];
+        if (!ipMatchesCidr(ip, entry.cidr)) return;
+        if (ipMatchesCidr(pHost, entry.cidr) && !entry.explicitTunnel && !entry.explicitDiscovered) return;
+        var score = (rec.active ? 1000 : 0) + entry.pfx;
+        if (!best || score > best.score) {
+          best = { pivotHost: pHost, subnet: entry.cidr, via: rec.via || (rec.active ? 'tunnel' : 'route'), active: !!rec.active, peerMatch: false, score: score };
+        }
+      });
+      if (rec.peers[ip]) {
+        var pHostBits = parseIpv4Bits(pHost);
+        var cross24 = pHostBits === null || ((pHostBits & 0xFFFFFF00) >>> 0) !== ((ipBits & 0xFFFFFF00) >>> 0);
+        if (rec.active || rec.multihomed || rec.explicitPeer || cross24) {
+          var peerSpec = parseCidrSpec(ip + '/24');
+          var matchedSub = (best && best.pivotHost === pHost && best.subnet) ? best.subnet : (peerSpec ? peerSpec.cidr : ip + '/24');
+          var peerScore = (rec.active ? 1000 : 0) + 32;
+          if (!best || peerScore >= best.score) {
+            best = { pivotHost: pHost, subnet: matchedSub, via: rec.via || (rec.active ? 'tunnel' : 'arp'), active: !!rec.active, peerMatch: true, score: peerScore };
+          }
+        }
+      }
+    });
+    if (!best) return null;
+    return { pivotHost: best.pivotHost, subnet: best.subnet, via: best.via, active: best.active, peerMatch: best.peerMatch };
+  }
+
+  function storeTargetAliases(eng, ip, hostFacts) {
+    var out = [String(ip || '').trim().toLowerCase()];
+    function addName(n) {
+      var s = String(n || '').trim().toLowerCase().replace(/\.$/, '').replace(/\$$/, '');
+      if (!s) return;
+      if (out.indexOf(s) < 0) out.push(s);
+      var shortName = s.split('.')[0];
+      if (shortName && out.indexOf(shortName) < 0) out.push(shortName);
+    }
+    ((eng && eng.targets) || []).forEach(function (t) {
+      if ((t.ip || t.id) === ip) { addName(t.hostname); addName(t.fqdn); }
+    });
+    (hostFacts || []).forEach(function (f) {
+      if (!f || f.state !== 'supported') return;
+      if (f.kind === 'host.hostname' || f.kind === 'host.fqdn') {
+        var v = f.value || {};
+        addName(v.name || v.hostname);
+        addName(v.fqdn);
+      }
+    });
+    return out;
+  }
+
+  function extractCredMaterial(raw, scope) {
+    if (OBOL.context && OBOL.context.material) return OBOL.context.material(raw, scope);
+    raw = raw || {};
+    var user = String(raw.user || raw.username || '').trim();
+    var domain = String(raw.domain || raw.realm || '').trim();
+    if (user.indexOf('\\') >= 0) { var up = user.split('\\'); domain = domain || up.shift(); user = up.join('\\'); }
+    if (user.indexOf('@') > 0 && !domain) { domain = user.slice(user.indexOf('@') + 1); user = user.slice(0, user.indexOf('@')); }
+    var password = raw.password != null ? String(raw.password) : raw.secret != null ? String(raw.secret) : '';
+    var nthash = String(raw.nthash || raw.hash || '').trim();
+    var type = String(raw.secretType || raw.secret_type || raw.type || '').trim().toUpperCase();
+    if (/^(NT|NTHASH|NTLM)$/.test(type) && !nthash) { nthash = password; password = ''; }
+    var accountType = raw.accountType || (raw.local ? 'local' : domain ? 'domain' : 'unknown');
+    var rawScope = String(scope || raw.scope || '').trim();
+    var originHost = String(raw.originHost || raw.reuseFrom || (/^host:/i.test(rawScope) && rawScope.toLowerCase() !== 'host:target' ? rawScope.slice(5) : '')).trim();
+    var binding = String(raw.targetBinding || raw.computer || (accountType === 'local' ? raw.host || raw.target || '' : '')).trim();
+    if (accountType === 'local' && !binding) binding = originHost || (/^host:/.test(scope || '') ? scope.slice(5) : '');
+    var key = JSON.stringify([user.toLowerCase(), domain.toLowerCase(), password, nthash.toLowerCase(), accountType, binding.toLowerCase()]);
+    var fp = (OBOL.facts && OBOL.facts.fingerprint) ? OBOL.facts.fingerprint(key) : key;
+    return {
+      id: 'cred-' + fp,
+      user: user,
+      domain: domain,
+      password: password,
+      nthash: nthash,
+      accountType: accountType,
+      targetBinding: binding,
+      method: raw.method || raw.via || ''
+    };
+  }
+
+  function isStoreLapsBoundElsewhere(v, originHost, aliases) {
+    v = v || {};
+    var tag = String(v.method || v.via || v.kind || v.source || '').trim();
+    if (!/\blaps\b/i.test(tag) && !v.machineBound) return false;
+    var bound = String(v.targetBinding || v.computer || originHost || '').trim().toLowerCase().replace(/\.$/, '').replace(/\$$/, '');
+    if (!bound) return true;
+    return aliases.indexOf(bound) < 0 && aliases.indexOf(bound.split('.')[0]) < 0;
+  }
+
+  function isStoreSshPassphraseOnly(v) {
+    v = v || {};
+    if (String(v.user || v.username || '').trim()) return false;
+    return /ssh/i.test(String(v.kind || v.via || v.method || v.format || '')) || /^id_(?:rsa|ed25519|ecdsa|dsa)/i.test(String(v.file || v.path || '').trim());
+  }
+
   function referencesBlob(value, id) {
     if (value === id) return true;
     if (!value || typeof value !== 'object') return false;
@@ -936,6 +1135,13 @@
       });
       return out;
     },
+    pivotRouteForTarget(ip) {
+      var targetIp = String(ip || '').trim();
+      if (!targetIp) return null;
+      var eng = this.active();
+      var arr = ((eng && eng.facts) || []).filter(function (f) { return f && typeof f === 'object' && f.kind; });
+      return findPivotRoute(arr, targetIp);
+    },
     // A per-target FactSet: this host's facts + applicable domain-/engagement-scoped facts.
     // Unscanned targets in multi-target engagements do not inherit other hosts' domain credentials/loot
     // until they have been scanned, and non-AD Linux hosts do not inherit Windows AD/DC compromise facts.
@@ -950,7 +1156,8 @@
       var hostFacts = arr.filter(function (f) { return f && (f.scope === hostScope || (!multiTarget && f.scope === 'host:target')); });
       var hasHostActivity = hostFacts.some(function (f) {
         return f.state === 'supported' && f.kind.indexOf('target.') !== 0
-          && f.kind !== 'host.hostname' && f.kind !== 'host.domain' && f.kind !== 'host.fqdn';
+          && f.kind !== 'host.hostname' && f.kind !== 'host.domain' && f.kind !== 'host.fqdn'
+          && !((f.kind === 'host.os' || f.kind === 'host.os_hint') && f.source === 'target-edit');
       });
       if (multiTarget && !hasHostActivity) {
         return new OBOL.facts.FactSet(hostFacts.map(OBOL.facts.factFromJson));
@@ -990,7 +1197,177 @@
         }
         return false;
       });
-      return new OBOL.facts.FactSet(sel.map(OBOL.facts.factFromJson));
+      var mapped = sel.map(OBOL.facts.factFromJson);
+      if (multiTarget && hasHostActivity && OBOL.facts && OBOL.facts.makeFact) {
+        var piv = findPivotRoute(arr, ip);
+        if (piv && !mapped.some(function (f) { return f && f.state === 'supported' && f.kind === 'tunnel.reachable_via_pivot'; })) {
+          mapped.push(OBOL.facts.makeFact({
+            kind: 'tunnel.reachable_via_pivot',
+            scope: hostScope,
+            state: 'supported',
+            source: 'pivot-projection',
+            value: { pivotHost: piv.pivotHost, subnet: piv.subnet, via: piv.via, active: piv.active }
+          }));
+        }
+        var aliases = storeTargetAliases(eng, ip, hostFacts);
+        var otherSources = [];
+        for (var oi = 0; oi < arr.length; oi++) {
+          var of = arr[oi];
+          if (!of || of.state !== 'supported' || !of.scope || of.scope.indexOf('host:') !== 0 || of.scope === 'host:target') continue;
+          var ohost = of.scope.slice(5);
+          if (ohost === ip || aliases.indexOf(ohost.toLowerCase().replace(/\$$/, '')) >= 0) continue;
+          if (/^credential\.(?:available|plaintext|ntlm_hash|ssh_key|certificate)$|^loot\.ssh_key$|^ssh\.private_key$/.test(of.kind)) {
+            otherSources.push({ fact: of, originHost: ohost });
+          }
+        }
+        if (otherSources.length) {
+          var hasAuthSurface = hostFacts.some(function (f) { return f && f.state === 'supported' && STORE_AUTH_SURFACE_RE.test(f.kind); });
+          var hasSshSurface = hostFacts.some(function (f) { return f && f.state === 'supported' && /^(?:port:(?:22|2222)|ssh\.reachable)$/.test(f.kind); });
+          var hasNativeCred = mapped.some(function (f) {
+            if (!f || f.state !== 'supported' || !/^credential\.(?:available|plaintext|ntlm_hash)$/.test(f.kind)) return false;
+            var fv = f.value || {};
+            if (fv.unvalidatedOnTarget) return false;
+            return !!(String(fv.user || fv.username || '').trim() && (fv.password || fv.secret || fv.nthash || fv.hash));
+          });
+          var isAnon = !!(((eng && eng.contextSelections && eng.contextSelections.anonymousByTarget) || {})[ip]);
+          var hasPinnedOrSelected = (OBOL.context && OBOL.context.pin(eng) !== undefined)
+            || !!(OBOL.context && OBOL.context.selectedId(eng, ip))
+            || isAnon
+            || hasNativeCred;
+          var seenReuse = Object.create(null), seenAvail = Object.create(null), seenKey = Object.create(null);
+          mapped.forEach(function (bf) {
+            if (!bf || bf.state !== 'supported') return;
+            var bv = bf.value || {};
+            if (bf.kind === 'credential.reuse_candidate') {
+              seenReuse[[String(bv.user || '').toLowerCase(), bv.password || bv.secret || '', String(bv.nthash || '').toLowerCase(), String(bv.keyPath || '').trim()].join('|')] = 1;
+            } else if (bf.kind === 'credential.available') {
+              seenAvail[extractCredMaterial(bv, bf.scope).id] = 1;
+            } else if (bf.kind === 'loot.ssh_key') {
+              seenKey[String(bv.keyPath || bv.path || bv.file || '').trim()] = 1;
+            }
+          });
+          var hasCertKey = mapped.some(function (bf) { return bf && bf.state === 'supported' && bf.kind === 'credential.certificate'; });
+          for (var si = 0; si < otherSources.length; si++) {
+            var srcFact = otherSources[si].fact, srcHost = otherSources[si].originHost, sv = srcFact.value || {};
+            if (/^credential\.(?:available|plaintext|ntlm_hash)$/.test(srcFact.kind)) {
+              if (sv.unresolved || sv.association === 'unresolved') continue;
+              if (isStoreLapsBoundElsewhere(sv, srcHost, aliases) || isStoreSshPassphraseOnly(sv)) continue;
+              var mat = extractCredMaterial(sv, srcFact.scope);
+              if (!mat.password && !mat.nthash) continue;
+              var rKey = [String(mat.user || '').toLowerCase(), mat.password, String(mat.nthash || '').toLowerCase(), ''].join('|');
+              if (!seenReuse[rKey]) {
+                seenReuse[rKey] = 1;
+                mapped.push(OBOL.facts.makeFact({
+                  kind: 'credential.reuse_candidate',
+                  scope: hostScope,
+                  state: 'supported',
+                  source: 'cross-host-reuse',
+                  value: {
+                    user: mat.user,
+                    password: mat.password,
+                    secret: mat.password,
+                    nthash: mat.nthash,
+                    keyPath: '',
+                    domain: mat.domain,
+                    originHost: srcHost,
+                    accountType: mat.accountType,
+                    credentialId: mat.id,
+                    reuseHypothesis: true
+                  }
+                }));
+              }
+              if (hasAuthSurface && !hasPinnedOrSelected && mat.user && !seenAvail[mat.id]) {
+                seenAvail[mat.id] = 1;
+                mapped.push(OBOL.facts.makeFact({
+                  kind: 'credential.available',
+                  scope: hostScope,
+                  state: 'supported',
+                  source: 'cross-host-reuse',
+                  value: {
+                    user: mat.user,
+                    domain: mat.domain,
+                    password: mat.password,
+                    secret: mat.password,
+                    nthash: mat.nthash,
+                    accountType: mat.accountType,
+                    targetBinding: mat.targetBinding,
+                    credentialId: mat.id,
+                    method: mat.method,
+                    originHost: srcHost,
+                    reuseFrom: srcHost,
+                    unvalidatedOnTarget: true
+                  }
+                }));
+              }
+            } else {
+              if (srcFact.kind === 'credential.certificate' && sv.kind !== 'private_key' && !sv.ssh_key_path && !sv.keyPath && !sv.key_path && !sv.keyfile) continue;
+              var kp = String(sv.ssh_key_path || sv.sshKeyPath || sv.keyPath || sv.key_path || sv.keyfile || sv.path || sv.file || 'id_rsa').trim();
+              var ku = String(sv.user || sv.username || sv.owner || '').trim();
+              var rkKey = [ku.toLowerCase(), '', '', kp].join('|');
+              if (!seenReuse[rkKey]) {
+                seenReuse[rkKey] = 1;
+                mapped.push(OBOL.facts.makeFact({
+                  kind: 'credential.reuse_candidate',
+                  scope: hostScope,
+                  state: 'supported',
+                  source: 'cross-host-reuse',
+                  value: {
+                    user: ku,
+                    password: '',
+                    secret: '',
+                    nthash: '',
+                    keyPath: kp,
+                    originHost: srcHost,
+                    accountType: sv.accountType || 'local',
+                    reuseHypothesis: true
+                  }
+                }));
+              }
+              if (hasAuthSurface && !hasPinnedOrSelected) {
+                if (!seenKey[kp]) {
+                  seenKey[kp] = 1;
+                  mapped.push(OBOL.facts.makeFact({
+                    kind: 'loot.ssh_key',
+                    scope: hostScope,
+                    state: 'supported',
+                    source: 'cross-host-reuse',
+                    value: {
+                      path: kp,
+                      file: kp,
+                      keyPath: kp,
+                      user: ku,
+                      originHost: srcHost,
+                      reuseFrom: srcHost,
+                      unvalidatedOnTarget: true
+                    }
+                  }));
+                }
+                if (hasSshSurface && !hasCertKey) {
+                  hasCertKey = true;
+                  mapped.push(OBOL.facts.makeFact({
+                    kind: 'credential.certificate',
+                    scope: hostScope,
+                    state: 'supported',
+                    source: 'cross-host-reuse',
+                    value: {
+                      kind: 'private_key',
+                      path: kp,
+                      file: kp,
+                      keyPath: kp,
+                      user: ku,
+                      encrypted: !!sv.encrypted,
+                      originHost: srcHost,
+                      reuseFrom: srcHost,
+                      unvalidatedOnTarget: true
+                    }
+                  }));
+                }
+              }
+            }
+          }
+        }
+      }
+      return new OBOL.facts.FactSet(mapped);
     },
     // The identity of a target at a glance: IP + the hostname and AD domain obol has proven for it (or
     // the domain the operator scoped). Both the target page and the engagement Attack Path render this,

@@ -24,21 +24,30 @@
     var nthash = clean(raw.nthash || raw.hash), type = clean(raw.secretType || raw.secret_type || raw.type).toUpperCase();
     if (/^(NT|NTHASH|NTLM)$/.test(type) && !nthash) { nthash = password; password = ''; }
     var accountType = raw.accountType || (raw.local ? 'local' : domain ? 'domain' : 'unknown');
+    var rawScope = clean(scope || raw.scope || '');
+    var originHost = clean(raw.originHost || raw.reuseFrom || (/^host:/i.test(rawScope) && lower(rawScope) !== 'host:target' ? rawScope.slice(5) : ''));
     var binding = clean(raw.targetBinding || raw.computer || (accountType === 'local' ? raw.host || raw.target : ''));
-    if (accountType === 'local' && !binding && /^host:/.test(scope || '')) binding = scope.slice(5);
+    if (accountType === 'local' && !binding) binding = originHost || (/^host:/.test(scope || '') ? scope.slice(5) : '');
     var key = JSON.stringify([lower(user), lower(domain), password, lower(nthash), accountType, lower(binding)]);
     var fingerprint = O.facts && O.facts.fingerprint ? O.facts.fingerprint(JSON.stringify([lower(domain),lower(user),nthash ? 'nthash' : 'password',String(nthash || password)])) : digest(key);
     return { id: 'cred-' + digest(key), credentialFingerprint:fingerprint, user: user, principal: domain ? domain + '\\' + user : user,
       domain: domain, realm: domain, password: password, secret: password, nthash: nthash,
       type: nthash && !password ? 'NT' : password ? 'PW' : type || '?', secretType: nthash && !password ? 'NT' : password ? 'PW' : type || 'USER',
-      scope: scope || raw.scope || '', targetBinding: binding, computer: raw.computer || '', accountType: accountType,
+      scope: scope || raw.scope || '', originHost: originHost, reuseFrom: clean(raw.reuseFrom || ''),
+      unvalidatedOnTarget: !!raw.unvalidatedOnTarget, targetBinding: binding, computer: raw.computer || '', accountType: accountType,
       source: raw.source || 'recovered', sourceId: raw.id || '', method: raw.method || raw.via || '' };
   }
   function credentials(eng) {
     eng = eng || {}; var found = [], seen = Object.create(null);
     function add(raw, scope) {
       var c = material(raw, scope); if (raw.unresolved || !c.user || (!c.password && !c.nthash && c.secretType !== 'USER')) return;
-      if (seen[c.id]) { if (!seen[c.id].scope && c.scope) seen[c.id].scope = c.scope; return; }
+      if (seen[c.id]) {
+        if (!seen[c.id].scope && c.scope && !(raw && raw.unvalidatedOnTarget)) seen[c.id].scope = c.scope;
+        if (!seen[c.id].originHost && c.originHost) seen[c.id].originHost = c.originHost;
+        if (!seen[c.id].method && c.method) seen[c.id].method = c.method;
+        if (!seen[c.id].targetBinding && c.targetBinding) seen[c.id].targetBinding = c.targetBinding;
+        return;
+      }
       seen[c.id] = c; found.push(c);
     }
     (eng.credentials || []).forEach(function (c) { add(c, c.scope); });
@@ -171,10 +180,44 @@
     if (t) [t.hostname,t.fqdn].forEach(function (v) { if (v) { out.push(lower(v)); out.push(lower(v).split('.')[0]); } });
     return out;
   }
+  var AUTH_SURFACE_RE = /^(?:port:(?:21|22|23|25|80|88|110|135|139|143|389|443|445|465|587|636|993|995|1433|1521|2222|3268|3269|3306|3389|5432|5900|5901|5985|5986|6379|8000|8080|8443|8888|27017)|(?:http|https|smb|ssh|winrm|rdp|ldap|kerberos|ftp|mssql|mysql|postgres|postgresql|redis|oracle|vnc|mail|imap|pop3|smtp)\.reachable|web\.login_form|http\.(?:login|basic_auth)|ad\.dc_candidate)$/;
+  function hasScannedActivity(hostFacts) {
+    for (var i = 0; i < hostFacts.length; i++) {
+      var f = hostFacts[i];
+      if (!f || f.state !== 'supported') continue;
+      if (f.kind.indexOf('target.') === 0 || f.kind === 'host.hostname' || f.kind === 'host.domain' || f.kind === 'host.fqdn') continue;
+      if ((f.kind === 'host.os' || f.kind === 'host.os_hint') && f.source === 'target-edit') continue;
+      return true;
+    }
+    return false;
+  }
+  function isLapsBoundElsewhere(v, originHost, aliases) {
+    v = v || {};
+    var tag = clean(v.method || v.via || v.kind || v.source || '');
+    if (!/\blaps\b/i.test(tag) && !v.machineBound) return false;
+    var bound = lower(v.targetBinding || v.computer || originHost || '').replace(/\$$/, '');
+    if (!bound) return true;
+    return aliases.indexOf(bound) < 0 && aliases.indexOf(bound.split('.')[0]) < 0;
+  }
+  function isSshPassphraseOnly(v) {
+    v = v || {};
+    if (clean(v.user || v.username)) return false;
+    return /ssh/i.test(clean(v.kind || v.via || v.method || v.format || '')) || /^id_(?:rsa|ed25519|ecdsa|dsa)/i.test(clean(v.file || v.path || ''));
+  }
   function scopeFacts(eng, target, facts, domain) {
     var all = list(facts), multi = ((eng && eng.targets) || []).length > 1 || all.some(function (f) { return /^host:/.test(f.scope || '') && f.scope !== 'host:target' && f.scope !== 'host:' + target; });
     var aliases = targetAliases(eng, target);
-    return all.filter(function (f) {
+    var ownHostFacts = [];
+    for (var hi = 0; hi < all.length; hi++) {
+      var hf = all[hi];
+      if (!hf) continue;
+      var hsc = clean(hf.scope);
+      if (/^host:/.test(hsc) && (aliases.indexOf(lower(hsc.slice(5)).replace(/\$$/, '')) >= 0 || (!multi && hsc === 'host:target'))) {
+        ownHostFacts.push(hf);
+      }
+    }
+    if (multi && target && !hasScannedActivity(ownHostFacts)) return ownHostFacts;
+    var baseScoped = all.filter(function (f) {
       if (!f) return false; var sc = clean(f.scope);
       if (/^host:/.test(sc)) return aliases.indexOf(lower(sc.slice(5)).replace(/\$$/, '')) >= 0 || (!multi && sc === 'host:target');
       if (/^domain:/.test(sc)) {
@@ -184,6 +227,178 @@
       if (multi && !sc && /^(?:access\.|foothold\.|credential\.|blocker\.|loot\.)/.test(f.kind)) return false;
       return !multi || /^scope:/.test(sc) || !sc;
     });
+    if (multi && target && O.facts && O.facts.makeFact) {
+      var hostScope = 'host:' + target;
+      if (O.store && O.store.pivotRouteForTarget && (!eng || !O.store.active || O.store.active() === eng)
+        && !baseScoped.some(function (f) { return f && f.state === 'supported' && f.kind === 'tunnel.reachable_via_pivot'; })) {
+        var piv = O.store.pivotRouteForTarget(target);
+        if (piv) {
+          baseScoped.push(O.facts.makeFact({
+            kind: 'tunnel.reachable_via_pivot',
+            scope: hostScope,
+            state: 'supported',
+            source: 'pivot-projection',
+            value: { pivotHost: piv.pivotHost, subnet: piv.subnet, via: piv.via, active: piv.active }
+          }));
+        }
+      }
+      var otherSources = [];
+      for (var oi = 0; oi < all.length; oi++) {
+        var of = all[oi];
+        if (!of || of.state !== 'supported') continue;
+        var osc = clean(of.scope);
+        if (!/^host:/.test(osc) || osc === 'host:target') continue;
+        var ohost = osc.slice(5);
+        if (aliases.indexOf(lower(ohost).replace(/\$$/, '')) >= 0) continue;
+        if (/^credential\.(?:available|plaintext|ntlm_hash|ssh_key|certificate)$|^loot\.ssh_key$|^ssh\.private_key$/.test(of.kind)) {
+          otherSources.push({ fact: of, originHost: ohost });
+        }
+      }
+      if (otherSources.length) {
+        var hasAuthSurface = ownHostFacts.some(function (f) { return f && f.state === 'supported' && AUTH_SURFACE_RE.test(f.kind); });
+        var hasSshSurface = ownHostFacts.some(function (f) { return f && f.state === 'supported' && /^(?:port:(?:22|2222)|ssh\.reachable)$/.test(f.kind); });
+        var hasNativeCred = baseScoped.some(function (f) {
+          if (!f || f.state !== 'supported' || !/^credential\.(?:available|plaintext|ntlm_hash)$/.test(f.kind)) return false;
+          var fv = f.value || {};
+          if (fv.unvalidatedOnTarget) return false;
+          return !!(clean(fv.user || fv.username) && (fv.password || fv.secret || fv.nthash || fv.hash));
+        });
+        var isAnon = !!(eng && shape(eng).anonymousByTarget && shape(eng).anonymousByTarget[target]);
+        var hasPinnedOrSelected = (eng && pin(eng) !== undefined) || !!(eng && selectedId(eng, target)) || isAnon || hasNativeCred;
+        var seenReuse = Object.create(null), seenAvail = Object.create(null), seenKey = Object.create(null);
+        baseScoped.forEach(function (bf) {
+          if (!bf || bf.state !== 'supported') return;
+          var bv = bf.value || {};
+          if (bf.kind === 'credential.reuse_candidate') {
+            seenReuse[[lower(bv.user), bv.password || bv.secret || '', lower(bv.nthash), clean(bv.keyPath)].join('|')] = 1;
+          } else if (bf.kind === 'credential.available') {
+            seenAvail[material(bv, bf.scope).id] = 1;
+          } else if (bf.kind === 'loot.ssh_key') {
+            seenKey[clean(bv.keyPath || bv.path || bv.file)] = 1;
+          }
+        });
+        var hasCertKey = baseScoped.some(function (bf) { return bf && bf.state === 'supported' && bf.kind === 'credential.certificate'; });
+        for (var si = 0; si < otherSources.length; si++) {
+          var srcFact = otherSources[si].fact, srcHost = otherSources[si].originHost, sv = srcFact.value || {};
+          if (/^credential\.(?:available|plaintext|ntlm_hash)$/.test(srcFact.kind)) {
+            if (sv.unresolved || sv.association === 'unresolved') continue;
+            if (isLapsBoundElsewhere(sv, srcHost, aliases) || isSshPassphraseOnly(sv)) continue;
+            var mat = material(sv, srcFact.scope);
+            if (!mat.password && !mat.nthash) continue;
+            var rKey = [lower(mat.user), mat.password, lower(mat.nthash), ''].join('|');
+            if (!seenReuse[rKey]) {
+              seenReuse[rKey] = 1;
+              baseScoped.push(O.facts.makeFact({
+                kind: 'credential.reuse_candidate',
+                scope: hostScope,
+                state: 'supported',
+                source: 'cross-host-reuse',
+                value: {
+                  user: mat.user,
+                  password: mat.password,
+                  secret: mat.password,
+                  nthash: mat.nthash,
+                  keyPath: '',
+                  domain: mat.domain,
+                  originHost: srcHost,
+                  accountType: mat.accountType,
+                  credentialId: mat.id,
+                  reuseHypothesis: true
+                }
+              }));
+            }
+            if (hasAuthSurface && !hasPinnedOrSelected && mat.user && !seenAvail[mat.id]) {
+              seenAvail[mat.id] = 1;
+              baseScoped.push(O.facts.makeFact({
+                kind: 'credential.available',
+                scope: hostScope,
+                state: 'supported',
+                source: 'cross-host-reuse',
+                value: {
+                  user: mat.user,
+                  domain: mat.domain,
+                  password: mat.password,
+                  secret: mat.password,
+                  nthash: mat.nthash,
+                  accountType: mat.accountType,
+                  targetBinding: mat.targetBinding,
+                  credentialId: mat.id,
+                  method: mat.method,
+                  originHost: srcHost,
+                  reuseFrom: srcHost,
+                  unvalidatedOnTarget: true
+                }
+              }));
+            }
+          } else {
+            if (srcFact.kind === 'credential.certificate' && sv.kind !== 'private_key' && !sv.ssh_key_path && !sv.keyPath && !sv.key_path && !sv.keyfile) continue;
+            var kp = clean(sv.ssh_key_path || sv.sshKeyPath || sv.keyPath || sv.key_path || sv.keyfile || sv.path || sv.file || 'id_rsa');
+            var ku = clean(sv.user || sv.username || sv.owner || '');
+            var rkKey = [lower(ku), '', '', kp].join('|');
+            if (!seenReuse[rkKey]) {
+              seenReuse[rkKey] = 1;
+              baseScoped.push(O.facts.makeFact({
+                kind: 'credential.reuse_candidate',
+                scope: hostScope,
+                state: 'supported',
+                source: 'cross-host-reuse',
+                value: {
+                  user: ku,
+                  password: '',
+                  secret: '',
+                  nthash: '',
+                  keyPath: kp,
+                  originHost: srcHost,
+                  accountType: sv.accountType || 'local',
+                  reuseHypothesis: true
+                }
+              }));
+            }
+            if (hasAuthSurface && !hasPinnedOrSelected) {
+              if (!seenKey[kp]) {
+                seenKey[kp] = 1;
+                baseScoped.push(O.facts.makeFact({
+                  kind: 'loot.ssh_key',
+                  scope: hostScope,
+                  state: 'supported',
+                  source: 'cross-host-reuse',
+                  value: {
+                    path: kp,
+                    file: kp,
+                    keyPath: kp,
+                    user: ku,
+                    originHost: srcHost,
+                    reuseFrom: srcHost,
+                    unvalidatedOnTarget: true
+                  }
+                }));
+              }
+              if (hasSshSurface && !hasCertKey) {
+                hasCertKey = true;
+                baseScoped.push(O.facts.makeFact({
+                  kind: 'credential.certificate',
+                  scope: hostScope,
+                  state: 'supported',
+                  source: 'cross-host-reuse',
+                  value: {
+                    kind: 'private_key',
+                    path: kp,
+                    file: kp,
+                    keyPath: kp,
+                    user: ku,
+                    encrypted: !!sv.encrypted,
+                    originHost: srcHost,
+                    reuseFrom: srcHost,
+                    unvalidatedOnTarget: true
+                  }
+                }));
+              }
+            }
+          }
+        }
+      }
+    }
+    return baseScoped;
   }
   function resolve(opts) {
     opts = opts || {}; var eng = opts.engagement || null;
@@ -204,10 +419,60 @@
       var scopedRegistry = credentials({facts:scoped});
       if (scopedRegistry.length === 1) { c = scopedRegistry[0]; source = 'single-scoped-candidate'; }
     }
+    if (!c && !owns(opts, 'credentialId') && pin(eng) === undefined && !selected && !(eng && shape(eng).anonymousByTarget && shape(eng).anonymousByTarget[target])) {
+      var reuseFacts = scoped.filter(function (f) {
+        return f && f.state === 'supported' && f.kind === 'credential.available' && f.value && f.value.unvalidatedOnTarget && f.value.reuseFrom;
+      });
+      if (reuseFacts.length) {
+        var svcHint = serviceOf(opts.command, opts.service);
+        var blockers = scoped.filter(function (f) {
+          return f && ((f.state === 'supported' && /^blocker\.(?:logon_failure|account_disabled|account_locked|password_expired)$/.test(f.kind))
+            || (f.state === 'refuted' && f.kind === 'credential.validation'));
+        });
+        var reuseAliases = targetAliases(eng, target);
+        var scoredReuse = reuseFacts.map(function (rf, idx) {
+          var mat = material(rf.value || {}, rf.scope);
+          var regMatch = registry.find(function (x) { return x.id === mat.id; }) || mat;
+          var rejectedHere = blockers.filter(function (bf) {
+            var bv = bf.value || {};
+            var bvUser = lower(bv.user || bv.principal || '').replace(/^.*\\/, '');
+            var bvDom = lower(bv.domain || '');
+            var regDom = lower(regMatch.domain || '');
+            var sameOrLocalRealm = !bvDom || !regDom || bvDom === regDom || reuseAliases.indexOf(bvDom) >= 0;
+            var aliasFpMatch = false;
+            if (!regDom && bvDom && reuseAliases.indexOf(bvDom) >= 0 && bv.credentialFingerprint && O.facts && O.facts.fingerprint) {
+              var aliasFp = O.facts.fingerprint(JSON.stringify([bvDom, lower(regMatch.user), regMatch.nthash ? 'nthash' : 'password', String(regMatch.nthash || regMatch.password)]));
+              aliasFpMatch = aliasFp === bv.credentialFingerprint;
+            }
+            var sameSecret = aliasFpMatch
+              || (bv.password && String(bv.password) === regMatch.password)
+              || ((bv.nthash || bv.hash) && lower(bv.nthash || bv.hash) === lower(regMatch.nthash))
+              || (!bv.password && !bv.nthash && !bv.hash && !bv.credentialFingerprint);
+            var idMatch = (bv.credentialId && bv.credentialId === regMatch.id)
+              || (bv.credentialFingerprint && bv.credentialFingerprint === regMatch.credentialFingerprint)
+              || (bvUser && bvUser === lower(regMatch.user) && sameSecret && sameOrLocalRealm);
+            if (!idMatch) return false;
+            if (svcHint && bv.service && lower(bv.service) !== svcHint) return false;
+            return true;
+          }).length;
+          var domCompat = (!regMatch.domain || !domain || lower(regMatch.domain) === lower(domain)) ? 1 : 0;
+          var isAdminName = /^(?:administrator|admin|root)$/i.test(regMatch.user) ? 1 : 0;
+          return { cred: regMatch, rejected: rejectedHere, domCompat: domCompat, admin: isAdminName, idx: idx };
+        });
+        scoredReuse.sort(function (a, b) {
+          if (a.rejected !== b.rejected) return a.rejected - b.rejected;
+          if (b.domCompat !== a.domCompat) return b.domCompat - a.domCompat;
+          if (b.admin !== a.admin) return b.admin - a.admin;
+          return a.idx - b.idx;
+        });
+        c = scoredReuse[0].cred;
+        source = 'cross-host-reuse';
+      }
+    }
     if (selected && !c) unresolved.push('selected-credential-unavailable');
     if (!target) unresolved.push('target');
     if (!domain) unresolved.push('target-domain');
-    var svc = serviceOf(opts.command, opts.service), realm = c ? c.domain || (c.accountType === 'local' ? c.targetBinding.replace(/\$$/, '') : '') : '', locus = opts.locus || 'remote';
+    var svc = serviceOf(opts.command, opts.service), realm = c ? c.domain || (c.accountType === 'local' ? (source === 'cross-host-reuse' ? '.' : c.targetBinding.replace(/\$$/, '')) : '') : '', locus = opts.locus || 'remote';
     if (c && c.targetBinding && targetAliases(eng, target).indexOf(lower(c.targetBinding).replace(/\$$/, '')) < 0) conflicts.push('credential-target-binding-differs');
     if (c && realm && domain && lower(realm) !== lower(domain)) conflicts.push('authentication-realm-differs-from-target-domain');
     var principal = c ? c.principal : '';

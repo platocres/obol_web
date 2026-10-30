@@ -26,6 +26,9 @@ var ASSET_TYPES = ['code_block', 'asciinema', 'screenshot', 'tool_fixture', 'sou
 var FIDELITIES = ['text', 'ocr'];
 // The axes of value a record can carry (Section 4). A record must carry at least one (Whole-Asset Rule).
 var AXES = ['output_blocks', 'facts_implied', 'failures', 'flow'];
+// Schema v2 optional enums (v13.0 Dual-Pass + Multi-Target harness).
+var OUTCOME_KINDS = ['completed-negative', 'authorization-denied', 'rejected', 'environment-error', 'success', 'partial'];
+var TIER_ATTRIBUTIONS = ['tier1', 'tier2_shape', 'tier3_inference'];
 
 // The dedup key (Section 4: asset.hash). sha256 over the raw text with CRLF normalized so the same block
 // pulled on two platforms hashes identically. qa-only; not a security boundary, just a stable content key.
@@ -34,6 +37,115 @@ function contentHash(text) {
 }
 function isHex64(s) { return typeof s === 'string' && /^[0-9a-f]{64}$/.test(s); }
 function isNonEmptyString(s) { return typeof s === 'string' && s.length > 0; }
+
+function validateOutcomeExpected(val, prefix, errors) {
+  if (val === undefined || val === null) return;
+  if (typeof val !== 'string' || OUTCOME_KINDS.indexOf(val) < 0) {
+    errors.push(prefix + ': "' + val + '" not in ' + OUTCOME_KINDS.join('|'));
+  }
+}
+
+function validateTierAttribution(val, prefix, isKnownKind, errors) {
+  if (val === undefined || val === null) return;
+  if (typeof val === 'string') {
+    if (TIER_ATTRIBUTIONS.indexOf(val) < 0) {
+      errors.push(prefix + ': "' + val + '" not in ' + TIER_ATTRIBUTIONS.join('|'));
+    }
+    return;
+  }
+  if (typeof val === 'object' && !Array.isArray(val)) {
+    var keys = Object.keys(val);
+    if (!keys.length) {
+      errors.push(prefix + ': tier attribution map cannot be empty');
+      return;
+    }
+    keys.forEach(function (k) {
+      if (isKnownKind && !isKnownKind(k)) {
+        errors.push(prefix + '["' + k + '"]: "' + k + '" is not a known engine fact kind');
+      }
+      if (typeof val[k] !== 'string' || TIER_ATTRIBUTIONS.indexOf(val[k]) < 0) {
+        errors.push(prefix + '["' + k + '"]: "' + val[k] + '" not in ' + TIER_ATTRIBUTIONS.join('|'));
+      }
+    });
+    return;
+  }
+  errors.push(prefix + ': must be one of ' + TIER_ATTRIBUTIONS.join('|') + ' or a {kind: tier} object');
+}
+
+function validateTrajectoryCheckpoint(cp, opts) {
+  opts = opts || {};
+  var isKnownKind = typeof opts === 'function' ? opts : opts.isKnownKind;
+  var p = (opts && opts.prefix) || 'trajectory_checkpoint';
+  var e = [];
+  if (!cp || typeof cp !== 'object' || Array.isArray(cp)) {
+    return { ok: false, errors: [p + ': not an object'] };
+  }
+  if (typeof cp.step_index !== 'number' || !Number.isInteger(cp.step_index) || cp.step_index < 0) {
+    e.push(p + '.step_index: must be a non-negative integer');
+  }
+  if (!isNonEmptyString(cp.target_ip)) {
+    e.push(p + '.target_ip: missing or empty');
+  }
+  if (!Array.isArray(cp.expected_move_ids) || cp.expected_move_ids.length === 0) {
+    e.push(p + '.expected_move_ids: must be a non-empty array of move ids');
+  } else {
+    cp.expected_move_ids.forEach(function (m, idx) {
+      if (!isNonEmptyString(m)) e.push(p + '.expected_move_ids[' + idx + ']: must be a non-empty string');
+    });
+  }
+  if (cp.required_gates != null) {
+    if (!Array.isArray(cp.required_gates)) {
+      e.push(p + '.required_gates: must be an array');
+    } else {
+      cp.required_gates.forEach(function (g, idx) {
+        if (!isNonEmptyString(g)) e.push(p + '.required_gates[' + idx + ']: must be a non-empty string');
+        else if (isKnownKind && !isKnownKind(g)) e.push(p + '.required_gates[' + idx + ']: "' + g + '" is not a known engine fact kind');
+      });
+    }
+  }
+  if (cp.earned_tokens != null) {
+    if (Array.isArray(cp.earned_tokens)) {
+      cp.earned_tokens.forEach(function (tok, idx) {
+        if (!isNonEmptyString(tok)) e.push(p + '.earned_tokens[' + idx + ']: must be a non-empty string');
+      });
+    } else if (typeof cp.earned_tokens === 'object') {
+      Object.keys(cp.earned_tokens).forEach(function (tok) {
+        if (!isNonEmptyString(tok)) e.push(p + '.earned_tokens: empty token key');
+        var tv = cp.earned_tokens[tok];
+        if (tv != null && typeof tv !== 'string' && typeof tv !== 'number' && typeof tv !== 'boolean') {
+          e.push(p + '.earned_tokens["' + tok + '"]: must be a scalar token value');
+        }
+      });
+    } else {
+      e.push(p + '.earned_tokens: must be an array of token names or a {token: value} object');
+    }
+  }
+  if (cp.require_closed_loop_top1 != null && typeof cp.require_closed_loop_top1 !== 'boolean') {
+    e.push(p + '.require_closed_loop_top1: must be a boolean');
+  }
+  if (cp.retired_dry_moves != null) {
+    if (!Array.isArray(cp.retired_dry_moves)) {
+      e.push(p + '.retired_dry_moves: must be an array');
+    } else {
+      cp.retired_dry_moves.forEach(function (m, idx) {
+        if (!isNonEmptyString(m)) e.push(p + '.retired_dry_moves[' + idx + ']: must be a non-empty string');
+      });
+    }
+  }
+  return { ok: e.length === 0, errors: e };
+}
+
+function validateTrajectoryCheckpoints(arr, prefix, isKnownKind, errors) {
+  if (arr === undefined || arr === null) return;
+  if (!Array.isArray(arr)) {
+    errors.push(prefix + ': must be an array');
+    return;
+  }
+  arr.forEach(function (cp, idx) {
+    var r = validateTrajectoryCheckpoint(cp, { prefix: prefix + '[' + idx + ']', isKnownKind: isKnownKind });
+    if (!r.ok) r.errors.forEach(function (msg) { errors.push(msg); });
+  });
+}
 
 // Mirror the engine's parser-capability test (assets/engine/decisionmap.js capability/capable): a kind is
 // "known" if it exactly matches an emits entry, or begins with a trailing-dot prefix family, or is an
@@ -92,6 +204,8 @@ function validateRecord(rec, opts) {
       if (typeof b.raw_output !== 'string') e.push(p + '.raw_output: missing (empty string allowed for a no-output block)');
       if (typeof b.truncated !== 'boolean') e.push(p + '.truncated: must be a boolean');
       if (FIDELITIES.indexOf(b.fidelity) < 0) e.push(p + '.fidelity: "' + b.fidelity + '" not in ' + FIDELITIES.join('|'));
+      validateOutcomeExpected(b.outcome_expected, p + '.outcome_expected', e);
+      validateTierAttribution(b.tier_attribution, p + '.tier_attribution', opts.isKnownKind, e);
     });
   }
   ['facts_implied', 'failures', 'flow'].forEach(function (k) {
@@ -99,15 +213,25 @@ function validateRecord(rec, opts) {
   });
   if (rec.notes != null && typeof rec.notes !== 'string') e.push('notes: must be a string');
 
+  validateOutcomeExpected(rec.outcome_expected, 'outcome_expected', e);
+  validateTierAttribution(rec.tier_attribution, 'tier_attribution', opts.isKnownKind, e);
+  validateTrajectoryCheckpoints(rec.trajectory_checkpoints, 'trajectory_checkpoints', opts.isKnownKind, e);
+
   // Whole-Asset Rule: an asset is not "done" until at least one axis of value is captured.
-  var carried = AXES.some(function (k) { return Array.isArray(rec[k]) && rec[k].length > 0; });
+  var carried = AXES.some(function (k) { return Array.isArray(rec[k]) && rec[k].length > 0; })
+    || (Array.isArray(rec.trajectory_checkpoints) && rec.trajectory_checkpoints.length > 0);
   if (!carried) e.push('no axis of value captured (need a non-empty one of ' + AXES.join(', ') + ')');
 
   // optional kind validation for facts_implied entries that name a kind
-  if (opts.isKnownKind && Array.isArray(rec.facts_implied)) {
+  if (Array.isArray(rec.facts_implied)) {
     rec.facts_implied.forEach(function (f, i) {
       var kind = f && typeof f === 'object' ? f.kind : f;
-      if (kind != null && !opts.isKnownKind(kind)) e.push('facts_implied[' + i + '].kind: "' + kind + '" is not a known engine fact kind');
+      if (opts.isKnownKind && kind != null && !opts.isKnownKind(kind)) {
+        e.push('facts_implied[' + i + '].kind: "' + kind + '" is not a known engine fact kind');
+      }
+      if (f && typeof f === 'object' && f.tier_attribution !== undefined) {
+        validateTierAttribution(f.tier_attribution, 'facts_implied[' + i + '].tier_attribution', opts.isKnownKind, e);
+      }
     });
   }
   return { ok: e.length === 0, errors: e };
@@ -140,6 +264,11 @@ function validateLabelCase(c, isKnownKind) {
       if (!('value_contains' in v)) e.push('expected_values[' + i + '].value_contains: missing');
     });
   }
+
+  validateOutcomeExpected(c.outcome_expected, 'outcome_expected', e);
+  validateTierAttribution(c.tier_attribution, 'tier_attribution', isKnownKind, e);
+  validateTrajectoryCheckpoints(c.trajectory_checkpoints, 'trajectory_checkpoints', isKnownKind, e);
+
   return { ok: e.length === 0, errors: e };
 }
 
@@ -155,6 +284,7 @@ function validateLabelsFile(obj, isKnownKind) {
     if (!r.ok) r.errors.forEach(function (m) { e.push('cases[' + i + '] (' + (c && c.id || '?') + '): ' + m); });
     if (c && c.id != null) { if (seen[c.id]) e.push('cases[' + i + ']: duplicate id "' + c.id + '"'); seen[c.id] = 1; }
   });
+  validateTrajectoryCheckpoints(obj.trajectory_checkpoints, 'trajectory_checkpoints', isKnownKind, e);
   return { ok: e.length === 0, errors: e, cases: obj.cases.length };
 }
 
@@ -162,9 +292,12 @@ module.exports = {
   ASSET_TYPES: ASSET_TYPES,
   FIDELITIES: FIDELITIES,
   AXES: AXES,
+  OUTCOME_KINDS: OUTCOME_KINDS,
+  TIER_ATTRIBUTIONS: TIER_ATTRIBUTIONS,
   contentHash: contentHash,
   buildKindVocabulary: buildKindVocabulary,
   validateRecord: validateRecord,
   validateLabelCase: validateLabelCase,
-  validateLabelsFile: validateLabelsFile
+  validateLabelsFile: validateLabelsFile,
+  validateTrajectoryCheckpoint: validateTrajectoryCheckpoint
 };

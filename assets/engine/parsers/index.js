@@ -30,6 +30,9 @@
   'use strict';
   var OBOL = root.OBOL = root.OBOL || {};
   var C = OBOL._parserCommon;
+  if (C && !C._parse_searchsploit && typeof require === 'function') {
+    try { require('./edb.js'); } catch (_e) {}
+  }
   OBOL.parsers = OBOL.parsers || {};
 
   function has(name) { return typeof C[name] === 'function'; }
@@ -267,10 +270,10 @@
       guarded._parse_privesc_output(actionId, text, ws, command, source, facts);
     } else if (has('_parse_privesc_output')) {
       var isRemoteScanner = /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc) || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
-      if (!isRemoteScanner && has('_looks_like_linux_enum') && (guarded._looks_like_linux_enum(text) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow)\b/i.test(text)))) {
+      if (!isRemoteScanner && has('_looks_like_linux_enum') && (guarded._looks_like_linux_enum(text) || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b/i.test(lc) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
-      if (!isRemoteScanner && has('_looks_like_windows_enum') && guarded._looks_like_windows_enum(text)) {
+      if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b/i.test(lc))) {
         guarded._parse_privesc_output('windows-enum', text, ws, command, source, facts);
       }
     }
@@ -303,6 +306,12 @@
     if ((lc.indexOf('get-mpcomputerstatus') >= 0 || lc.indexOf('get-applockerpolicy') >= 0 || lc.indexOf('languagemode') >= 0 || lc.indexOf('get-mppreference') >= 0 || (has('_looks_like_defense_enum') && guarded._looks_like_defense_enum(text))) && has('_parse_defense_enum')) guarded._parse_defense_enum(text, ws, command, source, facts);
     if (has('_parse_script_sinks')) guarded._parse_script_sinks(text, command, ws, source, facts);
     if (has('_parse_shadow_file')) guarded._parse_shadow_file(text, command, ws, source, facts);
+    var isWebOrRemotePaste = /\b(?:curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan|sqlmap|nmap|masscan|rustscan|searchsploit)\b/i.test(lc)
+      || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text)
+      || /<!doctype\s+html|<\/?(?:html|head|body|pre)\b|<\?(?:php|=)|<%@?\s/i.test(text);
+    if (!isWebOrRemotePaste && has('_looks_like_binary_inspection') && guarded._looks_like_binary_inspection(text, command) && has('_parse_binary_inspection')) {
+      guarded._parse_binary_inspection(text, ws, command, source, facts);
+    }
 
     if (lc.indexOf('certipy') >= 0 || lc.indexOf('certify') >= 0 || lc.indexOf('pywhisker') >= 0 || /(?:CA Name|Template Name|msPKI-Certificate-Name-Flag|Certipy)[\s\S]{1,600}?(?:ESC\d+|ENROLLEE_SUPPLIES_SUBJECT|Vulnerabilities)/i.test(text)) {
       if (has('_parse_adcs')) guarded._parse_adcs(text, ws, command, source, facts);
@@ -383,6 +392,9 @@
     if (has('_has_windows_creds') && C._has_windows_creds(text)) guarded._parse_windows_creds(text, ws, command, source, facts);
     if (has('_has_product_signature') && C._has_product_signature(text)) guarded._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
+    if (has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
+    if (has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
+    if (has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
 
     // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
     // action-id, each parser is content-gated so an unrelated paste mints nothing.
@@ -407,6 +419,14 @@
     // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
     if (has('_parse_vulnmatch')) guarded._parse_vulnmatch(text, ws, source, facts);
 
+    // Exploit-DB (searchsploit) Stage 1 table/JSON parser and Stage 2 mirrored script inspector.
+    if (has('_looks_like_searchsploit') && guarded._looks_like_searchsploit(text, command) && has('_parse_searchsploit')) {
+      guarded._parse_searchsploit(text, ws, command, source, facts);
+    }
+    if (has('_looks_like_edb_script') && guarded._looks_like_edb_script(text, command) && has('_parse_edb_script')) {
+      guarded._parse_edb_script(text, ws, command, source, facts);
+    }
+
     // Connectivity: a foothold's own interface/route dump -> the subnets it reaches (and multihomed);
     // a pivot tool's setup output -> the live tunnel. Powers the hub connectivity view.
     if (has('_parse_local_net') && (/\bip\s+(?:-\d+\s+)?a(?:ddr)?\b|\bifconfig\b|\bip\s+route\b|\bipconfig\b|\broute\s+print\b|\bnetstat\s+-r/.test(lc) || /\binet\s+\d|IPv4 Address|Network Destination|\bGenmask\b/i.test(text)))
@@ -430,6 +450,9 @@
     // dispatch above did not key on it. Strictly additive and guarded, so it only fills gaps (a bare
     // port table, a raw HTTP response, a pasted AS-REP/TGS hash) and never alters a parsed result.
     if (has('_parse_shape')) guarded._parse_shape(text, ws, source, facts);
+
+    // Stage 0 Exploit-DB versioned non-stock banner recognizer (yields whenever any vuln.* matched).
+    if (has('_parse_versioned_banner_for_edb')) guarded._parse_versioned_banner_for_edb(text, ws, command, source, facts);
 
     // Wittgensteinian Contextual Inference (Tier 3) & Causal Entailment Gate Synchronizer:
     // combines atomic primitives, 2D table/KV geometry, Operator Attention Frame, and global entities
@@ -461,7 +484,7 @@
   OBOL.parsers.parse_action_output = parseActionOutput; // python-name alias
 
   var _PROMPT_PREFIX_RE = /^\s*(?:\([^)]+\)\s*)?(?:\[?[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+[:\s][^\r\n$#%>\]]*\]?[$#%>]|(?:PS\s+)?[A-Za-z]:\\[^\r\n>]*>|(?:sh|bash|zsh|dash)-[\d.]+[$#]|[$#>])\s+/;
-  var _KNOWN_CMD_LINE_RE = /^\s*(?:sudo\s+|proxychains4?\s+)?(?:nmap|masscan|rustscan|nxc|netexec|crackmapexec|cme|impacket-[a-z0-9_-]+|[A-Za-z0-9_-]+\.py|ldapsearch|smbclient|smbmap|rpcclient|enum4linux(?:-ng)?|kerbrute|bloodhound(?:-python)?|sharphound|bloodyad|certipy(?:-ad)?|certify(?:\.exe)?|rubeus(?:\.exe)?|mimikatz(?:\.exe)?|pypykatz|evil-winrm|ssh|sshpass|hashcat|john|hydra|medusa|ncrack|crowbar|ffuf|feroxbuster|gobuster|dirb|dirsearch|wfuzz|httpx|nuclei|nikto|whatweb|wpscan|arjun|sqlmap|git-dumper|curl|wget|snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|mysql|psql|redis-cli|mongosh|sqlite3|sqlplus|odat|dig|nslookup|host|dnsrecon|chisel|ligolo[a-z_-]*|sshuttle|responder|ike-scan|ipmitool|nth|hashid|hash-identifier|haiti|searchsploit|linpeas|winpeas|whoami|id|uname|find|getcap|ps|netstat|ss|ip|ifconfig|ipconfig|arp|route|systeminfo|schtasks|reg|cmdkey|icacls|accesschk|klist|nltest|powerview|get-net\w+|get-domain\w+|get-ad\w+|invoke-\w+|cat|type)\b/i;
+  var _KNOWN_CMD_LINE_RE = /^\s*(?:sudo\s+|proxychains4?\s+)?(?:nmap|masscan|rustscan|nxc|netexec|crackmapexec|cme|impacket-[a-z0-9_-]+|[A-Za-z0-9_-]+\.py|ldapsearch|smbclient|smbmap|rpcclient|enum4linux(?:-ng)?|kerbrute|bloodhound(?:-python)?|sharphound|bloodyad|certipy(?:-ad)?|certify(?:\.exe)?|rubeus(?:\.exe)?|mimikatz(?:\.exe)?|pypykatz|evil-winrm|ssh|sshpass|hashcat|john|hydra|medusa|ncrack|crowbar|ffuf|feroxbuster|gobuster|dirb|dirsearch|wfuzz|httpx|nuclei|nikto|whatweb|wpscan|arjun|sqlmap|git-dumper|curl|wget|snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|mysql|psql|redis-cli|mongosh|sqlite3|sqlplus|odat|dig|nslookup|host|dnsrecon|chisel|ligolo[a-z_-]*|sshuttle|responder|ike-scan|ipmitool|nth|hashid|hash-identifier|haiti|searchsploit|linpeas|winpeas|whoami|id|uname|find|getcap|ps|netstat|ss|ip|ifconfig|ipconfig|arp|route|systeminfo|schtasks|reg|cmdkey|icacls|accesschk|klist|nltest|powerview|get-net\w+|get-domain\w+|get-ad\w+|invoke-\w+|cat|type|strings|ltrace|strace|ldd|readelf|objdump|ilspycmd|wmic|systemctl|2to3|gcc|python[23]?|pip[23]?|sc(?=\s+qc\b)|head(?=\s+-|\s+\d{3,6}\.))\b/i;
 
   // Convenience for pasted terminal output without a specific action card.
   OBOL.parsers.analyzeTerminal = function (text, opts) {

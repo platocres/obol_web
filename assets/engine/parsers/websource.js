@@ -163,7 +163,7 @@
   // line start after at most a little indentation) so prose ("the password is X") never matches.
   // Key must END in password/passwd/pwd or <word>_pass (so `bypass`, `password_hash`, `passwd_min`
   // do not match); value guarded below against SecureString/.NET type names, URLs, and binary blobs.
-  var _INI_PW_RE = /^[ \t]{0,12}(?!(?:forgot|reset|change|update|lost)[_.\-]?password\b)(?<key>[\w.\-]{0,40}?(?:password|passwd|pwd|[_.]pass))[ \t]*[:=][ \t]*["']?(?<s>[^\s"'#;]{3,64})/gim;
+  var _INI_PW_RE = /^[ \t]{0,12}(?!(?:forgot|reset|change|update|lost)[_.\-]?password\b)(?:(?:const|let|var|final|export)[ \t]+)?(?<key>[\w.\-]{0,40}?(?:password|passwd|pwd|[_.]pass))[ \t]*[:=][ \t]*(?:"(?<dq>[^"\r\n]{3,64})"|'(?<sq>[^'\r\n]{3,64})'|(?![ \t]*["'])(?<s>[^\s"'#;]{3,64})(?=[ \t]*(?:[#;]|\/\/|$)))/gim;
 
   function _clean_secret(val) {
     val = (val || '').trim();
@@ -172,15 +172,14 @@
   }
   C._clean_secret = _clean_secret;
 
-  // A plaintext config-field value must look like a usable secret, not a type/boolean/blob. Rejects
-  // booleans and config keywords, .NET/Java dotted type names (ConvertFrom-ADManagedPasswordBlob
-  // dumps `SecureCurrentPassword = System.Security.SecureString`), URLs, structural JSON/CSS blocks,
-  // and any value that is not entirely printable ASCII.
+  // A plaintext config-field value must look like a usable secret, not a type/boolean/blob or
+  // unquoted client/server code expression (DOM lookup, env lookup, request param, function call).
   var _CFG_VAL_TYPE_RE = /^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*){2,}$/;
   var _CFG_VAL_WORD_RE = /^(?:true|false|yes|no|on|off|nil|enabled|disabled|required|optional|empty|default|unset|automatic|manual|files|compat|systemd|sss|nis|ldap|myhostname|mymachines|resolve|dns|mdns4_minimal|sufficient|requisite|include|substack|write|read|create_child|delete_child|full_control|generic_all|generic_write)$/i;
+  var _CODE_EXPR_SECRET_RE = /^(?:document\.|window\.|navigator\.|location\.|localStorage\.|sessionStorage\.|form\.|this\.|self\.|process\.env\b|os\.environ\b|os\.getenv\b|System\.getenv\b|\$_(?:POST|GET|REQUEST|COOKIE|SERVER|ENV|SESSION)\b|req\.(?:body|query|params|headers|cookies)\b|request\.(?:form|args|json|values|POST|GET|DATA)\b|[A-Za-z_$][A-Za-z0-9_$.]*\s*\(|[A-Za-z_$][A-Za-z0-9_$.]*\[|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\.(?:value|password|passwd|pwd|pass|text|innerText|textContent)\b)/i;
   function _valid_config_pw(val) {
     if (!/^[\x21-\x7e]{3,64}$/.test(val)) return false;
-    if (_CFG_VAL_WORD_RE.test(val) || _CFG_VAL_TYPE_RE.test(val)) return false;
+    if (_CFG_VAL_WORD_RE.test(val) || _CFG_VAL_TYPE_RE.test(val) || _CODE_EXPR_SECRET_RE.test(val)) return false;
     if (/^(?:\/|\.\.?\/|~\/|[A-Za-z]:\\|[a-z][a-z0-9+.\-]*:\/\/|[{[\]()}])/i.test(val)) return false;
     return true;
   }
@@ -221,6 +220,8 @@
   function _has_labeled_creds(text) { return _labeled_cred_pairs(text).length > 0; }
   C._has_labeled_creds = _has_labeled_creds;
 
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|SqlConnection|DriverManager\.getConnection)\b|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=/i;
+
   function _has_source_secret(text) {
     var t = text || '';
     return !!(reSearch(_SIGNING_MARK_RE, t) || reSearch(_SECRET_KEY_RE, t)
@@ -229,6 +230,7 @@
       || reSearch(_ENV_PW_RE, t) || reSearch(_URI_CRED_RE, t)
       || reSearch(_VCS_TOKEN_RE, t) || reSearch(_PRIVKEY_RE, t)
       || reSearch(_INI_PW_RE, t)
+      || reSearch(_DB_CONNECTOR_HINT_RE, t)
       || _has_labeled_creds(t)
       || (reSearch(_CONNSTR_CTX_RE, t) && reSearch(_CONNSTR_PW_RE, t)));
   }
@@ -261,7 +263,7 @@
     [_CONFIG_PW_RE, _FIELD_CRED_RE, _PHP_PW_RE, _DEFINE_PW_RE, _ENV_PW_RE].forEach(function (rx) {
       reAll(rx, t).forEach(function (m) {
         var s = _clean_secret(m.groups.s);
-        if (!s || seen[s]) return;
+        if (!s || seen[s] || _CODE_EXPR_SECRET_RE.test(s)) return;
         seen[s] = true;
         _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'source-disclosure' }, S, source));
       });
@@ -279,7 +281,7 @@
     // on-host. Same config_secret lead as above, but with the extra value guards (no SecureString,
     // no binary blob, no boolean) the looser line-anchored shape needs.
     reAll(_INI_PW_RE, t).forEach(function (m) {
-      var s = _clean_secret(m.groups.s);
+      var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
       if (!s || seen[s] || !_valid_config_pw(s)) return;
       seen[s] = true;
       _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'config-field' }, S, source));
@@ -318,9 +320,299 @@
       var s = _clean_secret(m.groups.s);
       if (!s || seen[s]) return;
       seen[s] = true;
-      _add(facts, mkFact('credential.candidate', scope, { kind: 'connection_uri', user: m.groups.user, password: s, scheme: m.groups.scheme.toLowerCase(), host: m.groups.host, source: 'source-disclosure' }, S, source));
+      var u = (m.groups.user || '').trim();
+      var sch = m.groups.scheme.toLowerCase();
+      _add(facts, mkFact('credential.candidate', scope, { kind: 'connection_uri', user: u, password: s, scheme: sch, host: m.groups.host, source: 'source-disclosure' }, S, source));
+      if (u && !_SECRET_DENY[u.toLowerCase()] && !_PLACEHOLDER_RE.test(u) && /^(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mariadb|mssql|sqlserver|redis|amqp|ftp|ssh)$/.test(sch)) {
+        _add(facts, mkFact('credential.available', scope, { user: u, password: s, service: sch, host: m.groups.host, method: 'source-dsn' }, S, source));
+      }
     });
+
+    // Hardcoded DB connector calls and full User+Password DSN strings in disclosed source
+    _parse_source_db_connectors(t, scope, source, facts, seen);
   }
   C._parse_source_secret = _parse_source_secret;
+
+  function _resolvePhpVars(text) {
+    var vars = {};
+    var assignRe = /\$([A-Za-z_][A-Za-z0-9_]{0,48})\s*=\s*["']([^"'\r\n]{1,96})["']\s*;/g;
+    reAll(assignRe, text).forEach(function (m) {
+      vars[m[1]] = m[2];
+    });
+    return vars;
+  }
+
+  function _resolveArgToken(tok, phpVars) {
+    var s = String(tok || '').trim();
+    if (!s) return '';
+    if ((s[0] === '"' && s[s.length - 1] === '"') || (s[0] === "'" && s[s.length - 1] === "'")) {
+      return s.slice(1, -1).trim();
+    }
+    if (s[0] === '$' && phpVars && phpVars[s.slice(1)]) {
+      return phpVars[s.slice(1)].trim();
+    }
+    return '';
+  }
+
+  function _emitConcreteSourceCred(facts, scope, source, seen, user, pw, service, idiom) {
+    var u = String(user || '').trim();
+    var p = _clean_secret(pw);
+    if (!u || !p || !_valid_config_pw(p)) return;
+    if (_SECRET_DENY[u.toLowerCase()] || _PLACEHOLDER_RE.test(u) || /^(?:user|username|dbuser|db_user|your_user)$/i.test(u)) return;
+    var pairKey = 'pair:' + u + ':' + p;
+    if (seen[pairKey]) return;
+    seen[pairKey] = true;
+    _add(facts, mkFact('credential.available', scope, { user: u, password: p, service: service, method: idiom }, S, source));
+    if (!seen[p]) {
+      seen[p] = true;
+      _add(facts, mkFact('credential.candidate', scope, { kind: 'source_db_credential', user: u, password: p, service: service, source: idiom }, S, source));
+    }
+  }
+
+  function _parse_source_db_connectors(text, scope, source, facts, seen) {
+    var t = String(text || '');
+    if (!_DB_CONNECTOR_HINT_RE.test(t)) return;
+    seen = seen || {};
+    var phpVars = t.indexOf('$') >= 0 ? _resolvePhpVars(t) : {};
+
+    // 1. mysqli_connect(host, user, pass[, db]) / new mysqli(host, user, pass[, db])
+    var mysqliRe = /\b(?:mysqli_connect|new\s+mysqli)\s*\(\s*([^,)\r\n]+)\s*,\s*([^,)\r\n]+)\s*,\s*([^,)\r\n]+)/gi;
+    reAll(mysqliRe, t).forEach(function (m) {
+      var u = _resolveArgToken(m[2], phpVars);
+      var p = _resolveArgToken(m[3], phpVars);
+      _emitConcreteSourceCred(facts, scope, source, seen, u, p, 'mysql', 'mysqli_connect');
+    });
+
+    // 2. new PDO(dsn, user, pass)
+    var pdoRe = /\bnew\s+PDO\s*\(\s*([^,)\r\n]+)\s*,\s*([^,)\r\n]+)\s*,\s*([^,)\r\n]+)/gi;
+    reAll(pdoRe, t).forEach(function (m) {
+      var dsn = _resolveArgToken(m[1], phpVars) || m[1];
+      var svc = /pgsql/i.test(dsn) ? 'postgresql' : (/sqlsrv|mssql/i.test(dsn) ? 'mssql' : 'mysql');
+      var u = _resolveArgToken(m[2], phpVars);
+      var p = _resolveArgToken(m[3], phpVars);
+      _emitConcreteSourceCred(facts, scope, source, seen, u, p, svc, 'pdo');
+    });
+
+    // 3. SqlConnection / ADO.NET / web.config connection strings with both User Id/UID and Password/PWD
+    var adoLines = t.split(/\r?\n/);
+    for (var i = 0; i < adoLines.length; i++) {
+      var ln = adoLines[i];
+      if (!/(?:SqlConnection|connectionString|Data Source|Server\s*=)/i.test(ln)) continue;
+      var um = /\b(?:User\s*Id|UID|Username)\s*=\s*([^;"'\r\n<>]+)/i.exec(ln);
+      var pm = /\b(?:Password|PWD)\s*=\s*([^;"'\r\n<>]+)/i.exec(ln);
+      if (um && pm) {
+        _emitConcreteSourceCred(facts, scope, source, seen, um[1].trim(), pm[1].trim(), 'mssql', 'sqlconnection');
+      }
+    }
+  }
+
+  var _ORIG_HAS_SOURCE_SECRET = _has_source_secret;
+  _has_source_secret = function (text) {
+    var t = text || '';
+    return _ORIG_HAS_SOURCE_SECRET(t) || _DB_CONNECTOR_HINT_RE.test(t) || _URI_CRED_RE.test(t);
+  };
+  C._has_source_secret = _has_source_secret;
+
+  // ---- Step 1A: Disclosed web source, HTTP 500 stack traces, and phpinfo() tables ---- //
+  var _LOCAL_TOOL_CMD_RE = /^\s*(?:sudo\s+)?(?:python[23]?|pip[23]?|2to3|gcc|g\+\+|impacket-[\w-]+|bloodyad|certipy(?:-ad)?|nxc|netexec|crackmapexec|sqlmap|searchsploit)\b/i;
+
+  function _has_web_disclosure(text, command) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
+    // phpinfo() table
+    if (/PHP Version\s+\d+\.\d+/i.test(t) && /\b(?:DOCUMENT_ROOT|disable_functions|Loaded Configuration File|PHP Extension)\b/i.test(t)) return true;
+    // PHP verbose fatal/warning error with server path
+    if (/\b(?:Fatal error|Parse error|Warning):\s+(?:Uncaught\s+)?[^\r\n]+?\s+in\s+(?:\/(?:var\/www|srv|opt|app|home|usr\/share)\/[^\s:]+\.php|[A-Za-z]:\\(?:inetpub|xampp|wamp|www)[^\r\n:]+\.php)\s+on line\s+\d+/i.test(t)) return true;
+    // Stack trace leaking server application path
+    if (!(_LOCAL_TOOL_CMD_RE.test(command || '') && !/^\s*(?:<\s*)?HTTP\/[12]/im.test(t))) {
+      if (/Traceback \(most recent call last\):[\s\S]{1,1600}?File\s+"(\/(?:var\/www|app|srv|opt|usr\/src\/app|home\/[^/]+\/(?:app|web|site))\/[^"]+\.py)"/i.test(t)) return true;
+      if (/(?:HTTP\/[12](?:\.\d)?\s+500\b|500 Internal Server Error|Werkzeug Debugger|Server Error in '\/' Application)[\s\S]{1,2400}?(?:Traceback \(most recent call last\):|\/var\/www\/|\/usr\/src\/app\/|\/app\/|[A-Za-z]:\\inetpub\\|at\s+\S+\s+\(\/[^\r\n)]+:\d+:\d+\))/i.test(t)) return true;
+      if (/^\s*Error:[^\r\n]+\r?\n(?:\s+at\s+[^\r\n(]+\((?:\/(?:var\/www|app|srv|opt|usr\/src\/app)\/|[A-Za-z]:\\(?:inetpub|app|www)\\)[^)\r\n]+:\d+:\d+\)\r?\n?)+/m.test(t)) return true;
+    }
+    // Recovered server-side source (LFI, .git dump, backup file)
+    if (/<\?php\b/i.test(t) && !/\b(?:echo|curl|wget)\b[^\r\n]*<\?php/i.test(command || '')) return true;
+    if (/^\s*(?:from\s+flask\s+import\b|from\s+django\.[A-Za-z0-9_.]+\s+import\b|from\s+fastapi\s+import\b)/m.test(t)) return true;
+    if (/\brequire\s*\(\s*['"]express['"]\s*\)|\bimport\s+express\s+from\s+['"]express['"]/i.test(t)) return true;
+    if (/<configuration\b[^>]*>[\s\S]{0,2000}?<(?:connectionStrings|system\.web)\b/i.test(t)) return true;
+    return false;
+  }
+  C._has_web_disclosure = _has_web_disclosure;
+
+  function _parse_web_disclosure(text, ws, command, source, facts) {
+    var t = String(text || '');
+    if (!_has_web_disclosure(t, command)) return;
+    var scope = _scope(ws);
+    var kind = 'source_code';
+    var details = { kind: kind };
+
+    if (/PHP Version\s+(\d+\.\d+(?:\.\d+)?)/i.test(t) && /\b(?:DOCUMENT_ROOT|disable_functions|Loaded Configuration File)\b/i.test(t)) {
+      var pvM = /PHP Version\s+(\d+\.\d+(?:\.\d+)?)/i.exec(t);
+      details.kind = 'phpinfo';
+      if (pvM) details.php_version = pvM[1];
+      var docM = /DOCUMENT_ROOT\s*(?:<\/td><td[^>]*>|[|=>\t ]+)\s*([\/A-Za-z0-9_.:\\-]{3,140})/i.exec(t);
+      if (docM) {
+        details.document_root = docM[1].trim();
+        details.app_base_path = details.document_root;
+      }
+      var disM = /disable_functions\s*(?:<\/td><td[^>]*>|[|=>\t ]+)\s*([A-Za-z0-9_,\s-]{2,200})/i.exec(t);
+      if (disM) details.disable_functions = disM[1].trim().slice(0, 160);
+    } else if (/Traceback \(most recent call last\):|\bFatal error:\s|500 Internal Server Error|Server Error in '\/' Application|^\s*Error:[^\r\n]+\r?\n\s+at\s+/im.test(t)) {
+      details.kind = 'stack_trace';
+      var pathM = /(\/(?:var\/www|app|srv|opt|usr\/src\/app|home)\/[A-Za-z0-9_./-]+\.(?:py|php|js|ts|rb|java|go)|[A-Za-z]:\\(?:inetpub|xampp|wamp|app|www)\\[A-Za-z0-9_.\\-]+\.(?:cs|aspx|php|js|py))/i.exec(t);
+      if (pathM) {
+        details.leaked_path = pathM[1];
+        details.source_path = pathM[1];
+      }
+    } else if (/<\?php\b/i.test(t)) {
+      details.language = 'php';
+    } else if (/from\s+(?:flask|django|fastapi)\b/i.test(t)) {
+      details.language = 'python';
+    } else if (/require\s*\(\s*['"]express['"]\s*\)|import\s+express\b/i.test(t)) {
+      details.language = 'javascript';
+    } else if (/<connectionStrings\b|<system\.web\b/i.test(t)) {
+      details.language = 'aspnet';
+    }
+    if (!details.source_path && command) {
+      var cmdResM = /(?:resource=|file=|page=|path=)([\/A-Za-z0-9_.-]+\.(?:php|py|js|ts|cs|aspx|config|json|xml))/i.exec(command)
+        || /https?:\/\/[^/\s"']+(\/[^\s"'?#]+\.(?:php|py|js|ts|cs|aspx|config|txt|bak|old))/i.exec(command);
+      if (cmdResM) details.source_path = cmdResM[1];
+    }
+
+    _add(facts, mkFact('web.source_disclosed', scope, details, S, source));
+  }
+  C._parse_web_disclosure = _parse_web_disclosure;
+
+  // ---- Step 1B: Disclosed dependency manifests (package.json, composer.json, requirements.txt, pom.xml) ---- //
+  function _has_web_manifest(text, command) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    if (/"(?:dependencies|devDependencies)"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t)) return true;
+    if (/"require(?:-dev)?"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t) && (/"php"\s*:/.test(t) || /"[a-z0-9_.-]+\/[a-z0-9_.-]+"\s*:/.test(t))) return true;
+    if (/<dependencies\b[^>]*>[\s\S]{10,4000}?<artifactId>[^<]+<\/artifactId>[\s\S]{1,400}?<version>[^<]+<\/version>/i.test(t)) return true;
+    var reqLines = t.match(/^[ \t]*[A-Za-z0-9][A-Za-z0-9_.-]{1,50}[ \t]*(?:==|~=)[ \t]*\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*[ \t]*(?:#.*)?$/gm);
+    if (reqLines && (reqLines.length >= 2 || (reqLines.length >= 1 && /requirements[^\s/]*\.txt\b/i.test(command || '')))) return true;
+    return false;
+  }
+  C._has_web_manifest = _has_web_manifest;
+
+  function _parse_web_manifest(text, ws, command, source, facts) {
+    var t = String(text || '');
+    if (!_has_web_manifest(t, command)) return;
+    var scope = _scope(ws);
+    var packages = [], seenPkg = {}, manifestType = '';
+
+    function addPkg(name, ver) {
+      var n = String(name || '').trim();
+      var v = String(ver || '').trim().replace(/^[\^~>=<v\s]+/, '');
+      if (!n || !v || n === 'php' || seenPkg[n.toLowerCase()]) return;
+      seenPkg[n.toLowerCase()] = 1;
+      packages.push({ name: n, version: v });
+    }
+
+    // 1. JSON manifests: package.json / composer.json
+    if (t.indexOf('{') >= 0 && /"(?:dependencies|devDependencies|require|require-dev)"\s*:/.test(t)) {
+      var blockRe = /"(dependencies|devDependencies|require|require-dev)"\s*:\s*\{([^}]*)\}/g;
+      reAll(blockRe, t).forEach(function (bm) {
+        var sec = bm[1];
+        if (!manifestType) manifestType = (sec === 'require' || sec === 'require-dev') ? 'composer.json' : 'package.json';
+        reAll(/"([^"\r\n]+)"\s*:\s*"([^"\r\n]+)"/g, bm[2]).forEach(function (kv) {
+          addPkg(kv[1], kv[2]);
+        });
+      });
+    }
+
+    // 2. Maven pom.xml
+    if (!packages.length && /<dependency\b/i.test(t)) {
+      manifestType = 'pom.xml';
+      reAll(/<dependency\b[^>]*>([\s\S]*?)<\/dependency>/gi, t).forEach(function (dm) {
+        var aid = /<artifactId>\s*([^<\s]+)\s*<\/artifactId>/i.exec(dm[1]);
+        var ver = /<version>\s*([^<\s$]+)\s*<\/version>/i.exec(dm[1]);
+        if (aid && ver) addPkg(aid[1], ver[1]);
+      });
+    }
+
+    // 3. Python requirements.txt
+    if (!packages.length) {
+      var rMatches = reAll(/^[ \t]*([A-Za-z0-9][A-Za-z0-9_.-]{1,50})[ \t]*(?:==|~=|>=)[ \t]*(\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*)[ \t]*(?:#.*)?$/gm, t);
+      if (rMatches.length) {
+        manifestType = 'requirements.txt';
+        rMatches.forEach(function (rm) { addPkg(rm[1], rm[2]); });
+      }
+    }
+
+    if (!packages.length) return;
+    var manifestPath = '';
+    if (command) {
+      var mpM = /https?:\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml))/i.exec(command)
+        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml))/i.exec(command);
+      if (mpM) manifestPath = mpM[1];
+    }
+    var mVal = {
+      manifest_type: manifestType || 'manifest',
+      packages: packages.slice(0, 40),
+      count: packages.length
+    };
+    if (manifestPath) mVal.manifest_path = manifestPath;
+    _add(facts, mkFact('web.manifest_disclosed', scope, mVal, S, source));
+  }
+  C._parse_web_manifest = _parse_web_manifest;
+
+  // ---- Step 2B: Dangerous server-side web vulnerability sinks ---- //
+  var _WEB_VULN_SINKS = [
+    { category: 'cmdi', sink: 'php_shell_exec', re: /\b(?:shell_exec|passthru|proc_open|pcntl_exec)\s*\([^);\r\n]*\$[A-Za-z_]/i },
+    { category: 'cmdi', sink: 'php_system_exec', re: /\b(?:system|exec|popen)\s*\([^);\r\n]*\$[A-Za-z_{]/i },
+    { category: 'cmdi', sink: 'node_child_process_exec', re: /\bchild_process\s*\.\s*(?:exec|execSync)\s*\(|\bexec(?:Sync)?\s*\([^);\r\n]*\breq\.(?:body|query|params|headers)/i },
+    { category: 'cmdi', sink: 'python_shell_exec', re: /\bos\.(?:system|popen)\s*\([^)\r\n]*(?:request\.|f["']|\+)|\bsubprocess\.(?:Popen|run|call|check_output)\s*\([\s\S]{0,160}?shell\s*=\s*True/i },
+    { category: 'deserialization', sink: 'python_pickle_loads', re: /\b(?:cPickle|pickle|_pickle|dill)\.loads?\s*\(|\bjsonpickle\.decode\s*\(/ },
+    { category: 'deserialization', sink: 'yaml_unsafe_load', re: /\byaml\.(?:load|unsafe_load)\s*\((?![^)\r\n]*SafeLoader)/ },
+    { category: 'deserialization', sink: 'php_unserialize', re: /\bunserialize\s*\(\s*(?:\$_(?:GET|POST|REQUEST|COOKIE)|base64_decode\s*\(|\$[A-Za-z_])/i },
+    { category: 'deserialization', sink: 'node_unserialize', re: /\b(?:serialize\.unserialize|node-serialize)\b/i },
+    { category: 'type_juggling', sink: 'php_strcmp_loose', re: /\bstrcmp\s*\([^)\r\n]*(?:\$_(?:GET|POST|REQUEST|COOKIE)|pass|pwd|token|hash|secret)[^)\r\n]*\)\s*==(?!=)\s*0\b/i },
+    { category: 'type_juggling', sink: 'php_loose_auth_compare', re: /(?:\$_(?:GET|POST|REQUEST|COOKIE)\s*\[[^\]]+\]|\$[A-Za-z0-9_]*(?:pass(?:word)?|pwd|hash|token|secret|hmac|auth|otp)[A-Za-z0-9_]*)\s*==(?!=)\s*(?:\$[A-Za-z0-9_]+|['"]0e\d+['"])|(?:md5|sha1)\s*\([^)\r\n]+\)\s*==(?!=)/i },
+    { category: 'nosql_injection', sink: 'nosql_raw_req_body', re: /\.(?:find|findOne|findOneAndUpdate|countDocuments)\s*\(\s*(?:req\.(?:body|query)\b|\{\s*['"]?[A-Za-z0-9_]+['"]?\s*:\s*req\.(?:body|query)\.[A-Za-z0-9_]+(?:\s*,\s*['"]?[A-Za-z0-9_]+['"]?\s*:\s*req\.(?:body|query)\.[A-Za-z0-9_]+)?\s*\})/ }
+  ];
+
+  var _WEB_SOURCE_CONTEXT_RE = /(?:<\?php\b|\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b|\breq\.(?:body|query|params|cookies|headers)\b|\brequest\.(?:args|form|json|cookies|values|GET|POST)\b|\brequire\s*\(\s*['"](?:express|child_process|node-serialize|js-yaml)['"]|\bfrom\s+(?:flask|django|fastapi)\s+import\b|@app\.(?:route|get|post)\b|\brouter\.(?:get|post|put|use)\b)/i;
+
+  function _has_web_vuln_sinks(text, command) {
+    var t = String(text || '');
+    if (!t.trim()) return false;
+    if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
+    if (!_WEB_SOURCE_CONTEXT_RE.test(t)) return false;
+    for (var i = 0; i < _WEB_VULN_SINKS.length; i++) {
+      if (_WEB_VULN_SINKS[i].re.test(t)) return true;
+    }
+    return false;
+  }
+  C._has_web_vuln_sinks = _has_web_vuln_sinks;
+
+  function _parse_web_vuln_sinks(text, ws, command, source, facts) {
+    var t = String(text || '');
+    if (!_has_web_vuln_sinks(t, command)) return;
+    var scope = _scope(ws);
+    var hits = [];
+    for (var i = 0; i < _WEB_VULN_SINKS.length; i++) {
+      var rule = _WEB_VULN_SINKS[i];
+      var m = reSearch(rule.re, t);
+      if (!m) continue;
+      var evLine = (C._line_for_match ? C._line_for_match(t, m) : m[0]).trim().slice(0, 180);
+      hits.push({ sink: rule.sink, category: rule.category, evidence: evLine });
+    }
+    if (!hits.length) return;
+    var top = hits[0];
+    _add(facts, mkFact('web.vuln_sink', scope, {
+      sink: top.sink,
+      category: top.category,
+      evidence: top.evidence,
+      sinks: hits
+    }, S, source));
+    _add(facts, mkFact('vuln.web_sink', scope, {
+      sink: top.sink,
+      category: top.category,
+      lead: true
+    }, S, source));
+  }
+  C._parse_web_vuln_sinks = _parse_web_vuln_sinks;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);
