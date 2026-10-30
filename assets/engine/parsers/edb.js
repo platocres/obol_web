@@ -379,6 +379,14 @@
     return null;
   }
 
+  function _is_scanner_or_nmap_report(t, cmd) {
+    if (cmd && /\b(?:nmap|rustscan|masscan|nikto|wpscan|nuclei)\b/i.test(cmd)) return true;
+    if (/<nmaprun\b/i.test(t)) return true;
+    if ((/^\s*Nmap scan report for\b|^\s*PORT\s+STATE\s+SERVICE\b/im.test(t)) && /^\s*\d+\/(?:tcp|udp)\s+open\s/im.test(t)) return true;
+    if (/^\s*\d+\/(?:tcp|udp)\s+open\s/im.test(t) && /^[ \t]*\|[_ ][A-Za-z0-9_.-]+:/m.test(t)) return true;
+    return false;
+  }
+
   function _looks_like_edb_script(text, command) {
     var t = String(text || '');
     if (!/\S/.test(t)) return false;
@@ -386,6 +394,7 @@
     var hasCmd = /\S/.test(cmd);
     var cmdIsInspect = hasCmd && _EDB_INSPECT_CMD_RE.test(cmd);
     if (!cmdIsInspect) {
+      if (_is_scanner_or_nmap_report(t, cmd)) return false;
       if (hasCmd) {
         if (!/exploit|edb-id/i.test(t)) return false;
       } else {
@@ -445,6 +454,7 @@
     var t = String(text || '');
     var cmd = String(command || '');
     if (!t.trim()) return;
+    if (!(cmd && _EDB_INSPECT_CMD_RE.test(cmd)) && _is_scanner_or_nmap_report(t, cmd)) return;
 
     var edbId = '', edbFile = '', ext = '';
     var mCmd = _EDB_INSPECT_CMD_RE.exec(cmd);

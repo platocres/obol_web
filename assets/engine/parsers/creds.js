@@ -978,16 +978,16 @@
     }
 
     if (!/sekurlsa::|lsadump::|Authentication Id\s*:/i.test(text)) {
-      var inlineNtRe = /^\s*(?:[-*+]\s*)?([A-Za-z0-9_.$-]{2,32})\b[^\r\n]{0,40}?\bNTLM\s*:\s*([0-9a-fA-F]{32})\b/gim, inm;
+      var inlineNtRe = /^\s*(?:[-*+]\s*)?(?:([A-Za-z0-9_.-]{1,64})\\)?([A-Za-z0-9_.$-]{2,32})(?![A-Za-z0-9_.$\\-])[^\r\n]{0,40}?\bNTLM\s*:\s*([0-9a-fA-F]{32})\b/gim, inm;
       while ((inm = inlineNtRe.exec(text)) !== null) {
-        var inRawU = inm[1], inNt = inm[2].toLowerCase();
+        var inExplicitDom = (inm[1] || '').trim(), inRawU = inm[2], inNt = inm[3].toLowerCase();
         if (/^(?:hash|ntlm|lm|sha1|md5|password|passwd|user|username|login|domain|rid|sid|nt)$/i.test(inRawU)) continue;
         if (inNt === '31d6cfe0d16ae931b73c59d7e0c089c0' || inNt === 'aad3b435b51404eeaad3b435b51404ee') continue;
         var inUser = C._clean_username(inRawU);
         if (!C._valid_username(inUser, false) || /\$$/.test(inUser)) continue;
-        var inScope = C._scope_for_domain(ws, C._domain_from_facts(ws));
+        var inDom = (inExplicitDom && inExplicitDom.indexOf('.') >= 0 ? inExplicitDom : '') || C._domain_from_facts(ws);
+        var inScope = C._scope_for_domain(ws, inDom);
         var inVal = { user: inUser, nthash: inNt, method: 'cred-note', hash_type: 'ntlm' };
-        var inDom = C._domain_from_facts(ws);
         if (inDom) inVal.domain = inDom;
         _add(facts, mkFact('hash.ntlm', inScope, { count: 1, entries: [{ user: inUser, nthash: inNt }], user: inUser, nthash: inNt, via: 'cred-note' }, S, source));
         _add(facts, mkFact('credential.ntlm_hash', inScope, inVal, S, source));
@@ -1238,7 +1238,7 @@
         var isQuoted = !!kvM[2];
         var rawVal = (isQuoted ? kvM[3] : kvM[4] || '').trim();
         if (!rawVal || (!isQuoted && (isCodeLike || /^\$/.test(kvM[1]) || /^(?:args|opts|options|self|this|req|request|params|form|data|env|os|sys|config|cfg|row|item|obj)\./i.test(rawVal)))) continue;
-        if (/^(?:\$[A-Za-z_]|{{|<[A-Za-z_]|%[A-Za-z_]|env\(|os\.|process\.env)/i.test(rawVal)) continue;
+        if (/^(?:\$[A-Za-z_]|{{|<[A-Za-z_]|%[A-Za-z_]|env\(|os\.|process\.env)/i.test(rawVal) || /\$\(|\$\{|`/.test(rawVal) || (!isQuoted && /^[A-Za-z0-9_.-]+:$/.test(rawVal))) continue;
         var isUserKey = /(?:[a-z0-9](?:User(?:name)?|Login|Uid|Account))$/.test(rawKey) || /(?:^|[._-])(?:user(?:name)?|login|uid|account)$/i.test(rawKey);
         var isPassKey = /(?:[a-z0-9](?:Pass(?:word|wd)?|Pwd|Pw|Secret))$/.test(rawKey) || /(?:^|[._-])(?:pass(?:word|wd)?|pwd|pw|secret)$/i.test(rawKey);
         if (isUserKey && !isPassKey) userVars.push({ line: kvi, key: rawKey, val: rawVal });

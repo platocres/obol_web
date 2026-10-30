@@ -10,7 +10,27 @@
   var reAll = C.reAll, reSearch = C.reSearch;
 
   var _MSSQL_WHOAMI_RE = /\bnt (?:service|authority)\\[\w$.-]+|(?<![A-Za-z]:\\)\b(?![A-Za-z]:\\)[A-Za-z0-9_.-]{2,32}\\[A-Za-z0-9_.$-]{2,32}\s*$|uid=\d+\(/im;
-  var _DB_ACCESS_DENIED_RE = /access denied|authentication failed|login failed|permission denied|ERROR 1045|can't connect to|connection refused|could not connect to server|timeout expired|login failed for user|ERROR 200[235]|FATAL:\s+password authentication failed|ORA-01017/i;
+  var _DB_ACCESS_DENIED_RE = /access denied|authentication failed|login failed|permission denied|ERROR 1045|can't connect to|connection refused|could not connect to server|timeout expired|login failed for user|ERROR 200[235]|FATAL:\s+password authentication failed|ORA-01017|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]/i;
+  var _MONGO_AUTH_DENIED_RE = /MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|Mongo(?:Server|Network)?Error:\s*Authentication\s+failed|\berrmsg:\s*['"][^'"]*(?:requires\s+authentication|not\s+authorized|auth\s+failed)/i;
+  var _MONGO_CONN_FAIL_RE = /\b(?:ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|connect\s+ECONNREFUSED|connection\s+refused|timed?\s*out|couldn't\s+connect\s+to\s+server)\b/i;
+  var _MONGO_POSITIVE_DATA_RE = /\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b|\[\s*\{\s*['"_A-Za-z0-9$]+['"]?\s*:|\bObjectId\s*\(\s*['"][0-9a-fA-F]{24}['"]\s*\)|["']ok["']\s*:\s*1\b/i;
+  var _REDIS_DENIED_RE = /\b(?:NOAUTH\b|WRONGPASS\b|NOPERM\b|ERR\s+(?:invalid\s+password|Client\s+sent\s+AUTH|operation\s+not\s+permitted|authentication\s+required)|Could\s+not\s+connect\s+to\s+Redis|Connection\s+refused|Connection\s+timed\s+out)\b/i;
+
+  function _unescape_resp_bulk_string(rawStr) {
+    var inner = String(rawStr || '');
+    if (inner.length >= 2 && inner.charAt(0) === '"' && inner.charAt(inner.length - 1) === '"') {
+      inner = inner.slice(1, -1);
+    }
+    return inner.replace(/\\(n|r|t|"|\\|x([0-9a-fA-F]{2}))/g, function (_, tok, hex) {
+      if (tok === 'n') return '\n';
+      if (tok === 'r') return '\r';
+      if (tok === 't') return '\t';
+      if (tok === '"') return '"';
+      if (tok === '\\') return '\\';
+      if (hex) return String.fromCharCode(parseInt(hex, 16));
+      return tok;
+    });
+  }
   var _DB_HASH_ROW_RE = /\b(?<user>[A-Za-z0-9_.@-]{2,64})\b(?:[ \t]*[|:\t][ \t]*[^\s|:\t\r\n][^\r\n|:\t]{0,160}){0,6}?[ \t]*[|:\t][ \t]*(?<hash>\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:P|H|S|1|5|6|y|apr1)\$[^\s|\t]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|\t]+|\*[0-9A-Fa-f]{40}|(?:0x)?[a-fA-F0-9]{32,128})\b/;
   var _DB_HASH_REV_ROW_RE = /(?<hash>\$2[abxy]\$\d\d\$[./A-Za-z0-9]{53}|\$(?:P|H|S|1|5|6|y|apr1)\$[^\s|\t:]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s|\t:]+|\*[0-9A-Fa-f]{40})(?:[ \t]*[|:\t][ \t]*[^\s|:\t\r\n][^\r\n|:\t]{0,160}){0,5}?[ \t]*[|:\t][ \t]*(?<user>[A-Za-z0-9_.@-]{2,48})\b/;
   var _XP_CMDSHELL_DENIED_RE = /The EXECUTE permission was denied|Configuration option 'xp_cmdshell' does not exist|SQL Server blocked access to procedure/i;
@@ -260,11 +280,70 @@
       });
     }
 
-    var isRedisHit = (low.indexOf('redis') >= 0 || /^redis_version:/im.test(text)) && (text.toLowerCase().indexOf('# server') >= 0 || /^redis_version:/im.test(text) || /^\+PONG\b|^PONG\b|^\+OK\b/im.test(text) || /^\s*\d+\)\s+"/m.test(text));
+    var isRedisCmd = /\bredis-cli\b/i.test(command || '')
+      || /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*/m.test(text + '\n' + promptLine + '\n' + followPrompt);
+    var hasRedisBareReply = isRedisCmd && !_REDIS_DENIED_RE.test(text) && /^(?:\+OK|OK|\+PONG|PONG|\(integer\)\s+\d+)\s*$/im.test(text);
+    var isRedisHit = ((low.indexOf('redis') >= 0 || isRedisCmd || /^redis_version:/im.test(text)) && (text.toLowerCase().indexOf('# server') >= 0 || /^redis_version:/im.test(text) || /^\+PONG\b|^PONG\b|^\+OK\b/im.test(text) || /^\s*\d+\)\s+"/m.test(text))) || hasRedisBareReply;
     if (isRedisHit) {
-      if (!denied && text.toLowerCase().indexOf('noauth') < 0) {
+      if (!denied && !_REDIS_DENIED_RE.test(text)) {
         _add(facts, mkFact('config.review', h, { kind: 'unauthenticated_redis', service: 'redis', detail: 'redis responded to INFO/KEYS without authentication' }, S, source));
         _add(facts, mkFact('redis.unauth', h, { port: 6379, tool: 'redis-cli' }, S, source));
+      }
+    }
+
+    // Redis module / Lua command execution (system.exec, shell.exec, redis.exec, os.execute, eval) or RESP-escaped shell stdout
+    var combinedRedisCtx = (command || '') + '\n' + text + '\n' + promptLine;
+    var hasRedisExecVerb = (isRedisCmd || low.indexOf('redis') >= 0) && /\b(?:system\.exec|shell\.exec|redis\.exec|cmd\.exec|os\.execute|\beval\b)\b/i.test(combinedRedisCtx);
+    var respQuotedMatches = reAll(/"(?:[^"\\\r\n]|\\.)*"/g, text);
+    var hasRespEscapedShell = respQuotedMatches.some(function (qm) {
+      var qs = qm[0];
+      return /\\[nr]/.test(qs) && (/(?:e?uid)=\d+\(/i.test(qs) || /\bLinux\s+\S+\s+\d+\.\d+/i.test(qs) || /\bnt\s+(?:authority|service)\\\\/i.test(qs));
+    });
+    if ((hasRedisExecVerb || hasRespEscapedShell) && !_REDIS_DENIED_RE.test(text)) {
+      var unwrappedChunks = [];
+      if (respQuotedMatches.length) {
+        respQuotedMatches.forEach(function (qm) {
+          var uq = _unescape_resp_bulk_string(qm[0]).trim();
+          if (uq) unwrappedChunks.push(uq);
+        });
+      } else if (hasRedisExecVerb) {
+        var rawTrimmed = text.trim();
+        if (rawTrimmed) unwrappedChunks.push(_unescape_resp_bulk_string(rawTrimmed));
+      }
+      if (unwrappedChunks.length) {
+        var unwrapped = unwrappedChunks.join('\n');
+        if (C._parse_ssh_exec) {
+          C._parse_ssh_exec(unwrapped, ws, '', source, facts);
+        }
+        if (C._parse_privesc_output) {
+          C._parse_privesc_output('', unwrapped, ws, '', source, facts);
+        }
+        if (!reSearch(C._LINUX_ID_RE, unwrapped) && /\bwhoami\b/i.test(combinedRedisCtx) && C._parse_posix_whoami_escalation) {
+          C._parse_posix_whoami_escalation(unwrapped, ws, 'whoami', source, facts);
+        }
+        if (C._SYSTEM_ID_RE && reSearch(C._SYSTEM_ID_RE, unwrapped)) {
+          _add(facts, mkFact('foothold.windows', h, { service: 'redis', method: 'redis-exec', identity: 'nt authority\\system' }, S, source));
+          _add(facts, mkFact('access.shell', h, { service: 'redis', os: 'windows', user: 'nt authority\\system' }, S, source));
+          _add(facts, mkFact('access.admin', h, { service: 'redis', method: 'redis-exec', identity: 'nt authority\\system' }, S, source));
+          _add(facts, mkFact('access.system', h, { service: 'redis', method: 'redis-exec', identity: 'nt authority\\system' }, S, source));
+          C._add_os_observation(facts, ws, source, 'windows', 'redis command execution (nt authority\\system)', 'high', 'redis', true);
+        } else if (C._WHOAMI_ID_RE) {
+          var winIdM = reSearch(C._WHOAMI_ID_RE, unwrapped);
+          if (winIdM && winIdM.groups && winIdM.groups.id) {
+            var winId = winIdM.groups.id.trim();
+            _add(facts, mkFact('foothold.windows', h, { service: 'redis', method: 'redis-exec', identity: winId }, S, source));
+            _add(facts, mkFact('access.shell', h, { service: 'redis', os: 'windows', user: winId }, S, source));
+            if (/(?:^|\\)administrator$/i.test(winId)) {
+              _add(facts, mkFact('access.admin', h, { service: 'redis', method: 'redis-exec', identity: winId }, S, source));
+            }
+            C._add_os_observation(facts, ws, source, 'windows', 'redis command execution (' + winId + ')', 'high', 'redis', true);
+          }
+        }
+        var hasRootFact = facts.some(function (f) { return f && f.kind === 'access.root' && f.scope === h; });
+        var hasAdminFact = facts.some(function (f) { return f && f.kind === 'access.admin' && f.scope === h; });
+        if (hasRootFact && !hasAdminFact) {
+          _add(facts, mkFact('access.admin', h, { service: 'redis', identity: 'root', method: 'redis-exec' }, S, source));
+        }
       }
     }
 
@@ -316,6 +395,17 @@
       }
     }
 
+    var mongoSessionCtx = text + (followPrompt ? '\n' + followPrompt : '') + (promptLine ? '\n' + promptLine : '');
+    var isMongoContext = low.indexOf('mongo') >= 0 || /\bUsing Mongosh:|\bCurrent Mongosh Log ID:|\bConnecting to:\s*mongodb:\/\/|\bMongoServerError:|\btest>\s/i.test(mongoSessionCtx);
+    var hasMongoPositiveData = _MONGO_POSITIVE_DATA_RE.test(text);
+    var isMongoAuthDenied = isMongoContext && !_MONGO_CONN_FAIL_RE.test(text) && (_MONGO_AUTH_DENIED_RE.test(text) || (!!denied && !hasMongoPositiveData && /\b(?:requires\s+authentication|unauthorized|authentication\s+failed|access\s+denied)\b/i.test(text)));
+    if (isMongoAuthDenied && !hasMongoPositiveData) {
+      var mongoToolName = _db_tool(low);
+      if (mongoToolName === 'database') mongoToolName = /\bmongosh\b/i.test(mongoSessionCtx) ? 'mongosh' : 'mongo';
+      _add(facts, mkFact('db.reachable', h, { service: 'mongodb', port: 27017, tool: mongoToolName }, S, source));
+      _add(facts, mkFact('blocker.access_denied', h, { service: 'mongodb', reason: 'auth_required' }, S, source));
+    }
+
     // A successful interactive login -> db.session, the fact that unlocks the DB post-exploitation
     // (loot the tables, or MSSQL xp_cmdshell). Conservative: a recognizable engine-specific success
     // banner/prompt AND no access-denied line, so a failed login or an unrelated paste mints nothing.
@@ -336,13 +426,14 @@
                (/list of (?:databases|relations)/i.test(sessionText) || /^\s*[A-Za-z0-9_.-]+=[#>]/m.test(sessionText) || /^\s*\(\d+\s+rows?\)\s*$/im.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+|\bpsql\s*\(\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
       else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database|SQL\*Plus:\s*Release/i.test(sessionText)) &&
                (/connected to:/i.test(sessionText) || /^\s*SQL\s*>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
-      else if ((low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
-               (/\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b/i.test(text) || /test>|\bmongosh\b/i.test(sessionText))) {
+      else if (!isMongoAuthDenied && !_MONGO_CONN_FAIL_RE.test(text) &&
+               (low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
+               (hasMongoPositiveData || (/test>|\bmongosh\b/i.test(sessionText) && !/Mongo(?:Server|Network)?Error:/i.test(sessionText)))) {
         svc = 'mongodb';
         _add(facts, mkFact('mongo.unauth', h, { port: 27017, tool: 'mongosh' }, S, source));
       }
       else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(sessionText) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
-      else if (isRedisHit && tlow.indexOf('noauth') < 0) svc = 'redis';
+      else if (isRedisHit && !_REDIS_DENIED_RE.test(sessionText)) svc = 'redis';
       if (svc) {
         var dbTool = _db_tool(low);
         _add(facts, mkFact('db.session', h, { service: svc, tool: dbTool, detail: 'authenticated database session established' }, S, source));

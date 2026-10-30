@@ -3457,6 +3457,63 @@
           "note": "Raw NoSQL `findOne(req.body)` sink: switching `Content-Type` to `application/json` lets Express `bodyParser.json()` pass an operator object `{\"$ne\": null}` straight into the MongoDB query."
         }
       ]
+    },
+    {
+      "id": "web-terminal-foothold",
+      "title": "Browser Web Terminal Session (ttyd / Wetty / GoTTY / ShellInABox)",
+      "hypothesis": "An exposed browser-based terminal multiplexer (ttyd, Wetty, GoTTY, or ShellInABox) bridges HTTP/WebSocket traffic directly to a host PTY. When exposed without authentication or behind known credentials, opening the terminal endpoint immediately provides interactive OS command execution.",
+      "tool": "curl",
+      "tools": [
+        "curl"
+      ],
+      "os": [
+        "linux"
+      ],
+      "locus": "R",
+      "phase": "access",
+      "requires_all": [],
+      "requires_any": [
+        "service.web_terminal"
+      ],
+      "produces": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "settled_by": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "obsoleted_by": [
+        "foothold.linux",
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "foothold.linux",
+        "access.admin"
+      ],
+      "priority": 86,
+      "proves": "interactive shell access on the target host through the exposed web terminal service",
+      "does_not_prove": "root privileges unless the web terminal daemon itself runs as uid 0",
+      "report": {
+        "finding": "Exposed Browser Web Terminal Service Providing Direct Shell Access",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/tsl0922/ttyd"
+      ],
+      "commands": [
+        {
+          "tool": "curl",
+          "run": "curl -sk -i \"{{url}}\"",
+          "note": "Verify the web terminal HTTP endpoint and check whether HTTP Basic Authentication or a token path is required before opening the WebSocket PTY session in a browser."
+        },
+        {
+          "tool": "sh",
+          "run": "id && uname -a && ip -br a",
+          "note": "Inside the browser web terminal session, confirm your effective UID, group memberships, kernel version, and network interfaces, then paste the output to record the foothold."
+        }
+      ]
     }
   ]
 }

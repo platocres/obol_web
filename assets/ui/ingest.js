@@ -299,6 +299,8 @@
       seen[lead.command] = 1;
       hits.push(lead.command);
     }
+    var headSample = _stripAnsi(lines.slice(0, 120).join('\n'));
+    var isMultiSectionEnumBody = /(?:\u2554\u2550+\u2563|\u2560\u2550+\u2563|^\s*\u2550+\u2563\s+\S|Linux Privilege Escalation Awesome Script|\bLinPEAS\b|\bWinPEAS\b|\bLinEnum\b|\bSUID3NUM\b|\bSuidEnum\b|-~>\s*https?:\/\/gtfobins\.github\.io\/gtfobins\/|\[(?:~|#)\]\s*(?:(?:Default|Custom)\s+)?(?:SUID\s+Binaries|SUIDs)\b|Available information:[\s\S]{0,320}?Kernel version:\s*[2-6]\.\d|^\s*\[!\]\s*[a-z]{3}\d{3}\s+Can we\b)/im.test(headSample);
     for (var i = 0; i < lines.length && i < 600 && hits.length < 12; i++) {
       var raw = _stripAnsi(lines[i]), line = raw.trim();
       if (!line) continue;
@@ -309,7 +311,8 @@
         var sigBody = m[1].trim();
         if (!(raw.trim().charAt(0) === '#' && _isPlainEnglishCaptionLine(sigBody))) cand = sigBody;
       }
-      else {
+      else if (!isMultiSectionEnumBody
+          && !/\$(?:URL|LFILE|RFILE|LHOST|RHOST|PORT|LPORT|RPORT|TF|IP)\b|\$\{[A-Za-z_][A-Za-z0-9_]*\}|<\s*(?:target|url|ip|host|port|lhost|rhost)\s*>|-~>|https?:\/\/gtfobins\.github\.io/i.test(line)) {
         var first = line.split(/\s+/)[0], base = first.split('/').pop().toLowerCase();
         if (TOOL_HINTS[base] || TOOL_HINTS[first.toLowerCase()]) cand = line;
       }
@@ -335,6 +338,7 @@
     // bloodyAD `get writable` dump - a distinguishedName block followed by a bare WRITE/CREATE_CHILD attr.
     // Recovering it lets the coach mark the get-writable enumeration ran once you attach its 50k-line file.
     [/distinguishedName:[\s\S]{0,4000}?\n[A-Za-z][\w-]*:[ \t]*(?:WRITE|CREATE_CHILD)[ \t]*(?:\r?\n|$)/i, 'bloodyad get writable'],
+    [/(?:-~>\s*https?:\/\/gtfobins\.github\.io\/gtfobins\/|\[(?:~|#)\]\s*(?:(?:Default|Custom)\s+)?(?:SUID\s+Binaries|SUIDs)\b|\bSUID3NUM\b|\bSuidEnum\b|Available information:[\s\S]{0,320}?Kernel version:\s*[2-6]\.\d|^\s*\[!\]\s*[a-z]{3}\d{3}\s+Can we\b)/im, 'linpeas'],
   ];
   function contentSignatures(text) {
     var body = _stripProxychains(text), out = [];

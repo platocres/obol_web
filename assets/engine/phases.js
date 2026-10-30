@@ -34,7 +34,7 @@
     ['postgres.reachable', 'recon'], ['redis.reachable', 'recon'],
     ['telnet.reachable', 'recon'], ['snmp.reachable', 'recon'],
     ['nfs.reachable', 'recon'], ['rsync.reachable', 'recon'],
-    ['service.', 'recon'],
+    ['service.web_terminal', 'creds'], ['service.', 'recon'],
     ['dns.reachable', 'recon'], ['dns.zone', 'enum'], ['dns.email', 'enum'],
     ['dns.takeover', 'access'],
     ['ad.dc_candidate', 'enum'], ['ad.domain_known', 'enum'], ['ad.base_dn', 'enum'],

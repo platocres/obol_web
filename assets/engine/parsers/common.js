@@ -64,8 +64,8 @@
   C._SYSTEM_ID_RE = /\bnt authority\\system\b/i;
   C._WHOAMI_ID_RE = new RegExp('^' + NXC_ROW_PREFIX + '(?<id>(?:nt authority|nt service|iis apppool|window manager|font driver host)\\\\[A-Za-z0-9_.$-](?:[A-Za-z0-9_.$ -]{0,62}[A-Za-z0-9_.$-])?|[A-Za-z0-9][A-Za-z0-9.-]*\\\\[A-Za-z0-9._$-]{2,})\\s*$', 'im');
   C._EXEC_SUCCESS_RE = /\bexecuted command\b|\[\+\]\s+executed|Microsoft Windows \[Version|^[A-Za-z]:\\.*>/im;
-  C._LINUX_ID_RE = /\buid=(?<uid>\d+)\((?<user>[^)]+)\)\s+gid=\d+(?:\([^)]*\))?(?:\s+euid=(?<euid>\d+)\((?<euser>[^)]+)\))?(?:\s+egid=\d+(?:\([^)]*\))?)?(?:\s+groups=(?<groups>[^\r\n]+))?/i;
-  C._LINUX_ROOT_RE = /\b(?:e?uid)=0\(root\)/i;
+  C._LINUX_ID_RE = /(?:(?<![A-Za-z0-9_])|(?<=(?<![A-Za-z0-9_])[A-Za-z0-9_])(?=uid=\d+\([^)\r\n]+\)\s+gid=\d+\([^)\r\n]+\)))uid=(?<uid>\d+)\((?<user>[^)\r\n]+)\)\s+gid=\d+(?:\([^)\r\n]*\))?(?:\s+euid=(?<euid>\d+)\((?<euser>[^)\r\n]+)\))?(?:\s+egid=\d+(?:\([^)\r\n]*\))?)?(?:\s+groups=(?<groups>[^\r\n]+))?/i;
+  C._LINUX_ROOT_RE = /(?:(?<![A-Za-z0-9_])|(?<=(?<![A-Za-z0-9_])[A-Za-z0-9_])(?=uid=0\(root\)\s+gid=\d+\([^)\r\n]+\)))(?:e?uid)=0\(root\)/i;
   C._PENELOPE_GOT_RE = /got reverse shell from\s+(?<info>.+)/i;
   C._PENELOPE_UPGRADE_RE = /shell upgraded|spawned a pty|upgrading shell to pty/i;
   C._PENELOPE_SID_RE = /session\s*id\s*[:=]?\s*(?<sid>\w+)/i;
@@ -254,10 +254,12 @@
   C._WEAK_SERVICE_PERM_RE = /Service\s+"?([^"\r\n]+)"?\s+has\s+weak\s+permissions|(?<!(?:NT AUTHORITY\\SYSTEM|LocalSystem|\bSYSTEM|BUILTIN\\Administrators|\bAdministrators|(?:NT SERVICE\\)?TrustedInstaller|CREATOR OWNER|ALL (?:RESTRICTED )?APPLICATION PACKAGES|S-1-5-18|S-1-5-32-544|\b(?:Domain|Enterprise) Admins|\\Administrator)[ \t]*(?:[:(\[][^\r\n\]\):;,\\]*|[ \t]+))\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|CHANGE_CONFIG|WRITE_DAC|WRITE_OWNER)\b|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
   C._LOWPRIV_WRITE_ACE_RE = /(?:BUILTIN\\Users|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|Everyone|INTERACTIVE|\bUsers)\s*:\s*(?:\([A-Za-z,]+\))*\((?:[^)]*\b)?(?:F|M|W|WD|AD|GW|GA|Full|Modify|Write)\b[^)]*\)|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
   C._ANSI_RE = /\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][AB012])/g;
-  C._ID_LINE_RE = /\b(?:e?uid)=\d+\(/i;
+  C._ID_LINE_RE = /(?:(?<![A-Za-z0-9_])|(?<=(?<![A-Za-z0-9_])[A-Za-z0-9_])(?=uid=\d+\([^)\r\n]+\)\s+gid=\d+\([^)\r\n]+\)))(?:e?uid)=\d+\(/i;
   C._CVE_RE = /CVE-\d{4}-\d{3,7}/i;
   C._EXPLOIT_PROBABILITY_RE = /\b(?:\d{1,3}\s?%|highly probable|probable|exposure|vulnerable|exploitable)\b/i;
   C._KERNEL_EXPLOIT_NAMES = ['pwnkit', 'dirtycow', 'dirty cow', 'dirtypipe', 'dirty pipe', 'polkit', 'pkexec', 'baron samedit', 'overlayfs', 'af_packet', 'ptrace', 'netfilter', 'sequoia', 'looney tunables', 'gameoverlay', 'nftables', 'sudoedit', 'snapd', 'dirtysock'];
+  C._USERSPACE_EXPLOIT_NAMES = ['pwnkit', 'polkit', 'pkexec', 'baron samedit', 'sudoedit', 'looney tunables', 'snapd', 'dirtysock'];
+  C._USERSPACE_EXPLOIT_CVES_OR_NAMES_RE = /\b(?:CVE-2021-3156|baron\s+samedit|sudoedit|CVE-2021-4034|pwnkit|polkit|pkexec|CVE-2023-4911|looney\s+tunables|CVE-2019-7304|snapd|dirtysock)\b/i;
   C._KERNEL_EXPLOIT_NEGATION_RE = /\bnot\s+(?:vulnerable|exploitable|affected|applicable)\b|\bpatched\b|\bnot\s+a\s+match\b|\bn\/a\b/i;
   C._NXC_AUTH_RE = /^\s*(?<proto>SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(?<host>\S+)\s+\d+\s+\S+\s+\[\+\]\s+(?<auth>.+)$/im;
   C._AUTH_MATERIAL_RE = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$-]{2,}):(?<secret>[^\s()]+)/;
@@ -582,9 +584,23 @@
     var abi = m[4] !== undefined ? parseInt(m[4], 10) : null;
     var h = 'host:' + ws.target;
     if ((major === 2 && minor === 6 && patch >= 22) || (major === 2 && minor > 6) || major === 3 || (major === 4 && (minor < 8 || (minor === 8 && patch < 3)))) {
-      _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
-      _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2016-5195'], names: ['dirtycow'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
-      if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
+      var isEl7PatchedDirtyCow = false;
+      if (major === 3 && minor === 10 && patch === 0) {
+        var el7M = /\b3\.10\.0-(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\.\d+)*\.el7(?:_|\b|\.)/i.exec(ks);
+        if (el7M) {
+          var elA = parseInt(el7M[1], 10);
+          var elB = el7M[2] !== undefined ? parseInt(el7M[2], 10) : 0;
+          var elC = el7M[3] !== undefined ? parseInt(el7M[3], 10) : 0;
+          if (elA > 327 || (elA === 327 && (elB > 36 || (elB === 36 && elC >= 3)))) {
+            isEl7PatchedDirtyCow = true;
+          }
+        }
+      }
+      if (!isEl7PatchedDirtyCow) {
+        _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
+        _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2016-5195'], names: ['dirtycow'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
+        if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
+      }
     }
     if (major === 5 && (minor > 8 || (minor === 8 && patch >= 0)) && (minor < 16 || (minor === 16 && patch < 11))) {
       var isDistroPatchedDirtyPipe = (major === 5 && minor === 15 && patch === 0 && abi !== null && abi >= 25)
@@ -622,6 +638,7 @@
     password = (password || '').trim();
     if (!password || ['?', '*', '!', '!!', 'x', 'NP', '<password>', '{{password}}', '(null)', 'null', 'none'].indexOf(password) >= 0) return false;
     if (/^(?:\*+|!+|[-=_*]+|\(null\)|no\s+password\*+)$/i.test(password)) return false;
+    if (/\$\([^)\r\n]+\)|\$\{[^}\r\n]+\}|`[^`\r\n]+`/.test(password)) return false;
     var l = password.toLowerCase();
     if (l === '(null)' || l === 'null' || l.indexOf('status') === 0 || l.indexOf('recovered') === 0 || l.indexOf('progress') === 0 || l.indexOf('guess') === 0 || l.indexOf('no password') === 0) return false;
     return true;

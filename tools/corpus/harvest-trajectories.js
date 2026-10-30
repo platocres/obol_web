@@ -645,7 +645,7 @@ function inspectPreCommandTargetPrompt(turn, prePl, currentFacts) {
     return null;
   }
 
-  if (turn.kind === 'unix' && turn.host && !ATTACKER_HOST.test(turn.host) && !ATTACKER_HOST.test(turn.user || '')) {
+  if (turn.kind === 'unix' && ((turn.host && !ATTACKER_HOST.test(turn.host)) || turn.isRelCwdUnix) && !ATTACKER_HOST.test(turn.user || '')) {
     const pfx = stripPromptPrefixFromPreLine(pl, turn.rawCommand);
     if (!pfx) return null;
     const priv = turn.user === 'root' || /#\s*$/.test(pfx);
@@ -671,12 +671,17 @@ function inspectPreCommandTargetPrompt(turn, prePl, currentFacts) {
   return null;
 }
 
+const VPN_TUNNEL_SNIFFER_RE = /\b(?:tcpdump|tshark|wireshark)\b[^\r\n]*\s-i\s+(?:tun|tap|wg)\d+\b/i;
+
 function isAttackerTurn(turn, ctx) {
   if (!turn) return true;
   ctx = ctx || {};
   const facts = ctx.facts || null;
   const prePl = getPreCommandPromptLine(turn);
   if (turn.kind === 'powershell' || turn.kind === 'cmd') return false;
+  if (VPN_TUNNEL_SNIFFER_RE.test(String(turn.command || '')) && !(turn.host && !ATTACKER_HOST.test(turn.host))) {
+    return true;
+  }
   if (turn.hostHint === 'windows' || turn.hostHint === 'remote-windows' || /^remote-/i.test(turn.hostHint || '')) return false;
   if (turn.hostHint && !ATTACKER_HOST.test(turn.hostHint)) return false;
   if (turn.host && !ATTACKER_HOST.test(turn.host)) return false;
@@ -743,6 +748,9 @@ function isHousekeepingTurn(turn, ctx) {
   if ((/^(?:nc|ncat|netcat|penelope)\b/i.test(clean) && /\s-[A-Za-z]*l[A-Za-z]*\d*\b/.test(clean))
       || (/^socat\b/i.test(clean) && /\b(?:TCP\d*-LISTEN|UDP\d*-LISTEN|OPENSSL-LISTEN)\b/i.test(clean))) {
     return { housekeeping: true, reason: 'local_listener_wait' };
+  }
+  if (/^(?:sudo\s+)?(?:tcpdump|tshark|wireshark)\b[^\r\n]*\s-i\s+(?:tun|tap|wg)\d+\b/i.test(rawCmd) && isAttackerTurn(turn, ctx)) {
+    return { housekeeping: true, reason: 'attacker_callback_listener' };
   }
 
   if (isAttackerTurn(turn, ctx)) {
@@ -1025,8 +1033,17 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const pack = (OBOL.packs && typeof OBOL.packs.actions === 'function') ? OBOL.packs.actions() : [];
   if (!pack.length) return [];
 
-  const rawCmd = String((turn && turn.command) || '').trim();
-  if (!rawCmd) return [];
+  let rawCmd = String((turn && turn.command) || '').trim();
+  const rawTurnOut = String((turn && (turn.stdout || turn.output)) || '');
+  if (!rawCmd) {
+    const openPortRows = rawTurnOut.match(/^\s*\d+\/(?:tcp|udp)\s+open\b/gim) || [];
+    if (openPortRows.length >= 2) {
+      const hasVersionOrScripts = /^\s*\d+\/(?:tcp|udp)\s+open\s+\S+\s+\S+|^\s*\|[_ ]/m.test(rawTurnOut);
+      rawCmd = hasVersionOrScripts ? 'nmap -sC -sV' : 'nmap';
+    } else {
+      return [];
+    }
+  }
 
   const cleanCmd = stripCommandWrappers(rawCmd);
   const rawHeadBin = canonicalTool((cleanCmd.split(/\s+/)[0] || ''));
@@ -1096,9 +1113,19 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
-  // PG-2 B4: Disambiguate GTFOBins find -exec shell spawn vs find -name flag search
+  // PG-2 B4 / PG-3 B4: Disambiguate GTFOBins find -exec execution vs find -name flag search
   const isFindTool = cmdTool === 'find' || /^sudo\s+(?:-[A-Za-z]+\s+)*\S*find\b/i.test(cleanCmd);
-  const isFindExecShell = isFindTool && /\s-exec(?:dir)?\s+\S*(?:ba|da|z|k|a)?sh\b/i.test(cleanCmd);
+  const findExecM = isFindTool ? /(?:^|\s)-(?:exec|execdir|ok|okdir)\s+([^\r\n;|&]+)/i.exec(cleanCmd) : null;
+  let isFindExecShell = false;
+  if (findExecM) {
+    const execFirstTok = (String(findExecM[1] || '').trim().split(/\s+/)[0] || '').replace(/^['"]|['"]$/g, '');
+    const execBase = execFirstTok.split(/[\\/]/).pop().toLowerCase();
+    isFindExecShell = Boolean(
+      execBase &&
+      execBase !== '{}' &&
+      !/^(?:cat|head|tail|grep|egrep|fgrep|ls|file|stat|md5sum|sha\d+sum|strings|wc|echo|printf|rm|chmod|chown|cp|mv)$/.test(execBase)
+    );
+  }
   const findFlagNameM = (isFindTool && !isFindExecShell)
     ? /\s-i?name\s+['"]?\*?(local|user|root|proof)\.txt\*?['"]?(?:\s|;|2>|\||$)/i.exec(cleanCmd)
     : null;
@@ -1158,12 +1185,36 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       bump('stored-credentials', 22);
       bump('flag-hunt-windows', 20);
     }
-  } else if (onTarget && /^(?:type|Get-Content|gc|cat|more)\b/i.test(cleanCmd) && /\b(?:ConsoleHost_history|PSReadLine|unattend\.xml|sysprep|web\.config|confCons\.xml|\.ini\b|\.config\b)\b/i.test(cleanCmd)) {
-    excludedIds.add('flag-hunt-root-windows');
-    excludedIds.add('flag-hunt-windows');
-    bump('windows-loot-hunt', 25);
-    bump('stored-credentials', 24);
-    bump('windows-enum', 23);
+  } else if (onTarget && /^(?:type|Get-Content|gc|cat|more|less|head|tail)\b/i.test(cleanCmd) && (/\b(?:ConsoleHost_history|PSReadLine|unattend\.xml|sysprep|web\.config|confCons\.xml)\b/i.test(cleanCmd) || /\.(?:ini|conf|cfg|config)\b/i.test(cleanCmd))) {
+    const isWinSpecificArtifact = /\b(?:ConsoleHost_history|PSReadLine|unattend\.xml|sysprep|confCons\.xml)\b/i.test(cleanCmd)
+      || /^(?:type|Get-Content|gc)\b/i.test(cleanCmd)
+      || /[A-Za-z]:\\/i.test(cleanCmd);
+    const hasLinuxOsFamily = Boolean(
+      facts && (
+        facts.has('foothold.linux') ||
+        facts.has('access.root') ||
+        (typeof facts.values === 'function' && (facts.values('host.os_family') || []).some(v => String((v && (v.os || v.family || v.value)) || v || '').toLowerCase() === 'linux')) ||
+        (Array.isArray(facts.facts) && facts.facts.some(f => f && f.kind === 'host.os_family' && String((f.value && (f.value.os || f.value.family || f.value.value)) || f.value || '').toLowerCase() === 'linux'))
+      )
+    );
+    const isLinuxTarget = !isWinSpecificArtifact && (turn.kind === 'unix' || hasLinuxOsFamily) && !(facts && facts.has('foothold.windows'));
+    if (isLinuxTarget) {
+      excludedIds.add('flag-hunt-root-linux');
+      excludedIds.add('flag-hunt-linux');
+      excludedIds.add('flag-hunt-root-windows');
+      excludedIds.add('flag-hunt-windows');
+      excludedIds.add('stored-credentials');
+      excludedIds.add('windows-loot-hunt');
+      excludedIds.add('windows-enum');
+      bump('linux-loot-hunt', 25);
+      bump('linux-enum', 23);
+    } else {
+      excludedIds.add('flag-hunt-root-windows');
+      excludedIds.add('flag-hunt-windows');
+      bump('windows-loot-hunt', 25);
+      bump('stored-credentials', 24);
+      bump('windows-enum', 23);
+    }
   }
 
   // B2.4: Archive & KeePass cracking (zip2john/rar2john/7z2john, keepass2john, hashcat -m <mode>)
@@ -1407,6 +1458,40 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       bump('postgres-rce', 26);
     } else {
       bump('postgres-login', 25);
+      bump('validate-credential', 21);
+    }
+  }
+
+  if (cmdTool === 'redis-cli' || /^redis-cli\b/i.test(cleanCmd)) {
+    if (/\b(?:slaveof|replicaof|module\s+load|system\.exec|shell\.exec)\b/i.test(cleanCmd)) {
+      bump('redis-rogue-server-rce', 26);
+      bump('redis-rce', 26);
+      bump('redis-enum', 22);
+    } else if (/\b(?:config\s+set\s+(?:dir|dbfilename)|flushall|save)\b/i.test(cleanCmd)) {
+      bump('redis-rce', 25);
+      bump('redis-enum', 25);
+      bump('redis-rogue-server-rce', 23);
+    } else {
+      bump('redis-enum', 25);
+      bump('redis-unauth-check', 24);
+    }
+  } else if (/\bredis[-_](?:master|rogue|rce)\b/i.test(cleanCmd) || (/\bexp\.so\b|\bmodule\.so\b/i.test(cleanCmd) && /-p\s*6379\b|\b6379\b/.test(cleanCmd))) {
+    bump('redis-rogue-server-rce', 26);
+    bump('redis-rce', 26);
+  }
+
+  if (cmdTool === 'mysql' || cmdTool === 'mariadb' || /^(?:mysql|mariadb)\b/i.test(cleanCmd)) {
+    if (/\bINTO\s+(?:OUTFILE|DUMPFILE)\b/i.test(cleanCmd)) {
+      bump('mysql-outfile-rce', 26);
+      bump('mysql-loot', 22);
+    } else if (/\b(?:select\b[\s\S]*?\bfrom\b|show\s+(?:databases|tables)\b|describe\s+\S+|use\s+[A-Za-z0-9_]+)\b/i.test(cleanCmd)) {
+      bump('mysql-loot', 25);
+      bump('mysql-enum', 24);
+      bump('mysql-login', 22);
+    } else {
+      bump('mysql-login', 25);
+      bump('mysql-loot', 23);
+      bump('mysql-enum', 23);
       bump('validate-credential', 21);
     }
   }
@@ -1695,16 +1780,16 @@ function isInitialMultiPortReconFork(OBOL, session, facts, targetIp) {
   return nonNmapTargetActs === 0;
 }
 
-function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId) {
+function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId, initialCoach) {
   if (isFlagCollectionMove(card)) {
     OBOL.store.setChecklist(card.id, 'done');
-    return { method: 'flag_checklist_done', outcomes: ['done'] };
+    return { method: 'flag_checklist_done', outcomes: ['done'], lastCoach: null };
   }
 
   const cmds = card.commands || [];
   if (!cmds.length) {
     OBOL.store.setChecklist(card.id, 'done');
-    return { method: 'no_cmd_checklist_done', outcomes: ['done'] };
+    return { method: 'no_cmd_checklist_done', outcomes: ['done'], lastCoach: null };
   }
 
   const outcomes = [];
@@ -1714,8 +1799,10 @@ function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId
     : [];
   const activeCredentialCount = Array.isArray(activeCreds) ? activeCreds.length : 0;
   const maxAttempts = Math.min(256, Math.max(16, (cmds.length || 4) * Math.max(2, activeCredentialCount + 1)));
+  let freshCoach = initialCoach || null;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const coachNow = session.computeCoach(targetIp);
+    const coachNow = freshCoach || session.computeCoach(targetIp);
+    freshCoach = coachNow;
     const stillAtHead = coachNow.onFlow.findIndex(x => x.id === card.id);
     if (stillAtHead < 0) break;
     if (attempt > 0) {
@@ -1768,10 +1855,11 @@ function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId
       commandObj: cmdObj,
       resolvedContext: cmdCtx
     });
+    freshCoach = null;
     outcomes.push((turnRes && turnRes.outcome && turnRes.outcome.kind) || 'unknown');
   }
 
-  return { method: 'completed_negative_dry_probe', outcomes: outcomes };
+  return { method: 'completed_negative_dry_probe', outcomes: outcomes, lastCoach: freshCoach };
 }
 
 function evaluateClosedLoopReachability(session, candidates, turn, opts) {
@@ -1839,8 +1927,8 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
 
     try {
       const maxSteps = originalPreceding.length + 2;
+      let simCoach = coach;
       for (let step = 0; step < maxSteps; step++) {
-        const simCoach = session.computeCoach(targetIp);
         const simFlow = simCoach.onFlow || [];
         if (simFlow[0] && simFlow[0].id === targetMoveId) {
           return {
@@ -1868,8 +1956,8 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
           break;
         }
 
-        simulateRetireMoveInSandbox(OBOL, session, head, targetIp, targetMoveId);
-        const afterCoach = session.computeCoach(targetIp);
+        const retRes = simulateRetireMoveInSandbox(OBOL, session, head, targetIp, targetMoveId, simCoach);
+        const afterCoach = (retRes && retRes.lastCoach) || session.computeCoach(targetIp);
         const afterFlow = afterCoach.onFlow || [];
         const newHeadIdx = afterFlow.findIndex(m => m.id === head.id);
         const newTargetIdx = afterFlow.findIndex(m => m.id === targetMoveId);
@@ -1882,11 +1970,11 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
         }
 
         if (retiredPreceding.indexOf(head.id) < 0) retiredPreceding.push(head.id);
+        simCoach = afterCoach;
       }
 
       if (!stallBucket) {
-        const finalCoach = session.computeCoach(targetIp);
-        if (finalCoach.onFlow && finalCoach.onFlow[0] && finalCoach.onFlow[0].id === targetMoveId) {
+        if (simCoach.onFlow && simCoach.onFlow[0] && simCoach.onFlow[0].id === targetMoveId) {
           return {
             reachable: true,
             mode: 'closed_loop_promoted_top1',
@@ -1936,10 +2024,11 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
     const adGraphAlreadyCollected =
       producesList.indexOf('ad.graph.collected') >= 0 &&
       facts.has('ad.graph.collected');
+    const settledByEngine = Boolean(cand.move && typeof cand.move.settled === 'function' && cand.move.settled(facts));
     const actionSettled =
       allProducesSatisfied ||
       adGraphAlreadyCollected ||
-      (typeof cand.move.settled === 'function' && cand.move.settled(facts)) ||
+      settledByEngine ||
       (typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
     const isCandEligible = typeof cand.move.eligible === 'function' ? cand.move.eligible(facts) : true;
     const isCandObsolete = Boolean(cand.move && typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
@@ -1958,6 +2047,7 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
         matched_move_id: cand.id,
         initial_rank: null,
         retired_preceding: [],
+        settled_by_engine: settledByEngine,
         stall_bucket: null,
         detail: 'Operator repeated or continued a sub-command of an already settled or reached move'
       };
@@ -2029,17 +2119,21 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
   const prematurity = (OBOL.phases && typeof OBOL.phases.prematurity === 'function')
     ? OBOL.phases.prematurity(move, facts)
     : 0;
+  const settledByEngine = Boolean(move && typeof move.settled === 'function' && move.settled(facts));
 
   return {
     reachable: false,
-    mode: inComingUp ? 'stuck_in_coming_up' : 'excluded_from_ready_now',
+    mode: settledByEngine ? 'settled_predicate_drift' : (inComingUp ? 'stuck_in_coming_up' : 'excluded_from_ready_now'),
     matched_move_id: primary.id,
     initial_rank: null,
     prematurity: prematurity,
+    settled_by_engine: settledByEngine,
     stall_bucket: 'CLOSED_LOOP_RANK_STALL',
-    detail: inComingUp
-      ? ('Move eligible with runnable tokens, but held in Coming Up (prematurity=' + prematurity + ')')
-      : ('Move eligible with runnable tokens, but excluded from Ready Now (lens=' + (coach.lens || 'default') + ')')
+    detail: settledByEngine
+      ? ('SETTLED_PREDICATE_DRIFT: move.settled(facts) returned true while produces remained incomplete (lens=' + (coach.lens || 'default') + ')')
+      : (inComingUp
+          ? ('Move eligible with runnable tokens, but held in Coming Up (prematurity=' + prematurity + ')')
+          : ('Move eligible with runnable tokens, but excluded from Ready Now (lens=' + (coach.lens || 'default') + ')'))
   };
 }
 
@@ -2375,6 +2469,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
       session.ingestTurn({
         command: '',
         stdout: '',
+        promptLine: prePromptSeed.promptPrefix,
         followPrompt: prePromptSeed.promptPrefix,
         target: turnTarget,
         forceTarget: turnTarget,

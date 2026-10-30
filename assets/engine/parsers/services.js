@@ -119,10 +119,56 @@
   var _FTP_IIS_ROW_RE = /^\s*(?<date>\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}(?:AM|PM)\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
   var _FTP_UNIX_ROW_RE = /^\s*(?<perm>[-dlbcps](?:[-rwxsStT]{9})[@+.]?)\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+(?<name>\S.*?)\s*$/;
   var _FTP_WEBROOT_MARKER_RE = /^(?:iisstart\.(?:htm|html|png)|aspnet_client|web\.config|index\.(?:php|html?|aspx?|jsp)|default\.(?:aspx?|htm|html)|wp-config\.php|wwwroot|public_html|htdocs)$/i;
+  var _MAIL_220_BANNER_RE = /\b(?:E?SMTP|LMTP|Postfix|Exim|Sendmail|Haraka|Exchange\s+SMTP|Mail\s+(?:Server|Service|Transfer))\b/i;
+  var _FTP_VERBS_PRESENT_RE = /\b(?:PASV|EPSV|SYST|LIST|NLST|STOR|APPE|CWD|PWD|FEAT|RETR)\b|^\s*ftp>|^\s*(?:227|229|230|331)[ -]/im;
+
+  function _extract_ftp_stream_creds(text) {
+    var lines = String(text || '').split(/\r?\n/);
+    var pendingUser = '', creds = [], seen = {};
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      var um = /^\s*(?:(?:\d+\s+[\d.]+\s+\S+\s*(?:->|\u2192)\s*\S+\s+FTP\s+\d+\s+Request:\s*)|(?:[>C]:?\s*))?USER\s+([^\r\n]+?)\s*$/i.exec(ln);
+      if (um) {
+        var u = um[1].trim();
+        pendingUser = (!/^(?:anonymous|ftp|<[^>]+>)$/i.test(u)) ? u : '';
+        continue;
+      }
+      var pm = /^\s*(?:(?:\d+\s+[\d.]+\s+\S+\s*(?:->|\u2192)\s*\S+\s+FTP\s+\d+\s+Request:\s*)|(?:[>C]:?\s*))?PASS\s+([^\r\n]+?)\s*$/i.exec(ln);
+      if (pm && pendingUser) {
+        var p = pm[1].trim();
+        if (p && !/^(?:<[^>]+>|\*+|\[redacted\])$/i.test(p)) {
+          var key = pendingUser.toLowerCase() + ':' + p;
+          if (!seen[key]) {
+            seen[key] = true;
+            creds.push({ user: pendingUser, password: p });
+          }
+        }
+        pendingUser = '';
+      }
+    }
+    return creds;
+  }
+
+  function _emit_ftp_stream_creds(facts, ws, h, source, creds) {
+    var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+    creds.forEach(function (c) {
+      var cleanU = C._clean_username ? C._clean_username(c.user) : c.user;
+      if (!cleanU || !c.password) return;
+      if (C._valid_password && !C._valid_password(c.password)) return;
+      _add(facts, mkFact('credential.candidate', h, { user: cleanU, password: c.password, service: 'ftp', via: 'ftp-stream' }, S, source));
+      if (C._add_plaintext_credential) {
+        C._add_plaintext_credential(facts, ws, source, cleanU, c.password, '', 'ftp-stream', '');
+      } else {
+        _add(facts, mkFact('credential.plaintext', h, { user: cleanU, password: c.password, via: 'ftp-stream' }, S, source));
+        _add(facts, mkFact('credential.available', domScope, { user: cleanU, password: c.password, method: 'ftp-stream' }, S, source));
+      }
+    });
+  }
 
   function _parse_ftp_output(text, ws, command, source, facts) {
     var banners = [], loginSuccess = false;
     reAll(C._FTP_BANNER_RE, text).forEach(function (m) {
+      if (m.groups.banner && _MAIL_220_BANNER_RE.test(m.groups.banner)) return;
       var banner = (m.groups.banner || m.groups.login || '').trim();
       if (banner) banners.push(banner);
       if (m.groups.login) loginSuccess = true;
@@ -132,12 +178,56 @@
     var hasFtpUri = !!ftpUriM;
     var ftpUriPort = (ftpUriM && ftpUriM[1]) ? parseInt(ftpUriM[1], 10) : 0;
     if (ftpUriPort < 1 || ftpUriPort > 65535) ftpUriPort = 0;
+    var isExplicitFtpCmd = hasFtpUri || /(?:^|\s|[\/\\])(?:l?ftp|ncftp(?:ls|get|put)?)\b/i.test(cmdStr);
+    var isMailCmd = !isExplicitFtpCmd && (
+      /\b(?:smtps?|imaps?|pop3s?):\/\//i.test(cmdStr)
+      || /\b(?:swaks|smtp-user-enum)\b/i.test(cmdStr)
+      || /(?:^|\s)(?:nc|ncat|netcat|telnet|openssl)\b[^\r\n]*?(?:[:\s])(25|465|587|110|143|993|995)(?:\s|$)/i.test(cmdStr)
+    );
+    var isSmtpOnlyTranscript = !isExplicitFtpCmd
+      && /\b(?:EHLO|HELO|MAIL\s+FROM\s*:|RCPT\s+TO\s*:|ESMTP)\b/i.test(text)
+      && !_FTP_VERBS_PRESENT_RE.test(text);
+    if (isMailCmd || isSmtpOnlyTranscript) {
+      banners = [];
+      loginSuccess = false;
+    }
+
+    var h = 'host:' + ws.target;
+    var streamCreds = _extract_ftp_stream_creds(text);
+    var allKnownFacts = [].concat(facts || [], (ws && ws.facts) || [], (ws && ws.seedFacts) || []);
+    var hasKnownTargetFtp = allKnownFacts.some(function (f) {
+      return f && f.scope === h && (f.kind === 'port:21' || f.kind === 'ftp.reachable');
+    });
+    var isEmbeddedPcapStream = !cmdStr.trim() && !isExplicitFtpCmd && !hasKnownTargetFtp && (
+      /^\s*#\s*wireshark\b|\b[A-Za-z0-9_./-]+\.pcap(?:ng)?\b|\b(?:tcpdump|tshark|wireshark)\b/im.test(text)
+      || (/\bLinux version\s+\d+\.\d+/.test(text) && streamCreds.length > 0)
+    );
+    if (isEmbeddedPcapStream) {
+      if (streamCreds.length) _emit_ftp_stream_creds(facts, ws, h, source, streamCreds);
+      return;
+    }
+
     var hasFtpListingShape = reAll(/^\s*[-dlbcps][-rwxsStT]{9}[@+.]?\s+\d+\s+ftp\s+ftp\s+\d+\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+\S/gm, text).length >= 2;
-    var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
-    var hasFtpSession = !!(banners.length || loginSuccess || writeOk || hasFtpUri || hasFtpListingShape || /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|20|26|27|29|30)[ -]|331[ -]|Connected to\b)/im.test(text));
+    var writeOk = !isMailCmd && !isSmtpOnlyTranscript && reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
+    var hasFtpAnchorLine = !isMailCmd && !isSmtpOnlyTranscript && String(text || '').split(/\r?\n/).some(function (ln) {
+      if (/^\s*220[ -]/i.test(ln)) return !_MAIL_220_BANNER_RE.test(ln);
+      return /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(ln);
+    });
+    var hasFtpSession = !isMailCmd && !isSmtpOnlyTranscript && !!(banners.length || loginSuccess || writeOk || isExplicitFtpCmd || hasFtpListingShape || hasFtpAnchorLine);
     var ftpFiles = [], webrootMarkers = [];
+    var seenFtpAnchor = isExplicitFtpCmd || hasFtpListingShape;
+    var seenFtpPrompt = /^\s*ftp>/im.test(cmdStr);
     text.split(/\r?\n/).forEach(function (line) {
       if (!hasFtpSession) return;
+      if (/^\s*ftp>/i.test(line)) {
+        seenFtpPrompt = true;
+        seenFtpAnchor = true;
+      } else if (/^\s*220[ -]/i.test(line) && !_MAIL_220_BANNER_RE.test(line)) {
+        seenFtpAnchor = true;
+      } else if (/^\s*(?:1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(line)) {
+        seenFtpAnchor = true;
+      }
+      if (!seenFtpAnchor) return;
       var im = _FTP_IIS_ROW_RE.exec(line);
       if (im) {
         var inm = im.groups.name.trim();
@@ -152,6 +242,7 @@
       if (um) {
         var unm = um.groups.name.trim().replace(/[ \t]+->[ \t]+[^\r\n]*$/, '');
         if (unm && unm !== '.' && unm !== '..') {
+          if (/^\/(?:root|etc|proc|sys|dev)(?:\/|$)/.test(unm) && !seenFtpPrompt) return;
           ftpFiles.push({ share: '', path: unm, size: um.groups.size });
           var ubase = unm.split(/[\\/]/).pop();
           if (_FTP_WEBROOT_MARKER_RE.test(ubase)) webrootMarkers.push(ubase);
@@ -159,7 +250,6 @@
       }
     });
     if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length) return;
-    var h = 'host:' + ws.target;
     var ftpOsText = String(text || '')
       .replace(/^\s*Remote system type is [^\r\n]*$/gim, '')
       .replace(/^\s*215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
@@ -171,6 +261,7 @@
     var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
     var isAnon = /\banonymous\b/i.test(command) || anonInText;
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
+    if (loginSuccess && streamCreds.length) _emit_ftp_stream_creds(facts, ws, h, source, streamCreds);
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
     if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', (hasFtpUri && !banners.length) ? 'ftp-list' : 'ftp-listing', text, ws, source);
     if (webrootMarkers.length) {
@@ -568,7 +659,7 @@
     if (!t) return facts;
     var h = 'host:' + ((ws && ws.target) || 'unknown');
     var banners = [];
-    reAll(/^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?220[\s-]([^\r\n]*\bE?SMTP\b[^\r\n]*)/gim, t).forEach(function (m) {
+    reAll(/^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?220[\s-]([^\r\n]*\b(?:E?SMTP|LMTP|Postfix|Exim|Sendmail|Haraka|MailEnable)\b[^\r\n]*)/gim, t).forEach(function (m) {
       var b = (m[1] || '').trim();
       if (b) banners.push(b);
     });
@@ -582,6 +673,7 @@
       _add(facts, mkFact('mail.reachable', h, { tool: 'smtp-client' }, S, source));
     }
     if (banners.length) {
+      C._add_os_from_text(banners.join('\n'), ws, source, facts, 'smtp', 'medium', true);
       _add(facts, mkFact('smtp.banner', h, { banner: banners[0], banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
     }
     if (hasAuthContext && has235Success) {
@@ -589,6 +681,27 @@
       var credVal = { service: 'smtp', outcome: 'accepted' };
       if (user) credVal.user = user;
       _add(facts, mkFact('credential.validated', h, credVal, S, source));
+    }
+
+    var smtpEnumUsers = [];
+    reAll(/^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\s+([A-Za-z0-9_.+-]{1,64})\s+exists\s*$/gim, t).forEach(function (m) {
+      var eu = (m[1] || '').trim();
+      if (eu) smtpEnumUsers.push(eu);
+    });
+    var isSmtpUserEnumRun = /\bStarting\s+smtp-user-enum\b|#{5,}\s*Scan\s+completed\s*#{5,}/i.test(t)
+      || (/\bsmtp-user-enum\b/i.test(command) && /\b\d+\s+results?\b/i.test(t));
+    var hasSmtpConnErr = /\b(?:Connection\s+refused|Connection\s+timed\s+out|No\s+route\s+to\s+host|Network\s+is\s+unreachable|Can't\s+connect)\b/i.test(t);
+    if (smtpEnumUsers.length) {
+      var uniqSmtpUsers = C.uniqueSortedCI(smtpEnumUsers);
+      _add(facts, mkFact('smtp.reachable', h, { tool: 'smtp-user-enum' }, S, source));
+      _add(facts, mkFact('mail.reachable', h, { tool: 'smtp-user-enum' }, S, source));
+      _add(facts, mkFact('host.users', h, { users: uniqSmtpUsers, count: uniqSmtpUsers.length, via: 'smtp-vrfy' }, S, source));
+      uniqSmtpUsers.forEach(function (u) {
+        _add(facts, mkFact('credential.candidate', h, { user: u, username_only: true, service: 'smtp', via: 'smtp-user-enum' }, S, source));
+      });
+    } else if (isSmtpUserEnumRun && !hasSmtpConnErr) {
+      _add(facts, mkFact('smtp.reachable', h, { tool: 'smtp-user-enum' }, S, source));
+      _add(facts, mkFact('mail.reachable', h, { tool: 'smtp-user-enum' }, S, source));
     }
     return facts;
   }
@@ -717,6 +830,195 @@
   }
   C._parse_imap_output = _parse_imap_output;
 
+  var _POP3_BANNER_RE = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?\+OK\b(?<banner>[^\r\n]*?\b(?:POP3|Dovecot|Cyrus|Courier|qpopper|MailEnable|hMailServer|popa3d|ready)\b[^\r\n]*)$/im;
+  var _POP3_PUBLIC_MAIL_DOMAINS_RE = /^(?:localhost(?:\.localdomain)?|example\.(?:com|org|net)|gmail\.com|yahoo\.com|hotmail\.com|outlook\.com|live\.com|msn\.com|icloud\.com|aol\.com|protonmail\.com)$/i;
+  var _POP3_SYSTEM_MAILBOX_RE = /^(?:mailer-daemon|postmaster|noreply|no-reply|daemon|nobody)$/i;
+  C._POP3_BANNER_RE = _POP3_BANNER_RE;
+
+  function _inferPop3Port(command) {
+    var cmd = String(command || '');
+    if (!cmd) return 110;
+    var pop3sM = /\bpop3s:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?/i.exec(cmd);
+    if (pop3sM) {
+      var sp = pop3sM[1] ? parseInt(pop3sM[1], 10) : 995;
+      return (sp >= 1 && sp <= 65535) ? sp : 995;
+    }
+    var pop3M = /\bpop3:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?/i.exec(cmd);
+    if (pop3M) {
+      var pp = pop3M[1] ? parseInt(pop3M[1], 10) : 110;
+      return (pp >= 1 && pp <= 65535) ? pp : 110;
+    }
+    var connM = /(?:-connect|TCP4?:)\s*(?:\[[^\]]+\]|[^:\s'"]+):(\d{1,5})\b/i.exec(cmd);
+    if (connM) {
+      var cp = parseInt(connM[1], 10);
+      if (cp >= 1 && cp <= 65535) return cp;
+    }
+    var ncM = /\b(?:nc|ncat|netcat|telnet)\b[^\r\n]*?\s(\d{1,5})\s*$/i.exec(cmd);
+    if (ncM) {
+      var np = parseInt(ncM[1], 10);
+      if (np >= 1 && np <= 65535) return np;
+    }
+    return 110;
+  }
+
+  function _unpack_service_args(text, a1, a2, a3, a4, defaultSource) {
+    var ws, command = '', source = defaultSource, facts = [];
+    if (a1 && typeof a1 === 'object' && !Array.isArray(a1)) {
+      ws = a1;
+      if (Array.isArray(a4)) {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || defaultSource);
+        facts = a4;
+      } else if (Array.isArray(a3)) {
+        source = typeof a2 === 'string' ? a2 : defaultSource;
+        facts = a3;
+        command = typeof a4 === 'string' ? a4 : '';
+      } else {
+        command = typeof a2 === 'string' ? a2 : '';
+        source = typeof a3 === 'string' ? a3 : (command || defaultSource);
+      }
+    } else {
+      command = typeof a1 === 'string' ? a1 : '';
+      facts = Array.isArray(a2) ? a2 : [];
+      var ipM = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(command) || /\b(\d{1,3}(?:\.\d{1,3}){3})\b/.exec(String(text || ''));
+      ws = { target: ipM ? ipM[1] : 'unknown' };
+      source = command || defaultSource;
+    }
+    return { ws: ws, command: command, source: source, facts: facts };
+  }
+
+  function _parse_pop3_output(text, a1, a2, a3, a4) {
+    var unpacked = _unpack_service_args(text, a1, a2, a3, a4, 'pop3');
+    var ws = unpacked.ws, command = unpacked.command, source = unpacked.source, facts = unpacked.facts;
+    var t = String(text || '');
+    if (!t) return facts;
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var port = _inferPop3Port(command);
+    var banners = [];
+    reAll(_POP3_BANNER_RE, t).forEach(function (m) {
+      var b = ((m.groups && m.groups.banner) || m[0] || '').trim();
+      if (b) banners.push(b);
+    });
+    var isPop3Cmd = /\bpop3s?:\/\//i.test(command) || /(?:^|\s)(?:nc|ncat|netcat|telnet|openssl)\b[^\r\n]*?(?:[:\s])(?:110|995)(?:\s|$)/i.test(command);
+    var hasPop3Dialog = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?\+OK\b/im.test(t) && (
+      banners.length > 0
+      || isPop3Cmd
+      || /^\s*(?:(?:[-~*]{1,3}>|C:|>)\s*)?(?:USER\s+\S+|STAT|LIST|UIDL|RETR\s+\d+|TOP\s+\d+\s+\d+)\s*$/im.test(t)
+      || /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?\+OK\s+(?:Logged\s+in|Mailbox\s+locked|\d+\s+\d+\s*$)/im.test(t)
+    );
+    if (!hasPop3Dialog) return facts;
+
+    if (banners.length) {
+      C._add_os_from_text(banners.join('\n'), ws, source, facts, 'pop3', 'medium', true);
+    }
+    _add(facts, mkFact('mail.reachable', h, { protocol: 'pop3', port: port }, S, source));
+
+    var lines = t.split(/\r?\n/);
+    var pendingUser = '', pendingPass = '', stage = '';
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      var um = /^\s*(?:(?:[-~*]{1,3}>|C:|>)\s*)?USER\s+([^\r\n]+?)\s*$/i.exec(ln);
+      if (um) {
+        pendingUser = um[1].trim();
+        pendingPass = '';
+        stage = 'user';
+        continue;
+      }
+      var pm = /^\s*(?:(?:[-~*]{1,3}>|C:|>)\s*)?PASS\s+([^\r\n]+?)\s*$/i.exec(ln);
+      if (pm && pendingUser) {
+        pendingPass = pm[1].trim();
+        stage = 'pass';
+        continue;
+      }
+      var okM = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?\+OK\b([^\r\n]*)$/i.exec(ln);
+      if (okM && pendingUser) {
+        var okRest = (okM[1] || '').trim();
+        var isExplicitLoginOk = /\b(?:Logged\s+in|Mailbox\s+(?:locked|open)|maildrop\s+has|user\s+logged\s+in|authentication\s+succeeded)\b/i.test(okRest);
+        if (stage === 'pass' || (stage === 'user' && isExplicitLoginOk)) {
+          var cleanUser = C._clean_username ? C._clean_username(pendingUser) : pendingUser;
+          var credVal = { service: 'pop3', protocol: 'pop3', port: port, outcome: 'accepted' };
+          if (cleanUser || pendingUser) credVal.user = cleanUser || pendingUser;
+          _add(facts, mkFact('credential.validated', h, credVal, S, source));
+          if (cleanUser && pendingPass && !/^(?:<[^>]+>|\*+|\[redacted\])$/i.test(pendingPass) && (!C._valid_password || C._valid_password(pendingPass))) {
+            if (C._add_plaintext_credential) {
+              C._add_plaintext_credential(facts, ws, source, cleanUser, pendingPass, '', 'pop3-login', '');
+            } else {
+              var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+              _add(facts, mkFact('credential.plaintext', h, { user: cleanUser, password: pendingPass, via: 'pop3-login' }, S, source));
+              _add(facts, mkFact('credential.available', domScope, { user: cleanUser, password: pendingPass, method: 'pop3-login' }, S, source));
+            }
+          }
+          stage = 'authed';
+        }
+        continue;
+      }
+      var errM = /^\s*(?:(?:<[-~*]{1,3}|S:|<)\s*)?-ERR\b([^\r\n]*)$/i.exec(ln);
+      if (errM && (stage === 'pass' || /\b(?:AUTH|authentication|login|invalid|password|logon)\b/i.test(errM[1] || ''))) {
+        var failUser = pendingUser ? (C._clean_username ? C._clean_username(pendingUser) : pendingUser) : '';
+        var failVal = { service: 'pop3', protocol: 'pop3', port: port, reason: (errM[1] || '').trim() || 'Authentication failed' };
+        if (failUser) failVal.user = failUser;
+        _add(facts, mkFact('blocker.logon_failure', h, failVal, S, source));
+        stage = '';
+      }
+    }
+
+    var mailUsers = [], mailFqdns = {};
+    reAll(/^\s*(?:From|To|Cc|Delivered-To|Return-Path)\s*:\s*([^\r\n]+)$/gim, t).forEach(function (hm) {
+      reAll(/([A-Za-z0-9_.+-]{1,64})@([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+)/g, hm[1]).forEach(function (em) {
+        var mu = em[1].trim();
+        var md = em[2].replace(/\.$/, '').toLowerCase();
+        if (!md || _POP3_PUBLIC_MAIL_DOMAINS_RE.test(md)) return;
+        if ((C._IPV4_RE && C._IPV4_RE.test(md)) || /^\d+(?:\.\d+)+$/.test(md)) return;
+        mailFqdns[md] = true;
+        if (mu && !_POP3_SYSTEM_MAILBOX_RE.test(mu)) {
+          mailUsers.push(mu);
+        }
+      });
+    });
+    if (mailUsers.length) {
+      var uniqPopUsers = C.uniqueSortedCI(mailUsers);
+      _add(facts, mkFact('host.users', h, { users: uniqPopUsers, count: uniqPopUsers.length, via: 'pop3-mail' }, S, source));
+    }
+    C.uniqueSortedCI(Object.keys(mailFqdns)).forEach(function (fqdn) {
+      var parts = fqdn.split('.').filter(Boolean);
+      var fVal = { fqdn: fqdn };
+      if (parts.length > 2) {
+        fVal.hostname = parts[0];
+        fVal.domain = parts.slice(1).join('.');
+      } else {
+        fVal.domain = fqdn;
+      }
+      _add(facts, mkFact('host.fqdn', h, fVal, S, source));
+    });
+
+    return facts;
+  }
+  C._parse_pop3_output = _parse_pop3_output;
+
+  var _IDENT_STOCK_ACCOUNTS_RE = /^(?:root|nobody|nogroup|daemon|www-data|apache|nginx|postgres|mysql|redis|sshd|unknown|<unknown>|bin|sys|sync|mail|lp|uucp|proxy|backup|list|irc|gnats|systemd-network|systemd-resolve|messagebus|postfix|dovecot|ftp|smmsp|ntp|rpc|rpcuser|avahi|haldaemon|dbus)$/i;
+
+  function _parse_ident_output(text, a1, a2, a3, a4) {
+    var unpacked = _unpack_service_args(text, a1, a2, a3, a4, 'ident-user-enum');
+    var ws = unpacked.ws, source = unpacked.source, facts = unpacked.facts;
+    var t = String(text || '');
+    if (!t) return facts;
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var nonStock = [];
+    reAll(/^\s*(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})\s+([A-Za-z_][A-Za-z0-9_.-]{0,31}|<unknown>)\s*$/gm, t).forEach(function (m) {
+      var u = (m[3] || '').trim();
+      if (u && !_IDENT_STOCK_ACCOUNTS_RE.test(u)) {
+        nonStock.push(u);
+      }
+    });
+    if (nonStock.length) {
+      var uniqIdent = C.uniqueSortedCI(nonStock);
+      _add(facts, mkFact('host.users', h, { users: uniqIdent, count: uniqIdent.length, via: 'ident' }, S, source));
+    }
+    return facts;
+  }
+  C._parse_ident_output = _parse_ident_output;
+  C._parse_ident_user_enum = _parse_ident_output;
+
   OBOL.parsers = OBOL.parsers || {};
   OBOL.parsers.services = Object.assign(OBOL.parsers.services || {}, {
     _parse_http_metadata: _parse_http_metadata,
@@ -725,7 +1027,10 @@
     _parse_sqlite_dump: _parse_sqlite_dump,
     _parse_rsync_nfs: _parse_rsync_nfs,
     _parse_smtp_output: _parse_smtp_output,
-    _parse_imap_output: _parse_imap_output
+    _parse_imap_output: _parse_imap_output,
+    _parse_pop3_output: _parse_pop3_output,
+    _parse_ident_output: _parse_ident_output,
+    _parse_ident_user_enum: _parse_ident_output
   });
   if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.parsers.services; }
 

@@ -1574,9 +1574,11 @@
     // settled (already done), gated on a fact you have not earned, nor already tried in the current epoch.
     // A move whose every command still waits on an unearned fact or was already tried in this epoch drops
     // out of Ready Now rather than holding #1 with nothing left to run.
+    var activeEng = OBOL.store.active() || {};
+    var activeWsTokens = OBOL.workspace ? OBOL.workspace.tokens(activeEng) : {};
     function hasRunnableCommand(a) {
       var cmds = a.commands || []; if (!cmds.length) return true;
-      var eng = OBOL.store.active() || {};
+      var eng = activeEng;
       var loci = (OBOL.pack && OBOL.pack.moveCommandLoci) ? OBOL.pack.moveCommandLoci(a, facts) : null;
       for (var i = 0; i < cmds.length; i++) {
         var commandFacts = facts.forAction ? facts.forAction(a, cmds[i]) : facts;
@@ -1584,7 +1586,7 @@
         if (!OBOL.pack.commandIsEligible(cmds[i], commandFacts, a)) continue;
         if (OBOL.pack.commandSettled(cmds[i], commandFacts)) continue;
         if (!hasFoot && loci && loci.both && OBOL.pack.commandLocus && OBOL.pack.commandLocus(cmds[i]) === 'onhost') continue;
-        var filled = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) }, i);
+        var filled = OBOL.command.fillCommand(a, facts, { params: params, profile: eng.profile, workspace: activeWsTokens }, i);
         if (cmdGated(filled)) continue;
         if (cmdWasTriedInEpoch(a, cmds[i], filled, eng, curEpoch, params.target, commandFacts._resolvedContext)) continue;
         return true;

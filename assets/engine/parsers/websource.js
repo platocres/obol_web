@@ -88,9 +88,18 @@
     if (/^\s*(?:mysql|MariaDB\s*\[[^\]]*\]|postgres[-=#]*|sqlite3?|SQL(?:\s*\([^)]*\))?)\s*>/im.test(t)) return true;
     return false;
   }
+  var _HTML_VER_COMMENT_RE = /<!--\s*([A-Za-z][A-Za-z0-9_.-]{2,31})\s+version\s+(\d+\.\d+(?:\.\d+){0,2})(?:\s*\[(\d+)\])?/i;
+  var _HTML_VER_COMMENT_DENY_RE = /^(?:html|xhtml|xml|css|svg|doctype|template|theme|build|release|version|page|file|script|style|header|footer|jquery|bootstrap|modernizr|fontawesome)$/i;
+
   function _has_product_signature(text, ws, command) {
-    if (!text || !_ANY_PRODUCT_SIG_RE.test(text)) return false;
+    if (!text) return false;
+    var hasHtmlVer = text.indexOf('<!--') >= 0 && _HTML_VER_COMMENT_RE.test(text);
+    if (!hasHtmlVer && !_ANY_PRODUCT_SIG_RE.test(text)) return false;
     if (_is_outbound_http_request_only(text) || _is_unix_account_dump(text) || _is_sql_session_paste(text, ws, command)) return false;
+    if (hasHtmlVer) {
+      var hm = _HTML_VER_COMMENT_RE.exec(text);
+      if (hm && !_HTML_VER_COMMENT_DENY_RE.test(hm[1])) return true;
+    }
     return _PRODUCT_SIGS.some(function (r) { return reSearch(r[1], text || ''); });
   }
   C._has_product_signature = _has_product_signature;
@@ -98,6 +107,7 @@
   function _parse_product_signature(text, ws, command, source, facts) {
     if (Array.isArray(source) && !facts) { facts = source; source = command; command = ''; }
     if (_is_outbound_http_request_only(text) || _is_unix_account_dump(text) || _is_sql_session_paste(text, ws, command)) return;
+    var scope = _scope(ws), matchedKnown = false;
     for (var i = 0; i < _PRODUCT_SIGS.length; i++) {
       var tech = _PRODUCT_SIGS[i][0], sigRx = _PRODUCT_SIGS[i][1], verRx = _PRODUCT_SIGS[i][2], lead = _PRODUCT_SIGS[i][3];
       if (!reSearch(sigRx, text || '')) continue;
@@ -106,8 +116,22 @@
         var m = reSearch(verRx, text || '');
         if (m) value.version = m[1];
       }
-      _add(facts, mkFact('web.tech', _scope(ws), value, S, source));
-      return;
+      _add(facts, mkFact('web.tech', scope, value, S, source));
+      matchedKnown = true;
+      break;
+    }
+    if (text && text.indexOf('<!--') >= 0) {
+      var hvcM = _HTML_VER_COMMENT_RE.exec(text);
+      if (hvcM && !_HTML_VER_COMMENT_DENY_RE.test(hvcM[1])) {
+        var hvProd = hvcM[1], hvVer = hvcM[2];
+        if (!matchedKnown) {
+          var hvVal = { name: hvProd.toLowerCase(), product: hvProd, version: hvVer, via: 'html-comment' };
+          if (hvcM[3]) hvVal.build = hvcM[3];
+          _add(facts, mkFact('web.tech', scope, hvVal, S, source));
+        }
+        _add(facts, mkFact('service.version', scope, { service: 'http', product: hvProd, version: hvVer, via: 'html-comment' }, S, source));
+        _add(facts, mkFact('exploit.versioned_banner', scope, { product: hvProd, version: hvVer, search_query: hvProd + ' ' + hvVer, via: 'html-comment' }, S, source));
+      }
     }
   }
   C._parse_product_signature = _parse_product_signature;
@@ -188,6 +212,7 @@
   var _FIELD_CRED_RE = /\b(?<key>(?:sql|db|database|mysql|mssql|postgres|pg|jdbc|ftp|smtp|imap|redis|mongo|ldap|admin|root)_?(?:pass(?:word|wd)?|pwd))\s*=\s*["'](?<s>[^"']{3,})["']/gi;
   // A framework-config password field with a quoted literal value (PHP / WordPress define / .env).
   var _PHP_PW_RE = /(?:(?:public|private|protected|var|static)\s+)?\$(?<key>\w{0,64}(?:pass(?:word|wd)?|pwd))\s*=\s*["'](?<s>[^"']{3,})["']/gi;
+  var _PHP_SUBSCRIPT_PW_RE = /\$\w{1,48}(?:\[\s*(?:['"][A-Za-z0-9_.-]{1,48}['"]|\$\w+)\s*\])*?\[\s*['"](?<key>[A-Za-z0-9_.-]{0,48}?(?:pass(?:word|wd)?|pwd|[_.-]pass))['"]\s*\]\s*=\s*["'](?<s>[^"'\r\n]{3,128})["']/gi;
   var _DEFINE_PW_RE = /define\(\s*["'](?<key>\w{0,64}(?:pass(?:word|wd)?|pwd)\w{0,64})["']\s*,\s*["'](?<s>[^"']{3,})["']/gi;
   var _ENV_PW_RE = /^\s*(?:export\s+)?(?<key>[A-Z][A-Z0-9_]*(?:PASS(?:WORD|WD)?|PWD))\s*=\s*["']?(?<s>[^\s"'#]{3,})/gm;
   // A credential embedded in a connection URI: mysql://user:pass@host, ftp://u:p@host, etc.
@@ -215,7 +240,8 @@
 
   function _clean_secret(val) {
     val = (val || '').trim();
-    if (!val || _SECRET_DENY[val.toLowerCase()] || _PLACEHOLDER_RE.test(val) || /<%|%>/.test(val)) return '';
+    if (!val || val.indexOf('\x60') >= 0 || val.indexOf('$(') >= 0) return '';
+    if (_SECRET_DENY[val.toLowerCase()] || _PLACEHOLDER_RE.test(val) || /<%|%>/.test(val)) return '';
     return val;
   }
   C._clean_secret = _clean_secret;
@@ -227,6 +253,7 @@
   var _CODE_EXPR_SECRET_RE = /^(?:document\.|window\.|navigator\.|location\.|localStorage\.|sessionStorage\.|form\.|this\.|self\.|process\.env\b|os\.environ\b|os\.getenv\b|System\.getenv\b|\$_(?:POST|GET|REQUEST|COOKIE|SERVER|ENV|SESSION)\b|req\.(?:body|query|params|headers|cookies)\b|request\.(?:form|args|json|values|POST|GET|DATA)\b|[A-Za-z_$][A-Za-z0-9_$.]*\s*\(|[A-Za-z_$][A-Za-z0-9_$.]*\[|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)+\.(?:value|password|passwd|pwd|pass|text|innerText|textContent)\b)/i;
   function _valid_config_pw(val) {
     if (!/^[\x21-\x7e]{3,64}$/.test(val)) return false;
+    if (val.indexOf('\x60') >= 0 || val.indexOf('$(') >= 0) return false;
     if (_CFG_VAL_WORD_RE.test(val) || _CFG_VAL_TYPE_RE.test(val) || _CODE_EXPR_SECRET_RE.test(val)) return false;
     if (/^(?:\/|\.\.?\/|~\/|[A-Za-z]:\\|[a-z][a-z0-9+.\-]*:\/\/|[{[\]()}])/i.test(val)) return false;
     return true;
@@ -269,8 +296,8 @@
   C._has_labeled_creds = _has_labeled_creds;
 
   var _ASSOC_ARRAY_SECRET_HINT_RE = /['"](?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd|dbpass|secret|api[_-]?key|token)['"]\s*=>\s*['"][^'"\r\n]{1,128}['"]/i;
-  var _XML_ATTR_SECRET_HINT_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b[^>\r\n]{0,1024}?\b(?:(?:name|key|id)\s*=\s*["'][^"'\r\n]{0,128}(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)["']|(?:password|secret)\s*=\s*["'][^"'\r\n]{1,256}["'])[^>\r\n]{0,1024}\/?>/i;
-  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle):|define\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/i;
+  var _XML_ATTR_SECRET_HINT_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option|user|account|login|member|admin|server|resource)\b[^>\r\n]{0,1024}?\b(?:(?:name|key|id)\s*=\s*["'][^"'\r\n]{0,128}(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)["']|(?:password|passwd|pwd|secret)\s*=\s*["'][^"'\r\n]{1,256}["'])[^>\r\n]{0,1024}\/?>/i;
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle):|define\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]|\$(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:user(?:name)?|pass(?:word|wd)?|pwd)\s*=|\$\w{1,48}(?:\[[^\]]+\])*?\[\s*['"](?:(?:db|database|mysql|pg|postgres|mssql|sql)_?)?(?:user(?:name)?|pass(?:word|wd)?|pwd)['"]\s*\]\s*=|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/i;
 
   function _has_source_secret(text) {
     var t = text || '';
@@ -285,8 +312,8 @@
     var hasPrivKeyHint = t.indexOf('PRIVATE KEY-----') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
     var hasArrow = hasEq && t.indexOf('=>') >= 0;
     var hasXmlTag = t.indexOf('<') >= 0 && t.indexOf('>') >= 0;
-    var hasDbHint = hasArrow || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
-      || t.indexOf('jdbc:') >= 0 || t.indexOf('DB_') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+    var hasDbHint = hasArrow || hasDollar || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
+      || t.indexOf('jdbc:') >= 0 || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
       || (t.indexOf(';') >= 0 && (t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0));
     return !!((hasPrivKeyHint && reSearch(_PRIVKEY_RE, t))
       || (hasVcsHint && reSearch(_VCS_TOKEN_RE, t))
@@ -295,7 +322,7 @@
       || (hasEqOrColon && reSearch(_SECRET_KEY_RE, t))
       || (hasEqOrColon && reSearch(_CONFIG_PW_RE, t))
       || (hasEq && reSearch(_FIELD_CRED_RE, t))
-      || (hasDollar && hasEq && reSearch(_PHP_PW_RE, t))
+      || (hasDollar && hasEq && (reSearch(_PHP_PW_RE, t) || (t.indexOf('[') >= 0 && reSearch(_PHP_SUBSCRIPT_PW_RE, t))))
       || (hasParen && reSearch(_DEFINE_PW_RE, t))
       || (hasEq && reSearch(_ENV_PW_RE, t))
       || (hasEqOrColon && reSearch(_INI_PW_RE, t))
@@ -371,13 +398,17 @@
     var pwRxList = [];
     if (hasEqOrColon) pwRxList.push(_CONFIG_PW_RE);
     if (hasEq) pwRxList.push(_FIELD_CRED_RE);
-    if (hasDollar && hasEq) pwRxList.push(_PHP_PW_RE);
+    if (hasDollar && hasEq) {
+      pwRxList.push(_PHP_PW_RE);
+      if (t.indexOf('[') >= 0) pwRxList.push(_PHP_SUBSCRIPT_PW_RE);
+    }
     if (hasParen) pwRxList.push(_DEFINE_PW_RE);
     if (hasEq) pwRxList.push(_ENV_PW_RE);
     pwRxList.forEach(function (rx) {
       reAll(rx, t).forEach(function (m) {
         var s = _clean_secret(m.groups.s);
         if (!s || seen[s] || _CODE_EXPR_SECRET_RE.test(s)) return;
+        if ((rx === _CONFIG_PW_RE || rx === _ENV_PW_RE) && !/["']/.test(m[0]) && s.slice(-1) === ':') return;
         seen[s] = true;
         _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'source-disclosure' }, S, source));
       });
@@ -400,6 +431,7 @@
         || /(?:su:\s*Authentication failure|Sorry,\s*try again|Login incorrect|Cannot authenticate\b|doesn't have UF_DONT_REQUIRE_PREAUTH set|KDC_ERR_PREAUTH_FAILED|Permission denied\s*\(|STATUS_LOGON_FAILURE)/i.test(t);
       reAll(_INI_PW_RE, t).forEach(function (m) {
         if (isInteractiveAuthCli && /^[ \t]*(?:Enter[ \t]+)?Password[ \t]*:/i.test(m[0])) return;
+        if (!m.groups.dq && !m.groups.sq && m.groups.s && m.groups.s.slice(-1) === ':') return;
         var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
         if (!s || seen[s] || !_valid_config_pw(s)) return;
         seen[s] = true;
@@ -464,9 +496,9 @@
     if (t.indexOf('<') >= 0 && t.indexOf('>') >= 0) _parse_xml_attr_secrets(t, scope, source, facts, seen);
 
     // Hardcoded DB connector calls and full User+Password DSN strings in disclosed source
-    if (t.indexOf('=>') >= 0 || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
-        || t.indexOf('jdbc:') >= 0 || t.indexOf('DB_') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
-        || t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0) {
+    if (t.indexOf('=>') >= 0 || hasDollar || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
+        || t.indexOf('jdbc:') >= 0 || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+        || t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0 || t.indexOf('PASS') >= 0) {
       _parse_source_db_connectors(t, scope, source, facts, seen);
     }
   }
@@ -573,7 +605,7 @@
     if (t.indexOf('<') < 0 || t.indexOf('>') < 0 || !_XML_ATTR_SECRET_HINT_RE.test(t)) return;
     if (/<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(t)) return;
     var lines = t.split(/\r?\n/);
-    var tagRe = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b([^>\r\n]*)\/?>/gi;
+    var tagRe = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option|user|account|login|member|admin|server|resource)\b([^>\r\n]*)\/?>/gi;
     var userKeyRe = /^(?:(?:[A-Za-z0-9_.-]+[_.-])?(?:user(?:name)?|login|account|uid)|dbuser)$/i;
     var secKeyRe = /^(?:(?:[A-Za-z0-9_.-]+[_.-])?(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)|dbpass|apikey)$/i;
     var secKeyDenyRe = /(?:policy|reset|forgot|change|update|min|max|age|len|expir|prompt|file|path|url|uri|algo)/i;
@@ -743,14 +775,102 @@
       _emitConcreteSourceCred(facts, scope, source, seen, pgU, pgP, 'postgres', 'pg_connect', true, extra);
     });
 
-    // 5. Paired PHP define('DB_*USER*', '...') + define('DB_*PASS*', '...') constants
-    var defUserM = /\bdefine\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
-    var defPassM = /\bdefine\s*\(\s*['"](?:DB_[A-Z0-9_]*PASS(?:WORD)?|[A-Z0-9_]*DB_PASS(?:WORD)?)['"]\s*,\s*['"]([^'"\r\n]{3,96})['"]\s*\)/i.exec(t);
+    // 5. Paired PHP define('DB_*USER*', '...') + define('DB_*PASS*', '...') constants (underscore optional)
+    var defUserM = /\bdefine\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
+    var defPassM = /\bdefine\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*PASS(?:WORD|WD)?|(?:DB|MYSQL|PG|MSSQL|SQL)_?PWD|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?(?:PASS(?:WORD|WD)?|PWD))['"]\s*,\s*['"]([^'"\r\n]{3,96})['"]\s*\)/i.exec(t);
     if (defUserM && defPassM) {
-      var defDbM = /\bdefine\s*\(\s*['"](?:DB_NAME|DB_DATABASE|[A-Z0-9_]*DB_NAME)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
-      var defSvc = /\b(?:pgsql|postgres|pg_connect)\b/i.test(t) ? 'postgres' : 'mysql';
-      var defExtra = defDbM ? { dbname: defDbM[1].trim() } : {};
+      var defDbM = /\bdefine\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?(?:NAME|DATABASE)|[A-Z0-9_]*DB_?NAME)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
+      var defHostM = /\bdefine\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?(?:HOST|SERVER)|[A-Z0-9_]*DB_?HOST)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]\s*\)/i.exec(t);
+      var defSvc = /\b(?:pgsql|postgres|pg_connect)\b/i.test(t) ? 'postgres' : (/\b(?:mssql|sqlsrv)\b/i.test(t) ? 'mssql' : 'mysql');
+      var defExtra = {};
+      if (defDbM) defExtra.dbname = defDbM[1].trim();
+      if (defHostM) defExtra.host = defHostM[1].trim();
       _emitConcreteSourceCred(facts, scope, source, seen, defUserM[1].trim(), defPassM[1].trim(), defSvc, 'php-define', true, defExtra);
+    }
+
+    // 5b. Paired scalar PHP DB variables ($db_user / $db_password, $dbuser / $dbpass, $mysql_user / $mysql_pass)
+    var phpVarKeys = Object.keys(phpVars);
+    if (phpVarKeys.length >= 2) {
+      var pvUser = '', pvPass = '', pvDb = '', pvHost = '', pvSvcHint = '';
+      for (var pvi = 0; pvi < phpVarKeys.length; pvi++) {
+        var pvk = phpVarKeys[pvi];
+        if (!pvUser && /^(?:(?:db|database|mysql|pg|postgres|mssql|sql)_?user(?:name)?|user(?:name)?_?(?:db|database|mysql|pg))$/i.test(pvk)) {
+          pvUser = phpVars[pvk];
+          if (/pg|postgres/i.test(pvk)) pvSvcHint = 'postgres';
+          else if (/mssql/i.test(pvk)) pvSvcHint = 'mssql';
+        } else if (!pvPass && /^(?:(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:pass(?:word|wd)?|pwd)|(?:pass(?:word|wd)?|pwd)_?(?:db|database|mysql|pg))$/i.test(pvk)) {
+          pvPass = phpVars[pvk];
+          if (!pvSvcHint && /pg|postgres/i.test(pvk)) pvSvcHint = 'postgres';
+          else if (!pvSvcHint && /mssql/i.test(pvk)) pvSvcHint = 'mssql';
+        } else if (!pvDb && /^(?:(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:name|db)|dbname)$/i.test(pvk)) {
+          pvDb = phpVars[pvk];
+        } else if (!pvHost && /^(?:(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:host|server)|dbhost)$/i.test(pvk)) {
+          pvHost = phpVars[pvk];
+        }
+      }
+      if (pvUser && pvPass) {
+        var pvSvc = pvSvcHint || (/\b(?:pgsql|postgres|pg_connect)\b/i.test(t) ? 'postgres' : (/\b(?:mssql|sqlsrv)\b/i.test(t) ? 'mssql' : 'mysql'));
+        var pvExtra = {};
+        if (pvDb) pvExtra.dbname = pvDb.trim();
+        if (pvHost) pvExtra.host = pvHost.trim();
+        _emitConcreteSourceCred(facts, scope, source, seen, pvUser, pvPass, pvSvc, 'php-db-vars', true, pvExtra);
+      }
+    }
+
+    // 5c. Paired subscripted PHP config array assignments ($conf['mysql_user'] + $conf['mysql_pass'], $cfg['Servers'][$i]['password'])
+    if (t.indexOf('$') >= 0 && t.indexOf('[') >= 0) {
+      var subLines = t.split(/\r?\n/);
+      var subAssignRe = /\$([A-Za-z_][A-Za-z0-9_]{0,47})((?:\[\s*(?:['"][A-Za-z0-9_.-]{1,48}['"]|\$[A-Za-z_][A-Za-z0-9_]*)\s*\])*)\[\s*['"]([A-Za-z0-9_.-]{1,48})['"]\s*\]\s*=\s*['"]([^'"\r\n]{1,128})['"]/g;
+      var subUserKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:user(?:name)?|login|uname)|dbuser|mysqluser|pguser)$/i;
+      var subPassKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd)|dbpass|mysqlpass|pgpass)$/i;
+      var subDbKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:db(?:name)?|database)|mysql_?database)$/i;
+      var subHostKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:host|server)|dbhost|mysql_?host)$/i;
+      var subUsers = [], subPasses = [], subDbs = [], subHosts = [];
+      for (var sli = 0; sli < subLines.length; sli++) {
+        var sln = subLines[sli];
+        if (!sln || sln.indexOf('$') < 0 || sln.indexOf('[') < 0 || sln.length > 2048) continue;
+        subAssignRe.lastIndex = 0;
+        var sm;
+        while ((sm = subAssignRe.exec(sln)) !== null) {
+          var sRoot = sm[1], sChain = sm[2] || '', sKey = sm[3], sVal = sm[4];
+          if (subUserKeyRe.test(sKey)) {
+            var su = _valid_assoc_or_xml_user(sVal);
+            if (su) subUsers.push({ line: sli, root: sRoot, chain: sChain, key: sKey, user: su });
+          } else if (subPassKeyRe.test(sKey)) {
+            var sp = _valid_assoc_or_xml_secret(sVal, 3);
+            if (sp) subPasses.push({ line: sli, root: sRoot, chain: sChain, key: sKey, secret: sp });
+          } else if (subDbKeyRe.test(sKey)) {
+            subDbs.push({ line: sli, root: sRoot, val: sVal.trim() });
+          } else if (subHostKeyRe.test(sKey)) {
+            subHosts.push({ line: sli, root: sRoot, val: sVal.trim() });
+          }
+        }
+      }
+      for (var spi = 0; spi < subPasses.length; spi++) {
+        var spItem = subPasses[spi], bestSubU = null, bestSubDist = 999;
+        for (var sui = 0; sui < subUsers.length; sui++) {
+          if (subUsers[sui].root !== spItem.root) continue;
+          var sDist = Math.abs(subUsers[sui].line - spItem.line);
+          if (sDist <= 15 && sDist < bestSubDist) {
+            bestSubDist = sDist;
+            bestSubU = subUsers[sui];
+          }
+        }
+        if (bestSubU) {
+          var subHintStr = [spItem.root, spItem.chain, spItem.key, bestSubU.key].join(' ');
+          var isSubDb = /(?:db|database|mysql|mariadb|pgsql|postgres|mssql|sqlsrv|servers)/i.test(subHintStr)
+            || subDbs.some(function (d) { return d.root === spItem.root && Math.abs(d.line - spItem.line) <= 15; });
+          var subSvc = /(?:pgsql|postgres)/i.test(subHintStr) ? 'postgres' : (/(?:mssql|sqlsrv)/i.test(subHintStr) ? 'mssql' : 'mysql');
+          var subExtra = {};
+          for (var sdi = 0; sdi < subDbs.length; sdi++) {
+            if (subDbs[sdi].root === spItem.root && Math.abs(subDbs[sdi].line - spItem.line) <= 15) { subExtra.dbname = subDbs[sdi].val; break; }
+          }
+          for (var shi = 0; shi < subHosts.length; shi++) {
+            if (subHosts[shi].root === spItem.root && Math.abs(subHosts[shi].line - spItem.line) <= 15) { subExtra.host = subHosts[shi].val; break; }
+          }
+          _emitConcreteSourceCred(facts, scope, source, seen, bestSubU.user, spItem.secret, isSubDb ? subSvc : 'app', 'php-array-config', isSubDb, subExtra);
+        }
+      }
     }
 
     // 6. Java JDBC: DriverManager.getConnection(...), Properties.put/setProperty("user", ...)+("password", ...), and jdbc:...user=...&password=...

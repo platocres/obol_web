@@ -437,14 +437,37 @@
       }
     }
 
+    // (6e2) 7-Zip (p7zip) @listfile warning arbitrary-file-read disclosure shape
+    if ((text.indexOf('Scan WARNINGS') >= 0 || text.indexOf('7-Zip') >= 0)
+        && /Scan WARNINGS for files and folders:/i.test(text)
+        && /(?:7-Zip\b[^\r\n]*Copyright|Scan WARNINGS:\s*\d+)/i.test(text)) {
+      var szBlockM = /Scan WARNINGS for files and folders:\s*\r?\n([\s\S]{1,4096}?)(?:\r?\n-{4,}|\r?\nScan WARNINGS:\s*\d+|$)/i.exec(text);
+      if (szBlockM && szBlockM[1]) {
+        var szLines = szBlockM[1].split(/\r?\n/);
+        var szRowRe = /^[ \t]*(.+?)[ \t]+:[ \t]+(?:No more files|Cannot find the file|System ERROR|The system cannot find)[^\r\n]*$/i;
+        var szSeen = Object.create(null);
+        for (var szi = 0; szi < szLines.length; szi++) {
+          var szM = szRowRe.exec(szLines[szi]);
+          if (!szM) continue;
+          var szTok = szM[1].trim();
+          if (!szTok || szTok.length < 3 || szTok.length > 128) continue;
+          if (/^(?:\/|\.\.?\/|~\/|@|[A-Za-z]:\\)/.test(szTok) || /\.(?:zip|7z|tar|gz|tgz|rar)$/i.test(szTok)) continue;
+          if (!/^[\x21-\x7e]+$/.test(szTok) || szSeen[szTok]) continue;
+          szSeen[szTok] = 1;
+          _add(facts, mkFact('credential.candidate', h, { secret: szTok, password: szTok, kind: '7zip_listfile_leak', via: 'shape' }, S, source));
+        }
+      }
+    }
+
     // (6f) Command-less 10-field BSD master.passwd, standard 7-field /etc/passwd, and LinPEAS box-drawing section slices
     if (!hasKind(facts, 'loot.shadow') && text.indexOf(':$') >= 0 && C._parse_shadow_file
         && /^[a-z_][a-z0-9_.-]{0,31}:\$(?:1|2[abxy]|5|6|y)\$[^\s:]+:\d+:\d+:[^:\r\n]*:\d+:\d+:[^:\r\n]*:\/[^\s:]*:[^\r\n]*$/im.test(text)) {
       C._parse_shadow_file(text, '', ws, source, facts);
     }
-    if (!isHttpShape && text.indexOf(':/') >= 0 && !/\b(?:curl|wget|httpie|burp|ffuf|wfuzz|sqlmap)\b|\bhttps?:\/\//i.test(source || '')) {
+    if (text.indexOf(':/') >= 0) {
+      var isHttpPasswdSrc = isHttpShape || /\b(?:curl|wget|httpie|burp|ffuf|wfuzz|sqlmap)\b|\bhttps?:\/\//i.test(source || '');
       var pwRowRe = /^[ \t]*([a-z_][a-z0-9_.-]{0,31}):([^:\r\n]*):(\d+):(\d+):([^:\r\n]*):(\/[^\s:]*):(\/[^\s:\r\n]*)[ \t]*$/gm;
-      var pwRows = [], pwHumans = [], pwSeen = Object.create(null), mPw;
+      var pwRows = [], pwHumans = [], pwLoginUsers = [], pwSeen = Object.create(null), pwLoginSeen = Object.create(null), mPw;
       while ((mPw = pwRowRe.exec(text)) !== null) {
         var pwUser = mPw[1], pwUid = parseInt(mPw[3], 10), pwShell = mPw[7];
         pwRows.push(mPw[0].trim());
@@ -453,17 +476,27 @@
           pwSeen[pwUser] = 1;
           pwHumans.push(pwUser);
         }
+        if (pwUid >= 1000 && pwUid < 65534 && hasLoginShell && !pwLoginSeen[pwUser]) {
+          pwLoginSeen[pwUser] = 1;
+          pwLoginUsers.push(pwUser);
+        }
       }
-      if (pwRows.length >= 3) {
+      if (pwRows.length >= (isHttpPasswdSrc ? 5 : 3)) {
         if (C._add_os_observation) {
           C._add_os_observation(facts, ws, source, 'linux', pwRows[0], 'high', 'passwd-shape', true);
         }
         if (!hasKind(facts, 'config.review')) {
           _add(facts, mkFact('config.review', h, { kind: 'passwd', users: pwHumans, count: pwRows.length, via: 'shape' }, S, source));
         }
+        if (pwLoginUsers.length && !hasKind(facts, 'host.users')) {
+          _add(facts, mkFact('host.users', h, { users: pwLoginUsers, count: pwLoginUsers.length, via: 'passwd-shape' }, S, source));
+        }
       }
     }
-    if (/(?:\u2554\u2550+\u2563|\u2560\u2550+\u2563)\s*[A-Za-z]/.test(text)
+    if ((/(?:\u2554\u2550+\u2563|\u2560\u2550+\u2563|^\s*\u2550+\u2563)\s*[A-Za-z]/m.test(text)
+        || /Available information:[\s\S]{0,320}?Kernel version:\s*[2-6]\.\d|Possible Exploits:\s*(?:\r?\n)+\s*\[\+\]\s*\[CVE-\d{4}-\d+\]/i.test(text)
+        || /^\s*\[!\]\s*[a-z]{3}\d{3}\s+Can we\b/im.test(text)
+        || /-~>\s*https?:\/\/gtfobins\.github\.io\/gtfobins\/|\[(?:~|#)\]\s*(?:Default|Custom)\s+SUID\s+Binaries\b/i.test(text))
         && !(C._looks_like_winpeas && C._looks_like_winpeas(text))
         && C._parse_privesc_output) {
       C._parse_privesc_output('linux-enum', text, ws, '', source, facts);
@@ -800,6 +833,9 @@
     var cleanText = /\b(?:closed|filtered|unfiltered|open\|filtered)\b/i.test(text)
       ? text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
       : text;
+    if (/Analyzing\s+Cacti\s+Files/i.test(cleanText)) {
+      cleanText = cleanText.replace(/^[^\r\n]*\bAnalyzing\s+Cacti\s+Files\b[^\r\n]*$/gim, '');
+    }
     if (/^\s*\[\-\]\s*(?:this instance is patched|[^\r\n]*\bis not vulnerable\b|exploit failed|target is patched)\b/im.test(cleanText)
         && !/\buid=\d+\(|NT AUTHORITY\\SYSTEM|^\s*\[\+\]\s*(?:shell|pwned|vulnerable|success|executed|command)\b/im.test(cleanText)) {
       return;
@@ -812,6 +848,10 @@
       var s = VULN_SIGS[i];
       if (isLocalPathListingCmd && s.fact !== 'vuln.screen_suid' && s.fact !== 'vuln.chkrootkit') continue;
       if (!s.re.test(cleanText) || hasKind(facts, s.fact)) continue;
+      if (s.fact === 'vuln.cacti'
+          && !/CVE-2022-46169|\bCacti\s+v?\d+\.\d+|<title>[^<]*\bCacti\b|Set-Cookie:[^\r\n]*\bCacti\b|\/cacti\/(?:index|remote_agent|auth_login|graph_view)\.php\b|\b\d+\/tcp\s+open[^\r\n]*\bcacti\b|HTTPServer\[[^\]]*cacti|\bWhatWeb\b[^\r\n]*\bCacti\b|^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b[\s\S]{0,4000}?\bCacti\b/im.test(cleanText)) {
+        continue;
+      }
       if (s.fact === 'vuln.shellshock' && !_SHELLSHOCK_EXPLICIT_RE.test(cleanText)) {
         if (isNmapContext) continue;
         var cgiLines = cleanText.split(/\r?\n/);

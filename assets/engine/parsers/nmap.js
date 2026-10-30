@@ -15,7 +15,8 @@
   var _PORTLINE_RE = /^\s*\d+\/(?:tcp|udp)\b/i;
   var _NON_HTTP_WIRE_SVC_RE = /^(?:mongodb|mysql|mysqlx|postgresql|redis|memcached|amqp|jdwp|msrpc|ms-sql-s|netbios-ssn|microsoft-ds|ssh|ftp|smtp|pop3|imap|ldap|ldaps|kerberos(?:-sec)?|rdp|ms-wbt-server|vnc)$/i;
   var _DRIVER_PORT_HTTP_DIAG_RE = /trying to access MongoDB over HTTP on the native driver port/i;
-  var _HTTP_SERVER_VER_RE = /^(Apache httpd|Apache Tomcat(?:\/Coyote JSP engine)?|nginx|Microsoft IIS httpd|Jetty|lighttpd|Caddy|Cherokee|MiniServ|Werkzeug|gunicorn|TornadoServer|SimpleHTTPServer)\s+v?([0-9][0-9A-Za-z._-]*)/i;
+  var _HTTP_SERVER_VER_RE = /^(Apache httpd|Apache Tomcat(?:\/Coyote JSP engine)?|nginx|Microsoft IIS httpd|Jetty|lighttpd|Caddy|Cherokee|Cheroot(?: httpd)?|WEBrick(?: httpd)?|MiniServ|Werkzeug|gunicorn|TornadoServer|SimpleHTTPServer|CUPS|ttyd|ShellInABox|Waitress|Thin|Puma|Cowboy)\s+v?([0-9][0-9A-Za-z._-]*)/i;
+  var _IDENT_STOCK_USERS_RE = /^(?:root|nobody|nogroup|daemon|www-data|apache|nginx|postgres|mysql|redis|sshd|unknown|bin|sys|sync|mail|lp|uucp|proxy|backup|list|irc|gnats|systemd-network|systemd-resolve|messagebus|postfix|dovecot|ftp|smmsp|ntp|rpc|rpcuser|avahi|haldaemon|dbus)$/i;
 
   function _extract_http_ls_paths(blockText) {
     if (!/http-ls:/i.test(blockText || '')) return [];
@@ -181,6 +182,7 @@
 
   function _parse_service_reachability(port, proto, service, ws, source, facts) {
     var sl = service.toLowerCase();
+    var slClean = sl.replace(/\?$/, '');
     var value = { port: port, protocol: proto };
     if (service) value.service = service;
     var h = 'host:' + ws.target;
@@ -192,7 +194,7 @@
     var promoteWin = !hasLinuxOs;
     if (port === 21 || sl === 'ftp') _add(facts, mkFact('ftp.reachable', h, value, S, source));
     if (port === 22 || sl === 'ssh') _add(facts, mkFact('ssh.reachable', h, value, S, source));
-    if (port === 23 || sl === 'telnet') _add(facts, mkFact('telnet.reachable', h, value, S, source));
+    if (slClean === 'telnet' || (port === 23 && (!slClean || slClean === 'unknown' || slClean === 'tcpwrapped'))) _add(facts, mkFact('telnet.reachable', h, value, S, source));
     if ([512, 513, 514].indexOf(port) >= 0 || sl === 'exec' || sl === 'login' || sl === 'shell') _add(facts, mkFact('rservices.reachable', h, value, S, source));
     if (port >= 6000 && port <= 6009 && (sl.indexOf('x11') >= 0 || port === 6000)) _add(facts, mkFact('x11.reachable', h, value, S, source));
     if ([25, 465, 587].indexOf(port) >= 0 || sl.indexOf('smtp') >= 0) {
@@ -236,6 +238,10 @@
       _add(facts, mkFact('redis.reachable', h, value, S, source));
       _add(facts, mkFact('db.reachable', h, value, S, source));
     }
+    if (port === 27017 || slClean.indexOf('mongo') >= 0) {
+      _add(facts, mkFact('mongo.reachable', h, value, S, source));
+      _add(facts, mkFact('db.reachable', h, value, S, source));
+    }
     if (port === 3389 || sl === 'ms-wbt-server' || sl.indexOf('rdp') >= 0) {
       _add(facts, mkFact('rdp.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'rdp'), 'medium', 'nmap', promoteWin);
@@ -251,7 +257,7 @@
     }
     // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM/HTTP.sys, not a browsable web app, so it must not
     // mint http.reachable (nmap labels it "http") or it would unlock the web-exploit moves on an AD box.
-    if (!isWinrmPort && !isHttpApiPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http' || sl === 'http-proxy' || sl === 'http-alt' || sl === 'https-alt' || sl === 'ssl/http-proxy' || sl === 'ssl/http-alt')) _add(facts, mkFact('http.reachable', h, value, S, source));
+    if (!isWinrmPort && !isHttpApiPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || slClean === 'http' || slClean === 'https' || slClean === 'ssl/http' || slClean === 'http-proxy' || slClean === 'http-alt' || slClean === 'https-alt' || slClean === 'ssl/http-proxy' || slClean === 'ssl/http-alt' || slClean === 'ipp' || slClean === 'ssl/ipp')) _add(facts, mkFact('http.reachable', h, value, S, source));
   }
   C._parse_service_reachability = _parse_service_reachability;
 
@@ -354,6 +360,13 @@
       if (!/\.[a-z][a-z0-9-]*$/i.test(candHost)) return;
       fqdns[candHost] = true;
     });
+    reAll(/(?:(?<![A-Za-z0-9-])smtp-commands:\s*|<script\b[^>]*\bid=["']smtp-commands["'][^>]*\boutput=["']\s*)([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+)\b/gi, text).forEach(function (m) {
+      var candHost = (m[1] || '').replace(/\.$/, '').toLowerCase();
+      if (!candHost || C._IPV4_RE.test(candHost) || /^\d+(?:\.\d+)+$/.test(candHost)) return;
+      if (/^localhost(?:\.|$)/i.test(candHost)) return;
+      if (!/\.[a-z][a-z0-9-]*$/i.test(candHost)) return;
+      fqdns[candHost] = true;
+    });
     C.uniqueSortedCI(Object.keys(fqdns)).forEach(function (fqdn) {
       var parts = fqdn.split('.').filter(Boolean);
       var value = { fqdn: fqdn };
@@ -361,6 +374,17 @@
       if (parts.length > 1) value.domain = parts.slice(1).join('.');
       _add(facts, mkFact('host.fqdn', h, value, S, source));
     });
+    if (/auth-owners/i.test(text)) {
+      var identUsers = [];
+      reAll(/(?:(?<![A-Za-z0-9-])auth-owners:\s*|<script\b[^>]*\bid=["']auth-owners["'][^>]*\boutput=["']\s*)([A-Za-z_][A-Za-z0-9_.-]{0,31})\b/gi, text).forEach(function (m) {
+        var u = (m[1] || '').trim();
+        if (u && !_IDENT_STOCK_USERS_RE.test(u)) identUsers.push(u);
+      });
+      if (identUsers.length) {
+        var uniqIdent = C.uniqueSortedCI(identUsers);
+        _add(facts, mkFact('host.users', h, { users: uniqIdent, count: uniqIdent.length, via: 'ident' }, S, source));
+      }
+    }
     var signing = reSearch(C._NMAP_SMB_SIGNING_RE, text);
     if (signing) {
       var mode = (signing.groups && signing.groups.mode || '').toLowerCase();
@@ -451,6 +475,66 @@
     if (headers.length) _add(facts, mkFact('web.server', h, { headers: headers.slice(0, 10) }, S, source));
     var generators = C.uniqueSortedCI(reAll(C._NMAP_HTTP_GENERATOR_RE, text).map(function (m) { return m.groups.generator.trim(); }).filter(Boolean));
     var tech = generators.map(function (item) { return { name: 'generator', value: item }; });
+    var termSurfaces = headers.concat(titles);
+    facts.forEach(function (f) {
+      if (f && /^port:\d+$/.test(f.kind) && f.value) {
+        if (f.value.version) termSurfaces.push(String(f.value.version));
+        if (f.value.service) termSurfaces.push(String(f.value.service));
+      }
+    });
+    var seenWebTerms = {};
+    termSurfaces.forEach(function (surf) {
+      var tm = /\b(ttyd|wetty|gotty|shellinabox)\b/i.exec(surf || '');
+      if (tm) seenWebTerms[tm[1].toLowerCase()] = true;
+    });
+    Object.keys(seenWebTerms).sort().forEach(function (prod) {
+      tech.push({ name: 'web-terminal', value: prod });
+      _add(facts, mkFact('service.web_terminal', h, { product: prod, tool: 'nmap' }, S, source));
+    });
+    if (/\/exhibitor\/v1\/ui\//i.test(text) || redirects.some(function (r) { return /\/exhibitor\/v1\/ui\//i.test(r); }) || titles.some(function (tItem) { return /\/exhibitor\/v1\/ui\//i.test(tItem); })) {
+      tech.push({ name: 'console', value: 'exhibitor' });
+    }
+    if (/http-auth/i.test(text)) {
+      var authBlocks = [];
+      var curAuth = [];
+      String(text).split(/\r?\n/).forEach(function (ln) {
+        if (/^[ \t]*\|[_ ]?[ \t]*http-auth:/i.test(ln)) {
+          if (curAuth.length) authBlocks.push(curAuth.join('\n'));
+          curAuth = [ln];
+        } else if (curAuth.length) {
+          if (/^[ \t]*\|/.test(ln) && !/^[ \t]*\|(?:_[ \t]?|[ \t])[a-z0-9]+-[a-z0-9_.-]+:(?!\/\/)/i.test(ln)) {
+            curAuth.push(ln);
+            if (/^[ \t]*\|_/.test(ln)) { authBlocks.push(curAuth.join('\n')); curAuth = []; }
+          } else {
+            authBlocks.push(curAuth.join('\n'));
+            curAuth = [];
+          }
+        }
+      });
+      if (curAuth.length) authBlocks.push(curAuth.join('\n'));
+      if (/<script\b/i.test(text)) {
+        (String(text).match(/<script\b[^>]*>/gi) || []).forEach(function (el) {
+          if (/^http-auth$/i.test(xmlAttr(el, 'id'))) {
+            var out = xmlAttr(el, 'output');
+            if (out) authBlocks.push(out);
+          }
+        });
+      }
+      var seenRealms = {};
+      authBlocks.forEach(function (blk) {
+        reAll(/\bBasic\s+realm\s*=\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\r\n]+))/gi, blk).forEach(function (rm) {
+          var rawRealm = (rm[1] || rm[2] || rm[3] || '').replace(/\\x0[dDaA]/g, '').replace(/^["']|["']$/g, '').trim();
+          if (!rawRealm || seenRealms[rawRealm.toLowerCase()]) return;
+          seenRealms[rawRealm.toLowerCase()] = true;
+          _add(facts, mkFact('http.headers', h, {
+            scheme: 'Basic',
+            realm: rawRealm,
+            headers: { 'www-authenticate': 'Basic realm="' + rawRealm + '"' },
+            tool: 'nmap'
+          }, S, source));
+        });
+      });
+    }
     if (redirects.length) _add(facts, mkFact('http.redirect', h, { locations: redirects.slice(0, 10) }, S, source));
     if (tech.length) _add(facts, mkFact('web.tech', h, { items: tech.slice(0, 20), tool: 'nmap' }, S, source));
     generators.forEach(function (gen) {
@@ -463,9 +547,12 @@
         }, S, source));
       }
     });
-    if (reSearch(C._NMAP_FTP_ANON_RE, text)) {
+    if (reSearch(C._NMAP_FTP_ANON_RE, text) || (/ftp-anon/i.test(text) && /\[NSE:\s*writeable\]/i.test(text))) {
       _add(facts, mkFact('ftp.reachable', h, { tool: 'nmap' }, S, source));
       _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'nmap' }, S, source));
+      if (/\[NSE:\s*writeable\]/i.test(text)) {
+        _add(facts, mkFact('ftp.anon_write', h, { tool: 'nmap', anonymous: true }, S, source));
+      }
     }
     if (text.toLowerCase().indexOf('ssh-hostkey') >= 0) {
       var keys = reAll(C._NMAP_SSH_HOSTKEY_RE, text).map(function (m) {
@@ -768,7 +855,7 @@
       }
 
       if (value.protocol === 'tcp' && [5985, 5986, 47001].indexOf(value.port) < 0 &&
-          /^(?:http|https|ssl[\/-]http|http-alt|http-proxy)$/i.test(rawSvcClean) && value.version) {
+          /^(?:http|https|ssl[\/-]http|http-alt|http-proxy|https-alt|ssl[\/-]http-alt|ssl[\/-]http-proxy|ipp|ssl[\/-]ipp)$/i.test(rawSvcClean) && value.version) {
         var httpVerM = _HTTP_SERVER_VER_RE.exec(value.version);
         if (httpVerM && !C._isNonWebServerHeader(value.version)) {
           _add(facts, mkFact('service.version', h, {

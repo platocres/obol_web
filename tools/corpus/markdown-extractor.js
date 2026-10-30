@@ -69,13 +69,13 @@ const TOOL_HEAD_TOKENS = new Set((
   'certutil powershell pwsh cmd msfvenom msfconsole searchsploit linpeas winpeas pspy pspy32 pspy64 pspy32s pspy64s ' +
   'perl ruby chisel ligolo-ng ligolo-proxy ligolo-agent agent socat nc ncat netcat rlwrap ' +
   'mssqlclient mysql psql sqlite3 redis-cli xfreerdp xfreerdp3 rdesktop ' +
-  'diskshadow robocopy borg restic swaks tshark tcpdump mimikatz seatbelt certify ' +
+  'diskshadow robocopy borg restic swaks smtp-user-enum tshark tcpdump mimikatz seatbelt certify ' +
   'printspoofer godpotato juicypotato sweetpotato lazagne'
 ).split(/\s+/));
 
 const EXPLOIT_DB_HEADER_RE = /(?:^\s*(?:#|\/\/|\/\*+|\*|--|;)\s*Exploit\s+Title\s*:|Exploit\s+Database|\bExploit-DB\b|^\s*(?:#|\/\/|\*)\s*CVE\s*:\s*CVE-\d{4}-\d+)/im;
 
-const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|\u2563\s+[A-Z][A-Za-z0-9 &/_-]{2,}|-{3,}\s*[A-Z][A-Za-z0-9_-]*Enum\s*-{3,}\s*$|FolderPerms\s*:)/;
+const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|\s*\u2550*\u2563\s+[A-Z][A-Za-z0-9 &/_?-]{2,}|-{3,}\s*[A-Z][A-Za-z0-9_-]*Enum\s*-{3,}\s*$|FolderPerms\s*:)/;
 
 const PEM_ENVELOPE_RE = /-----BEGIN [A-Z0-9 ]+-----[\s\S]+?-----END [A-Z0-9 ]+-----/;
 
@@ -117,6 +117,7 @@ const TERMINAL_CONTENT_SIG_RE = new RegExp([
   'Nmap scan report for',
   'Starting Nmap',
   '^PORT\\s+STATE\\s+SERVICE',
+  '^Host script results:[ \\t]*\\r?\\n\\|(?:_|\\s)+[a-z0-9-]+(?:-[a-z0-9]+)*:',
   '^\\d+\\/(?:tcp|udp)\\s+(?:open|filtered|closed)\\s+\\S+',
   '^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\\s+\\d{1,3}(?:\\.\\d{1,3}){3}\\s+\\d+\\s+\\S+\\s+\\[[-*+]\\]',
   '^\\S+:\\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::',
@@ -135,7 +136,9 @@ const TERMINAL_CONTENT_SIG_RE = new RegExp([
   '^\\s*\\[\\*\\]\\s+\\S+',
   '^\\/[A-Za-z0-9._\\/-]+\\s+\\(Status:\\s*\\d{3}\\)',
   '^[0-9a-fA-F]{32}\\s*$',
-  '^[ \\t]*\\u2563\\s+[A-Z][A-Za-z0-9 &/_-]{2,}',
+  '^[ \\t]*\\u2550*\\u2563\\s+[A-Z][A-Za-z0-9 &/_?-]{2,}',
+  '^\\d{4}\\/\\d{2}\\/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2}\\s+CMD:\\s*UID=\\d+\\s+PID=\\d+\\s*\\|',
+  '%(?:26|3[Ff])(?:user(?:name)?|login|email|pass(?:word|wd)?|token|secret)(?:=|%3[Dd])|(?:^|[?&]|%26)(?:user(?:name)?|login|email|pass(?:word|wd)?|token|secret)(?:%3[Dd][A-Za-z0-9_.%+-]{1,128}|=[A-Za-z0-9_.+-]{0,64}%(?:2[0-9A-Fa-f]|3[A-Fa-f]|40))',
   '^root:[x*!]:0:0:[^:\\r\\n]*:\\/[^:\\r\\n]*:\\/',
   '^\\s*\\/\\S+\\s+(?:=\\s*)?cap_[a-z0-9_,]+[+=][eip]+(?:\\s+cap_[a-z0-9_,]+[+=][eip]+)*\\s*$',
   '^\\s*\\[\\s*[#~+!*$-]\\s*\\]\\s*(?:Custom\\s+|Interesting\\s+|Default\\s+)?SUID\\s+Binaries\\b',
@@ -186,8 +189,10 @@ const PROMPTS = [
   { kind: 'cmd', hostHint: 'windows', re: /^\s*[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]*\\)*[^\\/:*?"<>|\r\n]*>\s?(.*)$/ },
   { kind: 'cmd', hostHint: 'windows', isWinOpenSsh: true, re: /^\s*(?:([A-Za-z0-9_.-]+)\\)?([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)\s+([A-Za-z]:\\[^*?<>|\r\n]*)>\s?(.*)$/ },
   { kind: 'unix', isBracketUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?\[([\w.-]+)@([\w.-]+)(?:[:\s][^\]]*)?\]\s*[#$%]\s?(.*)$/ },
-  { kind: 'unix', isAtUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?([\w.-]+)@([\w.-]+)(?::[^\s#$%]*)?\s*[#$%](?:\s+(.*)|\s*)$/ },
+  { kind: 'unix', isAtUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?([\w.-]+)@([\w.-]+)(?::[^\s#$%]*|\s+(?:~(?:\/[^\s#$%]*)?|\/[^\s#$%]*))?\s*[#$%](?:\s+(.*)|\s*)$/ },
   { kind: 'unix', re: /^\s*(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*[#$]\s?(.*)$/ },
+  { kind: 'unix', hostHint: 'remote-linux', isPseudoShell: true, re: /^\s*([A-Za-z0-9_.-]{2,32}-shell)\s*[#$]\s+(\S.*)$/ },
+  { kind: 'unix', hostHint: 'remote-linux', isRelCwdUnix: true, re: /^\s*([a-z_][a-z0-9_-]{1,31})\/([A-Za-z0-9_./-]{1,64})\s*[#$]\s+((?:\/(?:usr|bin|sbin|opt|tmp|etc|var|home|root)\/\S+|\.\/\S+|sudo\b|su\b|id\b|whoami\b|uname\b|hostname\b|cat\b|head\b|tail\b|grep\b|ls\b|cd\b|pwd\b|wget\b|curl\b|find\b|chmod\b|chown\b|cp\b|mv\b|rm\b|echo\b|python3?\b|perl\b|php\b|ruby\b|nc\b|ncat\b|bash\b|sh\b).*)$/ },
   { kind: 'ftp', tool: 'ftp', prefix: 'ftp', re: /^\s*ftp>\s*(.*)$/i },
   { kind: 'repl', tool: 'smbclient', prefix: 'smbclient', re: /^\s*smb:\s*\\[^>]*>\s*(.*)$/i },
   { kind: 'repl', tool: 'mysql', prefix: 'mysql', re: /^\s*(?:mysql|MariaDB\s*\[[^\]]*\])\s*>\s*(.*)$/i },
@@ -230,9 +235,7 @@ function isBareHashCommand(cand) {
   // Pure TitleCase or ALL-CAPS words on a bare `#` line are English prose annotations, not shell commands
   if (/^[A-Z][a-z]+$/.test(firstRaw) || /^[A-Z]{2,}:?$/.test(firstRaw)) return false;
 
-  if (/^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(firstRaw)) {
-    return true;
-  }
+  const isRootedOrRelFirst = /^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(firstRaw);
   if (/^(?:Invoke|Get|Set|New|Import|Start|Stop|Enter|Add|Enable|Disable|Test|Select|Out|ConvertTo|ConvertFrom)-[A-Za-z0-9]+$/i.test(firstRaw)) {
     return true;
   }
@@ -241,19 +244,42 @@ function isBareHashCommand(cand) {
   if (!unwrapped) unwrapped = s;
   const headTok = (unwrapped.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
   if (!headTok || headTok.endsWith(':')) return false;
-  if (/^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(headTok)) {
-    return true;
-  }
+  const isRootedOrRelExec = isRootedOrRelFirst || /^(?:\.\.?\/|~\/|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root|dev|shm|mnt|srv|proc)\/)/.test(headTok);
 
   const base = headTok.split(/[\\/]/).pop().toLowerCase();
   const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
   const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
-  const knownHead = TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem)
+  const knownHead = isRootedOrRelExec
+    || TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem)
     || CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem) || CAPTION_CLI_EXTRA_BINS.has(archStem)
     || BARE_HASH_SHELL_BUILTINS.has(base) || /^impacket-[a-z0-9_-]+$/i.test(base);
   if (!knownHead) return false;
 
   const toks = unwrapped.split(/\s+/).filter(Boolean);
+  const unquoted = unwrapped.replace(/'[^']*'|"[^"]*"/g, ' ');
+  const restAfterHead = unwrapped.slice(headTok.length).trim();
+  if (/^(?:ba|da|z|k|a)?sh$/.test(base) && toks.length >= 2) {
+    if (!/^-[A-Za-z0-9-]/.test(toks[1]) && !/[\/\\><|;&$`'"]/.test(restAfterHead)
+        && !/\.(?:sh|bash|zsh|ksh|rc|profile)\b/i.test(toks[1]) && /^[A-Za-z]{2,15}$/.test(toks[1])) {
+      return false;
+    }
+  }
+  if (/\s[A-Za-z]{2,}\?\s*$/.test(unquoted) && !/https?:\/\/|\?[A-Za-z0-9_.-]+=/.test(unwrapped)) {
+    return false;
+  }
+  if (base === 'hostname' && toks.length >= 3 && !toks.slice(1).some(t => /^-[A-Za-z0-9-]/.test(t)) && !/[|><$`]/.test(unwrapped)) {
+    return false;
+  }
+  if (base === 'use') {
+    if (toks.length > 3 || (toks.length >= 3 && /\b(?:to|for|from|with|into|on|in|and|then|as|the|a|an)\b/i.test(unquoted))) {
+      return false;
+    }
+  }
+  if (base === 'source') {
+    if (toks.length < 2 || (!/[\/\\.~$]/.test(toks[1]) && !/\.(?:sh|bash|zsh|env|rc|conf|cfg|profile|ini)\b/i.test(toks[1]))) {
+      return false;
+    }
+  }
   if (base === 'set' && toks.length > 1 && !toks[1].startsWith('-') && unwrapped.indexOf('=') < 0) {
     return false;
   }
@@ -267,7 +293,6 @@ function isBareHashCommand(cand) {
       && toks.slice(1).every(w => /^[A-Za-z]{2,}[,.:;!?]?$/.test(w) && !/\.[A-Za-z0-9]{1,5}$/.test(w))) {
     return false;
   }
-  const unquoted = unwrapped.replace(/'[^']*'|"[^"]*"/g, ' ');
   if (/(?:(?:^|\s)>\s*(?:wget|curl|chmod|chown|invoke|run|execute|upload|download|transfer|nc|ncat|netcat|bash|sh|python3?|perl|ruby|php|gcc|compile|privesc|escalate|exploit|trigger|shell|root|enum|crack|login|ssh)\b[^>\r\n]*){2,}/i.test(unquoted)) {
     return false;
   }
@@ -285,21 +310,46 @@ function isBareHashCommand(cand) {
   return true;
 }
 
+function peelNestedPrompts(res, opts) {
+  if (!res || res.isHash || res.isDollar) return res;
+  if (res.kind !== 'unix' && res.kind !== 'powershell' && res.kind !== 'cmd') return res;
+  const depth = (opts && opts._peelDepth) || 0;
+  if (depth >= 2 || !res.rawCommand) return res;
+  const origRawCommand = res.rawCommand;
+  let cur = res;
+  for (let d = depth; d < 2 && cur.rawCommand; d++) {
+    const inner = matchPromptLine(cur.rawCommand, { suppressBareHash: true, _peelDepth: 2 });
+    if (!inner || inner.isHash || inner.isDollar) break;
+    if (inner.kind !== 'unix' && inner.kind !== 'powershell' && inner.kind !== 'cmd') break;
+    cur = Object.assign({}, cur, {
+      rawCommand: inner.rawCommand,
+      command: inner.command,
+      kind: inner.kind || cur.kind,
+      user: inner.user || cur.user,
+      host: inner.host || cur.host,
+      hostHint: inner.hostHint || cur.hostHint,
+      legacyUnpeeledRawCommand: origRawCommand
+    });
+  }
+  return cur;
+}
+
 function matchPromptLine(rawLine, opts) {
   const line = stripAnsi(rawLine);
   for (const p of PROMPTS) {
     const m = line.match(p.re);
     if (!m) continue;
     if (p.isHash) {
-      if (opts && opts.suppressBareHash) continue;
       const cand = (m[1] || '').trim();
+      const isExplicitPtySpawn = /\bpty\.spawn\s*\(/i.test(cand);
+      if (opts && opts.suppressBareHash && !isExplicitPtySpawn) continue;
       if (!opts || !opts.legacyBareHash) {
         if (!isBareHashCommand(cand)) continue;
       }
     }
     if (p.isZshOneLine) {
       const raw = (m[4] || '').trim();
-      return {
+      return peelNestedPrompts({
         tool: '',
         rawCommand: raw,
         command: raw,
@@ -311,11 +361,11 @@ function matchPromptLine(rawLine, opts) {
         isHash: false,
         isDollar: false,
         promptLine: rawLine
-      };
+      }, opts);
     }
     if (p.isZshBotOnly) {
       const raw = (m[2] || '').trim();
-      return {
+      return peelNestedPrompts({
         tool: '',
         rawCommand: raw,
         command: raw,
@@ -327,14 +377,14 @@ function matchPromptLine(rawLine, opts) {
         isHash: false,
         isDollar: false,
         promptLine: rawLine
-      };
+      }, opts);
     }
     if (p.isWinOpenSsh) {
       const dom = m[1] || '';
       const usr = m[2] || '';
       const hst = m[3] || '';
       const raw = (m[5] || '').trim();
-      return {
+      return peelNestedPrompts({
         tool: '',
         rawCommand: raw,
         command: raw,
@@ -346,11 +396,11 @@ function matchPromptLine(rawLine, opts) {
         isHash: false,
         isDollar: false,
         promptLine: rawLine
-      };
+      }, opts);
     }
     if (p.isBracketUnix || p.isAtUnix) {
       const raw = (m[3] || '').trim();
-      return {
+      return peelNestedPrompts({
         tool: '',
         rawCommand: raw,
         command: raw,
@@ -361,10 +411,42 @@ function matchPromptLine(rawLine, opts) {
         isHash: false,
         isDollar: false,
         promptLine: rawLine
+      }, opts);
+    }
+    if (p.isPseudoShell) {
+      const raw = (m[2] || '').trim();
+      return {
+        tool: '',
+        rawCommand: raw,
+        command: raw,
+        kind: 'unix',
+        user: '',
+        host: '',
+        hostHint: 'remote-linux',
+        isPseudoShell: true,
+        isHash: false,
+        isDollar: false,
+        promptLine: rawLine
       };
     }
+    if (p.isRelCwdUnix) {
+      const raw = (m[3] || '').trim();
+      return peelNestedPrompts({
+        tool: '',
+        rawCommand: raw,
+        command: raw,
+        kind: 'unix',
+        user: m[1] || '',
+        host: '',
+        hostHint: 'remote-linux',
+        isRelCwdUnix: true,
+        isHash: false,
+        isDollar: false,
+        promptLine: rawLine
+      }, opts);
+    }
     const raw = (m[m.length - 1] || '').trim();
-    return {
+    return peelNestedPrompts({
       tool: p.tool || '',
       rawCommand: raw,
       command: applyPrefix(raw, p.prefix),
@@ -375,7 +457,7 @@ function matchPromptLine(rawLine, opts) {
       isHash: Boolean(p.isHash),
       isDollar: Boolean(p.isDollar),
       promptLine: rawLine
-    };
+    }, opts);
   }
   return null;
 }
@@ -469,12 +551,34 @@ function isInteractiveTargetOrReplPrompt(p) {
   return false;
 }
 
+function isPassiveReaderCommand(cmd) {
+  const s = String(cmd || '').trim();
+  if (!s) return true;
+  if (/^\s*sudo\s+(?:-[A-Za-z]*l\b|--list\b)/i.test(s) || ENUM_SCRIPT_NO_SUBSHELL_RE.test(s)) return true;
+  const first = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '').split(/[\\/]/).pop().toLowerCase();
+  const stem = first.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  return NON_SHELL_READER_HEAD_RE.test(first) || NON_SHELL_READER_HEAD_RE.test(stem);
+}
+
 function stripPromptPrefix(rawLine, rawCmd) {
   const clean = stripAnsi(rawLine).trim();
   const cmd = String(rawCmd || '').trim();
-  if (!cmd) return clean;
-  const idx = clean.lastIndexOf(cmd);
-  return (idx > 0 ? clean.slice(0, idx) : clean).trim();
+  let pfx = clean;
+  if (cmd) {
+    const idx = clean.lastIndexOf(cmd);
+    pfx = (idx > 0 ? clean.slice(0, idx) : clean).trim();
+  }
+  for (let d = 0; d < 2 && pfx; d++) {
+    const mp = matchPromptLine(pfx, { suppressBareHash: true, _peelDepth: 2 });
+    if (!mp || !mp.rawCommand || mp.isHash || mp.isDollar) break;
+    const innerMp = matchPromptLine(mp.rawCommand, { suppressBareHash: true, _peelDepth: 2 });
+    if (innerMp && !innerMp.rawCommand && !innerMp.isHash && !innerMp.isDollar) {
+      pfx = mp.rawCommand.trim();
+    } else {
+      break;
+    }
+  }
+  return pfx;
 }
 
 function hasTitleCaseEnglishProseLook(firstTok, fullLine) {
@@ -761,6 +865,27 @@ function classifyFenceBlock(lang, text, contextOpts) {
   }
   if (nonEmptyLines.length >= 2 && CONFIG_PATH_SECTION_HEADER_RE.test(body)) {
     return { include: true, reason: 'bare-config-dump', lang: normLang };
+  }
+  if (nonEmptyLines.length >= 2 && /^https?:\/\/[^\s"'<>]+$/i.test(firstNonEmpty) && !isExternalReferenceUrlOrCommand(firstNonEmpty)) {
+    return { include: true, reason: 'bare-http-capture', lang: normLang };
+  }
+  const hasTargetParamOrWrapperUrl = activeLines.some(l => (
+    /^https?:\/\/[^\s"'<>]+$/i.test(l)
+    && !isExternalReferenceUrlOrCommand(l)
+    && (/[?&][A-Za-z0-9_.-]+=/.test(l) || /(?:php|zip|phar|file|expect|data):\/\//i.test(l))
+  ));
+  const hasBase64SourceBlob = nonEmptyLines.some(l => /^[A-Za-z0-9+/]{48,}={0,2}$/.test(l));
+  const hasDecodeMarkerOrLfiProse = nonEmptyLines.some(l => /^#\s*decode\b/i.test(l))
+    || Boolean(contextOpts && Array.isArray(contextOpts.prevProseLines) && contextOpts.prevProseLines.some(pl => {
+      const s = String(pl || '');
+      if (!/(?:php:\/\/filter|convert\.base64-encode|[?&](?:file|page|path|include|template|doc|view|resource|ajax_path)=|view-source:)/i.test(s)) {
+        return false;
+      }
+      const urls = s.match(/https?:\/\/[^\s)>\]"'`]+/gi) || [];
+      return urls.length === 0 || urls.some(u => !isExternalReferenceUrlOrCommand(u));
+    }));
+  if (hasTargetParamOrWrapperUrl || (hasBase64SourceBlob && hasDecodeMarkerOrLfiProse)) {
+    return { include: true, reason: 'bare-lfi-source', lang: normLang };
   }
   if (STATIC_SOURCE_LOOK_RE.test(body)) {
     return { include: false, reason: 'bare-static-source', lang: normLang };
@@ -1067,7 +1192,7 @@ function extractBlocks(md, opts) {
 
 function inferContentCommandHint(text) {
   const s = String(text || '');
-  if (/Nmap scan report for|Starting Nmap|^PORT\s+STATE\s+SERVICE/im.test(s)) return 'nmap';
+  if (/Nmap scan report for|Starting Nmap|^PORT\s+STATE\s+SERVICE|^Host script results:[ \t]*\r?\n\|/im.test(s)) return 'nmap';
   const nxcM = /^(SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+\s+\[[-*+]\]/m.exec(s);
   if (nxcM) return 'nxc ' + nxcM[1].toLowerCase();
   if (/^\S+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/m.test(s)) return 'secretsdump';
@@ -1191,17 +1316,31 @@ function segmentBlock(blockOrText, opts) {
       }
       const curLauncher = cur ? getSessionLauncherTool(cur.command) : '';
       const strippedNextPfx = stripPromptPrefix(ln, p.rawCommand);
+      const isDirectSameHostPrivUpgrade = Boolean(
+        cur &&
+        cur.kind === 'unix' &&
+        p.kind === 'unix' &&
+        cur.host && p.host &&
+        !ATTACKER_HOST.test(cur.host) &&
+        cur.host.toLowerCase() === p.host.toLowerCase() &&
+        cur.user && !/^(?:root|toor)$/i.test(cur.user) &&
+        /^(?:root|toor)$/i.test(p.user || '') &&
+        !isPassiveReaderCommand(cur.command)
+      );
       const shouldAttachFollow = Boolean(
         cur &&
         isInteractiveTargetOrReplPrompt(p) &&
-        (Boolean(curLauncher) || !p.rawCommand)
+        (Boolean(curLauncher) || !p.rawCommand || isDirectSameHostPrivUpgrade)
       );
       if (shouldAttachFollow) {
         const fp = strippedNextPfx;
         if (fp && !cur.followPrompt) cur.followPrompt = fp;
         if (fp && curLauncher === 'pty-spawn' && rawUnits.length > 0) {
           const prevU = rawUnits[rawUnits.length - 1];
-          if (prevU && !prevU.followPrompt && getSessionLauncherTool(prevU.command)) {
+          const sameOrAttackerHost = !prevU.host || !p.host || ATTACKER_HOST.test(prevU.host)
+            || prevU.host.toLowerCase() === p.host.toLowerCase();
+          if (prevU && !prevU.followPrompt && sameOrAttackerHost
+              && (getSessionLauncherTool(prevU.command) || !isPassiveReaderCommand(prevU.command))) {
             prevU.followPrompt = fp;
           }
         }
@@ -1217,7 +1356,10 @@ function segmentBlock(blockOrText, opts) {
           if (fp && !prevU.followPrompt) prevU.followPrompt = fp;
           if (fp && prevLauncher === 'pty-spawn' && rawUnits.length > 1) {
             const prevPrevU = rawUnits[rawUnits.length - 2];
-            if (prevPrevU && !prevPrevU.followPrompt && getSessionLauncherTool(prevPrevU.command)) {
+            const sameOrAttackerHost = !prevPrevU.host || !p.host || ATTACKER_HOST.test(prevPrevU.host)
+              || prevPrevU.host.toLowerCase() === p.host.toLowerCase();
+            if (prevPrevU && !prevPrevU.followPrompt && sameOrAttackerHost
+                && (getSessionLauncherTool(prevPrevU.command) || !isPassiveReaderCommand(prevPrevU.command))) {
               prevPrevU.followPrompt = fp;
             }
           }
@@ -1245,6 +1387,8 @@ function segmentBlock(blockOrText, opts) {
       }
       if (p.isHash) {
         inBareHashSubshell = true;
+      } else if (p.kind === 'repl' || p.kind === 'ftp') {
+        inBareHashSubshell = /^(?:\\!|system\b|shell\b|!\s*\S)/i.test(p.rawCommand || '');
       } else {
         inBareHashSubshell = isBareHashSubshellLauncher(p.command);
       }
@@ -1254,6 +1398,7 @@ function segmentBlock(blockOrText, opts) {
         tool: p.tool,
         rawCommand: p.rawCommand,
         command: p.command,
+        legacyUnpeeledRawCommand: p.legacyUnpeeledRawCommand || '',
         kind: p.kind,
         user: p.user || '',
         host: p.host || '',
@@ -1311,7 +1456,7 @@ function segmentBlock(blockOrText, opts) {
   }
   if (cur) rawUnits.push(cur);
 
-  if (!sawPrompt && includeUnprompted && classificationReason === 'http-api-json') {
+  if (!sawPrompt && includeUnprompted && (classificationReason === 'http-api-json' || classificationReason === 'bare-http-capture' || classificationReason === 'bare-lfi-source')) {
     rawUnits.push({
       promptLine: '',
       followPrompt: '',
@@ -1485,6 +1630,9 @@ function segmentBlock(blockOrText, opts) {
     .filter(u => u.rawCommand || u.command || u.isLandingPromptOnly || u.outLines.some(l => l.trim()))
     .map(u => {
       const stdout = u.outLines.join('\n');
+      if (u.legacyUnpeeledRawCommand && u.legacyUnpeeledRawCommand !== u.rawCommand) {
+        recordLegacyLeadBridge(u.rawCommand, stdout, u.legacyUnpeeledRawCommand, stdout);
+      }
       const followPrompt = u.followPrompt || '';
       const basePromptLine = u.promptLine || '';
       const promptLine = (followPrompt && basePromptLine.trim() !== followPrompt.trim())
@@ -1746,6 +1894,7 @@ const TOOLS = [
   [/\bsqlite3?\b/i, 'sqlite'], [/\bredis-cli\b/i, 'redis'],
   [/\blinpeas\b/i, 'linpeas'], [/\bwinpeas\b/i, 'winpeas'], [/\bpspy(?:32|64)?s?\b/i, 'pspy'],
   [/\bsudo\s+(?:-[A-Za-z]*l\b|--list\b)/i, 'sudo-l'], [/\bcertipy(?:-ad)?\b/i, 'certipy'], [/\bldapsearch\b/i, 'ldapsearch'],
+  [/\bsmtp-user-enum\b/i, 'smtp-user-enum'],
   [/\b(dig|nslookup|dnsrecon|dnsenum|host)\b/i, 'dns']
 ];
 
@@ -1782,7 +1931,7 @@ const FACT_BEARING = new Set([
   'netexec/cme', 'smbclient', 'smbmap', 'rpcclient', 'enum4linux', 'secretsdump',
   'GetUserSPNs', 'GetNPUsers', 'bloodhound', 'bloodyad', 'rubeus', 'kerbrute',
   'hashcat', 'john', 'hydra', 'sqlmap', 'nikto', 'wpscan', 'searchsploit',
-  'certipy', 'ldapsearch', 'dns', 'mysql', 'postgres', 'mssql', 'sqlite', 'redis',
+  'certipy', 'ldapsearch', 'smtp-user-enum', 'dns', 'mysql', 'postgres', 'mssql', 'sqlite', 'redis',
   'linpeas', 'winpeas', 'pspy', 'curl', 'sudo-l'
 ]);
 
@@ -1791,7 +1940,7 @@ const LISTING = /\b(ls|dir|tree|find)\b|\bget-childitem\b|\bgci\b/i;
 const TRANSFER = /\b(wget|curl|scp|certutil|tftp|smbget)\b|\biwr\b|\binvoke-webrequest\b/i;
 const SHELL_LAUNCH = /\bevil-winrm\b|\bpsexec(\.py)?\b|\bwmiexec(\.py)?\b|\bsmbexec(\.py)?\b|\batexec(\.py)?\b|\bssh\b|\bxfreerdp\b|pty\.spawn|\/bin\/(ba)?sh\b|\bsu\b|\bsudo\s+-i\b|nc .*-e|runas/i;
 const IDENTITY = /\b(whoami|id|hostname|systeminfo)\b|\bnet user\b|\bnet localgroup\b|\bgetuid\b/i;
-const ENUM_CMD = /\b(nmap|gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz|nxc|netexec|crackmapexec|cme|smbmap|enum4linux|secretsdump|kerbrute|hashcat|john|hydra|sqlmap|nikto|wpscan|searchsploit|ldapsearch|certipy|bloodhound|bloodyad|rubeus|dig|nslookup)\b/i;
+const ENUM_CMD = /\b(nmap|gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz|nxc|netexec|crackmapexec|cme|smbmap|enum4linux|secretsdump|kerbrute|hashcat|john|hydra|sqlmap|nikto|wpscan|searchsploit|ldapsearch|smtp-user-enum|certipy|bloodhound|bloodyad|rubeus|dig|nslookup)\b/i;
 const NONE_CMD = /^\s*(cd|pwd|clear|export|set|echo|which|cls|exit)\b/i;
 
 function classifyAxis(u, toolLabel) {

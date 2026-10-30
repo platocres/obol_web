@@ -640,12 +640,23 @@
     var aLen = (eng && Array.isArray(eng.activities)) ? eng.activities.length : -1;
     var entry = _resolvedFactsCache.get(facts);
     if (!entry || entry.fLen !== fLen || entry.scLen !== scLen || entry.aLen !== aLen) {
+      var proj = (scLen === 0 && facts._projBase && Array.isArray(facts._projBase.facts) && facts._projBase.facts.length === fLen)
+        ? facts._projBase : null;
+      var projMemo = proj ? _resolvedFactsCache.get(proj) : null;
+      if (proj && (!projMemo || projMemo.fLen !== fLen)) {
+        projMemo = {
+          fLen: fLen,
+          have: proj.kinds(),
+          fam: hostOsFamily(proj)
+        };
+        _resolvedFactsCache.set(proj, projMemo);
+      }
       entry = {
         fLen: fLen,
         scLen: scLen,
         aLen: aLen,
-        have: facts.kinds(),
-        fam: hostOsFamily(facts),
+        have: projMemo ? projMemo.have : facts.kinds(),
+        fam: projMemo ? projMemo.fam : hostOsFamily(facts),
         elig: new WeakMap(),
         settled: new WeakMap()
       };
@@ -656,6 +667,24 @@
 
   function actionMayMatchCompletedActivity(action, facts) {
     var rc = facts && facts._resolvedContext;
+    var frameInfos = rc && rc._frame && rc._frame.retirableActInfos;
+    if (Array.isArray(frameInfos)) {
+      if (!frameInfos.length) return false;
+      var fMeta = v2GetActionMeta(action);
+      var fPrefixes = fMeta.cmdPrefixes;
+      var fWildcard = fMeta.cmdPrefixWildcard;
+      for (var fi = 0; fi < frameInfos.length; fi++) {
+        var info = frameInfos[fi];
+        if (info.actionId === action.id) return true;
+        if (fWildcard) return true;
+        if (!fPrefixes.length) continue;
+        var iHay = info.hay;
+        for (var fpi = 0; fpi < fPrefixes.length; fpi++) {
+          if (iHay.indexOf(fPrefixes[fpi]) >= 0) return true;
+        }
+      }
+      return false;
+    }
     var eng = rc && rc.engagement;
     if (!eng || !Array.isArray(eng.activities)) return true;
     var acts = eng.activities;
@@ -865,6 +894,41 @@
     if (this.id === 'ad-path-manual' && ((have['ad.attack_paths'] && have['ad.acl_lead']) || have['ad.control_paths'])) return true;
     if (this.id === 'bloodyad-acl' || this.id === 'ad-acl-abuse') {
       return !!(have['ad.control_paths'] || have['ad.domain_control'] || have['loot.ntds'] || have['access.admin']);
+    }
+    if ((this.id === 'linux-enum' || this.id === 'windows-enum') && !have['access.admin'] && !have['access.root'] && !have['access.system']) {
+      var enumFhKind = this.id === 'linux-enum' ? 'foothold.linux' : 'foothold.windows';
+      var enumFactList = allScoped || (facts.facts || []);
+      var lastLeadsIdx = -1;
+      var allFhUsers = Object.create(null), allFhCount = 0;
+      for (var efi = 0; efi < enumFactList.length; efi++) {
+        var ef = enumFactList[efi];
+        if (!ef || (ef.state && ef.state !== 'supported')) continue;
+        if (ef.kind === 'privesc.leads') lastLeadsIdx = efi;
+        else if (ef.kind === enumFhKind && ef.value) {
+          var rawFhU = String(ef.value.user || ef.value.identity || ef.value.username || '').replace(/^.*[\\/]/, '').split('@')[0].trim().toLowerCase();
+          if (rawFhU && !/^(?:root|administrator|system|nt authority\\system)$/.test(rawFhU) && !allFhUsers[rawFhU]) {
+            allFhUsers[rawFhU] = 1;
+            allFhCount++;
+          }
+        }
+      }
+      if (allFhCount >= 2 && lastLeadsIdx >= 0) {
+        var beforeLeadsUsers = Object.create(null);
+        for (var bfi = 0; bfi <= lastLeadsIdx; bfi++) {
+          var bf = enumFactList[bfi];
+          if (!bf || (bf.state && bf.state !== 'supported') || bf.kind !== enumFhKind || !bf.value) continue;
+          var bFhU = String(bf.value.user || bf.value.identity || bf.value.username || '').replace(/^.*[\\/]/, '').split('@')[0].trim().toLowerCase();
+          if (bFhU) beforeLeadsUsers[bFhU] = 1;
+        }
+        for (var afi = lastLeadsIdx + 1; afi < enumFactList.length; afi++) {
+          var af = enumFactList[afi];
+          if (!af || (af.state && af.state !== 'supported') || af.kind !== enumFhKind || !af.value) continue;
+          var aFhU = String(af.value.user || af.value.identity || af.value.username || '').replace(/^.*[\\/]/, '').split('@')[0].trim().toLowerCase();
+          if (aFhU && !/^(?:root|administrator|system|nt authority\\system)$/.test(aFhU) && !beforeLeadsUsers[aFhU]) {
+            return false;
+          }
+        }
+      }
     }
     // Moves whose primary outputs are ONLY generic multi-instance kinds (credential.available,
     // credential.plaintext, credential.candidate, loot.files, config.review) must not settle merely
@@ -1480,7 +1544,7 @@
     var allowed = {};
     (actionOs || []).forEach(function (item) { var n = normalizeOsName(item); if (n) allowed[n] = true; });
     var keys = Object.keys(allowed);
-    if (family === 'linux' && action && (action.pack_id === 'ad_2026_09' || action.pack_id === 'obol_ad_2026_09') && action.id !== 'nmap-udp-top') {
+    if (family === 'linux' && action && (action.pack_id === 'ad_2026_09' || action.pack_id === 'obol_ad_2026_09') && !/^nmap-(?:fast-open-ports|version-scripts|vuln-scripts|udp-top)$/.test(action.id)) {
       var hasAdSmb = facts.has('smb.reachable') || facts.has('ldap.reachable') || facts.has('kerberos.reachable') || facts.has('winrm.reachable') || facts.has('ad.dc_candidate');
       if (!hasAdSmb) return false;
     }
@@ -1656,6 +1720,7 @@
     'ad.nopac': 1, 'vuln.printnightmare': 1, 'ad.maq_allow': 1,
     'mssql.sysadmin': 1, 'hash.sntp': 1, 'loot.keepass_dump': 1,
     'hash.crackable': 1, 'privesc.writable_etc': 1, 'privesc.suid': 1, 'smb.smbv1': 1,
+    'service.web_terminal': 1,
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1, 'objective.local_flag': 1, 'objective.root_flag': 1 };
   // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
@@ -2205,6 +2270,18 @@
     var fhVal = hasFact('foothold.windows') ? 'win'
       : (hasFact('foothold.linux') ? 'lin'
       : (hasFact('access.shell') ? 'shell' : ''));
+    if (fhVal === 'lin' || fhVal === 'win') {
+      var fhUsersMap = Object.create(null);
+      ['foothold.linux', 'foothold.windows'].forEach(function (fk) {
+        getValues(fk).forEach(function (fv) {
+          if (!fv) return;
+          var fu = String(fv.user || fv.identity || fv.username || '').replace(/^.*[\\/]/, '').split('@')[0].trim().toLowerCase();
+          if (fu && !/^(?:root|administrator|system|nt authority\\system)$/.test(fu)) fhUsersMap[fu] = 1;
+        });
+      });
+      var fhUserList = Object.keys(fhUsersMap).sort();
+      if (fhUserList.length >= 2) fhVal += ':' + fhUserList.join(',');
+    }
 
     var credMap = {};
     ['credential.available', 'credential.validated', 'credential.plaintext'].forEach(function (k) {
@@ -2322,6 +2399,20 @@
     var hasFtpWebroot = (typeof facts.values === 'function' ? (facts.values('config.review') || []) : []).some(function (v) {
       return v && (v.kind === 'ftp_webroot_exposed' || /ftp_webroot/i.test(String(v.kind || v.summary || '')));
     });
+    var hasWordpressCms = (typeof facts.values === 'function') && (
+      (facts.values('web.cms') || []).concat(facts.values('web.tech') || []).some(function (v) {
+        return v && /wordpress/i.test(String(v.cms || v.name || v.tech || v.app || (Array.isArray(v.tech) ? v.tech.join(' ') : '') || ''));
+      })
+      || (facts.values('web.paths') || []).some(function (v) {
+        var wpArr = (v && (v.paths || v.hits || v.urls)) || (v && v.path ? [v.path] : []);
+        return Array.isArray(wpArr) && wpArr.some(function (p) { return /\/wp-(?:login\.php|admin|content|includes)\b/i.test(String((p && p.path) || p || '')); });
+      })
+    );
+    var dbSessionVals = (typeof facts.values === 'function') ? (facts.values('db.session') || []) : [];
+    var hasPostgresSession = dbSessionVals.some(function (v) { return v && /postgres/i.test(String(v.engine || v.service || v.tool || '')); })
+      || !!(haveObj['db.session'] && (haveObj['service.postgresql'] || haveObj['port:5432'] || haveObj['postgres.reachable']));
+    var hasMysqlSession = dbSessionVals.some(function (v) { return v && /mysql|mariadb/i.test(String(v.engine || v.service || v.tool || '')); })
+      || !!(haveObj['db.session'] && (haveObj['service.mysql'] || haveObj['port:3306'] || haveObj['mysql.reachable']));
     var hasLivePrivescMove = live.some(function (b) {
       if (b.id === 'windows-enum' || b.id === 'linux-enum' || b.transition === 'privesc_orient') return false;
       if (b.id === 'linux-kernel-exploit' && haveObj['privesc.kernel_exploit']) return true;
@@ -2611,6 +2702,18 @@
       }
       if ((haveObj['db.session'] || haveObj['mssql.authenticated'] || haveObj['mssql.sysadmin']) && !haveObj['foothold.windows'] && !haveObj['access.shell'] && !haveObj['access.admin'] && !haveObj['access.system'] && a.id === 'mssql-xp-cmdshell') {
         promote(4, 3);
+      }
+      if ((hasPostgresSession || (haveObj['db.admin'] && (haveObj['service.postgresql'] || haveObj['port:5432']))) && !v2Foothold && a.id === 'postgres-rce') {
+        promote(4, 3);
+      }
+      if (hasMysqlSession && a.id === 'mysql-loot') {
+        promote(3, 3);
+      }
+      if (hasWordpressCms && !v2Foothold && a.id === 'wordpress') {
+        promote((rec.recent['web.cms'] || rec.recent['web.paths'] || rec.recent['web.tech']) ? 3 : 2, 3);
+      }
+      if (haveObj['service.web_terminal'] && !v2Foothold && a.id === 'web-terminal-foothold') {
+        promote(4, 4);
       }
       if (a.id === 'ftp-webroot-upload-webshell' && !v2Foothold && !haveObj['foothold.webshell']) {
         if (hasFtpWebroot) promote(4, 3);

@@ -2180,6 +2180,19 @@
       "mistakes": [
         "Ignoring SGID. A group bit on the right group is its own path."
       ]
+    },
+    {
+      "when": "A non-standard SUID binary path has been identified.",
+      "land": [
+        "Inspect ownership, permissions, and printable strings of the SUID binary to detect GTFOBins upstream applet names, relative command invocations, or custom library paths."
+      ],
+      "look": [
+        "Relative shell commands (service, tar, curl, cp) without leading slashes, or usage banners matching a known GTFOBins utility."
+      ],
+      "win": "You identify the exact GTFOBins applet or relative-PATH command sink inside the SUID binary.",
+      "mistakes": [
+        "Executing an unknown custom SUID binary blindly before checking strings and permissions."
+      ]
     }
   ],
   "pspy-monitor": [
@@ -2231,6 +2244,19 @@
       "win": "The planted script runs as root on the next job.",
       "mistakes": [
         "Wrong directory. The files must be where the root job runs tar with a wildcard."
+      ]
+    },
+    {
+      "when": "A privileged cron script runs 7z or 7za with a * wildcard inside a writable directory.",
+      "land": [
+        "Symlink leak.zip to the privileged file you want to read and create an empty @leak.zip trigger file in the same directory."
+      ],
+      "look": [
+        "7-Zip diagnostic warning lines printing each line of the symlinked target file when the cron job runs."
+      ],
+      "win": "7-Zip parses the symlink target as a @listfile and leaks root secrets or SSH keys into its log output.",
+      "mistakes": [
+        "Forgetting the matching @ prefix file that instructs 7-Zip to treat the symlink name as a listfile."
       ]
     }
   ],
@@ -5810,6 +5836,19 @@
       "mistakes": [
         "Assuming the table is named users. Check information_schema."
       ]
+    },
+    {
+      "when": "Already inside an interactive mysql> or MariaDB prompt.",
+      "land": [
+        "Run SHOW DATABASES and SELECT user,authentication_string FROM mysql.user directly in the active SQL session."
+      ],
+      "look": [
+        "Non-default application schemas alongside mysql.user password hashes."
+      ],
+      "win": "Schemas and database account hashes print without needing CLI connection flags.",
+      "mistakes": [
+        "Forgetting the trailing semicolon on interactive SQL statements."
+      ]
     }
   ],
   "mssql-login": [
@@ -5946,6 +5985,19 @@
       "mistakes": [
         "Quoting PGPASSWORD wrong for special characters."
       ]
+    },
+    {
+      "when": "Port 5432 is open and no PostgreSQL password is known yet.",
+      "land": [
+        "Probe psql -h <target> -U postgres -c '\\l' to test for permissive pg_hba.conf trust authentication."
+      ],
+      "look": [
+        "List of databases table printing immediately without a password prompt."
+      ],
+      "win": "Unauthenticated postgres superuser session confirmed via trust policy.",
+      "mistakes": [
+        "Skipping the zero-password trust check on exposed lab PostgreSQL listeners."
+      ]
     }
   ],
   "postgres-rce": [
@@ -5974,6 +6026,19 @@
       "mistakes": [
         "Leaving the temp table behind. Clean up after."
       ]
+    },
+    {
+      "when": "Sitting inside an interactive postgres=# SQL prompt.",
+      "land": [
+        "Execute CREATE TABLE, COPY ... FROM PROGRAM, and SELECT directly in the open psql session."
+      ],
+      "look": [
+        "uid=... output returned inside the obol_cmd query rows."
+      ],
+      "win": "OS command execution confirmed directly from the interactive psql prompt.",
+      "mistakes": [
+        "Forgetting single-quote escaping when swapping id for a reverse shell command."
+      ]
     }
   ],
   "redis-enum": [
@@ -6001,6 +6066,19 @@
       "win": "You read the stored keys.",
       "mistakes": [
         "KEYS * on a huge production DB is slow. Fine on a lab."
+      ]
+    },
+    {
+      "when": "Redis requires AUTH and you recovered a password from config or source files.",
+      "land": [
+        "Pass -a '<password>' to redis-cli to dump INFO and enumerate stored keys."
+      ],
+      "look": [
+        "redis_version, role:master, and application key names."
+      ],
+      "win": "Authenticated Redis server metadata and keyspace enumerated.",
+      "mistakes": [
+        "Not quoting special characters in the Redis password passed to -a."
       ]
     }
   ],
@@ -13656,6 +13734,45 @@
       "mistakes": [
         "Architecture mismatch between compiled module and target host (e.g. 32-bit vs 64-bit)."
       ]
+    },
+    {
+      "when": "A compiled Redis module (.so) has been uploaded to a known local path via FTP, SMB, or web upload.",
+      "land": [
+        "Load the shared library with MODULE LOAD and run OS commands via system.exec."
+      ],
+      "look": [
+        "OK from MODULE LOAD followed by uid=... output from system.exec."
+      ],
+      "win": "Direct OS command execution as the Redis daemon user (or root).",
+      "mistakes": [
+        "Compiling against an incompatible Redis module SDK ABI or wrong CPU architecture."
+      ]
+    },
+    {
+      "when": "Redis has write access to a user's .ssh directory (such as /var/lib/redis/.ssh or /root/.ssh).",
+      "land": [
+        "Flush or stage a key padded with newlines around your SSH public key, point CONFIG SET dir and dbfilename at authorized_keys, and run SAVE."
+      ],
+      "look": [
+        "OK responses on CONFIG SET dir, CONFIG SET dbfilename, and SAVE."
+      ],
+      "win": "SSH key login succeeds against the target account.",
+      "mistakes": [
+        "Omitting newline padding around the SSH public key so binary RDB header bytes corrupt the key line."
+      ]
+    },
+    {
+      "when": "An HTTP server runs on the same host and Redis can write to the web document root.",
+      "land": [
+        "Point CONFIG SET dir at the webroot, set dbfilename to a .php filename, store a PHP payload key, and run SAVE."
+      ],
+      "look": [
+        "OK on SAVE, followed by command output when curling /shell.php?c=id."
+      ],
+      "win": "Webshell execution confirmed over HTTP.",
+      "mistakes": [
+        "Guessing /var/www/html without checking virtual-host or nginx root paths disclosed earlier."
+      ]
     }
   ],
   "nosqli-regex-extract": [
@@ -15895,6 +16012,34 @@
       "win": "NoSQL operator injection bypasses login without knowing the password.",
       "mistakes": [
         "Sending JSON operators with default `application/x-www-form-urlencoded` headers when the Express app parses JSON via `express.json()`."
+      ]
+    }
+  ],
+  "web-terminal-foothold": [
+    {
+      "when": "Nmap or HTTP fingerprinting identifies ttyd, Wetty, GoTTY, or ShellInABox.",
+      "land": [
+        "Check the HTTP response headers with curl -sk -i to see if the web terminal is open or gated by Basic Auth."
+      ],
+      "look": [
+        "HTTP 200 OK serving the xterm.js/ttyd HTML shell, or 401 WWW-Authenticate if credentials are required."
+      ],
+      "win": "Reachable browser terminal endpoint confirmed.",
+      "mistakes": [
+        "Assuming a high TCP port serving HTML is a static site without checking for a ttyd/Wetty WebSocket terminal."
+      ]
+    },
+    {
+      "when": "Connected to the interactive browser web terminal PTY.",
+      "land": [
+        "Run id, uname -a, and ip -br a inside the web terminal and paste the output into OBOL."
+      ],
+      "look": [
+        "uid=..., group memberships, and host network interfaces."
+      ],
+      "win": "Interactive Linux foothold recorded; upgrade to SSH or reverse shell for file transfer convenience.",
+      "mistakes": [
+        "Staying inside a fragile browser tab without dropping an SSH key or catching a stable terminal shell."
       ]
     }
   ],

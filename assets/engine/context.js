@@ -533,8 +533,25 @@
     else if (eng) { selected = selectedId(eng, target); source = pin(eng) !== undefined ? 'session-pin' : 'target-memory'; }
     var c = registry.find(function (x) { return x.id === selected; }) || null;
     if (!eng && selected === undefined && (p.username || p.user)) { c = material({ user:p.username || p.user, domain:p.authRealm || '', password:p.password || '', nthash:p.nthash || '' }); source = 'explicit-params'; }
-    if (!frame) frame = { domain:domain, registry:registry, scoped:scopeFacts(eng, target, allFacts, domain),
-      materials:new Map(), projections:Object.create(null), contexts:Object.create(null), attempts:Object.create(null) };
+    if (!frame) {
+      var retirableActInfos = null;
+      if (eng && Array.isArray(eng.activities)) {
+        retirableActInfos = [];
+        for (var rai = 0; rai < eng.activities.length; rai++) {
+          var rAct = eng.activities[rai];
+          if (!rAct || !rAct.outcome) continue;
+          var rAo = rAct.outcome;
+          if (!rAo.retireCommand && !(rAo.kind === 'success' && /(?:^|\s)--host\b/i.test(rAct.command || ''))) continue;
+          retirableActInfos.push({
+            actionId: rAct.action_id || rAct.actionId || '',
+            hay: (String(rAct.command || '') + '\n' + String(rAct.dispatch || '') + '\n' + (Array.isArray(rAct.sequenceCommands) ? rAct.sequenceCommands.join('\n') : '')).toLowerCase()
+          });
+        }
+      }
+      frame = { domain:domain, registry:registry, scoped:scopeFacts(eng, target, allFacts, domain),
+        materials:new Map(), projections:Object.create(null), contexts:Object.create(null), attempts:Object.create(null),
+        retirableActInfos:retirableActInfos };
+    }
     var scoped = frame.scoped, conflicts = [], unresolved = [];
     if (!eng && selected === undefined && !c) {
       var scopedRegistry = credentials({facts:scoped});
@@ -657,6 +674,7 @@
     })));
     if (c && (c.password || c.nthash) && !scoped.some(function (f) { return f.state === 'supported' && f.kind === 'credential.available'; }) && O.facts) scoped.push(O.facts.makeFact({kind:'credential.available',scope:'host:' + target,state:'supported',value:{user:c.user,domain:c.domain,password:c.password,nthash:c.nthash,credentialId:c.id,targetBinding:c.targetBinding,accountType:c.accountType,selectedMaterial:true,speculativeCrossDomainReuse:isSpecCrossReuse}}));
     projection = frame.projections[projectionKey] = O.facts ? new O.facts.FactSet(scoped) : {facts:scoped};
+    Object.defineProperty(projection, '_projBase', { value: projection, configurable: true });
     }
     ['username','user','password','nthash','credentialId','authRealm','auth_realm'].forEach(function (k) { delete p[k]; });
     p.target = target; p.domain = domain; p.target_domain = domain; p.authRealm = realm; p.auth_realm = realm;
@@ -665,7 +683,7 @@
     // and array without rebuilding the ledger with quadratic FactSet.add calls.
     var view = Object.create(projection); view.facts = projection.facts.slice(); view.state_changed = [];
     var result = { target:target,targetDomain:domain,authRealm:realm,principal:principal,credentialId:c ? c.id : null,credentialFingerprint:c ? c.credentialFingerprint : '',credential:c,
-      service:svc,locus:locus,facts:view,allScopedFacts:frame.scoped,params:p,engagement:eng,
+      service:svc,locus:locus,facts:view,allScopedFacts:frame.scoped,params:p,engagement:eng,_frame:frame,
       selectionSource:source,conflicts:conflicts,unresolved:unresolved,actionId:opts.actionId || '' };
     result.attemptKey = JSON.stringify([target,result.credentialId,svc,result.locus,result.actionId]);
     Object.defineProperty(result.facts, '_resolvedContext', {value:result});

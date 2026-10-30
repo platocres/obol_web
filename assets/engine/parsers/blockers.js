@@ -52,9 +52,9 @@
     // gobuster/ffuf hitting a wildcard/catch-all response and refusing to run until you filter it.
     { kind: 'blocker.web_wildcard', re: /the server returns a status code that matches the provided options for non existing urls|To continue please exclude the status code|use the "--wildcard" switch|WildcardResponse|Wildcard response found:/i },
     // access denied / permission barriers (service refused authenticated access or local account confusion).
-    { kind: 'blocker.access_denied', re: /STATUS_ACCESS_DENIED|Access is denied|0xc0000022|\[\!\]\s*Access Denied\b|E_ACCESSDENIED|CERTSRV_E_TEMPLATE_DENIED|ERROR 1130 \(HY000\)|is not allowed to connect to this (?:MySQL|MariaDB) server|Certificate is not valid for client authentication|KDC_ERR_CLIENT_NOT_TRUSTED/i },
+    { kind: 'blocker.access_denied', re: /STATUS_ACCESS_DENIED|Access is denied|0xc0000022|\[\!\]\s*Access Denied\b|E_ACCESSDENIED|CERTSRV_E_TEMPLATE_DENIED|ERROR 1130 \(HY000\)|is not allowed to connect to this (?:MySQL|MariaDB) server|Certificate is not valid for client authentication|KDC_ERR_CLIENT_NOT_TRUSTED|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|^\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b/im },
     // authentication rejected (bad password or wrong account scope).
-    { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|WinRMAuthorizationError|ldap_bind:\s*Invalid credentials|Authentication failure|Failed to authenticate|Login failed for user|\[\!\]\s*Authentication error\b|ERROR 1045 \(28000\)|Access denied for user|Error de inicio de sesi[oó]n del usuario|Unable to connect to LDAP, verify your credentials/i },
+    { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|WinRMAuthorizationError|ldap_bind:\s*Invalid credentials|Authentication failure|Failed to authenticate|Login failed for user|\[\!\]\s*Authentication error\b|ERROR 1045 \(28000\)|Access denied for user|Error de inicio de sesi[oó]n del usuario|Unable to connect to LDAP, verify your credentials|^\s*\(error\)\s+(?:WRONGPASS|NOAUTH\s+Authentication\s+required|ERR\s+invalid\s+(?:username-password|password))\b/im },
     // Kerberos clock skew: DC rejected ticket because time drift > 5 mins.
     { kind: 'blocker.clock_skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i },
     // hashcat/john cannot use the GPU/OpenCL (common in a VM) - fall back to CPU / --force.
@@ -143,7 +143,9 @@
       var w = WALLS[i];
       if (w.kind === 'blocker.access_denied') {
         var hasPositiveSmbEnum = facts && facts.some(function (f) { return f && (f.kind === 'smb.readable_share' || f.kind === 'smb.shares'); });
-        if (isNmap || isRoastOrEnum || enum4linuxSucceeded || isAnonSmbProbe || hasPositiveSmbEnum) continue;
+        var isPassiveFileRead = command && /^\s*(?:(?:sudo(?:\s+-u\s+\S+)?)\s+)?(?:cat|head|tail|less|more|bat|batcat|nl|strings)\b/i.test(command)
+          && !/[|;&`]|\$\(|\b(?:curl|wget|ssh|nxc|netexec|smbclient|rpcclient|ldapsearch|psql|mysql|mongosh|redis-cli)\b/i.test(command);
+        if (isNmap || isRoastOrEnum || enum4linuxSucceeded || isAnonSmbProbe || hasPositiveSmbEnum || isPassiveFileRead) continue;
         var tNoWsmanLoopback = tWithoutNse.indexOf('Set-WSManQuickConfig') >= 0
           ? tWithoutNse.replace(/^[^\r\n]*Set-WSManQuickConfig\s*:\s*Access is denied[^\r\n]*$/gim, '')
           : tWithoutNse;

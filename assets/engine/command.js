@@ -514,6 +514,39 @@
       if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
     }
+    if (!ctx.user) {
+      var isExplicitAnon = !!(resolved && (
+        (resolved.selectionSource === 'explicit' && !resolved.credentialId)
+        || (resolved.engagement && resolved.engagement.context && resolved.engagement.context.anonymousByTarget && tgt && resolved.engagement.context.anonymousByTarget[tgt])
+      ));
+      if (!isExplicitAnon && !ctx.password && !ctx.nthash) {
+        var valUsers = [];
+        if (!resolved) {
+          fvals('credential.validated').forEach(function (vv) {
+            var vu = vv && (vv.user || vv.username || vv.principal);
+            if (vu) valUsers.push(String(vu).replace(/^.*\\/, '').split('@')[0].trim());
+          });
+        } else if (!resolved.credentialId && Array.isArray(resolved.allScopedFacts)) {
+          resolved.allScopedFacts.forEach(function (af) {
+            if (!af || af.state !== 'supported' || af.kind !== 'credential.validated' || !af.value) return;
+            var av = af.value;
+            if (av.password || av.secret || av.nthash || av.hash) return;
+            var au = av.user || av.username || av.principal;
+            if (au) valUsers.push(String(au).replace(/^.*\\/, '').split('@')[0].trim());
+          });
+        }
+        fvals('db.session').forEach(function (dv) {
+          var du = dv && (dv.user || dv.username || dv.principal);
+          if (du) valUsers.push(String(du).replace(/^.*\\/, '').split('@')[0].trim());
+        });
+        for (var vui = 0; vui < valUsers.length; vui++) {
+          if (valUsers[vui] && !/^(?:anonymous|guest)$/i.test(valUsers[vui])) {
+            ctx.user = valUsers[vui];
+            break;
+          }
+        }
+      }
+    }
     if (!ctx.user && !resolved) {
       var fhList = fvals('foothold.linux').concat(fvals('foothold.windows'));
       for (var fi = 0; fi < fhList.length; fi++) {
@@ -1332,6 +1365,24 @@
           ? cbv
           : (cbv.custom_bin || cbv.customBin || cbv.path || cbv.full_path || cbv.fullPath || cbv.file || cbv.artifact || cbv.exe || cbv.binary || cbv.bin || cbv.command || cbv.target || cbv.name || '');
         if (cbPick && String(cbPick).trim()) { ctx.custom_bin = String(cbPick).trim(); break; }
+      }
+    }
+    if (!ctx.suid_bin) {
+      var sbItems = [];
+      fvals('privesc.suid').concat(fvals('privesc.suid_candidate')).forEach(function (sv) {
+        if (!sv) return;
+        if (typeof sv === 'string') { sbItems.push(sv); return; }
+        sbItems.push(sv);
+        ['paths', 'binaries', 'files', 'items'].forEach(function (ak) {
+          if (Array.isArray(sv[ak])) sv[ak].forEach(function (sub) { if (sub) sbItems.push(sub); });
+        });
+      });
+      for (var sbi = 0; sbi < sbItems.length; sbi++) {
+        var sbv = sbItems[sbi];
+        var sbPick = typeof sbv === 'string'
+          ? sbv
+          : (sbv.suid_bin || sbv.suidBin || sbv.path || sbv.full_path || sbv.fullPath || sbv.file || sbv.binary || sbv.bin || '');
+        if (sbPick && String(sbPick).trim()) { ctx.suid_bin = String(sbPick).trim(); break; }
       }
     }
     if (!ctx.source_path || !ctx.app_base_path) {

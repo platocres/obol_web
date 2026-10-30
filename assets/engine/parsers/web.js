@@ -1068,11 +1068,25 @@
   C._mine_response_credentials = _mine_response_credentials;
 
   function _parse_web_ssrf(actionId, text, ws, command, source, facts) {
+    if (/^\s*(?:sudo\s+)?msfvenom\b|\bLHOST\s*=|\bLPORT\s*=/i.test(command || '')) return;
     var h = 'host:' + ws.target;
     var imds = reSearch(C._IMDS_MARKER_RE, text);
     var akid = reSearch(C._AWS_KEY_RE, text);
     var secret = reSearch(C._AWS_SECRET_RE, text);
-    var internal = reSearch(_INTERNAL_TARGET_RE, command || '');
+    var lhost = (ws && ws.context && ws.context.params && ws.context.params.lhost) || '';
+    var internalMatches = reAll(_INTERNAL_TARGET_RE, text || '');
+    var internal = null;
+    for (var ii = 0; ii < internalMatches.length; ii++) {
+      var candIp = internalMatches[ii][0];
+      if (candIp && candIp !== (ws && ws.target) && candIp !== lhost) {
+        internal = internalMatches[ii];
+        break;
+      }
+    }
+    if (!internal && command) {
+      var cmdParamM = /[?&][A-Za-z0-9_.-]+=(?:https?(?::\/\/|%3A%2F%2F))?(169\.254\.169\.254|metadata\.google\.internal|127\.0\.0\.1|localhost|\[::1\])\b/i.exec(command);
+      if (cmdParamM) internal = [cmdParamM[1]];
+    }
     var method = actionId === 'xxe' ? 'xxe' : 'ssrf';
     var mined = _mine_response_credentials(text);
     var confirmed = false;

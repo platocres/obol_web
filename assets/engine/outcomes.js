@@ -84,9 +84,22 @@
       var isMutatingCurl = /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*curl\b/.test(cmd)
         && (/(?:\/dev\/tcp\/|\bmkfifo\b|\bbash\s+-i\b|\bnc(?:at)?\b|\bos\.system\b|\bsubprocess\b|\bexec\s*\(|\bsystem\s*\(|\binto\s+(?:outfile|dumpfile)\b|--data(?:-urlencode|-binary|-raw)?\b|-X\s+(?:POST|PUT|DELETE|PATCH)\b)/i.test(rawCmd)
           || /(?:^|\s)-(?:d|F)\s/.test(rawCmd));
-      if (promptConfirmed && !isMutatingCurl) {
+      var isMutatingFind = /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*find\b/.test(cmd)
+        && /(?:^|\s)-(?:exec|execdir|ok|okdir|delete)\b/i.test(rawCmd);
+      if (promptConfirmed && !isMutatingCurl && !isMutatingFind) {
         return { complete: true, negative: true };
       }
+    }
+    if (/\bSaved corefile\s+\S+/i.test(body)) {
+      return { complete: true, negative: false };
+    }
+    if (/\bsmtp-user-enum\b/.test(cmd) || /#{5,}\s*Scan\s+completed\s*#{5,}/i.test(body)) {
+      var smtpDone = /\bScan\s+completed\b/i.test(body);
+      var smtpZero = /\b0\s+results?\b/i.test(body) && !/^\s*\S+\s+exists\s*$/im.test(body);
+      if (smtpDone) return { complete: true, negative: smtpZero };
+    }
+    if (/\[~\]\s*Custom\s+SUID\s+Binaries\b[\s\S]*?-{10,}/i.test(body)) {
+      return { complete: true, negative: true };
     }
     if (cmd && body.trim()) {
       var nonEmptyLines = body.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
@@ -173,9 +186,24 @@
     prevArr.forEach(function (pf) {
       if (supported(pf) && pf.kind) priorKinds[pf.kind] = true;
     });
-    var textForDenial = text.replace(/^.*Set-WSManQuickConfig\s*:\s*Access is denied.*$/gim, '');
-    var denial = /STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable|\[!\]\s*Not running as SYSTEM\b|\bOperation failed:\s*Access is denied\b|(?:^|\n)\s*(?!530\s)(?:[A-Za-z0-9_./-]+:\s+){1,3}Permission denied\s*(?:$|\r?\n)/i.test(textForDenial)
-      || facts.some(function (f) { return f && (f.kind === 'credential.authorization' || f.kind === 'blocker.ldap_anonymous_disabled'); });
+    var isPassiveLocalFileView = /^\s*(?:(?:sudo(?:\s+-u\s+\S+)?)\s+)?(?:cat|head|tail|less|more|bat|batcat|nl|strings)\b/i.test(command)
+      && !/[|;&`]|\$\(|\b(?:curl|wget|ssh|nxc|netexec|smbclient|rpcclient|ldapsearch|psql|mysql|mongosh|redis-cli)\b/i.test(command);
+    var textForDenial = text;
+    if (/Set-WSManQuickConfig|access\s+(?:is\s+)?denied|permission\s+denied/i.test(text)) {
+      textForDenial = text.replace(/^.*Set-WSManQuickConfig\s*:\s*Access is denied.*$/gim, '');
+      if (!isPassiveLocalFileView && /access\s+(?:is\s+)?denied|permission\s+denied/i.test(textForDenial)) {
+        textForDenial = textForDenial.split(/\r?\n/).filter(function (ln) {
+          if (ln.length > 1000) return true;
+          if (!/access\s+(?:is\s+)?denied|permission\s+denied/i.test(ln)) return true;
+          if (!/\b(?:echo|printf|fprintf|print|logger|die|warn|raise|return|throw|perror)\b/i.test(ln)) return true;
+          return !/(['"`])[^\r\n]{0,400}\b(?:access\s+(?:is\s+)?denied|permission\s+denied)\b[^\r\n]{0,400}\1/i.test(ln);
+        }).join('\n');
+      }
+    }
+    var denial = isPassiveLocalFileView
+      ? /^\s*(?:(?:\/usr\/bin\/|\/bin\/)?(?:cat|head|tail|less|more|bat|batcat|nl|strings)|-?(?:\/(?:usr\/)?bin\/)?(?:ba|da|a|z|k)?sh|sudo):\s+[^\r\n]*:\s*Permission denied\b/im.test(textForDenial)
+      : (/STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable|\[!\]\s*Not running as SYSTEM\b|\bOperation failed:\s*Access is denied\b|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|(?:^|\n)\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b|(?:^|\n)\s*(?!530\s)(?:[A-Za-z0-9_./-]+:\s+){1,3}Permission denied\s*(?:$|\r?\n)/i.test(textForDenial)
+        || facts.some(function (f) { return f && (f.kind === 'credential.authorization' || f.kind === 'blocker.ldap_anonymous_disabled'); }));
     var guestDisabled = /\\guest:\S*\s+STATUS_ACCOUNT_DISABLED/i.test(text) || (/\s-u\s+['"]?guest['"]?\b/i.test(command) && /STATUS_ACCOUNT_DISABLED/i.test(text));
     var sudoBadPass = /\bsudo:\s*\d+\s+incorrect\s+password\s+attempts?\b/i.test(text)
       || (/\[sudo\]\s*password\s+for\b/i.test(text) && /(?:^|\n)\s*Sorry,\s*try again\.\s*(?:$|\r?\n)/i.test(text));
@@ -183,7 +211,7 @@
       || (/\bftp:\/\//i.test(command) && !/\bhttps?:\/\//i.test(command))
       || /^\s*(?:220|331|530|534)[\s-]/m.test(text);
     var hasHardTransportReject = guestDisabled || sudoBadPass
-      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login(?:\s+or\s+password)?\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|(?:^|\n)\s*534[\s-]+(?:Policy\s+requires\s+SSL|Local\s+policy\s+on\s+server\s+does\s+not\s+allow\s+TLS|Could\s+not\s+connect\s+to\s+SNI)\b|\bftp:\s*Login\s+failed\b/i.test(text)
+      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|(?:^|\n)\s*\(error\)\s+(?:WRONGPASS|ERR\s+invalid\s+(?:username-password|password))\b|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login(?:\s+or\s+password)?\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|(?:^|\n)\s*534[\s-]+(?:Policy\s+requires\s+SSL|Local\s+policy\s+on\s+server\s+does\s+not\s+allow\s+TLS|Could\s+not\s+connect\s+to\s+SNI)\b|\bftp:\s*Login\s+failed\b/i.test(text)
       || (isFtpContext && /(?:^|\n)\s*(?:ftp:\s*)?Login\s+failed\.?\s*(?:$|\r?\n)/i.test(text))
       || facts.some(function (f) { return f && f.kind === 'credential.validation' && (f.state === 'refuted' || (f.value || {}).status === 'rejected'); });
     var isHttpResp = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
@@ -197,7 +225,9 @@
     );
     var httpAppLoginFailure = isHttpAppContext && /\b(?:authentication (?:failed|failure)|invalid (?:password|credentials?|username)|login (?:incorrect|failed))\b/i.test(text);
     var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\binvalid (?:password|credentials)\b|\bLogin incorrect\b/i.test(text));
-    var truncated = /\[truncated(?:[,\]]| output)|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
+    var hardTruncated = /\[truncated(?:,\s*[^\]]*|\s+output)\]|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
+    var bareTruncated = !hardTruncated && /\[truncated\]/i.test(text);
+    var truncated = hardTruncated || bareTruncated;
     var parsedError = !!opts.parseError || diagnostics.length > 0;
     var done = completion(text, command, opts), obs = observations(text);
     var isShellEstablishingCmd = /\b(?:su|sudo|ssh|sshpass|evil-winrm|psexec|wmiexec|smbexec|atexec|winrs|xfreerdp|nc|ncat|netcat|socat|msfconsole|exploit|meterpreter)\b/i.test(command);
@@ -228,6 +258,9 @@
       return /^(?:hash\.|credential\.(?:available|plaintext|candidate|ntlm_hash|ssh_key|certificate)|privesc\.|loot\.|vuln\.|exploit\.|db\.(?:tables|databases|hashes|creds))/.test(f.kind || '')
         || (!operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind || ''));
     });
+    if (bareTruncated && (substantiveProof || done.complete)) {
+      truncated = false;
+    }
     if (httpAppLoginFailure) {
       var hasNewWebSurface = resultProof || nonAmbientProof.some(function (f) {
         return /^(?:web\.|http\.(?:headers|response)$)/.test(f.kind || '') || (f.kind === 'http.reachable' && !priorKinds['http.reachable']);
@@ -236,10 +269,16 @@
     } else if (/PRIVILEGES INFORMATION/i.test(text) && /Privilege Name|={5,}/i.test(text) && !nonAmbientProof.some(function (f) { return f.kind === 'privesc.windows_privilege'; })) {
       done = { complete: true, negative: true };
     }
-    var envText = resultProof
+    var hasGcoreSaved = /\bSaved corefile\s+\S+/i.test(text);
+    var envText = (resultProof || hasGcoreSaved)
       ? text.replace(/^\s*(?:cat|ls|find|grep|egrep|fgrep|rg|stat|head|tail|file):\s+[^\r\n]*No such file or directory\s*$/gim, '')
       : text;
+    envText = envText.replace(/^[^\r\n]*\.{1,2}\/sysdeps\/[^\r\n]*:\s*No such file or directory\.?\s*$/gim, '');
+    if (hasGcoreSaved) {
+      envText = envText.replace(/^[^\r\n]*\.(?:c|cc|cpp|h|S):\s*No such file or directory\.?\s*$/gim, '');
+    }
     var hardEnvironment = (!guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?(?:command not found|is not recognized as an internal or external command|No such file or directory|unrecognized (?:option|arguments?)|invalid option|missing (?:required )?(?:option|argument)|SyntaxError:|ModuleNotFoundError:|ImportError:|externally-managed-environment|version ['`"]?GLIBC_2\.\d+|cannot execute binary file:\s*Exec format error|Traceback \(most recent call last\):|Connection (?:refused|reset)|could not connect|Name or service not known|Temporary failure in name resolution|Network is unreachable|\b(?:connection|request|operation|scan|socket|read)\s+timed?\s*out\b|(?<!nmblookup[^\n]{0,40})\btimed\s+out\b|KRB_AP_ERR_SKEW|clock skew too great|STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|BIO_do_handshake failed|freerdp_tls_handshake|ERRCONNECT_TLS_CONNECT_FAILED|Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management)/i.test(envText))
+      || (!guestDisabled && !denial && !hasHardTransportReject && /(?:^|\n)\s*\(error\)\s+ERR\b/i.test(text))
       || (!guestDisabled && /(?:^|\n)\s*-?(?:\/(?:usr\/(?:local\/)?)?bin\/)?(?:ba|da|a|z|k|c|tc)?sh:\s*(?:line\s+\d+:\s*|\d+:\s*)?[A-Za-z0-9_./-]+:\s*not found\b/i.test(text))
       || (!guestDisabled && /(?:^|\n)\s*Error:\s*invalid line \d+ in \/\S+:/i.test(text))
       || (!guestDisabled && !isHttpResp && /\b(?:SSLCertVerificationError|CERTIFICATE_VERIFY_FAILED|ProxyError)\b/.test(text))

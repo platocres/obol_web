@@ -858,7 +858,12 @@
     }
     var rpcOsVerM = /platform_id\s*:\s*500[\s\S]{1,80}?os version\s*:\s*(\d+\.\d+)/i.exec(text);
     if (rpcOsVerM && C._add_os_observation) {
-      C._add_os_observation(facts, ws, source, 'windows', 'Windows NT ' + rpcOsVerM[1] + ' (rpcclient srvinfo)', 'high', 'rpcclient', true);
+      var rpcWinBefore = text.slice(Math.max(0, rpcOsVerM.index - 240), rpcOsVerM.index + rpcOsVerM[0].length);
+      if (/\bSamba\b|\bWk\s+Sv\b[^\r\n]*\bUnx\b/i.test(rpcWinBefore)) {
+        C._add_os_observation(facts, ws, source, 'linux', 'Samba Unix server (rpcclient srvinfo)', 'high', 'rpcclient', true);
+      } else {
+        C._add_os_observation(facts, ws, source, 'windows', 'Windows NT ' + rpcOsVerM[1] + ' (rpcclient srvinfo)', 'high', 'rpcclient', true);
+      }
     }
     if (/\[\+\]\s*LDAP is accessible on 389\/tcp/i.test(text)) {
       _add(facts, mkFact('ldap.reachable', h, { port: 389, tool: 'enum4linux-ng' }, S, source));
