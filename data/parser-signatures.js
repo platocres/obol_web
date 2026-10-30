@@ -140,10 +140,10 @@
       emits: ['tls.info'],
     },
     'host-privesc': {
-      looksFor: "a privilege-escalation sweep on the host - winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd groups, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, kernel/sudo/pkexec exploit versions, and a reachable desktop.",
-      regex: 'NOPASSWD, SeImpersonatePrivilege, -rwsr-xr-x, nsclient.ini password=',
+      looksFor: "a privilege-escalation sweep on the host - winPEAS/linPEAS leads, sudo -l rights, SUID binaries, capabilities, writable cron/paths, docker/lxd and privileged local groups (disk/shadow/adm), pspy/ps process leads, unquoted service paths, dangerous tokens, missing patches, stored app credentials (PuTTY/WinSCP/VNC), AV/AppLocker posture, notable programs, kernel/sudo/pkexec exploit versions, and a reachable desktop.",
+      regex: 'NOPASSWD, SeImpersonatePrivilege, -rwsr-xr-x, 6(disk), CMD: UID=0, nsclient.ini password=',
       emits: ['privesc.', 'config.review', 'defense.control', 'host.notable_program', 'host.arch', 'access.desktop',
-        'host.os_family', 'credential.candidate', 'file.nsclient_ini', 'exploit.versioned_banner', 'exploit.candidate', 'vuln.dirtycow', 'vuln.dirtypipe', 'vuln.baron_samedit', 'vuln.polkit'],
+        'host.os_family', 'host.users', 'credential.candidate', 'file.nsclient_ini', 'exploit.versioned_banner', 'exploit.candidate', 'vuln.dirtycow', 'vuln.dirtypipe', 'vuln.baron_samedit', 'vuln.polkit'],
     },
     'flags': {
       looksFor: 'an on-host flag read - a clean flag token on its own line from a `type`/`cat ...proof.txt`, or a ===FLAG marker, tied to its slot.',

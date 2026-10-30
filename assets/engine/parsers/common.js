@@ -772,4 +772,27 @@
   }
   C._nt_hash = _nt_hash;
 
+  var _DOS_EMULATOR_MARKER_RE = /\bdosbox\b|Drive [A-Z] is mounted as (?:local directory|internal Virtual Drive)|\bMOUNT\s+[A-Za-z]\s+\/(?:(?:etc|usr|bin|sbin|var|home|root|tmp|opt)(?:\/|\s|$)|\s|$)/i;
+  var _DOS_ROOT_PROMPT_RE = /^\s*[A-Za-z]:\\>(.*)$/;
+  var _DOS_POSIX_ROOT_PATH_RE = /(?:^|\s|['"><|])\/(?:etc|usr|bin|sbin|var|home|root|tmp|opt)\//;
+
+  function isDosEmulatorContext(command, text, promptLine) {
+    var cmdStr = String(command || '');
+    var txtStr = String(text || '');
+    var pStr = typeof promptLine === 'string'
+      ? promptLine
+      : String((promptLine && (promptLine.promptLine || (promptLine.context && promptLine.context.promptLine))) || '');
+    if (_DOS_EMULATOR_MARKER_RE.test(cmdStr) || _DOS_EMULATOR_MARKER_RE.test(txtStr) || _DOS_EMULATOR_MARKER_RE.test(pStr)) {
+      return true;
+    }
+    var firstLine = txtStr.split(/\r?\n/, 1)[0] || '';
+    var pm = _DOS_ROOT_PROMPT_RE.exec(pStr) || _DOS_ROOT_PROMPT_RE.exec(firstLine);
+    if (pm) {
+      var candidateCmd = cmdStr.trim() ? cmdStr : (pm[1] || '');
+      if (_DOS_POSIX_ROOT_PATH_RE.test(candidateCmd)) return true;
+    }
+    return false;
+  }
+  C.isDosEmulatorContext = isDosEmulatorContext;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

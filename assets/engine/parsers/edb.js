@@ -20,7 +20,7 @@
 
   // Stock OS, runtime, web server, database, frontend library, and scanner baselines.
   // Subtracted in Stage 0 so routine infrastructure headers never spam searchsploit lookups.
-  var _STOCK_BANNER_PRODUCT_RE = /^(?:apache(?: httpd| tomcat| coyote)?|tomcat|httpd|nginx|openresty|microsoft[- ]iis|iis|microsoft[- ]httpapi|microsoft[- ]windows(?:[- ]rpc)?|microsoft|windows(?: server| nt| rpc)?|lighttpd|caddy|gunicorn|uvicorn|werkzeug|waitress|tornado|jetty|glassfish|kestrel|node(?:\.js)?|express|phusion passenger|passenger|cloudflare|varnish|squid|haproxy|traefik|php|asp\.net|python|python2|python3|cpython|ruby|perl|java|openjdk|openssl|libssh2?|mod_[a-z0-9_]+|openssh|dropbear|postfix|dovecot|exim|sendmail|isc bind|bind|named|dnsmasq|unbound|msrpc|microsoft-ds|netbios-ssn|kerberos(?:-sec)?|ms-wbt-server|winrm|mysql|mariadb|postgresql|postgres|microsoft sql server|mssql|sql server|redis|memcached|mongodb|sqlite3?|openldap|ldap|wordpress|drupal|joomla|phpmyadmin|bootstrap|jquery(?: ui| migrate)?|modernizr|fontawesome|font awesome|tailwind(?:css)?|react|vue(?:\.js)?|angular(?:\.js)?|popper(?:\.js)?|lodash|moment(?:\.js)?|axios|hugo|jekyll|gatsby|next(?:\.js)?|nuxt(?:\.js)?|ubuntu|debian|centos|redhat|rhel|fedora|alpine|freebsd|openbsd|netbsd|linux(?: kernel)?|gnu|samba(?: smbd)?|smbd|nmbd|rpcbind|nfs|nmap|masscan|rustscan|nikto|whatweb|gobuster|ffuf|feroxbuster|wpscan|sqlmap|curl|wget|httpie|python-requests|python-urllib3?|mozilla|chrome|chromium|safari|gecko|applewebkit|edge|opera|http|https|ssl|tls|tlsv1|ssh|ftp|smtp|pop3|imap|tcp|udp|ip|ipv4|ipv6|version|build|release|server|client|daemon|service|welcome|copyright|powered|generator)$/i;
+  var _STOCK_BANNER_PRODUCT_RE = /^(?:apache(?: httpd| tomcat| coyote)?|tomcat|httpd|nginx|openresty|microsoft[- ]iis|iis|microsoft[- ]httpapi|microsoft[- ]windows(?:[- ]rpc)?|microsoft|windows(?: server| nt| rpc)?|lighttpd|caddy|gunicorn|uvicorn|werkzeug(?:\s+httpd)?|waitress|tornado|jetty|glassfish|kestrel|node(?:\.js)?|express|phusion passenger|passenger|cloudflare|varnish|squid|haproxy|traefik|php|asp\.net|python|python2|python3|cpython|ruby|perl|java|openjdk|openssl|libssh2?|mod_[a-z0-9_]+|openssh|dropbear|postfix|dovecot|exim|sendmail|isc bind|bind|named|dnsmasq|unbound|msrpc|microsoft-ds|netbios-ssn|kerberos(?:-sec)?|ms-wbt-server|winrm|mysql|mariadb|postgresql|postgres|microsoft sql server|mssql|sql server|redis|memcached|mongodb|sqlite3?|openldap|ldap|wordpress|drupal|joomla|phpmyadmin|bootstrap|jquery(?: ui| migrate)?|modernizr|fontawesome|font awesome|tailwind(?:css)?|react|vue(?:\.js)?|angular(?:\.js)?|popper(?:\.js)?|lodash|moment(?:\.js)?|axios|hugo|jekyll|gatsby|next(?:\.js)?|nuxt(?:\.js)?|ubuntu|debian|centos|redhat|rhel|fedora|alpine|freebsd|openbsd|netbsd|linux(?: kernel)?|gnu|samba(?: smbd)?|smbd|nmbd|rpcbind|nfs|nmap|masscan|rustscan|nikto|whatweb|gobuster|ffuf|feroxbuster|wpscan|sqlmap|curl|wget|httpie|python-requests|python-urllib3?|mozilla|chrome|chromium|safari|gecko|applewebkit|edge|opera|http|https|ssl|tls|tlsv1|ssh|ftp|smtp|pop3|imap|tcp|udp|ip|ipv4|ipv6|version|build|release|server|client|daemon|service|welcome|copyright|powered|generator)$/i;
 
   function _cleanProductName(raw) {
     var s = String(raw || '')
@@ -381,8 +381,17 @@
 
   function _looks_like_edb_script(text, command) {
     var t = String(text || '');
+    if (!/\S/.test(t)) return false;
     var cmd = String(command || '');
-    if (!t.trim()) return false;
+    var hasCmd = /\S/.test(cmd);
+    var cmdIsInspect = hasCmd && _EDB_INSPECT_CMD_RE.test(cmd);
+    if (!cmdIsInspect) {
+      if (hasCmd) {
+        if (!/exploit|edb-id/i.test(t)) return false;
+      } else {
+        if (!/exploit|edb-id|cve-\d{4}-|author[ \t]*:/i.test(t)) return false;
+      }
+    }
     // Do not misclassify a searchsploit results table, HTTP response, or a bare searchsploit -m receipt without code
     if (/Exploit Title\s+\|\s+Path/i.test(t) || /"RESULTS_EXPLOIT"\s*:\s*\[/i.test(t) || /Exploits:\s*No Results/i.test(t)) {
       return false;
@@ -390,7 +399,7 @@
     if (/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t) || /<!doctype\s+html|<html[\s>]/i.test(t)) {
       return false;
     }
-    if (_EDB_INSPECT_CMD_RE.test(cmd)) return true;
+    if (cmdIsInspect) return true;
     if (_EDB_HEADER_RE.test(t) && (_SCRIPT_BODY_HINT_RE.test(t) || /\bUsage\s*:/i.test(t) || /CVE-\d{4}-\d+/i.test(t))) {
       // Exclude bare 6-line `searchsploit -m` summary output when no script lines follow
       if (/^\s*Exploit:\s+[^\r\n]+\r?\n\s*URL:\s+https?:\/\/www\.exploit-db\.com\/exploits\/\d+/i.test(t) && !_SCRIPT_BODY_HINT_RE.test(t)) {
@@ -401,7 +410,7 @@
     if (/https?:\/\/(?:www\.)?exploit-db\.com\/exploits\/\d+/i.test(t) && _SCRIPT_BODY_HINT_RE.test(t)) {
       return true;
     }
-    if (!cmd.trim() && (_LEGACY_POC_META_RE.test(t) || _LEGACY_POC_AUTHOR_SW_RE.test(t)) && _SCRIPT_BODY_HINT_RE.test(t) && _LEGACY_POC_EXPLOIT_IND_RE.test(t)) {
+    if (!hasCmd && (_LEGACY_POC_META_RE.test(t) || _LEGACY_POC_AUTHOR_SW_RE.test(t)) && _SCRIPT_BODY_HINT_RE.test(t) && _LEGACY_POC_EXPLOIT_IND_RE.test(t)) {
       return true;
     }
     return false;
@@ -666,7 +675,7 @@
 
   function _parse_versioned_banner_for_edb(text, ws, command, source, facts) {
     var t = String(text || '');
-    if (!t.trim()) return;
+    if (!/\S/.test(t)) return;
     if (_looks_like_searchsploit(t, command) || _looks_like_edb_script(t, command)) return;
     if (!Array.isArray(facts)) return;
 
@@ -748,56 +757,77 @@
     }
 
     // 2. Inspect raw text banners (HTML generator/powered-by/title, HTTP Server/X-Powered-By, 220 greetings, Nmap -sV rows)
-    var metaGenMatches = C.reAll(/<meta\b[^>]*?\bname=["']generator["'][^>]*?\bcontent=["']([^"']{3,90})["']/gi, t)
-      .concat(C.reAll(/<meta\b[^>]*?\bcontent=["']([^"']{3,90})["'][^>]*?\bname=["']generator["']/gi, t));
-    for (var mi = 0; mi < metaGenMatches.length; mi++) {
-      var mpv = _extractProdVerFromStr(metaGenMatches[mi][1]);
-      if (mpv) pushCandidate(mpv.product, mpv.version);
+    var hasHtmlLt = t.indexOf('<') >= 0;
+    if (hasHtmlLt) {
+      var metaGenMatches = C.reAll(/<meta\b[^>]*?\bname=["']generator["'][^>]*?\bcontent=["']([^"']{3,90})["']/gi, t)
+        .concat(C.reAll(/<meta\b[^>]*?\bcontent=["']([^"']{3,90})["'][^>]*?\bname=["']generator["']/gi, t));
+      for (var mi = 0; mi < metaGenMatches.length; mi++) {
+        var mpv = _extractProdVerFromStr(metaGenMatches[mi][1]);
+        if (mpv) pushCandidate(mpv.product, mpv.version);
+      }
     }
 
-    var poweredMatches = C.reAll(/\bPowered by\s+([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/gi, t);
-    for (var pwi = 0; pwi < poweredMatches.length; pwi++) {
-      pushCandidate(poweredMatches[pwi][1], poweredMatches[pwi][2]);
+    if (/powered by/i.test(t)) {
+      var poweredMatches = C.reAll(/\bPowered by\s+([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/gi, t);
+      for (var pwi = 0; pwi < poweredMatches.length; pwi++) {
+        pushCandidate(poweredMatches[pwi][1], poweredMatches[pwi][2]);
+      }
     }
 
-    var titleMatches = C.reAll(/<title>\s*([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t:|/-]+v?(\d+\.\d+(?:\.\d+)*)\s*<\/title>/gi, t);
-    for (var ti = 0; ti < titleMatches.length; ti++) {
-      pushCandidate(titleMatches[ti][1], titleMatches[ti][2]);
+    if (hasHtmlLt) {
+      var titleMatches = C.reAll(/<title>\s*([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t:|/-]+v?(\d+\.\d+(?:\.\d+)*)\s*<\/title>/gi, t);
+      for (var ti = 0; ti < titleMatches.length; ti++) {
+        pushCandidate(titleMatches[ti][1], titleMatches[ti][2]);
+      }
     }
 
-    var lines = t.split(/\r?\n/);
-    for (var li2 = 0; li2 < lines.length; li2++) {
-      var ln = lines[li2];
-      if (!ln || /^\s*(?:User-Agent|Referer|Accept|Starting Nmap|Nmap done|- Nikto)/i.test(ln)) continue;
+    var docHasSrvHdr = /(?:Server|X-Powered-By|X-Generator|X-Application|http-server-header)\s*:/i.test(t);
+    var docHasGreet220 = /^\s*220[- ]/m.test(t);
+    var docHasNmapOpen = /^\s*\d+\/(?:tcp|udp)\s+open\s/im.test(t);
+    var docHasAppCat = /\b(?:CMS|CRM|ERP|LMS|HRM|FMS|Portal|Management System|Manager|Helpdesk|Webmail|FTP Server|Mail Server|File Server)\b/i.test(t);
+    if (docHasSrvHdr || docHasGreet220 || docHasNmapOpen || docHasAppCat) {
+      var lines = t.split(/\r?\n/);
+      for (var li2 = 0; li2 < lines.length; li2++) {
+        var ln = lines[li2];
+        if (!ln || /^\s*(?:User-Agent|Referer|Accept|Starting Nmap|Nmap done|- Nikto)/i.test(ln)) continue;
 
-      // HTTP Server / X-Powered-By / X-Generator / Nmap http-server-header tokens
-      var hdrM = /^\s*(?:(?:<\s*)?(?:Server|X-Powered-By|X-Generator|X-Application)|(?:[|_][ \t]*)?_?http-server-header)\s*:\s*(.+)$/i.exec(ln);
-      if (hdrM) {
-        pushHeaderCandidates(hdrM[1]);
-        continue;
-      }
+        // HTTP Server / X-Powered-By / X-Generator / Nmap http-server-header tokens
+        if (docHasSrvHdr && ln.indexOf(':') >= 0) {
+          var hdrM = /^\s*(?:(?:<\s*)?(?:Server|X-Powered-By|X-Generator|X-Application)|(?:[|_][ \t]*)?_?http-server-header)\s*:\s*(.+)$/i.exec(ln);
+          if (hdrM) {
+            pushHeaderCandidates(hdrM[1]);
+            continue;
+          }
+        }
 
-      // 220 FTP/SMTP/service greeting banners
-      var greetM = /^\s*220[- ](?:Welcome to\s+)?([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3}?)(?:[ \t]+(?:FTP|SMTP|Mail|File)[ \t]+(?:Server|Daemon|Service))?[ \t\/]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
-      if (greetM) {
-        pushCandidate(greetM[1], greetM[2]);
-        continue;
-      }
+        // 220 FTP/SMTP/service greeting banners
+        if (docHasGreet220) {
+          var greetM = /^\s*220[- ](?:Welcome to\s+)?([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3}?)(?:[ \t]+(?:FTP|SMTP|Mail|File)[ \t]+(?:Server|Daemon|Service))?[ \t\/]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
+          if (greetM) {
+            pushCandidate(greetM[1], greetM[2]);
+            continue;
+          }
+        }
 
-      // Nmap -sV open port version column
-      var nmapM = /^\s*\d+\/(?:tcp|udp)\s+open\s+\S+\s+(.+)$/i.exec(ln);
-      if (nmapM) {
-        var rawSvcRest = nmapM[1].replace(/^(?:syn-ack|udp-response|localhost-response|reset|arp-response|nd-response|echo-reply|timestamp-reply|proto-response)(?:\s+ttl\s+\d+)?(?:\s+|$)/i, '');
-        var svcCol = rawSvcRest.replace(/\([^)]*\)/g, ' ').replace(/\bhttpd\b/gi, '').replace(/\s+/g, ' ').trim();
-        var npv = _extractProdVerFromStr(svcCol);
-        if (npv) pushCandidate(npv.product, npv.version);
-        continue;
-      }
+        // Nmap -sV open port version column
+        if (docHasNmapOpen && ln.indexOf('/') >= 0) {
+          var nmapM = /^\s*\d+\/(?:tcp|udp)\s+open\s+\S+\s+(.+)$/i.exec(ln);
+          if (nmapM) {
+            var rawSvcRest = nmapM[1].replace(/^(?:syn-ack|udp-response|localhost-response|reset|arp-response|nd-response|echo-reply|timestamp-reply|proto-response)(?:\s+ttl\s+\d+)?(?:\s+|$)/i, '');
+            var svcCol = rawSvcRest.replace(/\([^)]*\)/g, ' ').replace(/\bhttpd\b/gi, '').replace(/\s+/g, ' ').trim();
+            var npv = _extractProdVerFromStr(svcCol);
+            if (npv) pushCandidate(npv.product, npv.version);
+            continue;
+          }
+        }
 
-      // Explicit app category banner (e.g. "Wing FTP Server 7.2.1", "Fuel CMS 1.4.1", "OpenNetAdmin v18.1.1")
-      var appCatM = /\b([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,2}[ \t]+(?:CMS|CRM|ERP|LMS|HRM|FMS|Portal|Management System|Manager|Helpdesk|Webmail|FTP Server|Mail Server|File Server))[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
-      if (appCatM) {
-        pushCandidate(appCatM[1], appCatM[2]);
+        // Explicit app category banner (e.g. "Wing FTP Server 7.2.1", "Fuel CMS 1.4.1", "OpenNetAdmin v18.1.1")
+        if (docHasAppCat) {
+          var appCatM = /\b([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,2}[ \t]+(?:CMS|CRM|ERP|LMS|HRM|FMS|Portal|Management System|Manager|Helpdesk|Webmail|FTP Server|Mail Server|File Server))[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
+          if (appCatM) {
+            pushCandidate(appCatM[1], appCatM[2]);
+          }
+        }
       }
     }
 

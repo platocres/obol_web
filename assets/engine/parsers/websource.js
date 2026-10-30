@@ -43,12 +43,34 @@
   ];
 
   var _ANY_PRODUCT_SIG_RE = new RegExp(_PRODUCT_SIGS.map(function (r) { return '(?:' + r[1].source + ')'; }).join('|'), 'i');
+  var _OUTBOUND_HTTP_REQ_RE = /^(?:[ \t]*(?:(?:\*|\{|\}|#+[ \t]*Request\b)[^\r\n]*)?\r?\n)*[ \t]*(?:>[ \t]*)?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[ \t]+\S[^\r\n]{0,2048}?[ \t]+HTTP\/[12](?:\.\d)?\b/i;
+  var _INBOUND_HTTP_RESP_LINE_RE = /^[ \t]*(?:<[ \t]*)?HTTP\/[12](?:\.\d)?[ \t]+\d{3}\b/im;
+  var _OUTBOUND_HTTP_REQ_LINE_RE = /^[ \t]*(?:>[ \t]*)?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[ \t]+\S(?:\S*[ \t]*$|[^\r\n]{0,2048}?[ \t]+HTTP\/[12](?:\.\d)?\b[ \t]*$)/im;
+
   function _is_outbound_http_request_only(text) {
     var tr = String(text || '').trim();
-    if (!/^(?:>\s*)?(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+\S+\s+HTTP\/[12](?:\.\d)?\b/i.test(tr)) return false;
-    return !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(tr);
+    if (!_OUTBOUND_HTTP_REQ_RE.test(tr)) return false;
+    return !_INBOUND_HTTP_RESP_LINE_RE.test(tr);
   }
   C._is_outbound_http_request_only = _is_outbound_http_request_only;
+
+  function _inbound_http_segment(text) {
+    var s = String(text || '');
+    var respM = _INBOUND_HTTP_RESP_LINE_RE.exec(s);
+    if (respM) {
+      if (respM.index === 0) return s;
+      var preResp = s.slice(0, respM.index);
+      if (/^[ \t]*#+[ \t]*Request\b/im.test(preResp) || _OUTBOUND_HTTP_REQ_LINE_RE.test(preResp)) {
+        return s.slice(respM.index);
+      }
+      return s;
+    }
+    if (_OUTBOUND_HTTP_REQ_RE.test(s)) {
+      return '';
+    }
+    return s;
+  }
+  C._inbound_http_segment = _inbound_http_segment;
 
   function _is_unix_account_dump(text) {
     var t = String(text || '');
@@ -246,27 +268,59 @@
   function _has_labeled_creds(text) { return _labeled_cred_pairs(text).length > 0; }
   C._has_labeled_creds = _has_labeled_creds;
 
-  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|define\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=/i;
+  var _ASSOC_ARRAY_SECRET_HINT_RE = /['"](?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd|dbpass|secret|api[_-]?key|token)['"]\s*=>\s*['"][^'"\r\n]{1,128}['"]/i;
+  var _XML_ATTR_SECRET_HINT_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b[^>\r\n]{0,1024}?\b(?:(?:name|key|id)\s*=\s*["'][^"'\r\n]{0,128}(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)["']|(?:password|secret)\s*=\s*["'][^"'\r\n]{1,256}["'])[^>\r\n]{0,1024}\/?>/i;
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle):|define\s*\(\s*['"](?:DB_[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*DB_USER(?:NAME)?)['"]|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/i;
 
   function _has_source_secret(text) {
     var t = text || '';
-    return !!(reSearch(_SIGNING_MARK_RE, t) || reSearch(_SECRET_KEY_RE, t)
-      || reSearch(_CONFIG_PW_RE, t) || reSearch(_FIELD_CRED_RE, t)
-      || reSearch(_PHP_PW_RE, t) || reSearch(_DEFINE_PW_RE, t)
-      || reSearch(_ENV_PW_RE, t) || reSearch(_URI_CRED_RE, t)
-      || reSearch(_VCS_TOKEN_RE, t) || reSearch(_PRIVKEY_RE, t)
-      || reSearch(_INI_PW_RE, t)
-      || reSearch(_DB_CONNECTOR_HINT_RE, t)
+    if (!t) return false;
+    var hasEq = t.indexOf('=') >= 0;
+    var hasColon = t.indexOf(':') >= 0;
+    var hasEqOrColon = hasEq || hasColon;
+    var hasDollar = t.indexOf('$') >= 0;
+    var hasParen = t.indexOf('(') >= 0;
+    var hasProto = hasColon && t.indexOf('://') >= 0;
+    var hasVcsHint = t.indexOf('gh') >= 0 || t.indexOf('github_pat_') >= 0 || t.indexOf('glpat-') >= 0;
+    var hasPrivKeyHint = t.indexOf('PRIVATE KEY-----') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
+    var hasArrow = hasEq && t.indexOf('=>') >= 0;
+    var hasXmlTag = t.indexOf('<') >= 0 && t.indexOf('>') >= 0;
+    var hasDbHint = hasArrow || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
+      || t.indexOf('jdbc:') >= 0 || t.indexOf('DB_') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+      || (t.indexOf(';') >= 0 && (t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0));
+    return !!((hasPrivKeyHint && reSearch(_PRIVKEY_RE, t))
+      || (hasVcsHint && reSearch(_VCS_TOKEN_RE, t))
+      || (hasProto && reSearch(_URI_CRED_RE, t))
+      || reSearch(_SIGNING_MARK_RE, t)
+      || (hasEqOrColon && reSearch(_SECRET_KEY_RE, t))
+      || (hasEqOrColon && reSearch(_CONFIG_PW_RE, t))
+      || (hasEq && reSearch(_FIELD_CRED_RE, t))
+      || (hasDollar && hasEq && reSearch(_PHP_PW_RE, t))
+      || (hasParen && reSearch(_DEFINE_PW_RE, t))
+      || (hasEq && reSearch(_ENV_PW_RE, t))
+      || (hasEqOrColon && reSearch(_INI_PW_RE, t))
+      || (hasArrow && reSearch(_ASSOC_ARRAY_SECRET_HINT_RE, t))
+      || (hasXmlTag && reSearch(_XML_ATTR_SECRET_HINT_RE, t))
+      || (hasDbHint && reSearch(_DB_CONNECTOR_HINT_RE, t))
       || _has_labeled_creds(t)
-      || (reSearch(_CONNSTR_CTX_RE, t) && reSearch(_CONNSTR_PW_RE, t)));
+      || (hasEq && reSearch(_CONNSTR_CTX_RE, t) && reSearch(_CONNSTR_PW_RE, t)));
   }
   C._has_source_secret = _has_source_secret;
 
   function _parse_source_secret(text, ws, command, source, facts) {
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var t = text || '', scope = _scope(ws), seen = {};
+    if (!t) return;
+    var hasEq = t.indexOf('=') >= 0;
+    var hasColon = t.indexOf(':') >= 0;
+    var hasEqOrColon = hasEq || hasColon;
+    var hasDollar = t.indexOf('$') >= 0;
+    var hasParen = t.indexOf('(') >= 0;
+    var hasProto = hasColon && t.indexOf('://') >= 0;
+    var hasVcsHint = t.indexOf('gh') >= 0 || t.indexOf('github_pat_') >= 0 || t.indexOf('glpat-') >= 0;
+    var hasPrivKeyHint = t.indexOf('PRIVATE KEY-----') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
 
-    if (C && C._extract_diff_cred_pairs) {
+    if (C && C._extract_diff_cred_pairs && (t.indexOf('\n+') >= 0 || t.indexOf('\n-') >= 0 || t.charAt(0) === '+' || t.charAt(0) === '-')) {
       var diffPairs = C._extract_diff_cred_pairs(t);
       diffPairs.forEach(function (pair) {
         var pairKey = 'diff:' + pair.user + ':' + pair.password;
@@ -288,9 +342,9 @@
     // JWT-specific idioms → web.jwt_secret (a *JWT* signing secret).
     var jwtSecrets = [];
     if (reSearch(_SIGNING_MARK_RE, t)) {
-      reAll(_GETBYTES_RE, t).forEach(function (m) { var s = _clean_secret(m.groups.s); if (s) jwtSecrets.push(s); });
+      if (hasParen) reAll(_GETBYTES_RE, t).forEach(function (m) { var s = _clean_secret(m.groups.s); if (s) jwtSecrets.push(s); });
     }
-    reAll(_JWT_SIGN_RE, t).forEach(function (m) { var s = _clean_secret(m.groups.s); if (s) jwtSecrets.push(s); });
+    if (hasParen) reAll(_JWT_SIGN_RE, t).forEach(function (m) { var s = _clean_secret(m.groups.s); if (s) jwtSecrets.push(s); });
     jwtSecrets.forEach(function (s) {
       if (seen[s]) return;
       seen[s] = true;
@@ -299,20 +353,28 @@
     });
 
     // A generic SECRET_KEY assignment is app signing material, a candidate lead, not a JWT claim.
-    reAll(_SECRET_KEY_RE, t).forEach(function (m) {
-      var rawS = (m.groups && (m.groups.s || m.groups.uval)) || '';
-      var s = _clean_secret(rawS);
-      if (!s || seen[s]) return;
-      seen[s] = true;
-      _add(facts, mkFact('credential.candidate', scope, { kind: 'app_signing_secret', secret: s, source: 'source-disclosure' }, S, source));
-      if (/\bsecret_key_base\b/i.test(m[0]) || (m.groups && m.groups.uval)) {
-        var sdVal = { kind: 'config_file' };
-        if (/\bsecret_key_base\b/i.test(m[0])) sdVal.framework = 'rails';
-        _add(facts, mkFact('web.source_disclosed', scope, sdVal, S, source));
-      }
-    });
+    if (hasEqOrColon && /secret/i.test(t)) {
+      reAll(_SECRET_KEY_RE, t).forEach(function (m) {
+        var rawS = (m.groups && (m.groups.s || m.groups.uval)) || '';
+        var s = _clean_secret(rawS);
+        if (!s || seen[s]) return;
+        seen[s] = true;
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'app_signing_secret', secret: s, source: 'source-disclosure' }, S, source));
+        if (/\bsecret_key_base\b/i.test(m[0]) || (m.groups && m.groups.uval)) {
+          var sdVal = { kind: 'config_file' };
+          if (/\bsecret_key_base\b/i.test(m[0])) sdVal.framework = 'rails';
+          _add(facts, mkFact('web.source_disclosed', scope, sdVal, S, source));
+        }
+      });
+    }
 
-    [_CONFIG_PW_RE, _FIELD_CRED_RE, _PHP_PW_RE, _DEFINE_PW_RE, _ENV_PW_RE].forEach(function (rx) {
+    var pwRxList = [];
+    if (hasEqOrColon) pwRxList.push(_CONFIG_PW_RE);
+    if (hasEq) pwRxList.push(_FIELD_CRED_RE);
+    if (hasDollar && hasEq) pwRxList.push(_PHP_PW_RE);
+    if (hasParen) pwRxList.push(_DEFINE_PW_RE);
+    if (hasEq) pwRxList.push(_ENV_PW_RE);
+    pwRxList.forEach(function (rx) {
       reAll(rx, t).forEach(function (m) {
         var s = _clean_secret(m.groups.s);
         if (!s || seen[s] || _CODE_EXPR_SECRET_RE.test(s)) return;
@@ -333,26 +395,30 @@
     // on-host. Same config_secret lead as above, but with the extra value guards (no SecureString,
     // no binary blob, no boolean) the looser line-anchored shape needs. Guard against interactive
     // CLI authentication prompt echoes ("Password: <typed>") in su/sudo/ssh/impacket/auth failures.
-    var isInteractiveAuthCli = /^\s*(?:sudo\s+)?(?:su|sudo|ssh|kinit|smbclient|rpcclient|psql|mysql|mssqlclient|impacket-[\w-]+|GetNPUsers(?:\.py)?|GetUserSPNs(?:\.py)?|secretsdump(?:\.py)?|psexec(?:\.py)?|wmiexec(?:\.py)?|smbexec(?:\.py)?|atexec(?:\.py)?|dcomexec(?:\.py)?)\b/i.test(command || '')
-      || /(?:su:\s*Authentication failure|Sorry,\s*try again|Login incorrect|Cannot authenticate\b|doesn't have UF_DONT_REQUIRE_PREAUTH set|KDC_ERR_PREAUTH_FAILED|Permission denied\s*\(|STATUS_LOGON_FAILURE)/i.test(t);
-    reAll(_INI_PW_RE, t).forEach(function (m) {
-      if (isInteractiveAuthCli && /^[ \t]*(?:Enter[ \t]+)?Password[ \t]*:/i.test(m[0])) return;
-      var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
-      if (!s || seen[s] || !_valid_config_pw(s)) return;
-      seen[s] = true;
-      _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'config-field' }, S, source));
-    });
+    if (hasEqOrColon) {
+      var isInteractiveAuthCli = /^\s*(?:sudo\s+)?(?:su|sudo|ssh|kinit|smbclient|rpcclient|psql|mysql|mssqlclient|impacket-[\w-]+|GetNPUsers(?:\.py)?|GetUserSPNs(?:\.py)?|secretsdump(?:\.py)?|psexec(?:\.py)?|wmiexec(?:\.py)?|smbexec(?:\.py)?|atexec(?:\.py)?|dcomexec(?:\.py)?)\b/i.test(command || '')
+        || /(?:su:\s*Authentication failure|Sorry,\s*try again|Login incorrect|Cannot authenticate\b|doesn't have UF_DONT_REQUIRE_PREAUTH set|KDC_ERR_PREAUTH_FAILED|Permission denied\s*\(|STATUS_LOGON_FAILURE)/i.test(t);
+      reAll(_INI_PW_RE, t).forEach(function (m) {
+        if (isInteractiveAuthCli && /^[ \t]*(?:Enter[ \t]+)?Password[ \t]*:/i.test(m[0])) return;
+        var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
+        if (!s || seen[s] || !_valid_config_pw(s)) return;
+        seen[s] = true;
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'config-field' }, S, source));
+      });
+    }
 
     // a VCS access token (GitHub PAT / GitLab glpat), the token itself is the credential.
-    reAll(_VCS_TOKEN_RE, t).forEach(function (m) {
-      var tok = m.groups.token;
-      if (seen[tok]) return;
-      seen[tok] = true;
-      _add(facts, mkFact('credential.candidate', scope, { kind: 'vcs_token', token: tok, source: 'source-disclosure' }, S, source));
-    });
+    if (hasVcsHint) {
+      reAll(_VCS_TOKEN_RE, t).forEach(function (m) {
+        var tok = m.groups.token;
+        if (seen[tok]) return;
+        seen[tok] = true;
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'vcs_token', token: tok, source: 'source-disclosure' }, S, source));
+      });
+    }
 
     // a pasted private key is a key in hand → credential.certificate (lights ssh-key-login).
-    if (reSearch(_PRIVKEY_RE, t)) {
+    if (hasPrivKeyHint && reSearch(_PRIVKEY_RE, t)) {
       var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(t)
         || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(t);
       _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: isEncKey, source: 'source-disclosure' }, S, source));
@@ -367,7 +433,7 @@
     }
 
     // a password inside a DB connection string (only in a connection-string context).
-    if (reSearch(_CONNSTR_CTX_RE, t)) {
+    if (hasEq && reSearch(_CONNSTR_CTX_RE, t)) {
       reAll(_CONNSTR_PW_RE, t).forEach(function (m) {
         var s = _clean_secret(m.groups.s);
         if (!s || seen[s]) return;
@@ -377,22 +443,205 @@
     }
 
     // a credential embedded in a connection URI keeps its username too (a login lead).
-    reAll(_URI_CRED_RE, t).forEach(function (m) {
-      var s = _clean_secret(m.groups.s);
-      if (!s || seen[s]) return;
-      seen[s] = true;
-      var u = (m.groups.user || '').trim();
-      var sch = m.groups.scheme.toLowerCase();
-      _add(facts, mkFact('credential.candidate', scope, { kind: 'connection_uri', user: u, password: s, scheme: sch, host: m.groups.host, source: 'source-disclosure' }, S, source));
-      if (u && !_SECRET_DENY[u.toLowerCase()] && !_PLACEHOLDER_RE.test(u) && /^(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mariadb|mssql|sqlserver|redis|amqp|ftp|ssh)$/.test(sch)) {
-        _add(facts, mkFact('credential.available', scope, { user: u, password: s, service: sch, host: m.groups.host, method: 'source-dsn' }, S, source));
-      }
-    });
+    if (hasProto) {
+      reAll(_URI_CRED_RE, t).forEach(function (m) {
+        var s = _clean_secret(m.groups.s);
+        if (!s || seen[s]) return;
+        seen[s] = true;
+        var u = (m.groups.user || '').trim();
+        var sch = m.groups.scheme.toLowerCase();
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'connection_uri', user: u, password: s, scheme: sch, host: m.groups.host, source: 'source-disclosure' }, S, source));
+        if (u && !_SECRET_DENY[u.toLowerCase()] && !_PLACEHOLDER_RE.test(u) && /^(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|mariadb|mssql|sqlserver|redis|amqp|ftp|ssh)$/.test(sch)) {
+          _add(facts, mkFact('credential.available', scope, { user: u, password: s, service: sch, host: m.groups.host, method: 'source-dsn' }, S, source));
+        }
+      });
+    }
+
+    // Quoted PHP/Ruby associative-array ('user' => '...', 'password' => '...') credentials & secrets
+    if (t.indexOf('=>') >= 0) _parse_assoc_array_secrets(t, scope, source, facts, seen);
+
+    // Self-closing XML attribute (<param name="password" value="..."/>) credentials & secrets
+    if (t.indexOf('<') >= 0 && t.indexOf('>') >= 0) _parse_xml_attr_secrets(t, scope, source, facts, seen);
 
     // Hardcoded DB connector calls and full User+Password DSN strings in disclosed source
-    _parse_source_db_connectors(t, scope, source, facts, seen);
+    if (t.indexOf('=>') >= 0 || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
+        || t.indexOf('jdbc:') >= 0 || t.indexOf('DB_') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+        || t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0) {
+      _parse_source_db_connectors(t, scope, source, facts, seen);
+    }
   }
   C._parse_source_secret = _parse_source_secret;
+
+  function _valid_assoc_or_xml_secret(rawVal, minLen) {
+    var s = _clean_secret(rawVal);
+    if (!s || s.length < (minLen || 3) || s.length > 128) return '';
+    if (!/^[\x21-\x7e]+$/.test(s)) return '';
+    if (/^(?:\$[A-Za-z_{]|ENV\[|AQAAANCMnd8BFdER)/.test(s)) return '';
+    if (_CFG_VAL_WORD_RE.test(s) || _CFG_VAL_TYPE_RE.test(s) || _CODE_EXPR_SECRET_RE.test(s)) return '';
+    if (/^(?:\/|\.\.?\/|~\/|[A-Za-z]:\\|[a-z][a-z0-9+.\-]*:\/\/|[{[\]()}])/i.test(s)) return '';
+    return s;
+  }
+
+  function _valid_assoc_or_xml_user(rawUser) {
+    var u = String(rawUser || '').trim();
+    if (!u || u.length < 2 || u.length > 64) return '';
+    if (/^(?:\$[A-Za-z_{]|ENV\[)/.test(u)) return '';
+    if (_SECRET_DENY[u.toLowerCase()] || _PLACEHOLDER_RE.test(u)) return '';
+    if (/^(?:user|username|dbuser|db_user|your_user|login|account|null|none|true|false|empty)$/i.test(u)) return '';
+    if (!/^[A-Za-z0-9_.@+\-$\\]+$/.test(u)) return '';
+    return u;
+  }
+
+  function _parse_assoc_array_secrets(text, scope, source, facts, seen) {
+    var t = String(text || '');
+    if (t.indexOf('=>') < 0) return;
+    var lines = t.split(/\r?\n/);
+    var users = [], secrets = [];
+    var pairRe = /['"]([A-Za-z0-9_.-]{1,48})['"]\s*=>\s*['"]([^'"\r\n]{1,128})['"]/g;
+    var userKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:user(?:name)?|login|uname)|dbuser|db_user)$/i;
+    var secKeyRe = /^(?:(?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)|dbpass|db_pass|apikey)$/i;
+    var secKeyDenyRe = /(?:policy|reset|forgot|change|update|min|max|age|len|expir|prompt|file|path|url|uri|algo)/i;
+
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (!ln || ln.indexOf('=>') < 0 || ln.length > 2048) continue;
+      pairRe.lastIndex = 0;
+      var m;
+      while ((m = pairRe.exec(ln)) !== null) {
+        var k = m[1], v = m[2];
+        if (userKeyRe.test(k)) {
+          var vu = _valid_assoc_or_xml_user(v);
+          if (vu) users.push({ line: i, key: k, user: vu });
+        } else if (secKeyRe.test(k) && !secKeyDenyRe.test(k)) {
+          var vs = _valid_assoc_or_xml_secret(v, 3);
+          if (vs) secrets.push({ line: i, key: k, secret: vs });
+        }
+      }
+    }
+    if (!secrets.length) return;
+
+    var dbWindowRe = /(?:['"](?:db(?:name|_name)?|database|host|driver|type|port|charset|dsn|adapter)['"]\s*=>|\b(?:mysql|mariadb|pgsql|postgres|postgresql|mssql|sqlsrv|sqlite|pdo|database|db_config|dbconfig|db_conn)\b)/i;
+    for (var si = 0; si < secrets.length; si++) {
+      var secItem = secrets[si];
+      var bestUser = null, bestDist = 999;
+      for (var ui = 0; ui < users.length; ui++) {
+        var dist = Math.abs(users[ui].line - secItem.line);
+        if (dist <= 12 && dist < bestDist) {
+          bestDist = dist;
+          bestUser = users[ui];
+        }
+      }
+      if (bestUser) {
+        var lo = Math.max(0, Math.min(bestUser.line, secItem.line) - 6);
+        var hi = Math.min(lines.length - 1, Math.max(bestUser.line, secItem.line) + 6);
+        var winStr = lines.slice(lo, hi + 1).join('\n');
+        var isDb = dbWindowRe.test(winStr) || /^db/i.test(bestUser.key) || /^db/i.test(secItem.key);
+        var svc = /\b(?:pgsql|postgres|postgresql)\b/i.test(winStr) ? 'postgres'
+          : (/\b(?:mssql|sqlsrv|sqlserver)\b/i.test(winStr) ? 'mssql'
+          : (/\bsqlite\b/i.test(winStr) ? 'sqlite' : (isDb ? 'mysql' : 'app')));
+        if (isDb) {
+          var dbNameM = /['"](?:db(?:name|_name)?|database)['"]\s*=>\s*['"]([^'"\r\n]{1,96})['"]/i.exec(winStr);
+          var hostM = /['"]host['"]\s*=>\s*['"]([^'"\r\n]{1,96})['"]/i.exec(winStr);
+          var extra = {};
+          if (dbNameM) extra.dbname = dbNameM[1].trim();
+          if (hostM) extra.host = hostM[1].trim();
+          _emitConcreteSourceCred(facts, scope, source, seen, bestUser.user, secItem.secret, svc, 'assoc-array', true, extra);
+        } else {
+          var pairKey = 'pair:' + bestUser.user + ':' + secItem.secret;
+          if (!seen[pairKey]) {
+            seen[pairKey] = true;
+            var pVal = { user: bestUser.user, password: secItem.secret, secret_type: 'plaintext', method: 'assoc-array' };
+            _add(facts, mkFact('credential.plaintext', scope, pVal, S, source));
+            _add(facts, mkFact('credential.available', scope, pVal, S, source));
+          }
+          if (!seen[secItem.secret]) {
+            seen[secItem.secret] = true;
+            _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', user: bestUser.user, password: secItem.secret, key: secItem.key.toLowerCase(), source: 'assoc-array' }, S, source));
+          }
+        }
+      } else if (secItem.secret.length >= 4 && !seen[secItem.secret]) {
+        seen[secItem.secret] = true;
+        var kLow = secItem.key.toLowerCase();
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: secItem.secret, key: kLow, source: 'assoc-array' }, S, source));
+        _add(facts, mkFact('credential.password', scope, { password: secItem.secret, key: kLow, via: 'assoc-array' }, S, source));
+      }
+    }
+  }
+
+  function _parse_xml_attr_secrets(text, scope, source, facts, seen) {
+    var t = String(text || '');
+    if (t.indexOf('<') < 0 || t.indexOf('>') < 0 || !_XML_ATTR_SECRET_HINT_RE.test(t)) return;
+    if (/<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(t)) return;
+    var lines = t.split(/\r?\n/);
+    var tagRe = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b([^>\r\n]*)\/?>/gi;
+    var userKeyRe = /^(?:(?:[A-Za-z0-9_.-]+[_.-])?(?:user(?:name)?|login|account|uid)|dbuser)$/i;
+    var secKeyRe = /^(?:(?:[A-Za-z0-9_.-]+[_.-])?(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)|dbpass|apikey)$/i;
+    var secKeyDenyRe = /(?:policy|reset|forgot|change|update|min|max|age|len|expir|prompt|file|path|url|uri|algo)/i;
+    var xmlUsers = [], xmlSecrets = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (!ln || ln.indexOf('<') < 0 || ln.length > 2048) continue;
+      tagRe.lastIndex = 0;
+      var tm;
+      while ((tm = tagRe.exec(ln)) !== null) {
+        var attrs = tm[1] || '';
+        if (/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(attrs) || /\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(attrs)) continue;
+        var directUserM = /\b(?:user(?:name)?|login|uid)\s*=\s*["']([^"'\r\n]+)["']/i.exec(attrs);
+        var directSecM = /\b(password|passwd|pwd|secret)\s*=\s*["']([^"'\r\n]+)["']/i.exec(attrs);
+        if (directUserM) {
+          var du = _valid_assoc_or_xml_user(directUserM[1]);
+          if (du) xmlUsers.push({ line: i, user: du });
+        }
+        if (directSecM) {
+          var ds = _valid_assoc_or_xml_secret(directSecM[2], 3);
+          if (ds) xmlSecrets.push({ line: i, key: directSecM[1].toLowerCase(), secret: ds });
+          continue;
+        }
+        var nameM = /\b(?:name|key|id)\s*=\s*["']([^"'\r\n]+)["']/i.exec(attrs);
+        var valM = /\bvalue\s*=\s*["']([^"'\r\n]+)["']/i.exec(attrs);
+        if (!nameM || !valM) continue;
+        var attrName = nameM[1].trim(), attrVal = valM[1];
+        if (userKeyRe.test(attrName)) {
+          var xu = _valid_assoc_or_xml_user(attrVal);
+          if (xu) xmlUsers.push({ line: i, user: xu });
+        } else if (secKeyRe.test(attrName) && !secKeyDenyRe.test(attrName)) {
+          var xs = _valid_assoc_or_xml_secret(attrVal, 3);
+          if (xs) xmlSecrets.push({ line: i, key: attrName.toLowerCase(), secret: xs });
+        }
+      }
+    }
+
+    for (var xsi = 0; xsi < xmlSecrets.length; xsi++) {
+      var xSec = xmlSecrets[xsi];
+      var bestXmlUser = null, bestXmlDist = 999;
+      for (var xui = 0; xui < xmlUsers.length; xui++) {
+        var xDist = Math.abs(xmlUsers[xui].line - xSec.line);
+        if (xDist <= 12 && xDist < bestXmlDist) {
+          bestXmlDist = xDist;
+          bestXmlUser = xmlUsers[xui];
+        }
+      }
+      if (bestXmlUser) {
+        var xPairKey = 'pair:' + bestXmlUser.user + ':' + xSec.secret;
+        if (!seen[xPairKey]) {
+          seen[xPairKey] = true;
+          var xpVal = { user: bestXmlUser.user, password: xSec.secret, secret_type: 'plaintext', method: 'xml-attribute' };
+          _add(facts, mkFact('credential.plaintext', scope, xpVal, S, source));
+          _add(facts, mkFact('credential.password', scope, xpVal, S, source));
+          _add(facts, mkFact('credential.available', scope, xpVal, S, source));
+        }
+        if (!seen[xSec.secret]) {
+          seen[xSec.secret] = true;
+          _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', user: bestXmlUser.user, password: xSec.secret, key: xSec.key, source: 'xml-attribute' }, S, source));
+        }
+      } else if (!seen[xSec.secret]) {
+        seen[xSec.secret] = true;
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: xSec.secret, key: xSec.key, source: 'xml-attribute' }, S, source));
+        _add(facts, mkFact('credential.password', scope, { password: xSec.secret, key: xSec.key, via: 'xml-attribute' }, S, source));
+      }
+    }
+  }
 
   function _resolvePhpVars(text) {
     var vars = {};
@@ -503,16 +752,64 @@
       var defExtra = defDbM ? { dbname: defDbM[1].trim() } : {};
       _emitConcreteSourceCred(facts, scope, source, seen, defUserM[1].trim(), defPassM[1].trim(), defSvc, 'php-define', true, defExtra);
     }
+
+    // 6. Java JDBC: DriverManager.getConnection(...), Properties.put/setProperty("user", ...)+("password", ...), and jdbc:...user=...&password=...
+    var jdbcEngineM = /\bjdbc:(mysql|mariadb|postgresql|sqlserver|oracle|sqlite):/i.exec(t);
+    var defaultJdbcSvc = jdbcEngineM
+      ? (jdbcEngineM[1].toLowerCase() === 'mariadb' ? 'mysql' : (jdbcEngineM[1].toLowerCase() === 'sqlserver' ? 'mssql' : jdbcEngineM[1].toLowerCase()))
+      : 'mysql';
+
+    var dmRe = /\bDriverManager\.getConnection\s*\(\s*(?:"jdbc:([a-z0-9]+):[^"\r\n]*"|[A-Za-z_$][A-Za-z0-9_$.]*)\s*,\s*"([^"\r\n]{1,64})"\s*,\s*"([^"\r\n]{1,128})"\s*\)/gi;
+    reAll(dmRe, t).forEach(function (m) {
+      var rawEng = (m[1] || '').toLowerCase();
+      var svc = rawEng === 'mariadb' ? 'mysql' : (rawEng === 'sqlserver' ? 'mssql' : (rawEng || defaultJdbcSvc));
+      _emitConcreteSourceCred(facts, scope, source, seen, m[2].trim(), m[3].trim(), svc, 'jdbc-drivermanager', true);
+    });
+
+    var propLines = t.split(/\r?\n/);
+    var propUsers = [], propSecrets = [];
+    var propPutRe = /\.(?:put|setProperty)\s*\(\s*"(user(?:name)?|password|pass|pwd)"\s*,\s*"([^"\r\n]{1,128})"\s*\)/gi;
+    for (var pli = 0; pli < propLines.length; pli++) {
+      var pln = propLines[pli];
+      if (!pln || (pln.indexOf('.put') < 0 && pln.indexOf('.setProperty') < 0)) continue;
+      propPutRe.lastIndex = 0;
+      var pm2;
+      while ((pm2 = propPutRe.exec(pln)) !== null) {
+        var pk = pm2[1].toLowerCase(), pv = pm2[2];
+        if (pk === 'user' || pk === 'username') propUsers.push({ line: pli, user: pv.trim() });
+        else propSecrets.push({ line: pli, secret: pv.trim() });
+      }
+    }
+    for (var psi = 0; psi < propSecrets.length; psi++) {
+      for (var pui = 0; pui < propUsers.length; pui++) {
+        if (Math.abs(propUsers[pui].line - propSecrets[psi].line) <= 15) {
+          _emitConcreteSourceCred(facts, scope, source, seen, propUsers[pui].user, propSecrets[psi].secret, defaultJdbcSvc, 'jdbc-properties', true);
+          break;
+        }
+      }
+    }
+
+    var jdbcUrlRe = /\bjdbc:(mysql|mariadb|postgresql|sqlserver|oracle):\/\/[^\s"'?]+\?([^\s"']+)/gi;
+    reAll(jdbcUrlRe, t).forEach(function (m) {
+      var q = m[2] || '';
+      var jpM = /(?:^|&)password=([^&"'\s]+)/i.exec(q);
+      if (!jpM) return;
+      var juM = /(?:^|&)user=([^&"'\s]+)/i.exec(q);
+      if (!juM) return;
+      var rawEng = m[1].toLowerCase();
+      var svc = rawEng === 'mariadb' ? 'mysql' : (rawEng === 'sqlserver' ? 'mssql' : rawEng);
+      _emitConcreteSourceCred(facts, scope, source, seen, juM[1].trim(), jpM[1].trim(), svc, 'jdbc-url', true);
+    });
   }
+  C._parse_source_db_connectors = _parse_source_db_connectors;
 
   var _ORIG_HAS_SOURCE_SECRET = _has_source_secret;
   _has_source_secret = function (text) {
     var t = text || '';
+    if (!t) return false;
     if (_is_outbound_http_request_only(t) && /Content-Disposition:\s*form-data;/i.test(t)) return false;
     return _ORIG_HAS_SOURCE_SECRET(t)
-      || _DB_CONNECTOR_HINT_RE.test(t)
-      || _URI_CRED_RE.test(t)
-      || !!(C && C._extract_diff_cred_pairs && C._extract_diff_cred_pairs(t).length > 0);
+      || !!((t.indexOf('\n+') >= 0 || t.indexOf('\n-') >= 0 || t.charAt(0) === '+' || t.charAt(0) === '-') && C && C._extract_diff_cred_pairs && C._extract_diff_cred_pairs(t).length > 0);
   };
   C._has_source_secret = _has_source_secret;
 
@@ -521,12 +818,13 @@
   var _CONFIG_SYNTAX_ERR_LINE_RE = /^\s*(?:Error|Fatal|Warning):\s*invalid line \d+ in \S+:[^\r\n]*$/gim;
 
   function _has_web_disclosure(text, command) {
-    var t = String(text || '');
-    if (!t.trim()) return false;
+    var t = _inbound_http_segment(text);
+    if (!/\S/.test(t)) return false;
+    if (!/php|Fatal error|Parse error|Warning:|Traceback|500\b|Werkzeug|Server Error|Error:|flask|django|fastapi|express|<configuration/i.test(t)) return false;
     if (_is_outbound_http_request_only(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
-    var tNoCfgErr = t.replace(_CONFIG_SYNTAX_ERR_LINE_RE, '');
-    if (!tNoCfgErr.trim()) return false;
+    var tNoCfgErr = /invalid line \d+ in /i.test(t) ? t.replace(_CONFIG_SYNTAX_ERR_LINE_RE, '') : t;
+    if (!/\S/.test(tNoCfgErr)) return false;
     // phpinfo() table
     if (/PHP Version\s+\d+\.\d+/i.test(tNoCfgErr) && /\b(?:DOCUMENT_ROOT|disable_functions|Loaded Configuration File|PHP Extension)\b/i.test(tNoCfgErr)) return true;
     // PHP verbose fatal/warning error with server path
@@ -547,7 +845,7 @@
   C._has_web_disclosure = _has_web_disclosure;
 
   function _parse_web_disclosure(text, ws, command, source, facts) {
-    var t = String(text || '');
+    var t = _inbound_http_segment(text);
     if (!_has_web_disclosure(t, command)) return;
     var scope = _scope(ws);
     var kind = 'source_code';
@@ -595,18 +893,27 @@
 
   function _has_web_manifest(text, command) {
     var t = String(text || '');
-    if (!t.trim()) return false;
+    if (!/\S/.test(t)) return false;
+    var hasQuote = t.indexOf('"') >= 0 || t.indexOf("'") >= 0;
+    var hasLt = t.indexOf('<') >= 0;
+    var hasPinOp = t.indexOf('==') >= 0 || t.indexOf('~=') >= 0;
+    var hasRubyGems = t.indexOf('rubygems.org') >= 0;
+    if (!hasQuote && !hasLt && !hasPinOp && !hasRubyGems && !_COMMONS_TEXT_VULN_RE.test(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
-    if (/"(?:dependencies|devDependencies)"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t)) return true;
-    if (/"require(?:-dev)?"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t) && (/"php"\s*:/.test(t) || /"[a-z0-9_.-]+\/[a-z0-9_.-]+"\s*:/.test(t))) return true;
-    if (/<dependencies\b[^>]*>[\s\S]{10,4000}?<artifactId>[^<]+<\/artifactId>[\s\S]{1,400}?<version>[^<]+<\/version>/i.test(t)) return true;
-    if (/\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\s*\(?\s*['"][A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9][A-Za-z0-9_.-]*['"]/.test(t)) return true;
+    if (hasQuote && /"(?:dependencies|devDependencies)"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t)) return true;
+    if (hasQuote && /"require(?:-dev)?"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t) && (/"php"\s*:/.test(t) || /"[a-z0-9_.-]+\/[a-z0-9_.-]+"\s*:/.test(t))) return true;
+    if (hasLt && /<dependencies\b[^>]*>[\s\S]{10,4000}?<artifactId>[^<]+<\/artifactId>[\s\S]{1,400}?<version>[^<]+<\/version>/i.test(t)) return true;
+    if (hasQuote && /\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\s*\(?\s*['"][A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9][A-Za-z0-9_.-]*['"]/.test(t)) return true;
     if (_COMMONS_TEXT_VULN_RE.test(t)) return true;
-    var reqLines = t.match(/^[ \t]*[A-Za-z0-9][A-Za-z0-9_.-]{1,50}[ \t]*(?:==|~=)[ \t]*\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*[ \t]*(?:#.*)?$/gm);
-    if (reqLines && (reqLines.length >= 2 || (reqLines.length >= 1 && /requirements[^\s/]*\.txt\b/i.test(command || '')))) return true;
-    var gemLines = t.match(/^[ \t]*gem[ \t]+['"][A-Za-z0-9_.-]+['"](?:[ \t]*,[ \t]*['"][^'"]+['"])?/gm);
-    if (gemLines && (gemLines.length >= 2 || (/^[ \t]*source[ \t]+['"]https?:\/\/rubygems\.org/im.test(t) && gemLines.length >= 1) || (/\bgemfile\b/i.test(command || '') && gemLines.length >= 1))) return true;
-    if (/^GEM\r?\n[ \t]+remote:[ \t]+https?:\/\/rubygems\.org/m.test(t) && /^[ \t]{4}[A-Za-z0-9_.-]+[ \t]+\(\d+\.\d+[^)]*\)[ \t]*$/m.test(t)) return true;
+    if (hasPinOp) {
+      var reqLines = t.match(/^[ \t]*[A-Za-z0-9][A-Za-z0-9_.-]{1,50}[ \t]*(?:==|~=)[ \t]*\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*[ \t]*(?:#.*)?$/gm);
+      if (reqLines && (reqLines.length >= 2 || (reqLines.length >= 1 && /requirements[^\s/]*\.txt\b/i.test(command || '')))) return true;
+    }
+    if (hasQuote) {
+      var gemLines = t.match(/^[ \t]*gem[ \t]+['"][A-Za-z0-9_.-]+['"](?:[ \t]*,[ \t]*['"][^'"]+['"])?/gm);
+      if (gemLines && (gemLines.length >= 2 || (/^[ \t]*source[ \t]+['"]https?:\/\/rubygems\.org/im.test(t) && gemLines.length >= 1) || (/\bgemfile\b/i.test(command || '') && gemLines.length >= 1))) return true;
+    }
+    if (hasRubyGems && /^GEM\r?\n[ \t]+remote:[ \t]+https?:\/\/rubygems\.org/m.test(t) && /^[ \t]{4}[A-Za-z0-9_.-]+[ \t]+\(\d+\.\d+[^)]*\)[ \t]*$/m.test(t)) return true;
     return false;
   }
   C._has_web_manifest = _has_web_manifest;
@@ -743,11 +1050,11 @@
   var _WEB_SOURCE_CONTEXT_RE = /(?:<\?php\b|\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b|\breq\.(?:body|query|params|cookies|headers)\b|\brequest\.(?:args|form|json|cookies|values|GET|POST)\b|\brequire\s*\(\s*['"](?:express|child_process|node-serialize|js-yaml)['"]|\bfrom\s+(?:flask|django|fastapi)\s+import\b|@app\.(?:route|get|post)\b|\brouter\.(?:get|post|put|use)\b)/i;
 
   function _has_web_vuln_sinks(text, command) {
-    var t = String(text || '');
-    if (!t.trim()) return false;
+    var t = _inbound_http_segment(text);
+    if (!/\S/.test(t)) return false;
+    if (!_WEB_SOURCE_CONTEXT_RE.test(t)) return false;
     if (_is_outbound_http_request_only(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
-    if (!_WEB_SOURCE_CONTEXT_RE.test(t)) return false;
     for (var i = 0; i < _WEB_VULN_SINKS.length; i++) {
       if (_WEB_VULN_SINKS[i].re.test(t)) return true;
     }
@@ -756,7 +1063,7 @@
   C._has_web_vuln_sinks = _has_web_vuln_sinks;
 
   function _parse_web_vuln_sinks(text, ws, command, source, facts) {
-    var t = String(text || '');
+    var t = _inbound_http_segment(text);
     if (!_has_web_vuln_sinks(t, command)) return;
     var scope = _scope(ws);
     var hits = [];

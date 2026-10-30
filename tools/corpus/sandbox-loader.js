@@ -311,14 +311,10 @@ function probeBlockStateless(OBOL, opts) {
   // Do not set context.target in stateless probes unless opts.entail is requested:
   // inference.js uses context.target / opts.entail to detect live stateful engagements
   // for out-of-order causal entailment, whereas Pass 1 probes single blocks statelessly.
-  let parseContext = opts.context ? Object.assign({}, opts.context) : undefined;
-  if (promptLine || followPrompt) {
-    parseContext = Object.assign({ params: params }, parseContext || {});
-    if (promptLine) parseContext.promptLine = promptLine;
-    if (followPrompt) parseContext.followPrompt = followPrompt;
-  } else if (parseContext && !parseContext.params) {
-    parseContext.params = params;
-  }
+  let parseContext = Object.assign({ params: params }, opts.context || {});
+  if (promptLine) parseContext.promptLine = promptLine;
+  else if (parseContext.promptLine === undefined) parseContext.promptLine = '';
+  parseContext.followPrompt = followPrompt || parseContext.followPrompt || '';
 
   const isDryProbeSentinel = stdout.trim() === '[OBOL: completed with no output / nothing found]';
   const parsed = isDryProbeSentinel
@@ -354,9 +350,17 @@ function probeBlockStateless(OBOL, opts) {
     ? OBOL.outcomes.classify({
         text: stdout,
         command: command,
+        promptLine: promptLine || '',
+        followPrompt: followPrompt || '',
         facts: facts,
         diagnostics: diagnostics,
-        context: { target: targetIp, command: command, actionId: opts.actionId || '' },
+        context: {
+          target: targetIp,
+          command: command,
+          actionId: opts.actionId || '',
+          promptLine: promptLine || '',
+          followPrompt: followPrompt || ''
+        },
         previousFacts: seedFacts
       })
     : { kind: facts.length ? 'success' : 'unknown', conclusive: facts.length > 0 };

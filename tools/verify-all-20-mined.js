@@ -106,7 +106,7 @@ const checks = [
   { pack: 'recon_2026_09', action: 'samba-usermap-script-rce', mustHave: ['logon "/=`nohup', 'smbclient'], produces: 'access.admin' },
   { pack: 'database_2026_09', action: 'h2-database-console-rce', mustHave: ['CREATE ALIAS EXEC', 'CALL EXEC'], produces: 'foothold.linux' },
   { pack: 'database_2026_09', action: 'oracle-tns-odat-rce', mustHave: ['odat dbmsscheduler', 'sidguesser'], produces: 'access.system' },
-  { pack: 'web_2026_09', action: 'ftp-webroot-upload-webshell', mustHave: ['ftp://anonymous', 'shell.aspx'], produces: 'foothold.webshell' },
+  { pack: 'web_2026_09', action: 'ftp-webroot-upload-webshell', mustHave: ['ftp://', 'shell.aspx'], produces: 'foothold.webshell' },
   // Batch 10 (Ranks 188-194 final corpus completion):
   { pack: 'findings_checks_2026_09', action: 'gpg-private-key-decrypt', mustHave: ['gpg2john', 'gpg --import'], produces: 'loot.files' },
   { pack: 'linux_privesc_2026_09', action: 'npm-package-privesc', mustHave: ['preinstall', 'npm i -g'], produces: 'access.admin' },

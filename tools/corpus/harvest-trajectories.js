@@ -587,19 +587,127 @@ function expandShellTargetVars(command, activeTarget, varMap) {
   return s;
 }
 
-function isAttackerTurn(turn) {
+const ATTACKER_ONLY_BARE_PROMPT_TOOLS_RE = /^(?:nmap|rustscan|masscan|gobuster|feroxbuster|ffuf|wfuzz|dirb|dirsearch|nikto|whatweb|wpscan|nuclei|httpx|sqlmap|hydra|medusa|ncrack|hashcat|john|[a-z0-9_]+2john|searchsploit|msfvenom|msfconsole|nxc|netexec|crackmapexec|cme|evil-winrm|xfreerdp3?|rdesktop|impacket-[\w-]+|(?:secretsdump|getuserspns|getnpusers|wmiexec|psexec|smbexec|atexec|mssqlclient)(?:\.py)?|bloodhound(?:-ce)?-python|certipy(?:-ad)?|bloodyad|kerbrute|enum4linux(?:-ng)?|smbmap|responder)\b/i;
+
+function getPreCommandPromptLine(turn) {
+  if (!turn) return '';
+  let pl = String(turn.promptLine || '');
+  const fp = String(turn.followPrompt || '').trim();
+  if (fp && pl.indexOf('\n') >= 0) {
+    const parts = pl.split(/\r?\n/);
+    if (parts[parts.length - 1].trim() === fp) {
+      pl = parts.slice(0, -1).join('\n');
+    }
+  }
+  return pl;
+}
+
+function stripPromptPrefixFromPreLine(prePl, rawCmd) {
+  const clean = String(prePl || '').trim();
+  if (!clean) return '';
+  const lastLine = clean.split(/\r?\n/).pop().trim();
+  const cmd = String(rawCmd || '').trim();
+  if (!cmd) return lastLine;
+  const idx = lastLine.lastIndexOf(cmd);
+  return (idx > 0 ? lastLine.slice(0, idx) : lastLine).trim();
+}
+
+function isDosBoxPromptOrTurn(turn, prePromptLine) {
+  const pl = String(prePromptLine != null ? prePromptLine : getPreCommandPromptLine(turn)).trim();
+  const cmd = String((turn && turn.command) || '').trim();
+  const out = String((turn && (turn.stdout || turn.output)) || '');
+  if (/^Z:\\>/i.test(pl) || /\bDOSBox\b/i.test(pl + '\n' + out)) return true;
+  if (/^[A-Z]:\\>/i.test(pl) && (/^\s*mount\s+[a-z]\s+\//i.test(cmd) || /(?:^|\s)\/(?:etc|root|home|var|usr|opt|tmp|bin)\//i.test(cmd))) {
+    return true;
+  }
+  return false;
+}
+
+function inspectPreCommandTargetPrompt(turn, prePl, currentFacts) {
+  const pl = String(prePl || '').trim();
+  if (!pl || !turn) return null;
+  if (turn.host && ATTACKER_HOST.test(turn.host)) return null;
+  if (/^\s*[┌╭]──\(/.test(pl) || /\[(?:tun|tap|vpn|wg)\d*:/i.test(pl)) return null;
+  if (isDosBoxPromptOrTurn(turn, pl)) return null;
+
+  const hasFact = k => Boolean(currentFacts && typeof currentFacts.has === 'function' && currentFacts.has(k));
+
+  if ((hasFact('foothold.linux') || hasFact('access.root')) && (turn.kind === 'cmd' || /^\s*[A-Za-z]:\\>/i.test(pl))) {
+    return null;
+  }
+
+  const shM = /^\s*(?:ba|da|z|k|a)?sh-[0-9.]+\s*([#$])/i.exec(pl);
+  if (shM) {
+    const priv = shM[1] === '#';
+    if (!hasFact('foothold.linux') || (priv && !hasFact('access.root'))) {
+      return { os: 'linux', privileged: priv, promptPrefix: shM[0].trim() };
+    }
+    return null;
+  }
+
+  if (turn.kind === 'unix' && turn.host && !ATTACKER_HOST.test(turn.host) && !ATTACKER_HOST.test(turn.user || '')) {
+    const pfx = stripPromptPrefixFromPreLine(pl, turn.rawCommand);
+    if (!pfx) return null;
+    const priv = turn.user === 'root' || /#\s*$/.test(pfx);
+    if (!hasFact('foothold.linux') || (priv && !hasFact('access.root'))) {
+      return { os: 'linux', privileged: priv, promptPrefix: pfx };
+    }
+    return null;
+  }
+
+  if (turn.kind === 'powershell' || turn.kind === 'cmd') {
+    const pfx = stripPromptPrefixFromPreLine(pl, turn.rawCommand);
+    if (!pfx || !/(?:PS\s+[A-Za-z]:\\|Evil-WinRM|[A-Za-z]:\\(?:Users|Windows|Program|inetpub|Temp|tmp)|@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\)/i.test(pfx)) {
+      return null;
+    }
+    const priv = /^administrator$/i.test(turn.user || '')
+      || /C:\\Users\\Administrator(?:\\|>|\s|$)|C:\\Windows\\system32(?:\\|>|\s|$)/i.test(pfx);
+    if (!hasFact('foothold.windows') || (priv && !hasFact('access.admin') && !hasFact('access.system'))) {
+      return { os: 'windows', privileged: priv, promptPrefix: pfx };
+    }
+    return null;
+  }
+
+  return null;
+}
+
+function isAttackerTurn(turn, ctx) {
   if (!turn) return true;
+  ctx = ctx || {};
+  const facts = ctx.facts || null;
+  const prePl = getPreCommandPromptLine(turn);
   if (turn.kind === 'powershell' || turn.kind === 'cmd') return false;
   if (turn.hostHint === 'windows' || turn.hostHint === 'remote-windows' || /^remote-/i.test(turn.hostHint || '')) return false;
   if (turn.hostHint && !ATTACKER_HOST.test(turn.hostHint)) return false;
   if (turn.host && !ATTACKER_HOST.test(turn.host)) return false;
-  if (turn.user && /^(?:www-data|apache|nginx| daemon|nobody|postgres|mysql|mssql|tomcat|jenkins|svc[_-])/i.test(turn.user)) {
+  if (turn.user && /^(?:www-data|apache|nginx|daemon|nobody|postgres|mysql|mssql|tomcat|jenkins|svc[_-])/i.test(turn.user)) {
     return false;
+  }
+  if (/^\s*(?:ba|da|z|k|a)?sh-[0-9.]+\s*[#$]/i.test(prePl)) {
+    return false;
+  }
+  if (!turn.host && (turn.kind === 'bare' || turn.isHash || turn.isDollar || /^\s*[$#]\s+\S/.test(prePl))) {
+    const hasLinuxShellState = Boolean(
+      ctx.inTargetShell ||
+      (facts && typeof facts.has === 'function' && (
+        facts.has('foothold.linux') ||
+        facts.has('access.root') ||
+        facts.has('access.shell')
+      ))
+    );
+    if (hasLinuxShellState) {
+      const cleanCmd = stripCommandWrappers(String(turn.command || '').trim());
+      if (!ATTACKER_ONLY_BARE_PROMPT_TOOLS_RE.test(cleanCmd)) {
+        return false;
+      }
+    }
   }
   return !turn.host || ATTACKER_HOST.test(turn.host);
 }
 
-function isHousekeepingTurn(turn) {
+function isHousekeepingTurn(turn, ctx) {
+  ctx = ctx || {};
+  const facts = ctx.facts || null;
   const rawCmd = String((turn && turn.command) || '').trim();
   const out = String((turn && (turn.stdout || turn.output)) || '').trim();
   if (turn && (turn.externalReference || ((turn.kind === 'browser' || turn.ocrKind === 'browser') && isExternalReferenceUrlOrCommand(rawCmd || turn.url || '')))) {
@@ -632,16 +740,40 @@ function isHousekeepingTurn(turn) {
   if (/^(?:python3?\s+-m\s+(?:http\.server|pyftpdlib)|python\s+-m\s+SimpleHTTPServer|php\s+-S\b|updog\b|impacket-smbserver\b|smbserver(?:\.py)?\b)/i.test(clean)) {
     return { housekeeping: true, reason: 'local_staging_server' };
   }
-  if (/^(?:nc|ncat|netcat|penelope)\b/i.test(clean) && /\s-[A-Za-z]*l[A-Za-z]*\b/.test(clean)) {
+  if ((/^(?:nc|ncat|netcat|penelope)\b/i.test(clean) && /\s-[A-Za-z]*l[A-Za-z]*\d*\b/.test(clean))
+      || (/^socat\b/i.test(clean) && /\b(?:TCP\d*-LISTEN|UDP\d*-LISTEN|OPENSSL-LISTEN)\b/i.test(clean))) {
     return { housekeeping: true, reason: 'local_listener_wait' };
   }
 
-  if (isAttackerTurn(turn)) {
-    if (/^(?:mkdir|rmdir|touch|cp|mv|rm|chmod|chown|tar|unzip|zip|gunzip|wget\s+https?:\/\/(?:github\.com|raw\.githubusercontent\.com)|git\s+clone)\b/i.test(clean)) {
+  if (isAttackerTurn(turn, ctx)) {
+    if (/^git\s+clone\b/i.test(clean)) {
+      const urlM = /(?:https?|git|ssh):\/\/([^/\s:'"]+)|([A-Za-z0-9_.-]+)@([^:\s/'"]+):/i.exec(clean);
+      const cloneHost = urlM ? String(urlM[1] || urlM[3] || '').toLowerCase() : '';
+      const targetsExternalHost = !cloneHost
+        || isExternalReferenceUrlOrCommand('https://' + cloneHost)
+        || /(?:^|\.)(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|sourceforge\.net)$/i.test(cloneHost);
+      if (targetsExternalHost) {
+        return { housekeeping: true, reason: 'attacker_workspace_prep' };
+      }
+    } else if (/^(?:mkdir|rmdir|touch|cp|mv|rm|chmod|chown|tar|unzip|zip|gunzip|wget\s+https?:\/\/(?:github\.com|raw\.githubusercontent\.com))\b/i.test(clean)) {
       return { housekeeping: true, reason: 'attacker_workspace_prep' };
     }
     if (/^(?:ls|ll|la|dir|cat|head|tail|echo|printf|tee|sed|awk|cut|sort|uniq|wc|tr|file|md5sum|sha256sum)\b/i.test(clean)) {
-      if (!/(?:id_rsa|\.kdbx|\.pfx|\.psafe3|shadow|passwd|ntds|sam\b|system\b|credentials|config|\.env|web\.config|wp-config)/i.test(clean)) {
+      const hasTargetFoothold = Boolean(
+        ctx.inTargetShell ||
+        (facts && typeof facts.has === 'function' && (
+          facts.has('foothold.linux') ||
+          facts.has('foothold.windows') ||
+          facts.has('access.root') ||
+          facts.has('access.admin') ||
+          facts.has('access.system') ||
+          facts.has('access.shell')
+        ))
+      );
+      const isFlagFileOp = hasTargetFoothold
+        && /^(?:cat|type|head|tail|more|less)\b/i.test(clean)
+        && /(?:^|[\s/\\'"`])(?:proof|local|user|root)\.txt\b/i.test(clean);
+      if (!isFlagFileOp && !/(?:id_rsa|\.kdbx|\.pfx|\.psafe3|shadow|passwd|ntds|sam\b|system\b|credentials|config|\.env|web\.config|wp-config)/i.test(clean)) {
         return { housekeeping: true, reason: 'attacker_local_file_op' };
       }
     }
@@ -901,7 +1033,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const cmdTool = extractPrimaryTool(cleanCmd);
   const cmdFlags = extractCommandFlags(cleanCmd);
   const isUnambiguousWinLocalEnum = /^(?:whoami(?:\.exe)?\s+\/(?:priv|groups|all)\b|cmdkey(?:\.exe)?\s+\/list\b|systeminfo(?:\.exe)?\b)/i.test(cleanCmd);
-  const onTarget = !isAttackerTurn(turn) || isUnambiguousWinLocalEnum || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd));
+  const onTarget = !isAttackerTurn(turn, ctx) || isUnambiguousWinLocalEnum || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd));
   const hasAdminOrSystem = !!(facts && (facts.has('access.admin') || facts.has('access.system')));
   const hasNtdsLoot = !!(facts && facts.has('loot.ntds'));
 
@@ -964,8 +1096,33 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
+  // PG-2 B4: Disambiguate GTFOBins find -exec shell spawn vs find -name flag search
+  const isFindTool = cmdTool === 'find' || /^sudo\s+(?:-[A-Za-z]+\s+)*\S*find\b/i.test(cleanCmd);
+  const isFindExecShell = isFindTool && /\s-exec(?:dir)?\s+\S*(?:ba|da|z|k|a)?sh\b/i.test(cleanCmd);
+  const findFlagNameM = (isFindTool && !isFindExecShell)
+    ? /\s-i?name\s+['"]?\*?(local|user|root|proof)\.txt\*?['"]?(?:\s|;|2>|\||$)/i.exec(cleanCmd)
+    : null;
+  if (isFindExecShell) {
+    excludedIds.add('flag-hunt-linux');
+    excludedIds.add('flag-hunt-root-linux');
+    excludedIds.add('linux-loot-hunt');
+    excludedIds.add('linux-enum');
+    if (/^sudo\s+/i.test(rawCmd)) {
+      bump('sudo-abuse', 26);
+      bump('suid-gtfobins', 22);
+    } else {
+      bump('suid-gtfobins', 26);
+    }
+  } else if (findFlagNameM) {
+    excludedIds.add('linux-loot-hunt');
+    excludedIds.add('linux-enum');
+    excludedIds.add('suid-gtfobins');
+    const isRootFindFlag = /^(?:root|proof)$/i.test(findFlagNameM[1]);
+    bump(isRootFindFlag ? 'flag-hunt-root-linux' : 'flag-hunt-linux', 25);
+  }
+
   // B2.2: Explicit flag file reads vs recursive user/loot/config sweeps on Windows
-  const isExplicitFlagRead = /(?:^|\s)(?:cat|type|Get-Content|gc|more|head|tail)\s+[^\r\n;|&]*\b(local|user|root|proof)\.txt\b/i.test(cleanCmd);
+  const isExplicitFlagRead = !isFindTool && /(?:^|\s)(?:cat|type|Get-Content|gc|more|head|tail)\s+[^\r\n;|&]*\b(local|user|root|proof)\.txt\b/i.test(cleanCmd);
   if (isExplicitFlagRead) {
     const isRootFlag = /\b(?:root|proof)\.txt\b/i.test(cleanCmd);
     const isWin = turn.kind === 'powershell' || turn.kind === 'cmd' || /\btype\b|Get-Content|\bgc\b|[A-Za-z]:\\/i.test(cleanCmd) || !!(facts && facts.has('foothold.windows'));
@@ -1219,6 +1376,53 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
+  // PG-2 B4: Direct SSH, PostgreSQL psql, and target-hosted git clone attribution
+  if (cmdTool === 'ssh' || (cmdTool === 'sshpass' && /\bssh\b/i.test(cleanCmd))) {
+    const isSshTunnel = /(?:^|\s)-[A-Za-z]*[DLR](?:\s|\d|$)/.test(cleanCmd);
+    if (!isSshTunnel) {
+      excludedIds.add('pivot-ssh-dynamic');
+      excludedIds.add('pivot-ssh-portforward');
+      excludedIds.add('pivot-reach-listener');
+      excludedIds.add('jdwp-local-privesc');
+      const hasSshKeyFlag = /(?:^|\s)-i(?:\s+\S+|\S+)/.test(cleanCmd);
+      if (hasSshKeyFlag) {
+        bump('ssh-key-login', 26);
+        bump('ssh-login', 24);
+        bump('linux-remote-exec', 24);
+        bump('validate-credential', 22);
+      } else {
+        bump('ssh-login', 25);
+        bump('linux-remote-exec', 25);
+        bump('validate-credential', 24);
+        if (facts && (facts.has('loot.ssh_key') || facts.has('credential.ssh_key') || facts.has('credential.certificate'))) {
+          bump('ssh-key-login', 23);
+        }
+      }
+    }
+  }
+
+  if (cmdTool === 'psql') {
+    if (/\bCOPY\b[\s\S]*?\b(?:FROM|TO)\s+PROGRAM\b/i.test(cleanCmd)) {
+      excludedIds.add('postgres-login');
+      bump('postgres-rce', 26);
+    } else {
+      bump('postgres-login', 25);
+      bump('validate-credential', 21);
+    }
+  }
+
+  if (cmdTool === 'git' && /^git\s+clone\b/i.test(cleanCmd)) {
+    const cloneUrlM = /(?:https?|git|ssh):\/\/([^/\s:'"]+)|([A-Za-z0-9_.-]+)@([^:\s/'"]+):/i.exec(cleanCmd);
+    const cloneHost = cloneUrlM ? String(cloneUrlM[1] || cloneUrlM[3] || '').toLowerCase() : '';
+    const isExternalClone = !cloneHost
+      || isExternalReferenceUrlOrCommand('https://' + cloneHost)
+      || /(?:^|\.)(?:github\.com|gitlab\.com|bitbucket\.org|codeberg\.org|sourceforge\.net)$/i.test(cloneHost);
+    if (!isExternalClone) {
+      bump('git-exposed', 24);
+      bump('git-repo-forensics', 22);
+    }
+  }
+
   if (onTarget && /^sudo\s+(?:-l|--list)\b/i.test(cleanCmd)) {
     if (facts && facts.has('privesc.sudo_rights')) {
       bump('sudo-abuse', 23);
@@ -1227,7 +1431,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       bump('linux-enum', 23);
       bump('sudo-abuse', 18);
     }
-  } else if (!isAttackerTurn(turn) && /^sudo\s+/i.test(rawCmd) && !/^sudo\s+(?:-l|--list|-V|--version)\b/i.test(rawCmd)) {
+  } else if (!isAttackerTurn(turn, ctx) && /^sudo\s+/i.test(rawCmd) && !/^sudo\s+(?:-l|--list|-V|--version)\b/i.test(rawCmd)) {
     bump('sudo-abuse', 22);
   }
 
@@ -2047,6 +2251,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
   let unmappedSteps = 0;
   let housekeepingSteps = 0;
   let bhIngested = false;
+  let inTargetShell = false;
   let ligoloAgentHost = '';
   let activeTunnelTarget = '';
   const portForwardTargets = Object.create(null);
@@ -2069,6 +2274,22 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
       net.ipAliasMap
     );
     const turn = Object.assign({}, aliasedTurn, { command: expandedCmd });
+    const prePl = getPreCommandPromptLine(turn);
+    const hasExplicitAttackerPrompt = Boolean(
+      (turn.host && ATTACKER_HOST.test(turn.host)) ||
+      /^\s*[┌╭]──\(/.test(prePl) ||
+      /\[(?:tun|tap|vpn|wg)\d*:/i.test(prePl)
+    );
+    if (hasExplicitAttackerPrompt) {
+      inTargetShell = false;
+    } else if (
+      (turn.host && !ATTACKER_HOST.test(turn.host)) ||
+      (/^(?:powershell|cmd)$/.test(turn.kind || '') && !isDosBoxPromptOrTurn(turn, prePl)) ||
+      /^\s*(?:ba|da|z|k|a)?sh-[0-9.]+\s*[#$]/i.test(prePl) ||
+      (turn.user && /^(?:www-data|apache|nginx|daemon|nobody|postgres|mysql|mssql|tomcat|jenkins|svc[_-])/i.test(turn.user))
+    ) {
+      inTargetShell = true;
+    }
 
     // Determine target IP for this turn in multi-target mode BEFORE grading reachability.
     // Never scan general stdout for target routing (prevents ipconfig/arp/hosts/download-peer hijack).
@@ -2146,18 +2367,37 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
       }
     }
 
-    const hk = isHousekeepingTurn(turn);
+    // Seed pre-command target shell prompt telemetry (e.g. uncaptured privesc landing root@target:~#)
+    // after checkpoints for step idx and before grading step idx reachability.
+    const preSeedFacts = session.factSetForTarget(turnTarget);
+    const prePromptSeed = inspectPreCommandTargetPrompt(turn, prePl, preSeedFacts);
+    if (prePromptSeed) {
+      session.ingestTurn({
+        command: '',
+        stdout: '',
+        followPrompt: prePromptSeed.promptPrefix,
+        target: turnTarget,
+        forceTarget: turnTarget,
+        direct: true
+      });
+      inTargetShell = true;
+    }
+
+    const preFacts = session.factSetForTarget(turnTarget);
+    const turnCtx = {
+      inTargetShell: inTargetShell,
+      facts: preFacts,
+      target: turnTarget
+    };
+
+    const hk = isHousekeepingTurn(turn, turnCtx);
     let reachability = null;
     let candidates = [];
 
     if (hk.housekeeping) {
       housekeepingSteps++;
     } else {
-      const preFacts = session.factSetForTarget(turnTarget);
-      candidates = matchTurnToCatalogMoves(OBOL, turn, {
-        facts: preFacts,
-        target: turnTarget
-      });
+      candidates = matchTurnToCatalogMoves(OBOL, turn, turnCtx);
 
       if (!candidates.length) {
         unmappedSteps++;
@@ -2186,7 +2426,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     const isExternalRefLookup = hk.housekeeping && hk.reason === 'attacker_reference_lookup';
     const hasTargetPromptTelemetry = Boolean(
       String(turn.followPrompt || '').trim() ||
-      (!isAttackerTurn(turn) && String(turn.promptLine || '').trim())
+      (!isAttackerTurn(turn, turnCtx) && String(turn.promptLine || '').trim())
     );
     const hasPayload = !isExternalRefLookup && Boolean(
       (expandedCmd && !hk.housekeeping) ||
@@ -2207,6 +2447,15 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
         forceTarget: turnTarget
       });
       if (matchedActionId) executedMoveIds.add(matchedActionId);
+    }
+
+    const postFollowPrompt = String(turn.followPrompt || '').trim();
+    if (postFollowPrompt && !isDosBoxPromptOrTurn(turn, postFollowPrompt)) {
+      if (!/^\s*[┌╭]──\(/.test(postFollowPrompt) && !/\[(?:tun|tap|vpn|wg)\d*:/i.test(postFollowPrompt)) {
+        inTargetShell = true;
+      }
+    } else if (/^(?:exit|logout)\s*$/i.test(expandedCmd.trim())) {
+      inTargetShell = false;
     }
 
     const mintedKinds = ingestReport
@@ -2465,6 +2714,7 @@ module.exports = {
   extractCommandFlags: extractCommandFlags,
   detectSequentialRevertAliases: detectSequentialRevertAliases,
   applyIpAliases: applyIpAliases,
+  isAttackerTurn: isAttackerTurn,
   isHousekeepingTurn: isHousekeepingTurn,
   inferEngagementNetworking: inferEngagementNetworking,
   expandShellTargetVars: expandShellTargetVars,

@@ -801,24 +801,24 @@
   }
 
   function _looks_like_generic_dumped_credentials(text, command, ws) {
+    if (!text) return false;
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return false;
     var isReadCtx = _FILE_READ_CMD_RE.test(command || '') || _expects_cred_kind(ws, 'credential.plaintext');
-    var unwrappedCmdText = text ? _unwrap_format_list_lines(text) : '';
-    return !!text && (
+    return !!(
       /(?:^\s*Domain\s*:\s*[^\r\n]+\s*\r?\n\s*)?^\s*User(?:name)?\s*:\s*[^\r\n]+\s*\r?\n\s*(?:Domain\s*:\s*[^\r\n]+\s*\r?\n\s*)?Password\s*:\s*[^\r\n]+/im.test(text) ||
       /^\s*(?:Nthash|Password)\s*:\s*\S+[\s\S]{1,240}?^\s*Login\s*:\s*\S+/im.test(text) ||
       /^\s*Login\s*:\s*\S+[\s\S]{1,240}?^\s*(?:Nthash|Password)\s*:\s*\S+/im.test(text) ||
       /\bDefaultPassword\s*:\s*(?:[0-9a-fA-F]{2}[ \t]+){3,}[0-9a-fA-F]{2}\b/i.test(text) ||
-      /\b[A-Za-z0-9_.$-]{2,32}\b[^\r\n]{0,40}?\bNTLM\s*:\s*[0-9a-fA-F]{32}\b/i.test(text) ||
-      /\b[A-Za-z0-9_.$-]{1,48}::[A-Za-z0-9_.-]{1,64}:[0-9a-fA-F]{16}:(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{48}):[0-9a-fA-F]{32,}\b/.test(text) ||
-      (isReadCtx && /^\s*[A-Za-z0-9_.-]{2,32}(?:[ \t]+[A-Za-z0-9_.-]{1,24}){0,2}\s*:\s*[A-Za-z0-9_.$-]{2,32}\/[^\s\/]{4,64}\s*$/m.test(text)) ||
-      /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?[a-zA-Z0-9._-]+['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?!-)[^\s'"]+['"]?/i.test(unwrappedCmdText) ||
-      /"(?:username|user)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"[^"]+"/i.test(text) ||
-      /"(?:password|pass)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:username|user)"\s*:\s*"[^"]+"/i.test(text) ||
-      /https?:\/\/[a-zA-Z0-9._-]+:[^@\s'"]+@/i.test(text) ||
+      (/ntlm/i.test(text) && /\b[A-Za-z0-9_.$-]{2,32}\b[^\r\n]{0,40}?\bNTLM\s*:\s*[0-9a-fA-F]{32}\b/i.test(text)) ||
+      (text.indexOf('::') >= 0 && /\b[A-Za-z0-9_.$-]{1,48}::[A-Za-z0-9_.-]{1,64}:[0-9a-fA-F]{16}:(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{48}):[0-9a-fA-F]{32,}\b/.test(text)) ||
+      (isReadCtx && text.indexOf('/') >= 0 && /^\s*[A-Za-z0-9_.-]{2,32}(?:[ \t]+[A-Za-z0-9_.-]{1,24}){0,2}\s*:\s*[A-Za-z0-9_.$-]{2,32}\/[^\s\/]{4,64}\s*$/m.test(text)) ||
+      (/[-/][uU]/.test(text) && /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?[a-zA-Z0-9._-]+['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?!-)[^\s'"]+['"]?/i.test(_unwrap_format_list_lines(text))) ||
+      (text.indexOf('"') >= 0 && (/"(?:username|user)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"[^"]+"/i.test(text) ||
+        /"(?:password|pass)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:username|user)"\s*:\s*"[^"]+"/i.test(text))) ||
+      (text.indexOf('://') >= 0 && /https?:\/\/[a-zA-Z0-9._-]+:[^@\s'"]+@/i.test(text)) ||
       /(?:Possible master password|Master password candidate|Extracted password|KeePass master password|KeePass password)\s*[:=]\s*[^\r\n]+/i.test(text) ||
-      /^\s*[a-zA-Z0-9._$-]{1,64}@[a-zA-Z0-9._-]{1,64}(?::\d+)?\s*\|\s*password\s+is:/im.test(text) ||
-      /<(?:dbpassword|dbpass)>/i.test(text) ||
+      (text.indexOf('|') >= 0 && /^\s*[a-zA-Z0-9._$-]{1,64}@[a-zA-Z0-9._-]{1,64}(?::\d+)?\s*\|\s*password\s+is:/im.test(text)) ||
+      (text.indexOf('<') >= 0 && /<(?:dbpassword|dbpass)>/i.test(text)) ||
       /\b(?:AMPDBPASS|AMPMGRPASS)\s*=/i.test(text) ||
       /\b(?:password|encryptedPassword)\s*=\s*[a-fA-F0-9]{40}\b/i.test(text) ||
       /\[\+\]\s+Valid credentials found:\s*[a-zA-Z0-9_$]+\/\S+/i.test(text) ||

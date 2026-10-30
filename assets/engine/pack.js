@@ -623,9 +623,81 @@
     'credential.available': 1, 'credential.plaintext': 1, 'credential.candidate': 1
   };
 
-  Action.prototype.settled = function (facts) {
+  function canUseFastHave(facts, preHave) {
+    return !!(preHave && facts && root.OBOL && root.OBOL.facts && root.OBOL.facts.FactSet
+      && facts.has === root.OBOL.facts.FactSet.prototype.has
+      && facts.kinds === root.OBOL.facts.FactSet.prototype.kinds);
+  }
+  var _resolvedFactsCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function getResolvedFactsMemo(facts) {
+    if (!_resolvedFactsCache || !facts || !facts._resolvedContext || !Array.isArray(facts.facts)) return null;
+    if (!(root.OBOL && root.OBOL.facts && root.OBOL.facts.FactSet
+      && facts.has === root.OBOL.facts.FactSet.prototype.has
+      && facts.kinds === root.OBOL.facts.FactSet.prototype.kinds)) return null;
+    var fLen = facts.facts.length;
+    var scLen = Array.isArray(facts.state_changed) ? facts.state_changed.length : 0;
+    var eng = facts._resolvedContext.engagement;
+    var aLen = (eng && Array.isArray(eng.activities)) ? eng.activities.length : -1;
+    var entry = _resolvedFactsCache.get(facts);
+    if (!entry || entry.fLen !== fLen || entry.scLen !== scLen || entry.aLen !== aLen) {
+      entry = {
+        fLen: fLen,
+        scLen: scLen,
+        aLen: aLen,
+        have: facts.kinds(),
+        fam: hostOsFamily(facts),
+        elig: new WeakMap(),
+        settled: new WeakMap()
+      };
+      _resolvedFactsCache.set(facts, entry);
+    }
+    return entry;
+  }
+
+  function actionMayMatchCompletedActivity(action, facts) {
+    var rc = facts && facts._resolvedContext;
+    var eng = rc && rc.engagement;
+    if (!eng || !Array.isArray(eng.activities)) return true;
+    var acts = eng.activities;
+    if (!acts.length) return false;
+    var meta = v2GetActionMeta(action);
+    var prefixes = meta.cmdPrefixes;
+    var wildcard = meta.cmdPrefixWildcard;
+    for (var ai = 0; ai < acts.length; ai++) {
+      var act = acts[ai];
+      if (!act) continue;
+      var ao = act.outcome;
+      if (!ao) continue;
+      if (!ao.retireCommand && !(ao.kind === 'success' && /(?:^|\s)--host\b/i.test(act.command || ''))) continue;
+      if ((act.action_id || act.actionId) === action.id) return true;
+      if (wildcard) return true;
+      if (!prefixes.length) continue;
+      var hay = (String(act.command || '') + '\n' + String(act.dispatch || '') + '\n' + (Array.isArray(act.sequenceCommands) ? act.sequenceCommands.join('\n') : '')).toLowerCase();
+      for (var pi = 0; pi < prefixes.length; pi++) {
+        if (hay.indexOf(prefixes[pi]) >= 0) return true;
+      }
+    }
+    return false;
+  }
+
+  Action.prototype.settled = function (facts, preHave) {
     if (!facts) return false;
+    var rMemo = !facts._checkingCredPool ? getResolvedFactsMemo(facts) : null;
+    var sigBase = 0;
+    if (rMemo) {
+      sigBase = v2GetActionMeta(this).sigLen * 2;
+      var cachedS = rMemo.settled.get(this);
+      if (cachedS === sigBase + 2) return true;
+      if (cachedS === sigBase + 1) return false;
+    }
+    var res = this._settledImpl(facts, rMemo ? rMemo.have : preHave);
+    if (rMemo) rMemo.settled.set(this, sigBase + (res ? 2 : 1));
+    return res;
+  };
+
+  Action.prototype._settledImpl = function (facts, preHave) {
     var action = this;
+    var fastH = canUseFastHave(facts, preHave) ? preHave : null;
     var allScoped = (facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts))
       ? facts._resolvedContext.allScopedFacts : null;
     function valsOf(kind) {
@@ -638,6 +710,7 @@
     function getApplicable() {
       if (applicable !== null) return applicable;
       applicable = [];
+      if (facts._resolvedContext && actionBlockedByInvariantGate(action, facts, fastH)) return applicable;
       (action.commands || []).forEach(function (cmd, index) {
         var commandFacts = facts.forAction ? facts.forAction(action, cmd) : facts;
         var portOk = !root.OBOL || !root.OBOL.command || !root.OBOL.command.commandPortFeasible
@@ -651,11 +724,15 @@
     var allApplicableCompleted = false, someApplicableCompleted = false, someCleanCompleted = false;
     var appList = [];
     if (facts.context && facts.commandCompleted) {
-      appList = getApplicable();
-      var cleanFn = facts.commandCompletedClean || facts.commandCompleted;
-      someApplicableCompleted = appList.some(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
-      someCleanCompleted = appList.some(function (entry) { return cleanFn(action, entry.cmd, entry.index); });
-      allApplicableCompleted = appList.length > 0 && appList.every(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
+      if (this.id === 'validate-credential' || actionMayMatchCompletedActivity(action, facts)) {
+        appList = getApplicable();
+        var cleanFn = facts.commandCompletedClean || facts.commandCompleted;
+        someApplicableCompleted = appList.some(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
+        if (someApplicableCompleted) {
+          someCleanCompleted = cleanFn === facts.commandCompleted ? true : appList.some(function (entry) { return cleanFn(action, entry.cmd, entry.index); });
+          allApplicableCompleted = appList.length > 0 && appList.every(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
+        }
+      }
     }
     if (this.id === 'validate-credential' && facts.context) {
       var isAlreadyAuth = facts.has('credential.validated') || facts.has('smb.authenticated')
@@ -724,18 +801,21 @@
       });
       return !!dpapiDone;
     }
+    var sMeta = v2GetActionMeta(this);
     // Cracking actions (crack-tgs, crack-asrep, crack-ntlm, etc.) require specific hash evidence.
     // Once a matching hash is cracked (or terminal escalation is held), the crack move is settled
     // even if alternative cracking tools (john vs hashcat --show) were not run.
-    if ((this.id.indexOf('crack-') === 0 && this.id !== 'crack-identify' && this.id !== 'crack-hash-troubleshoot') || this.id === 'hashcat' || this.id === 'john') {
-      var reqHashes = this.requires_all.concat(this.requires_any).filter(function (k) {
-        return k.indexOf('hash.') === 0 || k === 'credential.netntlm' || k === 'db.hashes' || k === 'loot.shadow' || k === 'loot.material';
-      });
+    if (sMeta.isCrackMove) {
+      var reqHashes = sMeta.reqHashes;
       if (reqHashes.length > 0 && facts.has) {
-        var hasHash = reqHashes.some(function (k) { return facts.has(k); });
+        var fastH = canUseFastHave(facts, preHave) ? preHave : null;
+        var hasHash = false;
+        for (var rhi = 0; rhi < reqHashes.length; rhi++) {
+          if (fastH ? fastH[reqHashes[rhi]] : facts.has(reqHashes[rhi])) { hasHash = true; break; }
+        }
         if (hasHash) {
-          var hasTgs = reqHashes.indexOf('hash.tgs') >= 0;
-          var hasAsrep = reqHashes.indexOf('hash.asrep') >= 0;
+          var hasTgs = sMeta.reqHasTgs;
+          var hasAsrep = sMeta.reqHasAsrep;
           var creds = valsOf('credential.available').concat(valsOf('credential.plaintext'));
           var cracked = creds.some(function (c) {
             if (!c) return false;
@@ -747,25 +827,28 @@
             if (hasAsrep && ht && ht !== 'asrep' && ht !== 'krb5asrep') return false;
             return true;
           });
-          var mootByEscalation = facts.has('access.admin') || facts.has('access.system') ||
-            facts.has('access.root') || facts.has('loot.ntds');
+          var mootByEscalation = fastH
+            ? !!(fastH['access.admin'] || fastH['access.system'] || fastH['access.root'] || fastH['loot.ntds'])
+            : (facts.has('access.admin') || facts.has('access.system') || facts.has('access.root') || facts.has('loot.ntds'));
           if (cracked || mootByEscalation) return true;
           return false;
         }
       }
     }
-    if (facts.context && !(this.produces.length && this.produces.every(function (kind) {
-      return /^(?:objective\.(?:flag|local_flag|root_flag)|proof\.captured)$/.test(kind);
-    }))) {
+    if (facts.context && !sMeta.isObjectiveFlagOnly) {
       var eng = facts._resolvedContext && facts._resolvedContext.engagement;
       var tgtIp = facts.context.target || '';
       if (eng && Array.isArray(eng.activities)) {
-        var moveActs = eng.activities.filter(function (a) {
-          return a && (a.action_id || a.actionId) === action.id && (!tgtIp || !a.target || a.target === tgtIp);
-        });
-        if (moveActs.length > 0) {
-          var latestAct = moveActs[moveActs.length - 1];
-          if (latestAct && latestAct.outcome && latestAct.outcome.kind === 'partial') return false;
+        var latestAct = null;
+        for (var mai = eng.activities.length - 1; mai >= 0; mai--) {
+          var mAct = eng.activities[mai];
+          if (mAct && (mAct.action_id || mAct.actionId) === action.id && (!tgtIp || !mAct.target || mAct.target === tgtIp)) {
+            latestAct = mAct;
+            break;
+          }
+        }
+        if (latestAct) {
+          if (latestAct.outcome && latestAct.outcome.kind === 'partial') return false;
           if ((this.commands || []).length === 1 && !someApplicableCompleted) return false;
         }
       }
@@ -773,10 +856,9 @@
     // True once every produced kind is already proven - re-running gains no new facts.
     var rawPk = this.produces || [];
     if (!rawPk.length) return false;
-    var primaryPk = rawPk.filter(function (k) { return !AUX_PRODUCED_RE.test(k); });
-    var pk = primaryPk.length ? primaryPk : rawPk;
-    var have = facts.kinds();
-    if (!primaryPk.length && facts.commandCompleted) {
+    var pk = sMeta.settledPk;
+    var have = canUseFastHave(facts, preHave) ? preHave : facts.kinds();
+    if (!sMeta.hasPrimaryPk && facts.commandCompleted) {
       if (someCleanCompleted) return true;
     }
     if (this.id === 'bloodhound-collect' && (have['ad.graph.collected'] || have['ad.attack_paths'])) return true;
@@ -787,23 +869,25 @@
     // Moves whose primary outputs are ONLY generic multi-instance kinds (credential.available,
     // credential.plaintext, credential.candidate, loot.files, config.review) must not settle merely
     // because an unrelated credential/loot fact exists from an earlier step.
-    var onlyGenericMulti = pk.every(function (k) { return !!GENERIC_MULTI_KINDS[k]; });
-    var onlyGenericCred = pk.every(function (k) { return !!GENERIC_CRED_ONLY_KINDS[k]; });
-    if (onlyGenericCred || (onlyGenericMulti && (facts.context || typeof facts.applicableCommands === 'function' || typeof facts.commandCompleted === 'function'))) {
+    if (sMeta.onlyGenericCred || (sMeta.onlyGenericMulti && (facts.context || typeof facts.applicableCommands === 'function' || typeof facts.commandCompleted === 'function'))) {
       if (someCleanCompleted) return true;
+      var anyGenericHeld = false;
+      for (var gi0 = 0; gi0 < pk.length; gi0++) { if (have[pk[gi0]]) { anyGenericHeld = true; break; } }
+      if (!anyGenericHeld) return false;
       var rawFactList = allScoped || (facts.facts || []);
-      var hasMoveSpecificFact = rawFactList.some(function (f) {
-        if (!f || f.state !== 'supported') return false;
-        if (f.source === action.id) return true;
+      var hasMoveSpecificFact = false;
+      for (var rfi = 0; rfi < rawFactList.length; rfi++) {
+        var f = rawFactList[rfi];
+        if (!f || f.state !== 'supported') continue;
+        if (f.source === action.id) { hasMoveSpecificFact = true; break; }
         var v = f.value || {};
-        if (v.action_id === action.id || v.via === action.id || v.method === action.id) return true;
-        if (action.id === 'password-spray' && /spray/i.test(String(v.method || v.via || ''))) return true;
-        if (action.id === 'keepass-dump-recover' && /keepass/i.test(String(v.method || v.via || v.kind || ''))) return true;
-        if (action.id === 'sccm-exploit' && /sccm/i.test(String(v.method || v.via || v.kind || ''))) return true;
-        if (action.id === 'vnc-decrypt' && /vnc/i.test(String(v.method || v.via || v.kind || ''))) return true;
-        if (action.id === 'cisco-decrypt' && /cisco/i.test(String(v.method || v.via || v.kind || ''))) return true;
-        return false;
-      });
+        if (v.action_id === action.id || v.via === action.id || v.method === action.id) { hasMoveSpecificFact = true; break; }
+        if (action.id === 'password-spray' && /spray/i.test(String(v.method || v.via || ''))) { hasMoveSpecificFact = true; break; }
+        if (action.id === 'keepass-dump-recover' && /keepass/i.test(String(v.method || v.via || v.kind || ''))) { hasMoveSpecificFact = true; break; }
+        if (action.id === 'sccm-exploit' && /sccm/i.test(String(v.method || v.via || v.kind || ''))) { hasMoveSpecificFact = true; break; }
+        if (action.id === 'vnc-decrypt' && /vnc/i.test(String(v.method || v.via || v.kind || ''))) { hasMoveSpecificFact = true; break; }
+        if (action.id === 'cisco-decrypt' && /cisco/i.test(String(v.method || v.via || v.kind || ''))) { hasMoveSpecificFact = true; break; }
+      }
       if (!hasMoveSpecificFact) return false;
     }
     var allHeld = true;
@@ -816,9 +900,8 @@
     // output as satisfied once any admin/system/root fact is held.
     var hasOsFoot = !!(have['foothold.linux'] || have['foothold.windows']);
     var hasAdmin = !!(have['access.admin'] || have['access.system'] || have['access.root']);
-    var reqAllAny = (this.requires_all || []).concat(this.requires_any || []);
-    var reqHasFoot = reqAllAny.indexOf('foothold.linux') >= 0 || reqAllAny.indexOf('foothold.windows') >= 0;
-    var reqHasAdmin = reqAllAny.indexOf('access.admin') >= 0 || reqAllAny.indexOf('access.system') >= 0 || reqAllAny.indexOf('access.root') >= 0;
+    var reqHasFoot = sMeta.reqHasFoot;
+    var reqHasAdmin = sMeta.reqHasAdmin;
     for (var j = 0; j < pk.length; j++) {
       var k = pk[j];
       if (have[k]) continue;
@@ -840,10 +923,14 @@
     return true;
   };
 
-  Action.prototype.obsolete = function (facts) {
+  Action.prototype.obsolete = function (facts, preHave) {
     // True once a later achievement makes this move pointless - e.g. the coercion→relay lane is moot
     // after a completed DCSync (loot.ntds). Retired like a settled move: dropped from the ready list and
     // the blocked list alike, so the coach stops steering you toward a means to an end you already hold.
+    if (canUseFastHave(facts, preHave)) {
+      for (var j = 0; j < this.obsoleted_by.length; j++) { if (preHave[this.obsoleted_by[j]]) return true; }
+      return false;
+    }
     for (var i = 0; i < this.obsoleted_by.length; i++) { if (facts.has(this.obsoleted_by[i])) return true; }
     return false;
   };
@@ -896,21 +983,96 @@
     return false;
   }
 
-  Action.prototype.eligible = function (facts) {
+  var CONTEXT_SENSITIVE_KIND_RE = /^(?:access\.(?:admin|system|root)$|credential\.|(?:smb|ldap|winrm|ssh|rdp|mssql)\.authenticated$|blocker\.)/;
+  function actionNeedsForActionContext(action, facts, fastHave) {
+    if (action.credential_probe) return true;
+    if (action.id === 'win-interactive-shell' || action.id === 'ad-user-enum') return true;
+    var hasWinrmOrRdp = fastHave
+      ? !!(fastHave['winrm.authenticated'] || fastHave['rdp.authenticated'])
+      : (facts.has('winrm.authenticated') || facts.has('rdp.authenticated'));
+    if (action.os && action.os.length && hasWinrmOrRdp) return true;
+    return v2GetActionMeta(action).hasCtxGate;
+  }
+  function actionBlockedByInvariantGate(action, facts, fastHave, preFam) {
+    var meta = v2GetActionMeta(action);
+    var hasWinrmOrRdp = fastHave
+      ? !!(fastHave['winrm.authenticated'] || fastHave['rdp.authenticated'])
+      : (facts.has('winrm.authenticated') || facts.has('rdp.authenticated'));
+    if (action.os && action.os.length && facts._resolvedContext && facts._resolvedContext.locus === 'overview' && !hasWinrmOrRdp) {
+      var osOk = preFam !== undefined ? osCompatibleWithFamily(facts, preFam, action.os, action) : osCompatible(facts, action.os, action);
+      if (!osOk) return true;
+    }
+    var hasFactFn = null, i, reqAllCtx = meta.reqAllCtx;
+    for (i = 0; i < action.requires_all.length; i++) {
+      if (reqAllCtx[i]) continue;
+      var rk = action.requires_all[i];
+      var hasRk = fastHave ? !!fastHave[rk] : facts.has(rk);
+      if (!hasRk) {
+        if (rk === 'http.reachable') {
+          if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+          if (hasActionReqKind(action, hasFactFn, rk)) continue;
+        }
+        return true;
+      }
+    }
+    if (action.requires_any.length && !action.credential_probe) {
+      var anyPossible = false, reqAnyCtx = meta.reqAnyCtx;
+      for (i = 0; i < action.requires_any.length; i++) {
+        if (reqAnyCtx[i]) { anyPossible = true; break; }
+        var yk = action.requires_any[i];
+        if (fastHave ? fastHave[yk] : facts.has(yk)) { anyPossible = true; break; }
+      }
+      if (!anyPossible) return true;
+    }
+    return false;
+  }
+
+  Action.prototype.eligible = function (facts, preHave, preFam) {
+    var rMemo = getResolvedFactsMemo(facts);
+    var sigBase = 0;
+    if (rMemo) {
+      sigBase = v2GetActionMeta(this).sigLen * 2;
+      var cachedE = rMemo.elig.get(this);
+      if (cachedE === sigBase + 2) return true;
+      if (cachedE === sigBase + 1) return false;
+    }
+    var res = this._eligibleImpl(facts, rMemo ? rMemo.have : preHave, rMemo ? rMemo.fam : preFam);
+    if (rMemo) rMemo.elig.set(this, sigBase + (res ? 2 : 1));
+    return res;
+  };
+
+  Action.prototype._eligibleImpl = function (facts, preHave, preFam) {
+    var fastHave = canUseFastHave(facts, preHave) ? preHave : null;
     if (facts && facts.forAction && (!facts.context || facts.context.actionId !== this.id)) {
-      var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
-      return candidates.some(function (candidate) { return action.eligible(candidate); });
+      if (facts._resolvedContext) {
+        if (actionBlockedByInvariantGate(this, facts, fastHave, preFam)) return false;
+        if (!(facts._resolvedContext.locus === 'overview' && !actionNeedsForActionContext(this, facts, fastHave))) {
+          var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
+          return candidates.some(function (candidate) { return action.eligible(candidate); });
+        }
+      } else {
+        var action2 = this, candidates2 = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
+        return candidates2.some(function (candidate) { return action2.eligible(candidate); });
+      }
     }
     // True when the target's OS and proven facts satisfy this action's prerequisites.
-    if (!osCompatible(facts, this.os, this)) return false;
-    var hasFactFn = function (k) { return facts.has(k); };
+    var osOk2 = (fastHave && preFam !== undefined) ? osCompatibleWithFamily(facts, preFam, this.os, this) : osCompatible(facts, this.os, this);
+    if (!osOk2) return false;
+    var hasFactFn = null;
     for (var i = 0; i < this.requires_all.length; i++) {
-      if (!hasActionReqKind(this, hasFactFn, this.requires_all[i])) return false;
+      var rk2 = this.requires_all[i];
+      if (fastHave ? fastHave[rk2] : facts.has(rk2)) continue;
+      if (rk2 === 'http.reachable') {
+        if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+        if (hasActionReqKind(this, hasFactFn, rk2)) continue;
+      }
+      return false;
     }
     if (this.requires_any.length) {
       var any = false;
       for (var j = 0; j < this.requires_any.length; j++) {
-        if (facts.has(this.requires_any[j])) { any = true; break; }
+        var yk2 = this.requires_any[j];
+        if (fastHave ? fastHave[yk2] : facts.has(yk2)) { any = true; break; }
       }
       if (!any && !credentialProbeAllowed(this, facts)) return false;
     }
@@ -921,11 +1083,35 @@
     return true;
   };
 
-  Action.prototype.unmet = function (facts) {
+  Action.prototype.unmet = function (facts, knownIneligible) {
     if (facts && facts.forAction && (!facts.context || facts.context.actionId !== this.id)) {
-      var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
-      var eligible = candidates.filter(function (candidate) { return action.eligible(candidate); })[0];
-      return this.unmet(eligible || candidates[0]);
+      if (facts._resolvedContext && facts._resolvedContext.locus === 'overview' && !actionNeedsForActionContext(this, facts)) {
+        // Invariant across per-command contexts; evaluate directly against overview facts.
+      } else if (knownIneligible) {
+        if (facts._resolvedContext && facts._resolvedContext.locus === 'overview' && !facts.has('winrm.authenticated') && !facts.has('rdp.authenticated')) {
+          if (!osCompatible(facts, this.os, this)) {
+            var invFamily = hostOsFamily(facts) || 'another OS';
+            return 'blocked because target looks like ' + invFamily;
+          }
+          var invHasFn = null;
+          for (var qi = 0; qi < this.requires_all.length; qi++) {
+            var qk = this.requires_all[qi];
+            if (CONTEXT_SENSITIVE_KIND_RE.test(qk)) break;
+            if (!facts.has(qk)) {
+              if (qk === 'http.reachable') {
+                if (!invHasFn) invHasFn = function (k) { return facts.has(k); };
+                if (hasActionReqKind(this, invHasFn, qk)) continue;
+              }
+              return 'blocked until ' + friendly(qk) + ' exists';
+            }
+          }
+        }
+        return this.unmet(facts.forAction(this));
+      } else {
+        var action = this, candidates = facts.forActionContexts ? facts.forActionContexts(this) : [facts.forAction(this)];
+        var eligible = candidates.filter(function (candidate) { return action.eligible(candidate); })[0];
+        return this.unmet(eligible || candidates[0]);
+      }
     }
     // A friendly one-line reason this action is blocked (first unmet prerequisite).
     if (!osCompatible(facts, this.os, this)) {
@@ -1290,11 +1476,10 @@
     return keys.length === 1 ? keys[0] : '';
   }
 
-  function osCompatible(facts, actionOs, action) {
+  function osCompatibleWithFamily(facts, family, actionOs, action) {
     var allowed = {};
     (actionOs || []).forEach(function (item) { var n = normalizeOsName(item); if (n) allowed[n] = true; });
     var keys = Object.keys(allowed);
-    var family = hostOsFamily(facts);
     if (family === 'linux' && action && (action.pack_id === 'ad_2026_09' || action.pack_id === 'obol_ad_2026_09') && action.id !== 'nmap-udp-top') {
       var hasAdSmb = facts.has('smb.reachable') || facts.has('ldap.reachable') || facts.has('kerberos.reachable') || facts.has('winrm.reachable') || facts.has('ad.dc_candidate');
       if (!hasAdSmb) return false;
@@ -1302,6 +1487,10 @@
     if (!keys.length) return true;
     if (!family) return true;
     return !!allowed[family];
+  }
+
+  function osCompatible(facts, actionOs, action) {
+    return osCompatibleWithFamily(facts, hostOsFamily(facts), actionOs, action);
   }
 
   // ------------------------------------------------------------ pack loading --
@@ -1386,19 +1575,24 @@
     opts = opts || {};
     var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
     var frontier = P.frontierIndex(facts);
-    var out = [];
-    pack.forEach(function (a) {
-      if (noFlags && isFlagHuntAction(a)) return;
-      if (a.eligible(facts) || a.settled(facts) || a.obsolete(facts)) return;
-      if (!osCompatible(facts, a.os, a)) return;
-      out.push({ action: a, reason: a.unmet(facts) });
+    var rMemo = getResolvedFactsMemo(facts);
+    var fam = rMemo ? rMemo.fam : hostOsFamily(facts);
+    var haveObj = rMemo ? rMemo.have : ((facts && typeof facts.kinds === 'function') ? facts.kinds() : null);
+    var tmp = [];
+    for (var i = 0; i < pack.length; i++) {
+      var a = pack[i];
+      if (noFlags && isFlagHuntAction(a)) continue;
+      if (!osCompatibleWithFamily(facts, fam, a.os, a)) continue;
+      if (a.eligible(facts, haveObj, fam) || a.settled(facts, haveObj) || a.obsolete(facts, haveObj)) continue;
+      var px = Math.max(0, P.phaseIndex(P.phaseOfAction(a)) - frontier);
+      tmp.push({ item: { action: a, reason: a.unmet(facts, true) }, px: px, pri: a.priority });
+    }
+    tmp.sort(function (x, y) {
+      if (x.px !== y.px) return x.px - y.px;
+      return y.pri - x.pri;
     });
-    out.sort(function (x, y) {
-      var px = Math.max(0, P.phaseIndex(P.phaseOfAction(x.action)) - frontier);
-      var py = Math.max(0, P.phaseIndex(P.phaseOfAction(y.action)) - frontier);
-      if (px !== py) return px - py;
-      return y.action.priority - x.action.priority;
-    });
+    var out = new Array(tmp.length);
+    for (var j = 0; j < tmp.length; j++) out[j] = tmp[j].item;
     return out;
   }
 
@@ -1485,20 +1679,129 @@
   // same class of evidence as a vuln.* fingerprint, so a move gated on one is evidenced, not a bare-port
   // gamble. Without this a confirmed SQLi left sqlmap-automation capped as speculative, below weaker leads.
   function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g) || /_confirmed$/.test(g); }
-  function v2ProducesFoothold(a) { for (var i = 0; i < a.produces.length; i++) { var k = a.produces[i]; if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) return true; } return false; }
+  var _v2ActionMetaCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function v2GetActionMeta(a) {
+    var prod = a.produces || [], ra = a.requires_all || [], ry = a.requires_any || [], cmds = a.commands || [];
+    var sigLen = (prod.length << 16) ^ (ra.length << 8) ^ ry.length ^ (cmds.length << 24);
+    var canCache = !!(_v2ActionMetaCache && a && typeof a === 'object');
+    var m = canCache ? _v2ActionMetaCache.get(a) : null;
+    if (m && m.sigLen === sigLen && m.locus === a.locus && m.aid === a.id) return m;
+    var adviceOnly = prod.length > 0;
+    var isObjectiveFlagOnly = prod.length > 0;
+    var alwaysSpecProd = false, producesFoothold = false, producesCred = false, producesPriv = false, i, k;
+    var primaryPk = [];
+    for (i = 0; i < prod.length; i++) {
+      k = prod[i];
+      if (adviceOnly && !/^advice\./.test(k)) adviceOnly = false;
+      if (isObjectiveFlagOnly && !/^(?:objective\.(?:flag|local_flag|root_flag)|proof\.captured)$/.test(k)) isObjectiveFlagOnly = false;
+      if (!AUX_PRODUCED_RE.test(k)) primaryPk.push(k);
+      if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') alwaysSpecProd = true;
+      if (V2_FOOTHOLD[k] || /_confirmed$/.test(k)) producesFoothold = true;
+      if (k === 'credential.available' || k === 'credential.plaintext') producesCred = true;
+      if (V2_PRIV[k]) producesPriv = true;
+    }
+    var settledPk = primaryPk.length ? primaryPk : prod;
+    var onlyGenericMulti = true, onlyGenericCred = true;
+    for (i = 0; i < settledPk.length; i++) {
+      if (!GENERIC_MULTI_KINDS[settledPk[i]]) onlyGenericMulti = false;
+      if (!GENERIC_CRED_ONLY_KINDS[settledPk[i]]) onlyGenericCred = false;
+    }
+    var earnedGates = [], evidenceGates = [];
+    var reqAllCtx = new Array(ra.length), reqAnyCtx = new Array(ry.length);
+    var hasCtxGate = false, reqHasFoot = false, reqHasAdmin = false;
+    var aid = String(a.id || '');
+    var isCrackMove = ((aid.indexOf('crack-') === 0 && aid !== 'crack-identify' && aid !== 'crack-hash-troubleshoot') || aid === 'hashcat' || aid === 'john');
+    var reqHashes = isCrackMove ? [] : _V2_EMPTY_I32;
+    var reqHasTgs = false, reqHasAsrep = false;
+    for (i = 0; i < ra.length; i++) {
+      k = ra[i];
+      if (V2_SPECIFIC[k] || /^vuln\./.test(k)) earnedGates.push(k);
+      if (v2EvidenceFact(k)) evidenceGates.push(k);
+      var ctxA = CONTEXT_SENSITIVE_KIND_RE.test(k);
+      reqAllCtx[i] = ctxA;
+      if (ctxA) hasCtxGate = true;
+      if (k === 'foothold.linux' || k === 'foothold.windows') reqHasFoot = true;
+      if (k === 'access.admin' || k === 'access.system' || k === 'access.root') reqHasAdmin = true;
+      if (isCrackMove && (k.indexOf('hash.') === 0 || k === 'credential.netntlm' || k === 'db.hashes' || k === 'loot.shadow' || k === 'loot.material')) {
+        reqHashes.push(k);
+        if (k === 'hash.tgs') reqHasTgs = true;
+        if (k === 'hash.asrep') reqHasAsrep = true;
+      }
+    }
+    for (i = 0; i < ry.length; i++) {
+      k = ry[i];
+      if (V2_SPECIFIC[k] || /^vuln\./.test(k)) earnedGates.push(k);
+      if (v2EvidenceFact(k)) evidenceGates.push(k);
+      var ctxY = CONTEXT_SENSITIVE_KIND_RE.test(k);
+      reqAnyCtx[i] = ctxY;
+      if (ctxY) hasCtxGate = true;
+      if (k === 'foothold.linux' || k === 'foothold.windows') reqHasFoot = true;
+      if (k === 'access.admin' || k === 'access.system' || k === 'access.root') reqHasAdmin = true;
+      if (isCrackMove && (k.indexOf('hash.') === 0 || k === 'credential.netntlm' || k === 'db.hashes' || k === 'loot.shadow' || k === 'loot.material')) {
+        reqHashes.push(k);
+        if (k === 'hash.tgs') reqHasTgs = true;
+        if (k === 'hash.asrep') reqHasAsrep = true;
+      }
+    }
+    var cmdPrefixes = [], cmdPrefixWildcard = false;
+    var cmdList = cmds.length ? cmds : [{ run: a.web_command || a.command || '' }];
+    for (i = 0; i < cmdList.length; i++) {
+      var rawCmd = String((cmdList[i] && (cmdList[i].web || cmdList[i].run)) || a.web_command || a.command || '').trim();
+      if (!rawCmd) continue;
+      var w0 = rawCmd.split(/\s+/)[0].replace(/^['"]+|['"]+$/g, '').toLowerCase();
+      if (!w0 || w0.indexOf('<') >= 0 || w0.indexOf('{') >= 0 || w0.indexOf('$') >= 0) {
+        cmdPrefixWildcard = true;
+        break;
+      }
+      if (cmdPrefixes.indexOf(w0) < 0) cmdPrefixes.push(w0);
+    }
+    m = {
+      sigLen: sigLen,
+      aid: a.id,
+      locus: a.locus,
+      locusCost: locusRank(a.locus) * 0.3,
+      adviceOnly: adviceOnly,
+      isObjectiveFlagOnly: isObjectiveFlagOnly,
+      hasPrimaryPk: primaryPk.length > 0,
+      settledPk: settledPk,
+      onlyGenericMulti: onlyGenericMulti,
+      onlyGenericCred: onlyGenericCred,
+      alwaysSpecProd: alwaysSpecProd,
+      producesFoothold: producesFoothold,
+      producesCred: producesCred,
+      producesPriv: producesPriv,
+      earnedGates: earnedGates,
+      evidenceGates: evidenceGates,
+      reqAllCtx: reqAllCtx,
+      reqAnyCtx: reqAnyCtx,
+      hasCtxGate: hasCtxGate,
+      reqHasFoot: reqHasFoot,
+      reqHasAdmin: reqHasAdmin,
+      isCrackMove: isCrackMove,
+      reqHashes: reqHashes,
+      reqHasTgs: reqHasTgs,
+      reqHasAsrep: reqHasAsrep,
+      cmdPrefixes: cmdPrefixes,
+      cmdPrefixWildcard: cmdPrefixWildcard
+    };
+    if (canCache) _v2ActionMetaCache.set(a, m);
+    return m;
+  }
+  function v2ProducesFoothold(a) { return v2GetActionMeta(a).producesFoothold; }
   function v2Earned(a, haveObj) {
     if (!haveObj) return false;
     if (a.id === 'linux-kernel-exploit') return !!haveObj['privesc.kernel_exploit'];
     if (a.id === 'baron-samedit') return !!(haveObj['vuln.baron_samedit'] || haveObj['privesc.kernel_exploit']);
     if ((a.id === 'bloodyad-acl' || a.id === 'ad-acl-abuse') && (haveObj['ad.attack_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.control_paths'])) return true;
-    var gates = a.requires_all.concat(a.requires_any), i;
-    for (i = 0; i < gates.length; i++) if (haveObj[gates[i]] && (V2_SPECIFIC[gates[i]] || /^vuln\./.test(gates[i]))) return true;
+    var gates = v2GetActionMeta(a).earnedGates;
+    for (var i = 0; i < gates.length; i++) if (haveObj[gates[i]]) return true;
     return false;
   }
   function v2Indicated(a, haveObj) {
-    if (a.id === 'linux-kernel-exploit' && haveObj && haveObj['privesc.kernel_exploit']) return true;
-    var g = a.requires_all.concat(a.requires_any), i;
-    for (i = 0; i < g.length; i++) if (haveObj[g[i]] && v2EvidenceFact(g[i])) return true;
+    if (!haveObj) return false;
+    if (a.id === 'linux-kernel-exploit' && haveObj['privesc.kernel_exploit']) return true;
+    var g = v2GetActionMeta(a).evidenceGates;
+    for (var i = 0; i < g.length; i++) if (haveObj[g[i]]) return true;
     return false;
   }
 
@@ -1506,49 +1809,304 @@
     // A guidance/troubleshooter move produces only advice.* - it mints no attack fact, so it can never
     // be a "try-if-vulnerable" gamble. Exempt it before the id-regex/payoff checks (otherwise a doctor
     // whose id merely contains "relay"/"responder"/"check" would be wrongly capped below everything).
-    if (a.produces.length && a.produces.every(function (k) { return /^advice\./.test(k); })) return false;
-    if (a.speculative) return true;
-    for (var i = 0; i < a.produces.length; i++) {
-      var k = a.produces[i];
-      if (k === 'exploit.candidate' || k === 'ad.coerced_auth' || k === 'credential.netntlm') return true;
-    }
+    var meta = v2GetActionMeta(a);
+    if (meta.adviceOnly) return false;
+    if (a.speculative || meta.alwaysSpecProd) return true;
     // A move that claims a real PAYOFF - a foothold/privilege, or a VALIDATED credential - while eligible
     // without any proven indicator (a fingerprint, a held credential/hash, a foothold) is a gamble: blind
     // password spraying or default-cred guessing against a bare user list, or firing an exploit at an open
     // port. Cap it below evidenced moves so the deterministic path (AS-REP roast, crack a captured hash)
     // leads. Once you actually hold material to work with, the move is indicated and promotes normally.
-    if (haveObj && !v2Indicated(a, haveObj)) {
-      if (v2ProducesFoothold(a)) return true;
-      for (var j = 0; j < a.produces.length; j++) if (a.produces[j] === 'credential.available' || a.produces[j] === 'credential.plaintext') return true;
+    if (haveObj && (meta.producesFoothold || meta.producesCred) && !v2Indicated(a, haveObj)) {
+      return true;
     }
     return false;
   }
   // Minimal steps from a set of held fact-kinds to any goal, through the produce/require graph:
   // AND over a move's requirements, OR over a fact's producers. Memoized, cycle-guarded.
-  function v2GoalDistance(haveObj, producers, goals) {
-    var goalList = goals || V2_GOALS;
-    var memoF = {}, memoM = {};
-    function fc(f, stack) {
-      if (haveObj[f]) return 0;
-      if (memoF[f] !== undefined) return memoF[f];
-      if (stack[f]) return V2_INF;
-      stack[f] = 1; var best = V2_INF, ms = producers[f] || [];
-      for (var i = 0; i < ms.length; i++) best = Math.min(best, mc(ms[i], stack));
-      delete stack[f]; memoF[f] = best; return best;
+  // Compiled once per `producers` map via WeakMap into contiguous CSR integer arrays so repeated
+  // calls in nextActionsV2 and planPath perform zero object allocations and zero property deletes.
+  var _v2GraphCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  var _V2_EMPTY_I32 = typeof Int32Array === 'function' ? new Int32Array(0) : [];
+  function v2AllocI32(n) {
+    if (typeof Int32Array === 'function') return new Int32Array(n);
+    var a = new Array(n); for (var i = 0; i < n; i++) a[i] = 0; return a;
+  }
+  function v2AllocU8(n) {
+    if (typeof Uint8Array === 'function') return new Uint8Array(n);
+    var a = new Array(n); for (var i = 0; i < n; i++) a[i] = 0; return a;
+  }
+  function v2FillArr(arr, val) {
+    if (typeof arr.fill === 'function') { arr.fill(val); return; }
+    for (var i = 0; i < arr.length; i++) arr[i] = val;
+  }
+  function v2CopyArr(dst, src) {
+    if (typeof dst.set === 'function') { dst.set(src); return; }
+    for (var i = 0; i < src.length; i++) dst[i] = src[i];
+  }
+  function v2CompileGraph(producers) {
+    var factId = Object.create(null), F = 0;
+    function internFact(k) {
+      var id = factId[k];
+      if (id === undefined) { id = F++; factId[k] = id; }
+      return id;
     }
-    function mc(m, stack) {
-      if (memoM[m.id] !== undefined) return memoM[m.id];
-      var c = 1, j;
-      for (j = 0; j < m.requires_all.length; j++) c += fc(m.requires_all[j], stack);
-      if (m.requires_any.length) {
+    var gi;
+    for (gi = 0; gi < V2_GOALS.length; gi++) internFact(V2_GOALS[gi]);
+    for (gi = 0; gi < V2_GOALS_NO_FLAGS.length; gi++) internFact(V2_GOALS_NO_FLAGS[gi]);
+
+    var moveObjMap = typeof Map === 'function' ? new Map() : null;
+    var moveIdMap = Object.create(null), U = 0, M = 0;
+    var prodTemp = [], reqAllTemp = [], reqAnyTemp = [], moveMemoIdArr = [];
+    var totalProd = 0, totalReqAll = 0, totalReqAny = 0;
+    var pKeys = producers ? Object.keys(producers) : [];
+    for (var pk = 0; pk < pKeys.length; pk++) {
+      var fk = pKeys[pk], ms = producers[fk];
+      if (!ms || !ms.length) continue;
+      var fId = internFact(fk);
+      var mList = new Array(ms.length);
+      totalProd += ms.length;
+      for (var i = 0; i < ms.length; i++) {
+        var m = ms[i];
+        var u = moveObjMap ? moveObjMap.get(m) : undefined;
+        if (u === undefined) {
+          u = U++;
+          if (moveObjMap) moveObjMap.set(m, u);
+          var midKey = String(m.id);
+          var mid = moveIdMap[midKey];
+          if (mid === undefined) { mid = M++; moveIdMap[midKey] = mid; }
+          moveMemoIdArr[u] = mid;
+          var ra = m.requires_all || [], raIds = new Array(ra.length), j;
+          for (j = 0; j < ra.length; j++) raIds[j] = internFact(ra[j]);
+          reqAllTemp[u] = raIds;
+          totalReqAll += ra.length;
+          var ry = m.requires_any || [], ryIds = new Array(ry.length);
+          for (j = 0; j < ry.length; j++) ryIds[j] = internFact(ry[j]);
+          reqAnyTemp[u] = ryIds;
+          totalReqAny += ry.length;
+        }
+        mList[i] = u;
+      }
+      prodTemp[fId] = mList;
+    }
+
+    var prodOff = v2AllocI32(F + 1), prodFlat = v2AllocI32(totalProd), pCur = 0;
+    var initMemoF = v2AllocI32(F);
+    for (var fi = 0; fi < F; fi++) {
+      prodOff[fi] = pCur;
+      var pl = prodTemp[fi];
+      if (pl && pl.length) {
+        for (var pli = 0; pli < pl.length; pli++) prodFlat[pCur++] = pl[pli];
+        initMemoF[fi] = -1;
+      } else {
+        initMemoF[fi] = V2_INF;
+      }
+    }
+    prodOff[F] = pCur;
+
+    var reqAllOff = v2AllocI32(U + 1), reqAllFlat = v2AllocI32(totalReqAll), raCur = 0;
+    var reqAnyOff = v2AllocI32(U + 1), reqAnyFlat = v2AllocI32(totalReqAny), ryCur = 0;
+    var moveMemoId = v2AllocI32(U);
+    for (var ui = 0; ui < U; ui++) {
+      moveMemoId[ui] = moveMemoIdArr[ui];
+      reqAllOff[ui] = raCur;
+      var ral = reqAllTemp[ui];
+      for (var rali = 0; rali < ral.length; rali++) reqAllFlat[raCur++] = ral[rali];
+      reqAnyOff[ui] = ryCur;
+      var ryl = reqAnyTemp[ui];
+      for (var ryli = 0; ryli < ryl.length; ryli++) reqAnyFlat[ryCur++] = ryl[ryli];
+    }
+    reqAllOff[U] = raCur;
+    reqAnyOff[U] = ryCur;
+
+    var memoF = v2AllocI32(F);
+    var memoM = v2AllocI32(M);
+    var stack = v2AllocU8(F);
+
+    function fc(fId) {
+      var mf = memoF[fId];
+      if (mf !== -1) return mf;
+      if (stack[fId]) return V2_INF;
+      stack[fId] = 1;
+      var best = V2_INF, s = prodOff[fId], e = prodOff[fId + 1];
+      for (var i = s; i < e; i++) {
+        var u = prodFlat[i], c = memoM[moveMemoId[u]];
+        if (c === -1) c = mc(u);
+        if (c < best) best = c;
+      }
+      stack[fId] = 0;
+      memoF[fId] = best;
+      return best;
+    }
+    function mc(u) {
+      var mid = moveMemoId[u];
+      var mm = memoM[mid];
+      if (mm !== -1) return mm;
+      var c = 1, j, as = reqAllOff[u], ae = reqAllOff[u + 1];
+      for (j = as; j < ae; j++) {
+        var rId = reqAllFlat[j], rv = memoF[rId];
+        c += (rv !== -1 ? rv : fc(rId));
+      }
+      var ys = reqAnyOff[u], ye = reqAnyOff[u + 1];
+      if (ys < ye) {
         var mn = V2_INF;
-        for (j = 0; j < m.requires_any.length; j++) mn = Math.min(mn, fc(m.requires_any[j], stack));
+        for (j = ys; j < ye; j++) {
+          var yId = reqAnyFlat[j], v = memoF[yId];
+          if (v === -1) v = fc(yId);
+          if (v < mn) mn = v;
+        }
         c += mn;
       }
-      c = Math.min(c, V2_INF); memoM[m.id] = c; return c;
+      if (c > V2_INF) c = V2_INF;
+      memoM[mid] = c;
+      return c;
+    }
+
+    return {
+      F: F,
+      factId: factId,
+      prodOff: prodOff,
+      prodFlat: prodFlat,
+      reqAllOff: reqAllOff,
+      reqAllFlat: reqAllFlat,
+      reqAnyOff: reqAnyOff,
+      reqAnyFlat: reqAnyFlat,
+      initMemoF: initMemoF,
+      memoF: memoF,
+      memoM: memoM,
+      fc: fc
+    };
+  }
+  function v2GetGraph(producers) {
+    var canCache = !!(_v2GraphCache && producers && typeof producers === 'object');
+    var G = canCache ? _v2GraphCache.get(producers) : null;
+    if (!G) {
+      G = v2CompileGraph(producers);
+      if (canCache) _v2GraphCache.set(producers, G);
+    }
+    return G;
+  }
+  var _v2PackBundleCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  function v2BuildProducers(list) {
+    var p = {};
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i], pr = a.produces;
+      for (var j = 0; j < pr.length; j++) {
+        var k = pr[j];
+        var arr = p[k];
+        if (!arr) p[k] = [a];
+        else arr.push(a);
+      }
+    }
+    return p;
+  }
+  function v2GetPackBundle(pack, noFlags) {
+    var len = pack ? pack.length : 0;
+    var first = len ? pack[0] : null;
+    var last = len ? pack[len - 1] : null;
+    var canCache = !!(_v2PackBundleCache && pack && typeof pack === 'object');
+    var entry = canCache ? _v2PackBundleCache.get(pack) : null;
+    if (!entry || entry.len !== len || entry.first !== first || entry.last !== last) {
+      entry = { len: len, first: first, last: last, all: null, noFlags: null };
+      if (canCache) _v2PackBundleCache.set(pack, entry);
+    }
+    if (noFlags) {
+      if (!entry.noFlags) {
+        var apNf = pack.filter(function (a) { return !isFlagHuntAction(a); });
+        entry.noFlags = { activePack: apNf, producers: v2BuildProducers(apNf) };
+      }
+      return entry.noFlags;
+    }
+    if (!entry.all) {
+      entry.all = { activePack: pack, producers: v2BuildProducers(pack) };
+    }
+    return entry.all;
+  }
+  function v2GoalDistance(haveObj, producers, goals) {
+    var goalList = goals || V2_GOALS;
+    var gLen = goalList.length, g;
+    for (g = 0; g < gLen; g++) {
+      if (haveObj[goalList[g]]) return 0;
+    }
+    var G = v2GetGraph(producers);
+    var memoF = G.memoF, memoM = G.memoM, factId = G.factId, fc = G.fc;
+    v2CopyArr(memoF, G.initMemoF);
+    v2FillArr(memoM, -1);
+    for (var hk in haveObj) {
+      if (haveObj[hk]) {
+        var hid = factId[hk];
+        if (hid !== undefined) memoF[hid] = 0;
+      }
     }
     var d = V2_INF;
-    for (var g = 0; g < goalList.length; g++) d = Math.min(d, fc(goalList[g], {}));
+    for (g = 0; g < gLen; g++) {
+      var gId = factId[goalList[g]];
+      if (gId !== undefined) {
+        var gd = fc(gId);
+        if (gd < d) d = gd;
+      }
+    }
+    return d;
+  }
+  function v2GoalDistanceDelta(G, baseMemoF, extraA, extraB, goalSet, goalIds) {
+    var i, k, fid;
+    for (i = 0; i < extraA.length; i++) {
+      if (goalSet[extraA[i]]) return 0;
+    }
+    if (extraB) {
+      for (i = 0; i < extraB.length; i++) {
+        if (goalSet[extraB[i]]) return 0;
+      }
+    }
+    var memoF = G.memoF, memoM = G.memoM, factId = G.factId, fc = G.fc;
+    v2CopyArr(memoF, baseMemoF);
+    v2FillArr(memoM, -1);
+    for (i = 0; i < extraA.length; i++) {
+      fid = factId[extraA[i]];
+      if (fid !== undefined) memoF[fid] = 0;
+    }
+    if (extraB) {
+      for (i = 0; i < extraB.length; i++) {
+        fid = factId[extraB[i]];
+        if (fid !== undefined) memoF[fid] = 0;
+      }
+    }
+    var d = V2_INF, gLen = goalIds.length;
+    for (var g = 0; g < gLen; g++) {
+      var gId = goalIds[g];
+      if (gId !== -1) {
+        var gd = fc(gId);
+        if (gd < d) d = gd;
+      }
+    }
+    return d;
+  }
+  function v2GoalDistanceBits(G, bits, W, bitToFactId, goalBits, goalFactIds) {
+    var w;
+    for (w = 0; w < W; w++) {
+      if ((bits[w] & goalBits[w]) !== 0) return 0;
+    }
+    var memoF = G.memoF, memoM = G.memoM, fc = G.fc;
+    v2CopyArr(memoF, G.initMemoF);
+    v2FillArr(memoM, -1);
+    for (w = 0; w < W; w++) {
+      var word = bits[w];
+      var base = w << 5;
+      while (word !== 0) {
+        var lsb = word & -word;
+        var fid = bitToFactId[base + (31 - Math.clz32(lsb))];
+        if (fid !== -1) memoF[fid] = 0;
+        word ^= lsb;
+      }
+    }
+    var d = V2_INF, gLen = goalFactIds.length;
+    for (var g = 0; g < gLen; g++) {
+      var gId = goalFactIds[g];
+      if (gId !== -1) {
+        var gd = fc(gId);
+        if (gd < d) d = gd;
+      }
+    }
     return d;
   }
   function v2ProgressFrom(d0, haveObj, produces, producers, goals) {
@@ -1560,12 +2118,18 @@
     return Math.max(0, d0 - d1);
   }
   function v2EligAgainst(a, kindsObj) {
-    var i;
-    var hasKindFn = function (k) { return !!kindsObj[k]; };
-    for (i = 0; i < a.requires_all.length; i++) if (!hasActionReqKind(a, hasKindFn, a.requires_all[i])) return false;
-    if (a.requires_any.length) {
+    var i, ra = a.requires_all;
+    for (i = 0; i < ra.length; i++) {
+      var rk = ra[i];
+      if (!kindsObj[rk]) {
+        if (rk === 'http.reachable' && hasActionReqKind(a, function (k) { return !!kindsObj[k]; }, rk)) continue;
+        return false;
+      }
+    }
+    var ry = a.requires_any;
+    if (ry.length) {
       var any = false;
-      for (i = 0; i < a.requires_any.length; i++) if (kindsObj[a.requires_any[i]]) { any = true; break; }
+      for (i = 0; i < ry.length; i++) if (kindsObj[ry[i]]) { any = true; break; }
       if (!any) return false;
     }
     return true;
@@ -1573,7 +2137,7 @@
   function v2Reliability(a, haveObj) {
     if (v2Earned(a, haveObj)) return 1.0;
     if (v2Speculative(a, haveObj)) return 0.25;
-    for (var i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) return 0.3;
+    if (v2GetActionMeta(a).producesPriv) return 0.3;
     return 0.8;
   }
   // Recency: the fact-kinds from the operator's latest ingest batch (within 2s of the newest fact),
@@ -1685,11 +2249,19 @@
     var doneIds = opts.doneIds || {}, focus = opts.focusPrefixes || [];
     var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
     var goals = opts.goals || (noFlags ? V2_GOALS_NO_FLAGS : V2_GOALS);
-    var activePack = noFlags ? pack.filter(function (a) { return !isFlagHuntAction(a); }) : pack;
-    var live = activePack.filter(function (a) { return a.eligible(facts) && !a.settled(facts) && !a.obsolete(facts) && !doneIds[a.id]; });
-    var haveObj = facts.kinds();
-    var producers = {};
-    activePack.forEach(function (a) { a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); }); });
+    var bundle = v2GetPackBundle(pack, noFlags);
+    var activePack = bundle.activePack;
+    var producers = bundle.producers;
+    var rMemo = getResolvedFactsMemo(facts);
+    var haveObj = rMemo ? rMemo.have : facts.kinds();
+    var fam = rMemo ? rMemo.fam : hostOsFamily(facts);
+    var live = [];
+    for (var _li = 0; _li < activePack.length; _li++) {
+      var _la = activePack[_li];
+      if (!doneIds[_la.id] && _la.eligible(facts, haveObj, fam) && !_la.settled(facts, haveObj) && !_la.obsolete(facts, haveObj)) {
+        live.push(_la);
+      }
+    }
     var rec = v2Recency(facts, opts);
     var activeGoals = goals.filter(function (g) { return !haveObj[g]; });
     if (!activeGoals.length) activeGoals = goals;
@@ -1758,6 +2330,101 @@
       });
     });
 
+    var distCache = Object.create(null);
+    var haveAllTruthy = true, baseHave = {};
+    for (var _tk in haveObj) {
+      baseHave[_tk] = 1;
+      if (!haveObj[_tk]) haveAllTruthy = false;
+    }
+    if (haveAllTruthy) distCache[''] = d0;
+    var navG = v2GetGraph(producers);
+    var navGoalSet = Object.create(null), navGoalIds = new Array(activeGoals.length);
+    var navBaseHasGoal = false;
+    for (var _gi = 0; _gi < activeGoals.length; _gi++) {
+      var _gk = activeGoals[_gi];
+      navGoalSet[_gk] = 1;
+      if (baseHave[_gk]) navBaseHasGoal = true;
+      var _gfid = navG.factId[_gk];
+      navGoalIds[_gi] = _gfid !== undefined ? _gfid : -1;
+    }
+    var navBaseMemoF = null;
+    if (!navBaseHasGoal) {
+      navBaseMemoF = v2AllocI32(navG.F);
+      v2CopyArr(navBaseMemoF, navG.initMemoF);
+      for (var _bhk in baseHave) {
+        var _bhid = navG.factId[_bhk];
+        if (_bhid !== undefined) navBaseMemoF[_bhid] = 0;
+      }
+    }
+
+    var blockedPack = [], blockedNewProd = [], blockedByFact = haveAllTruthy ? Object.create(null) : null;
+    function indexBlockedFact(fk, bIdx) {
+      var arr = blockedByFact[fk];
+      if (!arr) { blockedByFact[fk] = [bIdx]; return; }
+      if (arr[arr.length - 1] !== bIdx) arr.push(bIdx);
+    }
+    var hasHaveObjKind = function (k) { return !!haveObj[k]; };
+    for (var _bi = 0; _bi < activePack.length; _bi++) {
+      var _bm = activePack[_bi];
+      if (v2EligAgainst(_bm, haveObj)) continue;
+      var _bIdx = blockedPack.length;
+      blockedPack.push(_bm);
+      var _np = [];
+      for (var _pi = 0; _pi < _bm.produces.length; _pi++) {
+        var _pk = _bm.produces[_pi];
+        if (!baseHave[_pk] && _np.indexOf(_pk) < 0) _np.push(_pk);
+      }
+      if (_np.length > 1) _np.sort();
+      blockedNewProd.push(_np);
+      if (blockedByFact) {
+        var _ra = _bm.requires_all, _missingAll = false;
+        for (var _ri = 0; _ri < _ra.length; _ri++) {
+          var _rk = _ra[_ri];
+          if (!haveObj[_rk]) {
+            if (_rk === 'http.reachable' && hasActionReqKind(_bm, hasHaveObjKind, _rk)) continue;
+            indexBlockedFact(_rk, _bIdx);
+            if (_rk === 'http.reachable' && _bm.id === 'ftp-webroot-upload-webshell') {
+              for (var _hp = 0; _hp < HTTP_SURFACE_PORT_KINDS.length; _hp++) {
+                indexBlockedFact(HTTP_SURFACE_PORT_KINDS[_hp], _bIdx);
+              }
+            }
+            _missingAll = true;
+            break;
+          }
+        }
+        if (!_missingAll) {
+          var _ry = _bm.requires_any;
+          for (var _yi = 0; _yi < _ry.length; _yi++) indexBlockedFact(_ry[_yi], _bIdx);
+        }
+      }
+    }
+    var seenBlocked = blockedByFact ? v2AllocI32(blockedPack.length) : null, blockedStamp = 0;
+    var allBlockedIndices = null;
+    if (!blockedByFact) {
+      allBlockedIndices = new Array(blockedPack.length);
+      for (var _abi = 0; _abi < blockedPack.length; _abi++) allBlockedIndices[_abi] = _abi;
+    }
+    function numAsc(x, y) { return x - y; }
+    function v2MergeSortedDisjoint(xs, ys) {
+      var xl = xs.length, yl = ys.length;
+      if (!xl) return ys;
+      if (!yl) return xs;
+      var out = new Array(xl + yl), xi = 0, yi = 0, oi = 0;
+      while (xi < xl && yi < yl) {
+        if (xs[xi] < ys[yi]) out[oi++] = xs[xi++];
+        else out[oi++] = ys[yi++];
+      }
+      while (xi < xl) out[oi++] = xs[xi++];
+      while (yi < yl) out[oi++] = ys[yi++];
+      return out;
+    }
+
+    var isAdminStage = (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system']);
+    var hasGppCand = (haveObj['credential.candidate'] && typeof facts.values === 'function')
+      ? facts.values('credential.candidate').some(function (v) { return v && v.kind === 'gpp_cpassword'; })
+      : false;
+    var inFootholdStage = (st.accessLevel === 'foothold' || haveObj['foothold.linux'] || haveObj['foothold.windows'] || haveObj['access.shell']) && !haveObj['access.root'] && !haveObj['access.admin'] && !haveObj['access.system'];
+
     var scored = live.map(function (a) {
       var indicated = v2Earned(a, haveObj), i;
       var spec = v2Speculative(a, haveObj);
@@ -1784,10 +2451,22 @@
         }
       };
 
-      var h2 = {}, k;
+      var h2 = {}, aAdded = [], k;
       for (k in haveObj) h2[k] = 1;
-      a.produces.forEach(function (p) { h2[p] = 1; });
-      var dH2 = v2GoalDistance(h2, producers, activeGoals);
+      for (i = 0; i < a.produces.length; i++) {
+        var ap = a.produces[i];
+        if (!h2[ap]) {
+          h2[ap] = 1;
+          aAdded.push(ap);
+        }
+      }
+      if (aAdded.length > 1) aAdded.sort();
+      var aKey = aAdded.length === 0 ? '' : (aAdded.length === 1 ? aAdded[0] : aAdded.join('\x00'));
+      var dH2 = distCache[aKey];
+      if (dH2 === undefined) {
+        dH2 = navBaseHasGoal ? 0 : v2GoalDistanceDelta(navG, navBaseMemoF, aAdded, null, navGoalSet, navGoalIds);
+        distCache[aKey] = dH2;
+      }
       var progA = d0 >= V2_INF ? (dH2 >= V2_INF ? 0 : 5) : Math.max(0, d0 - dH2);
       // enablement + keystone in one forward pass over the moves this one unblocks (1-step lookahead):
       //   enable   = the single BEST door a opens (goal-tempered) - the deepest unlock.
@@ -1796,9 +2475,55 @@
       //              at all). Capped so a fact that unblocks the whole authenticated surface is favoured as
       //              the pivot, without letting raw fan-out dominate a better-progress move.
       var enable = 0, keystone = 0;
-      activePack.forEach(function (b) {
-        if (b.id === a.id || v2EligAgainst(b, haveObj) || !v2EligAgainst(b, h2)) return;
-        var relB = v2Reliability(b, h2), progB = v2ProgressFrom(dH2, h2, b.produces, producers, activeGoals);
+      var candIndices;
+      if (blockedByFact) {
+        if (aAdded.length === 0) {
+          candIndices = _V2_EMPTY_I32;
+        } else if (aAdded.length === 1) {
+          candIndices = blockedByFact[aAdded[0]] || _V2_EMPTY_I32;
+        } else {
+          var cands = [];
+          blockedStamp++;
+          for (var ai2 = 0; ai2 < aAdded.length; ai2++) {
+            var bl = blockedByFact[aAdded[ai2]];
+            if (!bl) continue;
+            for (var bli = 0; bli < bl.length; bli++) {
+              var candBi = bl[bli];
+              if (seenBlocked[candBi] !== blockedStamp) {
+                seenBlocked[candBi] = blockedStamp;
+                cands.push(candBi);
+              }
+            }
+          }
+          if (cands.length > 1) cands.sort(numAsc);
+          candIndices = cands;
+        }
+      } else {
+        candIndices = allBlockedIndices;
+      }
+      for (var ci = 0; ci < candIndices.length; ci++) {
+        var bi = candIndices[ci];
+        var b = blockedPack[bi];
+        if (b.id === a.id || !v2EligAgainst(b, h2)) continue;
+        var relB = v2Reliability(b, h2), progB = 0;
+        var bProds = blockedNewProd[bi], bOnly = null;
+        for (var pi = 0; pi < bProds.length; pi++) {
+          var bp = bProds[pi];
+          if (!h2[bp]) {
+            if (!bOnly) bOnly = [bp];
+            else bOnly.push(bp);
+          }
+        }
+        if (bOnly) {
+          var abAdded = v2MergeSortedDisjoint(aAdded, bOnly);
+          var abKey = abAdded.length === 1 ? abAdded[0] : abAdded.join('\x00');
+          var d1 = distCache[abKey];
+          if (d1 === undefined) {
+            d1 = navBaseHasGoal ? 0 : v2GoalDistanceDelta(navG, navBaseMemoF, aAdded, bOnly, navGoalSet, navGoalIds);
+            distCache[abKey] = d1;
+          }
+          progB = dH2 >= V2_INF ? (d1 >= V2_INF ? 0 : 5) : Math.max(0, dH2 - d1);
+        }
         // Escalation-aware lookahead: when a low-privilege credential is already in haveObj, roasting a service
         // ticket (hash.tgs -> crack-tgs) yields an escalated credential even though credential.available is
         // already present as a boolean kind in haveObj.
@@ -1807,7 +2532,7 @@
         }
         enable = Math.max(enable, relB * progB);
         keystone += relB * (0.5 + progB);
-      });
+      }
       if (keystone > V2_KEYSTONE_CAP) keystone = V2_KEYSTONE_CAP;
       // Keystone is a MIDDLE-GAME term: it helps you reach a winning position, it does not adjudicate the
       // win itself. Once a move directly produces a privilege/goal fact it is a cash-in - rank it by
@@ -1843,7 +2568,6 @@
       //   Tier -1: Speculative Frontier (blind CVE/spray gambles without supporting evidence)
 
       // ---- Tier 5: Endgame Cash-In Frontier ----
-      var isAdminStage = (st.accessLevel === 'admin' || st.accessLevel === 'system' || st.credTier === 'admin_cred' || haveObj['access.admin'] || haveObj['access.system']);
       var isDcsyncCashIn = a.transition === 'dcsync' || ((!spec || indicated) && (a.produces.indexOf('loot.ntds') >= 0 || a.produces.indexOf('access.admin') >= 0) && a.requires_all.concat(a.requires_any).some(function (k) {
         return k === 'ad.control_paths' || k === 'ad.domain_control';
       }));
@@ -1866,7 +2590,6 @@
       }
 
       // ---- Tier 4: Earned Material / Active Exploitation Lead in Hand ----
-      var hasGppCand = (typeof facts.values === 'function' ? facts.values('credential.candidate') : []).some(function (v) { return v && v.kind === 'gpp_cpassword'; });
       if (haveObj['hash.tgs'] && a.transition === 'crack_tgs' && !haveObj['loot.ntds']) {
         promote(4, 4);
       }
@@ -1896,7 +2619,6 @@
       var privescIndicated = (!spec || indicated) && ((a.id === 'linux-kernel-exploit' && !!haveObj['privesc.kernel_exploit']) || a.requires_all.concat(a.requires_any).some(function (k) {
         return haveObj[k] && ((/^privesc\./.test(k) && k !== 'privesc.leads') || ACTIONABLE_PRIVESC_VULN_RE.test(k));
       }));
-      var inFootholdStage = (st.accessLevel === 'foothold' || haveObj['foothold.linux'] || haveObj['foothold.windows'] || haveObj['access.shell']) && !haveObj['access.root'] && !haveObj['access.admin'] && !haveObj['access.system'];
       if (inFootholdStage && privescIndicated && (a.transition === 'privesc_act' || a.produces.some(function (p) { return V2_PRIV[p] || p === 'credential.available' || p === 'credential.plaintext'; }))) {
         promote(4, 3);
       }
@@ -2161,77 +2883,329 @@
   // "no route from here with the current move library", not a guess. OS is fixed per engagement, so
   // os-compatibility is judged once against the live facts.
   function v2ActionCost(a, haveObj) {
-    var i, earned = v2Earned(a, haveObj);
+    var meta = v2GetActionMeta(a);
+    var earned = v2Earned(a, haveObj);
     var base;
-    if (v2Speculative(a, haveObj) && !earned) base = 12;
+    if (!earned && v2Speculative(a, haveObj)) base = 12;
     else if (earned) base = 1;
-    else { base = 1.5; for (i = 0; i < a.produces.length; i++) if (V2_PRIV[a.produces[i]]) { base = 8; break; } }
+    else base = meta.producesPriv ? 8 : 1.5;
     // Remote-first: a small surcharge for stepping onto the host (R +0, F +0.3, I +0.6) so the planner
     // prefers the Kali-side route when steps otherwise tie - never enough to reorder a genuinely cheaper
     // path. Running a command from Kali beats getting on the box: faster, and it leaves nothing behind.
-    return base + locusRank(a.locus) * 0.3;
+    return base + meta.locusCost;
   }
   function planPath(facts, pack, opts) {
     opts = opts || {};
     var noFlags = !!(opts.noFlags || opts.flagsEnabled === false);
     var goals = opts.goals || (noFlags ? V2_GOALS_NO_FLAGS : V2_GOALS);
-    var activePack = noFlags ? pack.filter(function (a) { return !isFlagHuntAction(a); }) : pack;
-    var producers = {}, relevant = {}, i;
-    activePack.forEach(function (a) {
-      a.produces.forEach(function (k) { (producers[k] = producers[k] || []).push(a); });
-      a.requires_all.concat(a.requires_any).forEach(function (k) { relevant[k] = 1; });
-    });
+    var bundle = v2GetPackBundle(pack, noFlags);
+    var activePack = bundle.activePack;
+    var producers = bundle.producers;
+    var relevant = Object.create(null), i, j0;
+    for (i = 0; i < activePack.length; i++) {
+      var act0 = activePack[i], ra0List = act0.requires_all, ry0List = act0.requires_any;
+      for (j0 = 0; j0 < ra0List.length; j0++) relevant[ra0List[j0]] = 1;
+      for (j0 = 0; j0 < ry0List.length; j0++) relevant[ry0List[j0]] = 1;
+    }
     for (i = 0; i < goals.length; i++) relevant[goals[i]] = 1;
+
+    var G = v2GetGraph(producers);
+    var relKeys = Object.keys(relevant), R = relKeys.length, relBit = Object.create(null);
+    var bitToFactId = v2AllocI32(((R + 31) >> 5) << 5);
+    v2FillArr(bitToFactId, -1);
+    for (i = 0; i < R; i++) {
+      var rk = relKeys[i];
+      relBit[rk] = i;
+      var gfId = G.factId[rk];
+      if (gfId !== undefined) bitToFactId[i] = gfId;
+    }
+    var W = (R + 31) >> 5;
+    if (W < 1) W = 1;
+    function bitsKey(b) {
+      switch (W) {
+        case 13: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10] + ',' + b[11] + ',' + b[12];
+        case 12: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10] + ',' + b[11];
+        case 14: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10] + ',' + b[11] + ',' + b[12] + ',' + b[13];
+        case 15: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10] + ',' + b[11] + ',' + b[12] + ',' + b[13] + ',' + b[14];
+        case 16: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10] + ',' + b[11] + ',' + b[12] + ',' + b[13] + ',' + b[14] + ',' + b[15];
+        case 11: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9] + ',' + b[10];
+        case 10: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8] + ',' + b[9];
+        case 9: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7] + ',' + b[8];
+        case 8: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6] + ',' + b[7];
+        case 7: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5] + ',' + b[6];
+        case 6: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4] + ',' + b[5];
+        case 5: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3] + ',' + b[4];
+        case 4: return b[0] + ',' + b[1] + ',' + b[2] + ',' + b[3];
+        case 3: return b[0] + ',' + b[1] + ',' + b[2];
+        case 2: return b[0] + ',' + b[1];
+        case 1: return String(b[0]);
+        default:
+          var s = String(b[0]);
+          for (var w = 1; w < W; w++) s += ',' + b[w];
+          return s;
+      }
+    }
 
     // OS is fixed per box but may only be learned partway in: honor a known family from the live facts,
     // else infer it from footholds as the plan accrues them, so a Linux foothold rules out Windows moves.
     var startFam = hostOsFamily(facts);
-    function famOf(st) {
-      if (startFam) return startFam;
-      if (st['foothold.windows'] || st['winrm.authenticated'] || st['rdp.authenticated']) return 'windows';
-      if (st['foothold.linux']) return 'linux';
-      return '';
-    }
-    function osOkIn(a, st) {
-      var al = a.os || [];
-      if (!al.length) return true;
-      var f = famOf(st);
-      if (!f) return true;
-      for (var j = 0; j < al.length; j++) if (normalizeOsName(al[j]) === f) return true;
-      return false;
+    function famCodeOf(st) {
+      if (startFam === 'windows') return 1;
+      if (startFam === 'linux') return 2;
+      if (startFam) return 3;
+      if (st['foothold.windows'] || st['winrm.authenticated'] || st['rdp.authenticated']) return 1;
+      if (st['foothold.linux']) return 2;
+      return 0;
     }
 
-    function sig(st) { var ks = [], k; for (k in st) if (relevant[k]) ks.push(k); return ks.sort().join('|'); }
-    function isGoal(st) { for (var g = 0; g < goals.length; g++) if (st[goals[g]]) return true; return false; }
-    function applic(a, st) {
-      if (!osOkIn(a, st)) return false;
-      for (var j = 0; j < a.requires_all.length; j++) if (!st[a.requires_all[j]]) return false;
-      if (a.requires_any.length) { var any = false; for (j = 0; j < a.requires_any.length; j++) if (st[a.requires_any[j]]) { any = true; break; } if (!any) return false; }
-      return true;
+    var activeLen = activePack.length;
+    var allowWin = v2AllocU8(activeLen), allowLin = v2AllocU8(activeLen), allowOther = v2AllocU8(activeLen);
+    var ra0 = v2AllocI32(activeLen), ra1 = v2AllocI32(activeLen), raMore = v2AllocU8(activeLen);
+    var reqAllBits = new Array(activeLen), hasReqAny = v2AllocU8(activeLen), reqAnyBits = new Array(activeLen);
+    var prBitOff = v2AllocI32(activeLen + 1), prBitTemp = [], totalRelProd = 0;
+    for (i = 0; i < activeLen; i++) {
+      var act = activePack[i], al = act.os || [], j;
+      if (!al.length) {
+        allowWin[i] = 1; allowLin[i] = 1; allowOther[i] = 1;
+      } else {
+        for (j = 0; j < al.length; j++) {
+          var nf = normalizeOsName(al[j]);
+          if (nf === 'windows') allowWin[i] = 1;
+          else if (nf === 'linux') allowLin[i] = 1;
+          else if (nf === startFam && startFam) allowOther[i] = 1;
+        }
+      }
+      var ra = act.requires_all;
+      ra0[i] = ra.length >= 1 ? relBit[ra[0]] : -1;
+      ra1[i] = ra.length >= 2 ? relBit[ra[1]] : -1;
+      if (ra.length > 2) {
+        raMore[i] = 1;
+        var rab = v2AllocI32(W);
+        for (j = 0; j < ra.length; j++) { var rb1 = relBit[ra[j]]; rab[rb1 >> 5] |= (1 << (rb1 & 31)); }
+        reqAllBits[i] = rab;
+      } else {
+        reqAllBits[i] = _V2_EMPTY_I32;
+      }
+      var ry = act.requires_any;
+      if (ry.length) {
+        hasReqAny[i] = 1;
+        var ryb = v2AllocI32(W);
+        for (j = 0; j < ry.length; j++) { var rb2 = relBit[ry[j]]; ryb[rb2 >> 5] |= (1 << (rb2 & 31)); }
+        reqAnyBits[i] = ryb;
+      } else {
+        reqAnyBits[i] = _V2_EMPTY_I32;
+      }
+      var pr = act.produces, prList = [];
+      for (j = 0; j < pr.length; j++) {
+        var rb3 = relBit[pr[j]];
+        if (rb3 !== undefined && prList.indexOf(rb3) < 0) prList.push(rb3);
+      }
+      prBitTemp.push(prList);
+      totalRelProd += prList.length;
     }
-    var start = {}, have = facts.kinds(), k;
-    for (k in have) start[k] = 1;
-    var gScore = {}, came = {}, open = [{ st: start, gc: 0, f: v2GoalDistance(start, producers, goals) }];
-    gScore[sig(start)] = 0;
-    var exp = 0, MAXEXP = 60000;
-    while (open.length) {
-      var bi = 0;
-      for (i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
-      var cur = open.splice(bi, 1)[0], cs = sig(cur.st);
+    var prBitFlat = v2AllocI32(totalRelProd), prCur = 0;
+    for (i = 0; i < activeLen; i++) {
+      prBitOff[i] = prCur;
+      var pl2 = prBitTemp[i];
+      for (var pli2 = 0; pli2 < pl2.length; pli2++) prBitFlat[prCur++] = pl2[pli2];
+    }
+    prBitOff[activeLen] = prCur;
+
+    var goalBits = v2AllocI32(W), goalFactIds = v2AllocI32(goals.length);
+    var goalReach = v2AllocU8(G.F), bfsQ = v2AllocI32(G.F), qHead = 0, qTail = 0;
+    for (i = 0; i < goals.length; i++) {
+      var gb = relBit[goals[i]];
+      goalBits[gb >> 5] |= (1 << (gb & 31));
+      var gfid = G.factId[goals[i]];
+      goalFactIds[i] = gfid !== undefined ? gfid : -1;
+      if (gfid !== undefined && !goalReach[gfid]) {
+        goalReach[gfid] = 1;
+        bfsQ[qTail++] = gfid;
+      }
+    }
+    var gProdOff = G.prodOff, gProdFlat = G.prodFlat;
+    var gReqAllOff = G.reqAllOff, gReqAllFlat = G.reqAllFlat;
+    var gReqAnyOff = G.reqAnyOff, gReqAnyFlat = G.reqAnyFlat;
+    while (qHead < qTail) {
+      var cf = bfsQ[qHead++];
+      var ps0 = gProdOff[cf], pe0 = gProdOff[cf + 1];
+      for (var pi0 = ps0; pi0 < pe0; pi0++) {
+        var mu = gProdFlat[pi0], ri0, nf0;
+        var ras = gReqAllOff[mu], rae = gReqAllOff[mu + 1];
+        for (ri0 = ras; ri0 < rae; ri0++) {
+          nf0 = gReqAllFlat[ri0];
+          if (!goalReach[nf0]) { goalReach[nf0] = 1; bfsQ[qTail++] = nf0; }
+        }
+        var rys = gReqAnyOff[mu], rye = gReqAnyOff[mu + 1];
+        for (ri0 = rys; ri0 < rye; ri0++) {
+          nf0 = gReqAnyFlat[ri0];
+          if (!goalReach[nf0]) { goalReach[nf0] = 1; bfsQ[qTail++] = nf0; }
+        }
+      }
+    }
+    var bitCanReachGoal = v2AllocU8(R), isGoalBit = v2AllocU8(R);
+    for (i = 0; i < R; i++) {
+      var bfid = bitToFactId[i];
+      if (bfid !== -1 && goalReach[bfid]) bitCanReachGoal[i] = 1;
+    }
+    for (i = 0; i < goals.length; i++) {
+      var gbi = relBit[goals[i]];
+      bitCanReachGoal[gbi] = 1;
+      isGoalBit[gbi] = 1;
+    }
+
+    var heap = [], seqCounter = 0;
+    function heapLess(x, y) {
+      return x.f < y.f || (x.f === y.f && x.seq < y.seq);
+    }
+    function heapInsertRaw(node) {
+      var idx = heap.length;
+      heap.push(node);
+      while (idx > 0) {
+        var p = (idx - 1) >> 1;
+        if (!heapLess(heap[idx], heap[p])) break;
+        var tmp = heap[p]; heap[p] = heap[idx]; heap[idx] = tmp;
+        idx = p;
+      }
+    }
+    function heapPush(node) {
+      node.seq = seqCounter++;
+      heapInsertRaw(node);
+    }
+    function heapPop() {
+      var top = heap[0], last = heap.pop();
+      if (heap.length > 0) {
+        heap[0] = last;
+        var idx = 0, len = heap.length;
+        while (true) {
+          var l = (idx << 1) + 1, r = l + 1, sm = idx;
+          if (l < len && heapLess(heap[l], heap[sm])) sm = l;
+          if (r < len && heapLess(heap[r], heap[sm])) sm = r;
+          if (sm === idx) break;
+          var tmp = heap[idx]; heap[idx] = heap[sm]; heap[sm] = tmp;
+          idx = sm;
+        }
+      }
+      return top;
+    }
+
+    var start = {}, startBits = v2AllocI32(W), have = facts.kinds(), k;
+    for (k in have) {
+      start[k] = 1;
+      var sb = relBit[k];
+      if (sb !== undefined) startBits[sb >> 5] |= (1 << (sb & 31));
+    }
+    var startSig = bitsKey(startBits);
+    var gScore = Object.create(null), came = Object.create(null), hCache = Object.create(null);
+    var h0 = v2GoalDistanceBits(G, startBits, W, bitToFactId, goalBits, goalFactIds);
+    hCache[startSig] = h0;
+    gScore[startSig] = 0;
+    heapPush({ st: start, pSt: null, addProd: null, bits: startBits, sig: startSig, gc: 0, h: h0, hDone: true, f: h0 });
+
+    var exp = 0, MAXEXP = 60000, tmpBits = v2AllocI32(W);
+    while (heap.length) {
+      var cur = heapPop();
+      if (!cur.hDone) {
+        var realH = hCache[cur.sig];
+        if (realH === undefined) {
+          realH = v2GoalDistanceBits(G, cur.bits, W, bitToFactId, goalBits, goalFactIds);
+          hCache[cur.sig] = realH;
+        }
+        cur.h = realH;
+        cur.f = cur.gc + realH;
+        cur.hDone = true;
+        heapInsertRaw(cur);
+        continue;
+      }
+      var cs = cur.sig, curBits = cur.bits, curH = cur.h;
       if (++exp > MAXEXP) break;
-      if (isGoal(cur.st)) { var pathIds = [], s = cs; while (came[s]) { pathIds.unshift(came[s].move); s = came[s].prev; } return { path: pathIds, cost: cur.gc, reachable: true }; }
+      var hitGoal = false, w;
+      for (w = 0; w < W; w++) { if ((curBits[w] & goalBits[w]) !== 0) { hitGoal = true; break; } }
+      if (hitGoal) {
+        var pathIds = [], s = cs;
+        while (came[s]) { pathIds.unshift(came[s].move); s = came[s].prev; }
+        return { path: pathIds, cost: cur.gc, reachable: true };
+      }
       if (cur.gc > gScore[cs]) continue;
-      for (var ai = 0; ai < activePack.length; ai++) {
-        var a = activePack[ai];
-        if (!applic(a, cur.st)) continue;
-        var addsRelevant = false, pk;
-        for (var pi = 0; pi < a.produces.length; pi++) { pk = a.produces[pi]; if (relevant[pk] && !cur.st[pk]) { addsRelevant = true; break; } }
+      var curSt = cur.st;
+      if (!curSt) {
+        curSt = {};
+        var pst = cur.pSt, kk;
+        for (kk in pst) curSt[kk] = 1;
+        var cap = cur.addProd;
+        for (var cpi = 0; cpi < cap.length; cpi++) curSt[cap[cpi]] = 1;
+        cur.st = curSt;
+      }
+      var famCode = famCodeOf(curSt);
+      for (var ai = 0; ai < activeLen; ai++) {
+        if (famCode === 1) { if (!allowWin[ai]) continue; }
+        else if (famCode === 2) { if (!allowLin[ai]) continue; }
+        else if (famCode === 3) { if (!allowOther[ai]) continue; }
+
+        var b0 = ra0[ai];
+        if (b0 !== -1) {
+          if ((curBits[b0 >> 5] & (1 << (b0 & 31))) === 0) continue;
+          var b1 = ra1[ai];
+          if (b1 !== -1) {
+            if ((curBits[b1 >> 5] & (1 << (b1 & 31))) === 0) continue;
+            if (raMore[ai]) {
+              var rab2 = reqAllBits[ai], okAll = true;
+              for (w = 0; w < W; w++) {
+                if (((curBits[w] & rab2[w]) ^ rab2[w]) !== 0) { okAll = false; break; }
+              }
+              if (!okAll) continue;
+            }
+          }
+        }
+        if (hasReqAny[ai]) {
+          var ryb2 = reqAnyBits[ai], okAny = false;
+          for (w = 0; w < W; w++) {
+            if ((curBits[w] & ryb2[w]) !== 0) { okAny = true; break; }
+          }
+          if (!okAny) continue;
+        }
+        var ps = prBitOff[ai], pe = prBitOff[ai + 1];
+        if (ps === pe) continue;
+        var addsRelevant = false, touchesGoalCone = false, hitsGoalNow = false, pbi;
+        for (pbi = ps; pbi < pe; pbi++) {
+          var pb = prBitFlat[pbi];
+          if ((curBits[pb >> 5] & (1 << (pb & 31))) === 0) {
+            addsRelevant = true;
+            if (bitCanReachGoal[pb]) touchesGoalCone = true;
+            if (isGoalBit[pb]) hitsGoalNow = true;
+          }
+        }
         if (!addsRelevant) continue;
-        var ns = {}, kk;
-        for (kk in cur.st) ns[kk] = 1;
-        a.produces.forEach(function (p) { ns[p] = 1; });
-        var nsig = sig(ns), ng = cur.gc + v2ActionCost(a, cur.st);
-        if (gScore[nsig] === undefined || ng < gScore[nsig]) { gScore[nsig] = ng; came[nsig] = { prev: cs, move: a.id }; open.push({ st: ns, gc: ng, f: ng + v2GoalDistance(ns, producers, goals) }); }
+        for (w = 0; w < W; w++) tmpBits[w] = curBits[w];
+        for (pbi = ps; pbi < pe; pbi++) {
+          var pb2 = prBitFlat[pbi];
+          tmpBits[pb2 >> 5] |= (1 << (pb2 & 31));
+        }
+
+        var a = activePack[ai];
+        var nsig = bitsKey(tmpBits), ng = cur.gc + v2ActionCost(a, curSt);
+        var prevG = gScore[nsig];
+        if (prevG === undefined || ng < prevG) {
+          gScore[nsig] = ng;
+          came[nsig] = { prev: cs, move: a.id };
+          var nbits = v2AllocI32(W);
+          for (w = 0; w < W; w++) nbits[w] = tmpBits[w];
+          if (hitsGoalNow) {
+            hCache[nsig] = 0;
+            heapPush({ st: null, pSt: curSt, addProd: a.produces, bits: nbits, sig: nsig, gc: ng, h: 0, hDone: true, f: ng });
+          } else {
+            var h = hCache[nsig];
+            if (h === undefined && !touchesGoalCone) {
+              h = curH;
+              hCache[nsig] = curH;
+            }
+            if (h !== undefined) {
+              heapPush({ st: null, pSt: curSt, addProd: a.produces, bits: nbits, sig: nsig, gc: ng, h: h, hDone: true, f: ng + h });
+            } else {
+              heapPush({ st: null, pSt: curSt, addProd: a.produces, bits: nbits, sig: nsig, gc: ng, h: 1, hDone: false, f: ng + 1 });
+            }
+          }
+        }
       }
     }
     return { path: null, cost: Infinity, reachable: false };

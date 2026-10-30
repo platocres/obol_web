@@ -10555,6 +10555,26 @@
       }
     },
     {
+      "key": "linux-privileged-group",
+      "title": "Privileged Local Group Membership (disk/shadow/adm)",
+      "category": "privesc",
+      "severity": "high",
+      "confidence": "confirmed",
+      "remediation": "Remove non-administrative accounts from privileged system groups such as disk, shadow, and adm, and enforce least-privilege access to block devices, /etc/shadow, and system logs.",
+      "refs": [
+        "https://cwe.mitre.org/data/definitions/250.html",
+        "https://attack.mitre.org/techniques/T1068/"
+      ],
+      "cwe": "CWE-250",
+      "attack": "T1068",
+      "nist": "AC-6",
+      "match": {
+        "facts_any": [
+          "privesc.privileged_group"
+        ]
+      }
+    },
+    {
       "key": "nfs-no-root-squash",
       "title": "NFS Export with no_root_squash",
       "category": "privesc",

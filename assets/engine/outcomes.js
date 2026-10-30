@@ -71,13 +71,22 @@
   }
   var _PROMPT_ONLY_LINE_RE = /^\s*(?:[┌╭]──.*|[└╰]─\s*[#$%>].*|\[\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}[^\]]*\](?:\s*\[[^\]]+\])?|(?:\([^)]+\)\s*)?\[?[\w.\-]+@[\w.\-]+(?::[^\s#$%\]]*|\s+[^\r\n#$%\]]*)\]?\s*[#$%](?:\s+.*)?|(?:\*?Evil-WinRM\*?\s+)?PS\s+[A-Za-z]:[^>]*>(?:\s+.*)?|[A-Za-z]:\\[^>]*>(?:\s+.*)?)$/;
   var _NEG_EXPLOIT_RE = /^\s*\[-\]\s*(?:Did not find (?:an?\s+)?accessible named pipe|Exploit failed|Failed to (?:exploit|trigger|connect))\b|\bExploit completed,\s*but no session was created\b/im;
-  function completion(text, command) {
-    var cmd = String(command || '').toLowerCase(), body = String(text || '');
+  function completion(text, command, opts) {
+    var rawCmd = String(command || ''), cmd = rawCmd.toLowerCase(), body = String(text || '');
     if (/^\s*\[OBOL:\s*completed with no output\s*\/\s*nothing found\]\s*$/i.test(body)) {
       return { complete: true, negative: true };
     }
     if (cmd && !body.trim() && /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*(?:curl|find|grep|egrep|fgrep|rg|getcap|which|whereis)\b/.test(cmd)) {
-      return { complete: true, negative: true };
+      var hasPromptTracking = !!(opts && ('promptLine' in opts || 'followPrompt' in opts || (opts.context && ('promptLine' in opts.context || 'followPrompt' in opts.context))));
+      var promptLineVal = String((opts && opts.promptLine) || (opts && opts.context && opts.context.promptLine) || '');
+      var followPromptVal = String((opts && opts.followPrompt) || (opts && opts.context && opts.context.followPrompt) || '');
+      var promptConfirmed = !hasPromptTracking || Boolean(promptLineVal.trim() || followPromptVal.trim());
+      var isMutatingCurl = /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*curl\b/.test(cmd)
+        && (/(?:\/dev\/tcp\/|\bmkfifo\b|\bbash\s+-i\b|\bnc(?:at)?\b|\bos\.system\b|\bsubprocess\b|\bexec\s*\(|\bsystem\s*\(|\binto\s+(?:outfile|dumpfile)\b|--data(?:-urlencode|-binary|-raw)?\b|-X\s+(?:POST|PUT|DELETE|PATCH)\b)/i.test(rawCmd)
+          || /(?:^|\s)-(?:d|F)\s/.test(rawCmd));
+      if (promptConfirmed && !isMutatingCurl) {
+        return { complete: true, negative: true };
+      }
     }
     if (cmd && body.trim()) {
       var nonEmptyLines = body.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
@@ -143,7 +152,7 @@
       return { complete: true, negative: !msfOpened && !/\[\+\]/.test(body) };
     }
     if ((/^[ \t]*\u2554\u2550\u2550+[\u2563\u2557]/m.test(body) || (/\b(?:linpeas|winpeas)\b/i.test(cmd) && /\u2554\u2550\u2550+|Legend:/i.test(body)))
-      && !/\[truncated(?:[,\]]| output)|\[output truncated\]|output (?:was )?truncated/i.test(body)) {
+      && !/\[truncated(?:[,\]]| output)|\[output truncated\]|output (?:was )?truncated|^\s*\.\.\.\s*$/im.test(body)) {
       return { complete: true, negative: true };
     }
     if (/\b(?:hydra|medusa|ncrack|crowbar)\b/.test(cmd) || /\b0 valid passwords? found\b/i.test(body)) {
@@ -190,7 +199,7 @@
     var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\binvalid (?:password|credentials)\b|\bLogin incorrect\b/i.test(text));
     var truncated = /\[truncated(?:[,\]]| output)|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
     var parsedError = !!opts.parseError || diagnostics.length > 0;
-    var done = completion(text, command), obs = observations(text);
+    var done = completion(text, command, opts), obs = observations(text);
     var isShellEstablishingCmd = /\b(?:su|sudo|ssh|sshpass|evil-winrm|psexec|wmiexec|smbexec|atexec|winrs|xfreerdp|nc|ncat|netcat|socat|msfconsole|exploit|meterpreter)\b/i.test(command);
     function isAmbientOrPreExistingAccess(f) {
       if (!f) return true;

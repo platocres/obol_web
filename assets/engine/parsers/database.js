@@ -93,11 +93,70 @@
     return 'modular';
   }
 
+  var _DB_INTERACTIVE_PROMPT_LINE_RE = /^\s*(?:mysql\s*>|MariaDB\s*\[[^\]]*\]\s*>|[A-Za-z][A-Za-z0-9_.-]{0,62}=[#>](?:\s|$)|SQL(?:\s*\([^)]*\))?\s*>|1>\s|sqlite3?\s*>)/im;
+  var _DB_ECHOED_PW_LINE_RE = /^[ \t]{0,2}(?:Enter[ \t]+[Pp]assword|Password)(?:[ \t]+for[ \t]+(?:user[ \t]+)?([A-Za-z0-9_.-]+))?:[ \t]*([^\s\r\n]+)[ \t]*$/;
+  var _DB_PROMPT_USER_LINE_RE = /^[ \t]{0,2}(?:Password[ \t]+for[ \t]+(?:user[ \t]+)?([A-Za-z0-9_.-]+):|Enter[ \t]+user-?name:[ \t]*([A-Za-z0-9_.$#-]+))[ \t]*$/i;
+
+  function _is_valid_echoed_db_pw(pw) {
+    var s = String(pw || '').trim();
+    if (!s) return false;
+    if (C._valid_password && !C._valid_password(s)) return false;
+    if (/^(?:<[^>]+>|\[redacted\]|mysql>|postgres=[#>]|SQL>|MariaDB|psql|Welcome|Connected|Type|\[\*\]|\[\+\]|\[-\]|ERROR|FATAL|ORA-\d+)$/i.test(s)) return false;
+    if (/^(?:\$(?:1|2[abxy]|5|6|y|P|H|S|apr1)\$|\*[0-9A-Fa-f]{40}$|md5[0-9a-fA-F]{32}$|SCRAM-SHA-256\$|pbkdf2_)/i.test(s)) return false;
+    return true;
+  }
+
+  function _extract_db_login_cred(text, command, sessionText, svc) {
+    var user = '', password = '';
+    var lines = String(text || '').split(/\r?\n/);
+    for (var i = 0; i < lines.length && i < 20; i++) {
+      var ln = lines[i];
+      if (/^\*{3,}\s*\d+\.\s*row\b/i.test(ln) || /^\s*\+[-+]+\+\s*$/.test(ln)) break;
+      var pm = _DB_ECHOED_PW_LINE_RE.exec(ln);
+      if (pm) {
+        if (pm[1] && !user) user = pm[1];
+        if (_is_valid_echoed_db_pw(pm[2])) password = pm[2].trim();
+        break;
+      }
+      var um = _DB_PROMPT_USER_LINE_RE.exec(ln);
+      if (um && !user) user = (um[1] || um[2] || '').trim();
+    }
+    var cmd = String(command || '');
+    if (!user && cmd) {
+      var flagM = /(?:^|\s)(?:-U|-u|--username|--user)(?:=|\s+)['"]?([A-Za-z0-9_.\\$-]+)['"]?/.exec(cmd)
+        || /(?:^|\s)-u([A-Za-z0-9_.-]{2,32})(?=\s|$)/.exec(cmd)
+        || /\b(?:postgres(?:ql)?|mysql|mariadb|mssql|oracle):\/\/([A-Za-z0-9_.-]+)(?::[^\s@\/]+)?@/i.exec(cmd);
+      if (flagM) user = flagM[1];
+      if (!user && /\bmssqlclient/i.test(cmd)) {
+        var msM = /(?:^|\s)['"]?(?:[A-Za-z0-9_.-]+[\/\\])?([A-Za-z0-9_.$-]+)(?::[^\s@'"]+)?@[A-Za-z0-9_.-]+/.exec(cmd);
+        if (msM) user = msM[1];
+      }
+      if (!user && /\bsqlplus\b/i.test(cmd)) {
+        var oraM = /\bsqlplus\s+(?:-[A-Za-z0-9]+\s+)*['"]?([A-Za-z0-9_.$#-]+)(?:\/[^\s@'"]+)?(?:@[^\s'"]+)?['"]?/i.exec(cmd);
+        if (oraM && !/^(?:as|\/nolog|nolog)$/i.test(oraM[1])) user = oraM[1];
+      }
+    }
+    if (!user) {
+      var sqlPromptM = /\bSQL\s*\((?:[^)\\]+\s*\\)?([A-Za-z0-9_.$-]+)\s+/.exec(sessionText || '');
+      if (sqlPromptM) user = sqlPromptM[1];
+      else if (svc === 'mssql') {
+        var nxcM = /MSSQL\b[^\r\n]*\[\+\]\s*(?:[^\\\s:]+\s*\\)?([A-Za-z0-9_.$-]+):/i.exec(text || '');
+        if (nxcM) user = nxcM[1];
+      } else if (svc === 'postgresql' && /^\s*postgres=[#>](?:\s|$)/m.test(sessionText || '')) {
+        user = 'postgres';
+      }
+    }
+    var cleanUser = user ? (C._clean_username ? C._clean_username(user) : user.trim()) : '';
+    if (cleanUser && C._valid_username && !C._valid_username(cleanUser, false)) cleanUser = '';
+    return { user: cleanUser, password: password };
+  }
+
   function _parse_database_output(text, ws, command, source, facts) {
     text = String(text || '');
     var ctx = (ws && ws.context) || {};
-    var promptCtx = [ctx.promptLine || '', ctx.followPrompt || ''].filter(Boolean).join('\n').trim();
-    if (!text.trim() && !promptCtx) return;
+    var followPrompt = ctx.followPrompt ? String(ctx.followPrompt) : '';
+    var promptLine = ctx.promptLine ? String(ctx.promptLine) : '';
+    if (!text.trim() && !promptLine.trim() && !followPrompt.trim()) return;
     var h = 'host:' + ws.target, low = (command || '').toLowerCase();
     var denied = reSearch(_DB_ACCESS_DENIED_RE, text);
 
@@ -261,20 +320,22 @@
     // (loot the tables, or MSSQL xp_cmdshell). Conservative: a recognizable engine-specific success
     // banner/prompt AND no access-denied line, so a failed login or an unrelated paste mints nothing.
     if (!denied) {
-      var sessionText = promptCtx ? (text + '\n' + promptCtx) : text;
+      var sessionText = text
+        + (followPrompt ? '\n' + followPrompt : '')
+        + (_DB_INTERACTIVE_PROMPT_LINE_RE.test(promptLine) ? '\n' + promptLine : '');
       var tlow = sessionText.toLowerCase(), svc = null;
-      if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(sessionText)) &&
-          (/\bmysql\s*>/.test(sessionText) || /mariadb\s*\[/i.test(sessionText) || tlow.indexOf('information_schema') >= 0 ||
+      if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(sessionText) || /^\s*mysql\s*>|Welcome to the (?:MySQL|MariaDB) monitor/im.test(sessionText)) &&
+          (/\bmysql\s*>/.test(sessionText) || /mariadb\s*\[/i.test(sessionText) || /Welcome to the (?:MySQL|MariaDB) monitor/i.test(sessionText) || tlow.indexOf('information_schema') >= 0 ||
            /\bversion\(\)/i.test(sessionText) || /server version:\s*\S/i.test(sessionText) ||
            /^\s*\d+\.\d+\.\d+(?!\.\d)(?:-[A-Za-z0-9._-]+)?\s*$/im.test(text))) svc = 'mysql';
-      else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)>/.test(sessionText)) &&
-               (/\bSQL\s*[>(]/.test(sessionText) || /microsoft sql server/i.test(sessionText) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
+      else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)\s*>|\bENVCHANGE\(DATABASE\)|\bImpacket\b[\s\S]{0,240}\bSQL\s*>/i.test(sessionText)) &&
+               (/\bSQL\s*(?:\([^)]*\)\s*)?>/.test(sessionText) || /microsoft sql server|\bENVCHANGE\(DATABASE\)/i.test(sessionText) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
       // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
-      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b/i.test(sessionText) || /\b(?:pg_shadow|pg_database|pg_authid|pg_tables)\b/i.test(low + '\n' + sessionText)) &&
-               (/list of (?:databases|relations)/i.test(sessionText) || /^\s*\w+=[#>]/m.test(sessionText) || /^\s*\(\d+\s+rows?\)\s*$/im.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
-      else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database/i.test(sessionText)) &&
-               (/connected to:/i.test(sessionText) || /^\s*SQL>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
+      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b|\bpsql\s*\(\d+\.\d+/i.test(sessionText) || /^\s*[A-Za-z][A-Za-z0-9_.-]{0,62}=[#>](?:\s|$)/m.test(sessionText) || /\b(?:pg_shadow|pg_database|pg_authid|pg_tables)\b/i.test(low + '\n' + sessionText)) &&
+               (/list of (?:databases|relations)/i.test(sessionText) || /^\s*[A-Za-z0-9_.-]+=[#>]/m.test(sessionText) || /^\s*\(\d+\s+rows?\)\s*$/im.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+|\bpsql\s*\(\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
+      else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database|SQL\*Plus:\s*Release/i.test(sessionText)) &&
+               (/connected to:/i.test(sessionText) || /^\s*SQL\s*>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
       else if ((low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
                (/\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b/i.test(text) || /test>|\bmongosh\b/i.test(sessionText))) {
         svc = 'mongodb';
@@ -283,13 +344,28 @@
       else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(sessionText) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
       else if (isRedisHit && tlow.indexOf('noauth') < 0) svc = 'redis';
       if (svc) {
-        _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));
+        var dbTool = _db_tool(low);
+        _add(facts, mkFact('db.session', h, { service: svc, tool: dbTool, detail: 'authenticated database session established' }, S, source));
+        if (svc !== 'sqlite') {
+          _add(facts, mkFact('db.reachable', h, { service: svc, tool: dbTool }, S, source));
+        }
+        if (svc === 'mssql' || svc === 'postgresql' || svc === 'mysql' || svc === 'oracle') {
+          var loginCred = _extract_db_login_cred(text, command, sessionText, svc);
+          var validVal = { service: svc, tool: dbTool, outcome: 'accepted' };
+          if (loginCred.user) validVal.user = loginCred.user;
+          _add(facts, mkFact('credential.validated', h, validVal, S, source));
+          if (loginCred.password) {
+            var credVal = { password: loginCred.password, service: svc, tool: dbTool, via: svc + '-login' };
+            if (loginCred.user) credVal.user = loginCred.user;
+            _add(facts, mkFact('credential.plaintext', h, credVal, S, source));
+            _add(facts, mkFact('credential.available', h, credVal, S, source));
+          }
+        }
         if (svc === 'mssql') {
-          _add(facts, mkFact('mssql.authenticated', h, { service: 'mssql', tool: _db_tool(low) }, S, source));
-          _add(facts, mkFact('credential.validated', h, { service: 'mssql', tool: _db_tool(low), outcome: 'accepted' }, S, source));
+          _add(facts, mkFact('mssql.authenticated', h, { service: 'mssql', tool: dbTool }, S, source));
           if (/\bSQL\s*\([^)]*\bdbo@master\)|(?:^|[\s/\\])sa(?::|@|\s+dbo@)/i.test(sessionText + '\n' + (command || '')) || /\(Pwn3d!\)|\bsysadmin\b|\bCONTROL\s+SERVER\b/i.test(text)) {
-            _add(facts, mkFact('mssql.sysadmin', h, { service: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
-            _add(facts, mkFact('db.admin', h, { engine: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
+            _add(facts, mkFact('mssql.sysadmin', h, { service: 'mssql', role: 'sysadmin', tool: dbTool }, S, source));
+            _add(facts, mkFact('db.admin', h, { engine: 'mssql', role: 'sysadmin', tool: dbTool }, S, source));
           }
         }
       }

@@ -12,11 +12,16 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   createSandbox,
-  createEngagementSession
+  createEngagementSession,
+  probeBlockStateless
 } = require('../../tools/corpus/sandbox-loader');
 const extractor = require('../../tools/corpus/markdown-extractor');
+const factsAxis = require('../../tools/corpus/facts-axis');
 const trajectories = require('../../tools/corpus/harvest-trajectories');
 
 function runSmokeSuite() {
@@ -902,6 +907,399 @@ function runSmokeSuite() {
     assert.strictEqual(b2.length, 1, 'Expected 1 exploit.versioned_banner for dashed narrow header');
     assert.strictEqual(b2[0].value.product, 'Acme Archive1 Agent');
     assert.strictEqual(b2[0].value.search_query, 'Acme Archive1 Agent 4.2');
+  });
+
+  // ---- Part III: Cohort PG-2 Slice B4 Corpus Harness & Trajectory Generalizations ----
+
+  test('PG2-B4-1: probeBlockStateless forwards followPrompt to parsers and outcomes without forcing stateless context.target', () => {
+    let seenParseArg = null;
+    let seenOutcomeArg = null;
+    const mockObol = {
+      parsers: {
+        parseActionOutput: function (arg) {
+          seenParseArg = arg;
+          return { facts: [], diagnostics: [] };
+        }
+      },
+      outcomes: {
+        classify: function (arg) {
+          seenOutcomeArg = arg;
+          return { kind: 'success' };
+        }
+      }
+    };
+    probeBlockStateless(mockObol, {
+      command: 'su',
+      stdout: 'Password:',
+      promptLine: 'op_user@app-node-01:~$ su',
+      followPrompt: 'root@app-node-01:~#',
+      target: '198.51.100.51'
+    });
+    assert.ok(seenParseArg && seenParseArg.context, 'Expected parseContext object');
+    assert.strictEqual(seenParseArg.context.promptLine, 'op_user@app-node-01:~$ su');
+    assert.strictEqual(seenParseArg.context.followPrompt, 'root@app-node-01:~#');
+    assert.strictEqual(seenParseArg.context.target, undefined, 'Stateless probe must not set parseContext.target unless caller supplied opts.context.target');
+    assert.ok(seenOutcomeArg && seenOutcomeArg.context, 'Expected outcomes.classify context object');
+    assert.strictEqual(seenOutcomeArg.followPrompt, 'root@app-node-01:~#');
+    assert.strictEqual(seenOutcomeArg.context.followPrompt, 'root@app-node-01:~#');
+
+    const liveProbe = probeBlockStateless(OBOL, {
+      command: 'su',
+      stdout: 'Password:',
+      promptLine: 'op_user@app-node-01:~$ su',
+      followPrompt: 'root@app-node-01:~#',
+      target: '198.51.100.51'
+    });
+    assert.ok(liveProbe.supported_kinds.includes('foothold.linux'), 'Expected foothold.linux from root followPrompt');
+    assert.ok(liveProbe.supported_kinds.includes('access.root'), 'Expected access.root from root followPrompt');
+  });
+
+  test('PG2-B4-2: facts-axis sequential idsByCmdAndOut queue preserves distinct followPrompt on duplicate command+output keys', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'obol-pg2-b4-'));
+    try {
+      const wtDir = path.join(tmpDir, 'walkthroughs');
+      fs.mkdirSync(wtDir, { recursive: true });
+      const md = [
+        '# Synthetic Duplicate Key Check',
+        '',
+        '```console',
+        'postgres=# \\q',
+        '```',
+        '',
+        '```console',
+        'op_user@app-node-01:~$ psql \\q',
+        'root@app-node-01:~#',
+        '```'
+      ].join('\n');
+      fs.writeFileSync(path.join(wtDir, 'synth_dup.md'), md, 'utf8');
+
+      const turns = extractor.extractWalkthroughTurns(md).turns;
+      assert.strictEqual(turns.length, 2, 'Expected 2 extracted turns');
+      assert.strictEqual(turns[0].command, 'psql \\q');
+      assert.strictEqual(turns[1].command, 'psql \\q');
+      assert.strictEqual(turns[0].output, '');
+      assert.strictEqual(turns[1].output, '');
+      assert.strictEqual(turns[0].followPrompt || '', '');
+      assert.strictEqual(turns[1].followPrompt || '', 'root@app-node-01:~#');
+
+      const id1 = extractor.blockId('synth_dup.md', turns[0].rawCommand, turns[0].output);
+      const id2 = extractor.blockId('synth_dup.md', turns[1].rawCommand, turns[1].output);
+      assert.notStrictEqual(id1, id2, 'Expected distinct blockIds from distinct rawCommand values');
+
+      const labelsFile = path.join(tmpDir, 'labels.json');
+      fs.writeFileSync(labelsFile, JSON.stringify({
+        version: 2,
+        description: 'Synthetic duplicate command+output queue test',
+        cases: [
+          {
+            id: id1,
+            file: 'synth_dup.md',
+            command: 'psql \\q',
+            expected_kinds: [],
+            forbidden_kinds: ['access.root']
+          },
+          {
+            id: id2,
+            file: 'synth_dup.md',
+            command: 'psql \\q',
+            expected_kinds: ['foothold.linux', 'access.root'],
+            forbidden_kinds: []
+          }
+        ]
+      }, null, 2), 'utf8');
+
+      const res = factsAxis.runFactsAxis({
+        OBOL: OBOL,
+        corpusDir: tmpDir,
+        labels: labelsFile,
+        writeReports: false
+      });
+      assert.deepStrictEqual(res.report.missing_blocks, []);
+      assert.strictEqual(res.report.totals.miss, 0, 'Expected 0 missed facts');
+      assert.strictEqual(res.report.totals.forbidden_hits, 0, 'Expected 0 forbidden hits on first duplicate turn');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('PG2-B4-3: Linux capability lines are rejected by isCommandLikeLine and preserved intact in unprompted fences', () => {
+    assert.strictEqual(extractor.isCommandLikeLine('/usr/bin/python3.9 = cap_setuid+ep'), false);
+    assert.strictEqual(extractor.isCommandLikeLine('/usr/bin/tar cap_dac_read_search=ep'), false);
+    assert.strictEqual(extractor.isCommandLikeLine('getcap -r / 2>/dev/null'), true);
+
+    const md = [
+      '```bash',
+      'getcap -r / 2>/dev/null',
+      '```',
+      '',
+      '```',
+      '/usr/bin/python3.9 = cap_setuid+ep',
+      '/usr/bin/ping = cap_net_raw+ep',
+      '```'
+    ].join('\n');
+    const turns = extractor.extractWalkthroughTurns(md).turns;
+    assert.strictEqual(turns.length, 2, 'Uncaptioned adjacent command and capability fences must remain separate turns');
+    assert.strictEqual(turns[0].rawCommand, 'getcap -r / 2>/dev/null');
+    assert.strictEqual(turns[0].output, '');
+    assert.strictEqual(turns[1].rawCommand, '');
+    assert.ok(turns[1].output.indexOf('/usr/bin/python3.9 = cap_setuid+ep') >= 0, 'Line 1 of capability output must not be consumed as rawCommand');
+  });
+
+  test('PG2-B4-4: perl and ruby CLI invocations are recognized as commands while English prose stays excluded', () => {
+    assert.strictEqual(extractor.isCommandLikeLine('perl exploit.pl 198.51.100.10 8080'), true);
+    assert.strictEqual(extractor.isCommandLikeLine('ruby -e \'puts "ok"\''), true);
+    assert.strictEqual(extractor.isCommandLikeLine('ruby poc_runner.rb --target 198.51.100.10'), true);
+    assert.strictEqual(extractor.isCommandLikeLine('Ruby is a dynamic language used by web frameworks'), false);
+    assert.strictEqual(extractor.isCommandLikeLine('Perl scripts are often installed under /usr/local/bin'), false);
+  });
+
+  test('PG2-B4-5: followPrompt capture on su/sudo/nc -nlvp443, intermediate landing prompts, and pty.spawn propagation', () => {
+    const mdSu = [
+      '```console',
+      'op_user@app-node-01:~$ su',
+      'Password:',
+      'root@app-node-01:/home/op_user#',
+      'root@app-node-01:/home/op_user# id',
+      'uid=0(root) gid=0(root) groups=0(root)',
+      '```'
+    ].join('\n');
+    const suTurns = extractor.extractWalkthroughTurns(mdSu).turns;
+    assert.strictEqual(suTurns.length, 2, 'Intermediate empty landing prompt must not emit a ghost command-less turn');
+    assert.strictEqual(suTurns[0].command, 'su');
+    assert.strictEqual(suTurns[0].output, 'Password:');
+    assert.strictEqual(suTurns[0].followPrompt, 'root@app-node-01:/home/op_user#');
+    assert.strictEqual(suTurns[1].command, 'id');
+
+    const mdNcPty = [
+      '```console',
+      'kali@kali:~$ nc -nlvp443',
+      'listening on [any] 443 ...',
+      'connect to [10.10.14.5] from (UNKNOWN) [198.51.100.52] 49210',
+      'python3 -c \'import pty; pty.spawn("/bin/bash")\'',
+      'www-data@app-node-01:/var/www/html$',
+      '```'
+    ].join('\n');
+    const ncTurns = extractor.extractWalkthroughTurns(mdNcPty).turns;
+    assert.ok(ncTurns.length >= 1);
+    assert.strictEqual(ncTurns[0].command, 'nc -nlvp443');
+    assert.strictEqual(ncTurns[0].followPrompt, 'www-data@app-node-01:/var/www/html$');
+  });
+
+  test('PG2-B4-6: Pre-prompt unprompted artifact dump before first prompt splits cleanly without altering prompted turn', () => {
+    const synthHash = '$6$synthSalt01$0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef012345';
+    const md = [
+      '```console',
+      '\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563 Readable shadow backup',
+      'svc_backup:' + synthHash + ':19000:0:99999:7:::',
+      'kali@kali:~$ hashcat -m 1800 shadow.hash /usr/share/wordlists/rockyou.txt',
+      synthHash + ':Winter2026!',
+      '```'
+    ].join('\n');
+    const turns = extractor.extractWalkthroughTurns(md).turns;
+    assert.strictEqual(turns.length, 2, 'Expected leading unprompted artifact unit + prompted hashcat unit');
+    assert.strictEqual(turns[0].rawCommand, '');
+    assert.ok(turns[0].output.indexOf('svc_backup:' + synthHash) >= 0);
+    assert.strictEqual(turns[1].rawCommand, 'hashcat -m 1800 shadow.hash /usr/share/wordlists/rockyou.txt');
+    assert.strictEqual(turns[1].output, synthHash + ':Winter2026!');
+  });
+
+  test('PG2-B4-7: isBareHashCommand rejects prose comments with tool heads and workflow-arrow summaries', () => {
+    assert.strictEqual(extractor.isBareHashCommand('# zip files are not viewable via http://198.51.100.10/archive.zip'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# curl > wget > chmod > execute payload'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# python script is located in the root folder'), false);
+    assert.strictEqual(extractor.isBareHashCommand('# zip -r /tmp/site.zip /var/www/html'), true);
+    assert.strictEqual(extractor.isBareHashCommand('# find / -name proof.txt 2>/dev/null'), true);
+  });
+
+  test('PG2-B4-8: pspy32, pspy64, and pspy64s are recognized as CLI tools and classified as pspy', () => {
+    assert.strictEqual(extractor.isCommandLikeLine('./pspy64 -pf -i 1000'), true);
+    assert.strictEqual(extractor.isCommandLikeLine('pspy64s'), true);
+    assert.strictEqual(extractor.isCommandLikeLine('pspy32'), true);
+    assert.strictEqual(extractor.detectTool('./pspy64 -pf -i 1000', ''), 'pspy');
+    assert.strictEqual(extractor.detectTool('pspy64s', ''), 'pspy');
+    assert.strictEqual(extractor.detectTool('pspy32', ''), 'pspy');
+  });
+
+  test('PG2-B4-9: Bare artifact fence classification and URL-attributed HTTP API json credential fence extraction', () => {
+    assert.strictEqual(extractor.classifyFenceBlock('', '\u2550\u2550\u2550\u2550\u2550\u2550\u2563 System Information\nOS: Linux 5.15.0').include, true);
+    assert.strictEqual(extractor.classifyFenceBlock('', 'root:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin').include, true);
+    assert.strictEqual(extractor.classifyFenceBlock('', 'Username   Password\nop_admin   SynthPass99!').include, true);
+    assert.strictEqual(extractor.classifyFenceBlock('', '# /etc/exports: the access control list\n/srv/share *(rw,no_root_squash)').include, true);
+    assert.strictEqual(extractor.classifyFenceBlock('', '-------------SuidEnum-------------\n/usr/bin/find').include, true);
+    assert.strictEqual(extractor.classifyFenceBlock('', 'Usage: backupctl [OPTION]...\nReport bugs to <maintainers@example.org>.').include, true);
+
+    const mdApi = [
+      'Querying `http://198.51.100.53:8080/api/v1/users` returns the account JSON:',
+      '',
+      '```json',
+      '{',
+      '  "username": "op_user",',
+      '  "password": "SynthApiValue42!"',
+      '}',
+      '```',
+      '',
+      'Unrelated static package manifest:',
+      '',
+      '```json',
+      '{',
+      '  "name": "widget-ui",',
+      '  "private": true',
+      '}',
+      '```'
+    ].join('\n');
+    const turns = extractor.extractWalkthroughTurns(mdApi).turns;
+    assert.strictEqual(turns.length, 1, 'Only URL-attributed credential API JSON fence should be extracted');
+    assert.strictEqual(turns[0].rawCommand, '');
+    assert.strictEqual(turns[0].command, 'curl');
+    assert.ok(turns[0].output.indexOf('"SynthApiValue42!"') >= 0);
+  });
+
+  test('PG2-B4-10: Session-aware isAttackerTurn handles sh-X.Y prompts and bare prompts with target shell state', () => {
+    const footholdSet = new Set(['foothold.linux']);
+    assert.strictEqual(
+      trajectories.isAttackerTurn({ kind: 'unix', promptLine: 'sh-5.1$ id', command: 'id' }, {}),
+      false
+    );
+    assert.strictEqual(
+      trajectories.isAttackerTurn({ kind: 'bare', isHash: true, promptLine: '# cat proof.txt', command: 'cat proof.txt' }, { facts: footholdSet }),
+      false
+    );
+    assert.strictEqual(
+      trajectories.isAttackerTurn({ kind: 'bare', isDollar: true, promptLine: '$ cat local.txt', command: 'cat local.txt' }, { inTargetShell: true }),
+      false
+    );
+    assert.strictEqual(
+      trajectories.isAttackerTurn({ kind: 'bare', isDollar: true, promptLine: '$ hashcat -m 0 hash.txt rockyou.txt', command: 'hashcat -m 0 hash.txt rockyou.txt' }, { inTargetShell: true, facts: footholdSet }),
+      true,
+      'Attacker-only cracking/scanning tools on bare $ prompt must remain attacker turns'
+    );
+  });
+
+  test('PG2-B4-11: isHousekeepingTurn handles attached-port listeners, target git clone, and foothold flag reads', () => {
+    assert.strictEqual(
+      trajectories.isHousekeepingTurn({ command: 'nc -nlvp443', stdout: '' }).reason,
+      'local_listener_wait'
+    );
+    assert.strictEqual(
+      trajectories.isHousekeepingTurn({ command: 'socat TCP-LISTEN:4444,reuseaddr,fork -', stdout: '' }).reason,
+      'local_listener_wait'
+    );
+    assert.strictEqual(
+      trajectories.isHousekeepingTurn({ host: 'kali', command: 'git clone https://github.com/org/helper-tool.git', stdout: '' }).housekeeping,
+      true
+    );
+    assert.strictEqual(
+      trajectories.isHousekeepingTurn({ host: 'kali', command: 'git clone http://198.51.100.54/webapp.git', stdout: '' }).housekeeping,
+      false,
+      'Target-hosted git clone must not be discarded as attacker_workspace_prep'
+    );
+    assert.strictEqual(
+      trajectories.isHousekeepingTurn(
+        { kind: 'bare', isHash: true, promptLine: '# cat proof.txt', command: 'cat proof.txt', stdout: '0123456789abcdef0123456789abcdef' },
+        { facts: new Set(['foothold.linux', 'access.root']) }
+      ).housekeeping,
+      false,
+      'Explicit flag read with foothold must not be discarded as attacker_local_file_op'
+    );
+  });
+
+  test('PG2-B4-12: matchTurnToCatalogMoves disambiguates find -exec shell, find flag search, ssh, and psql', () => {
+    const linuxFacts = new Set(['foothold.linux', 'privesc.suid']);
+    const findExecMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-01', kind: 'unix', command: 'find . -exec /bin/sh -p \\; -quit' },
+      { facts: linuxFacts, inTargetShell: true, target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.strictEqual(findExecMoves[0], 'suid-gtfobins');
+    assert.ok(!findExecMoves.includes('flag-hunt-linux') && !findExecMoves.includes('flag-hunt-root-linux'));
+
+    const findFlagMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'app-node-01', kind: 'unix', command: 'find / -name local.txt 2>/dev/null' },
+      { facts: linuxFacts, inTargetShell: true, target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.strictEqual(findFlagMoves[0], 'flag-hunt-linux');
+    assert.ok(!findFlagMoves.includes('suid-gtfobins'));
+
+    const sshKeyMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'ssh -i id_rsa op_user@198.51.100.55' },
+      { facts: new Set(['port:22', 'service.ssh', 'loot.ssh_key']), target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.strictEqual(sshKeyMoves[0], 'ssh-key-login');
+    assert.ok(!sshKeyMoves.includes('pivot-ssh-dynamic') && !sshKeyMoves.includes('pivot-ssh-portforward'));
+
+    const sshPassMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'ssh op_user@198.51.100.55' },
+      { facts: new Set(['port:22', 'service.ssh', 'credential.valid']), target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.ok(
+      sshPassMoves[0] === 'ssh-login' || sshPassMoves[0] === 'linux-remote-exec',
+      'Expected ssh-login or linux-remote-exec at #1 for ssh user@target, got ' + sshPassMoves[0]
+    );
+    assert.ok(!sshPassMoves.includes('pivot-ssh-dynamic'));
+
+    const psqlRceMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'psql -h 198.51.100.55 -U postgres -c "COPY cmd_exec FROM PROGRAM \'id\';"' },
+      { facts: new Set(['port:5432', 'service.postgres']), target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.strictEqual(psqlRceMoves[0], 'postgres-rce');
+    assert.ok(!psqlRceMoves.includes('postgres-login'));
+
+    const psqlLoginMoves = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { host: 'kali', kind: 'unix', command: 'psql -h 198.51.100.55 -U postgres -d appdb' },
+      { facts: new Set(['port:5432', 'service.postgres']), target: '198.51.100.55' }
+    ).map(c => c.id);
+    assert.strictEqual(psqlLoginMoves[0], 'postgres-login');
+  });
+
+  test('PG2-B4-13: replayWalkthrough seeds pre-command root prompt telemetry and guards DOSBox prompts on Linux targets', () => {
+    const md = [
+      '```console',
+      'op_user@app-node-01:~$ id',
+      'uid=1000(op_user) gid=1000(op_user) groups=1000(op_user)',
+      '```',
+      '',
+      '```console',
+      'C:\\> MOUNT C /',
+      'Drive C is mounted as local directory /',
+      '```',
+      '',
+      '```console',
+      'root@app-node-01:~# cat /root/proof.txt',
+      'fedcba9876543210fedcba9876543210',
+      '```'
+    ].join('\n');
+
+    const rep = trajectories.replayWalkthrough(OBOL, {
+      slug: 'synth-preprompt-dosbox',
+      markdown: md,
+      trajectory_checkpoints: [{
+        step_index: 3,
+        target_ip: '198.51.100.56',
+        required_gates: ['foothold.linux', 'access.root']
+      }]
+    }, {
+      target: '198.51.100.56',
+      lhost: '10.10.14.5'
+    });
+
+    const rootFlagStep = rep.steps.find(s => /proof\.txt/.test(s.command));
+    assert.ok(rootFlagStep, 'Expected root flag step in replay report');
+    assert.ok(
+      rootFlagStep.reachability && rootFlagStep.reachability.reachable,
+      'Expected root@app-node-01:~# cat /root/proof.txt to be reachable via pre-command prompt seeding'
+    );
+    assert.ok(rep.checkpoints.length === 1 && rep.checkpoints[0].ok, 'Expected final checkpoint to hold foothold.linux and access.root');
+
+    const allMinted = [];
+    for (const s of rep.steps) {
+      for (const k of (s.minted_kinds || [])) allMinted.push(k);
+    }
+    assert.ok(!allMinted.includes('foothold.windows'), 'DOSBox MOUNT C / prompt on Linux foothold must not mint foothold.windows');
   });
 
   if (failures.length > 0) {

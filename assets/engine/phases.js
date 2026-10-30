@@ -121,12 +121,28 @@
     var explicit = String((action && action.phase) || '').toLowerCase();
     if (explicit && ACTION_PHASE_ALIASES[explicit]) explicit = ACTION_PHASE_ALIASES[explicit];
     if (explicit && explicit !== 'web' && explicit !== 'ad' && (explicit in PHASE_INDEX)) return explicit;
-    var kinds = ((action && action.produces) || []).slice();
-    if (!kinds.length) {
-      kinds = ((action && action.requires_all) || []).slice().concat((action && action.requires_any) || []);
+    var prod = ((action && action.produces) || []).slice();
+    var reqs = [].concat((action && action.requires) || [], (action && action.requires_all) || [], (action && action.requires_any) || []);
+    if (!prod.length) {
+      if (!reqs.length) return 'recon';
+      return maxByPhase(reqs);
     }
-    if (!kinds.length) return 'recon';
-    return maxByPhase(kinds);
+    var derived = maxByPhase(prod);
+    if (phaseIndex(derived) > PHASE_INDEX.access) {
+      var hasPostFootholdReq = reqs.some(function (k) {
+        return /^(?:foothold\.|access\.|privesc\.|ad\.|adcs\.|credential\.validated$|db\.session$|hash\.krbtgt$|blocker\.acl_reauth$)/.test(k);
+      });
+      var isAdEscalationProd = prod.some(function (k) {
+        return /^(?:ad\.|adcs\.|persistence\.domain$)/.test(k);
+      });
+      if (!hasPostFootholdReq && !isAdEscalationProd) {
+        var producesInitialAccess = prod.some(function (k) {
+          return /^(?:foothold\.|access\.|web\.(?:cmdi|upload|lfi|sqli|ssrf|ssti|xxe|nosqli)_confirmed$|web\.authz_bypass$)/.test(k);
+        });
+        return producesInitialAccess ? 'access' : 'enum';
+      }
+    }
+    return derived;
   }
 
   function targetPhase(factset) {

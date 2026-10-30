@@ -55,7 +55,17 @@
     'print operators': 1, 'server operators': 1, 'account operators': 1,
     'cryptographic operators': 1, dnsupdateproxy: 1,
     example: 1, test: 1, sample: 1, demo: 1, placeholder: 1, your_username: 1,
-    username_here: 1, myuser: 1, foo: 1, bar: 1
+    username_here: 1, myuser: 1, foo: 1, bar: 1,
+    'nt authority': 1, 'nt service': 1, 'window manager': 1, 'font driver host': 1,
+    'iis apppool': 1, workgroup: 1,
+    'null': 1, none: 1, 'true': 1, 'false': 1, unknown: 1, error: 1, failed: 1,
+    denied: 1, invalid: 1, status: 1, version: 1, server: 1, client: 1, target: 1,
+    host: 1, domain: 1, user: 1, username: 1, login: 1, password: 1, secret: 1,
+    'admin$': 1, 'ipc$': 1, 'c$': 1, 'print$': 1, http: 1, https: 1, ldap: 1,
+    smb: 1, tcp: 1, udp: 1, initshutdown: 1, eventlog: 1, srvsvc: 1, atsvc: 1,
+    wkssvc: 1, samr: 1, lsarpc: 1, lsass: 1, netlogon: 1, spoolss: 1, winreg: 1,
+    svcctl: 1, ntsvcs: 1, epmapper: 1, browser: 1, davhlp: 1, currentversion: 1,
+    currentcontrolset: 1, microsoft: 1, windows: 1
   };
   var _ATTACKER_HOSTS = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec|htb|tryhackme|arch|debian-vm|vbox|vmware)$/i;
   var _REMOTE_OFFENSIVE_TOOLS = /^\s*(?:nmap|masscan|rustscan|impacket-[\w.-]+|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|wmiexec[\w.]*|psexec[\w.]*|smbexec[\w.]*|atexec[\w.]*|dcomexec[\w.]*|lookupsid[\w.]*|getTGT[\w.]*|getST[\w.]*|addcomputer[\w.]*|bloodyAD|dacledit[\w.]*|owneredit[\w.]*|certipy[\w-]*|nxc|netexec|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|evil-winrm|ffuf|gobuster|feroxbuster|wfuzz|dirb|dirsearch|nikto|whatweb|httpx|nuclei|hydra|john|hashcat|responder|ntlmrelayx[\w.]*|sqlmap|bloodhound[\w.-]*|pywhisker[\w.]*|sccmhunter[\w.]*|snmpwalk|onesixtyone|showmount)\b/i;
@@ -78,12 +88,12 @@
   function isBoilerplateUser(u) {
     if (!u) return true;
     var raw = String(u).trim();
-    if (/\.(?:zip|tar|gz|tgz|rar|7z|bak|sql|db|sqlite|txt|log|xml|json|yml|yaml|ini|conf|cfg|php|py|sh|exe|dll|ps1|bat|cmd|vbs|jar|war|pem|key|pfx|kdbx|ova|vmdk|iso|img|pdf|doc|docx|xls|xlsx)$/i.test(raw)) return true;
-    var low = raw.toLowerCase().replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
+    if (raw.indexOf('.') >= 0 && /\.(?:zip|tar|gz|tgz|rar|7z|bak|sql|db|sqlite|txt|log|xml|json|yml|yaml|ini|conf|cfg|php|py|sh|exe|dll|ps1|bat|cmd|vbs|jar|war|pem|key|pfx|kdbx|ova|vmdk|iso|img|pdf|doc|docx|xls|xlsx)$/i.test(raw)) return true;
+    var low = raw.toLowerCase();
+    if (low.indexOf('\\') >= 0 || low.indexOf('/') >= 0) low = low.replace(/^.*[\\\/]/, '');
+    if (low.indexOf('@') >= 0) low = low.slice(0, low.indexOf('@'));
     if (!low || low.length < 2 || low.length > 64) return true;
-    if (_BOILERPLATE_USERS[low]) return true;
-    if (/^(?:nt authority|nt service|builtin|window manager|font driver host|iis apppool|workgroup)$/i.test(low)) return true;
-    if (/^(?:null|none|true|false|unknown|error|failed|denied|invalid|status|version|server|client|target|host|domain|user|username|login|password|secret|admin\$|ipc\$|c\$|print\$|http|https|ldap|smb|tcp|udp|initshutdown|eventlog|srvsvc|atsvc|wkssvc|samr|lsarpc|lsass|netlogon|spoolss|winreg|svcctl|ntsvcs|epmapper|browser|davhlp|currentversion|currentcontrolset|microsoft|windows)$/i.test(low)) return true;
+    if (_BOILERPLATE_USERS[low] === 1) return true;
     return false;
   }
 
@@ -105,8 +115,25 @@
     if (/[\x00-\x08\x0e-\x1f\x7f-\x9f\ufffd]/.test(clean)) return true;
     if (echoSet && echoSet[clean.toLowerCase()]) return true;
     if (/^(?:null|none|false|true|empty|nil|undefined|n\/a|na|tbd|todo|changeme|change_me|password|passwd|secret|user|username|account|login|domain|host|server|your_password|password_here|secret_here|api_key_here|token_here|testpassword|mysecretpassword|yourpassword|enterpassword|p@ssw0rd|passw0rd|example|sample|test|placeholder|redacted|hidden|masked|encrypted|not\s*set|write|read|create_child|delete_child|full_control|generic_all|generic_write|\*+|\.+|-+|_+|<[^>]+>|\[[^\]]+\]|\{[^}]+\}|0x0+)$/i.test(clean)) return true;
+    if (/^(?:NOPASSWD(?::.*)?|PASSWD(?::.*)?|SETENV(?::.*)?|NOEXEC(?::.*)?|LOG_INPUT(?::.*)?|LOG_OUTPUT(?::.*)?|ALL)$/i.test(clean)) return true;
+    if (/^\(ALL(?::[^)]*)?\)/i.test(clean) || /\bNOPASSWD:/i.test(clean)) return true;
     if (/^(?:https?:\/\/|#[0-9a-fA-F]{3,8}$|\d+(?:px|em|rem|ms|s|%|pt|vh|vw)$)/.test(clean)) return true;
     if (/^(?:document\.|window\.|navigator\.|location\.|localStorage\.|sessionStorage\.|form\.|this\.|self\.|process\.env\b|os\.environ\b|os\.getenv\b|System\.getenv\b|\$_(?:POST|GET|REQUEST|COOKIE|SERVER|ENV|SESSION)\b|req\.(?:body|query|params|headers|cookies)\b|request\.(?:form|args|json|values|POST|GET|DATA)\b|[A-Za-z_$][A-Za-z0-9_$.]*\s*\(|[A-Za-z_$][A-Za-z0-9_$.]*\[|[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*){2,}$)/i.test(clean)) return true;
+    return false;
+  }
+
+  function _is_dos_emulator_ctx(command, text, promptLine) {
+    if (C && typeof C.isDosEmulatorContext === 'function') {
+      return !!C.isDosEmulatorContext(command, text, promptLine);
+    }
+    var combined = String(command || '') + '\n' + String(text || '');
+    if (/\bdosbox\b|Drive [A-Z] is mounted as (?:local directory|internal Virtual Drive)|\bMOUNT\s+[A-Za-z]\s+\/(?:\s|$)/i.test(combined)) {
+      return true;
+    }
+    var promptCtx = String(promptLine || '') + '\n' + String(text || '');
+    if (/^\s*[A-Za-z]:\\>/m.test(promptCtx) && /(?:^|\s|[><|"'=])\/(?:etc|usr|bin|sbin|var|home|root|tmp|opt)\//.test(combined)) {
+      return true;
+    }
     return false;
   }
 
@@ -202,7 +229,26 @@
   // ---- Axis 2A: Shell Prompt Telemetry Extractor ----------------------------------------------
   var _PROMPT_BANNER_SKIP_RE = /^(?:listening on \[|connect to \[[^\]]+\] from |Connection received on |Ncat:\s|Trying \d+\.|Connected to |Escape character is |Microsoft Windows \[Version |\(c\) Microsoft Corporation)/i;
 
-  function _extract_prompt_telemetry(rawText, ws) {
+  function _is_interactive_session_launcher_cmd(command, hasLocalCtxPrompt) {
+    var cmd = String(command || '').trim();
+    if (!cmd) return true;
+    if (/\bpty\.spawn\s*\(/i.test(cmd) || /\bscript\b[^\r\n]*\/dev\/null\b/i.test(cmd)) return true;
+    if ((C._is_ssh_command && C._is_ssh_command(cmd)) || /^\s*(?:sudo\s+|proxychains4?\s+)?(?:ssh|sshpass|evil-winrm)\b/i.test(cmd)) return true;
+    if (/\b(?:nc|ncat|netcat)\b[^\r\n]*-[A-Za-z0-9]*l/i.test(cmd) || /\bsocat\b[^\r\n]*\b(?:TCP\d*-)?LISTEN\b/i.test(cmd)) return true;
+    if (/^\s*(?:sudo\s+)?su(?:\s|$)/i.test(cmd)) return true;
+    if (/^\s*(?:\/[A-Za-z0-9_./-]*\/|\.?\/)?(?:ba|da|z|k|a)?sh\b/i.test(cmd)) return true;
+    if (/^\s*(?:sudo|doas)\b/i.test(cmd)) {
+      var unwrapped = _strip_cmd_wrappers(cmd);
+      if (/\b(?:python[23]?|perl|ruby|php|curl|wget|httpie|nmap|masscan|rustscan|ffuf|gobuster|feroxbuster|wpscan|sqlmap)\b|--rhosts?\b|\bhttps?:\/\//i.test(unwrapped)) {
+        return false;
+      }
+      return true;
+    }
+    if (hasLocalCtxPrompt && /^\s*psql\b/i.test(cmd)) return true;
+    return false;
+  }
+
+  function _extract_prompt_telemetry(rawText, ws, command) {
     var rawStr = String(rawText || '');
     var ctxPrompt = (ws && ws.context && ws.context.promptLine) ? String(ws.context.promptLine) : '';
     var followPrompt = (ws && ws.context && ws.context.followPrompt) ? String(ws.context.followPrompt) : '';
@@ -278,6 +324,7 @@
         if (winPs || winCmd) {
           var cwdWin = (winPs ? winPs[1] : winCmd[1]).trim();
           var cmdAfterWin = (winPs ? winPs[2] : winCmd[2]).trim();
+          if (winCmd && _is_dos_emulator_ctx(cmdAfterWin || command, rawStr, l)) continue;
           out.cwd = cwdWin;
           out.osFamily = 'windows';
           out.locus = 'local';
@@ -302,13 +349,15 @@
           var u = nixM[1], h = nixM[2];
           var cwdNix = nixTightM ? '' : String(nixM[3] || '').trim();
           var sigil = nixTightM ? nixM[3] : nixM[4];
-          var cmdAfterNix = String(nixTightM ? nixM[4] : (nixM[5] || '')).trim();
+          var rawTail = String(nixTightM ? nixM[4] : (nixM[5] || ''));
+          var cmdAfterNix = rawTail.trim();
+          var promptPrefixOnly = rawTail ? l.slice(0, l.length - rawTail.length) : l;
           out.user = u;
           out.host = h;
           out.cwd = cwdNix;
           out.hasCommand = !!cmdAfterNix || hasTrailingOutput;
           out.promptLine = l;
-          var hasTunStamp = /\[(?:tun|tap|vpn|wg)\d*:/i.test(l) || (lhost && l.indexOf(lhost) >= 0);
+          var hasTunStamp = /\[(?:tun|tap|vpn|wg)\d*:/i.test(promptPrefixOnly) || (lhost && promptPrefixOnly.indexOf(lhost) >= 0);
           if (_ATTACKER_HOSTS.test(h) || _ATTACKER_HOSTS.test(u) || hasTunStamp || _REMOTE_OFFENSIVE_TOOLS.test(_strip_cmd_wrappers(cmdAfterNix))) {
             out.locus = 'remote';
           } else {
@@ -334,18 +383,21 @@
       return out;
     }
 
-    var stdoutRes = _scanPromptLines(rawStr.split(/\r?\n/), false, false);
+    var promptHeadStr = rawStr.length > 8192 ? rawStr.slice(0, 8192) : rawStr;
+    var stdoutRes = _scanPromptLines(promptHeadStr.split(/\r?\n/), rawStr.length > 8192, false);
     if (stdoutRes.promptLine) return stdoutRes;
 
-    if (followPrompt) {
+    var ctxRes = ctxPrompt ? _scanPromptLines(ctxPrompt.split(/\r?\n/), Boolean(rawStr.trim()), true) : null;
+
+    if (followPrompt && _is_interactive_session_launcher_cmd(command, Boolean(ctxRes && ctxRes.locus === 'local'))) {
       var followRes = _scanPromptLines(followPrompt.split(/\r?\n/), true, false);
-      if (followRes.promptLine) return followRes;
+      if (followRes.promptLine) {
+        followRes.fromFollowPrompt = true;
+        return followRes;
+      }
     }
 
-    if (ctxPrompt) {
-      var ctxRes = _scanPromptLines(ctxPrompt.split(/\r?\n/), Boolean(rawStr.trim()), true);
-      if (ctxRes.promptLine) return ctxRes;
-    }
+    if (ctxRes && ctxRes.promptLine) return ctxRes;
 
     stdoutRes.origin = '';
     return stdoutRes;
@@ -529,7 +581,9 @@
 
     for (var i = 0; i < limit - 1; i++) {
       var rawHdr = lines[i];
-      if (!rawHdr || rawHdr.length > 512 || !_TABLE_HDR_HINT_RE.test(rawHdr)) continue;
+      if (!rawHdr || rawHdr.length > 512) continue;
+      if (!adTableCtx && rawHdr.indexOf('  ') < 0 && rawHdr.indexOf('|') < 0 && rawHdr.indexOf('\t') < 0 && rawHdr.indexOf(',') < 0 && !/[\u2502\u2503\u2551]/.test(rawHdr)) continue;
+      if (!_TABLE_HDR_HINT_RE.test(rawHdr)) continue;
       var l = _normalizeTableLine(rawHdr).trim();
       if (!l || /^[\-+|=:*#\s]{2,}$/.test(l)) continue;
 
@@ -616,8 +670,9 @@
 
   function _isInteractivePasswordPromptEcho(linesArr, idx, fullText, command) {
     var ln = String((linesArr && linesArr[idx]) || '');
-    if (!ln) return false;
+    if (!ln || ln.indexOf(':') < 0 || !/password/i.test(ln)) return false;
     if (/^\s*\[sudo\]\s*password\s+for\s+[^:\r\n]+:\s*\S*\s*$/i.test(ln)) return true;
+    if (/^\s*[^\s:'"]+@[A-Za-z0-9_.-]+'s\s+password:\s*\S*\s*$/i.test(ln)) return true;
     if (!/^\s*(?:Enter\s+)?Password(?:\s+for\s+[^\r\n:]+)?\s*:\s*\S+\s*$/i.test(ln)) return false;
     var nextWindow = [linesArr[idx + 1] || '', linesArr[idx + 2] || ''].join('\n');
     if (_INTERACTIVE_AUTH_FAIL_RE.test(nextWindow)) return true;
@@ -632,6 +687,7 @@
   // ---- Axis 3B: Key-Value Paragraph / Block Grouper (including XML leaf elements) -------------
   var _KV_LINE_RE = /^\s*(?:(?:\[[*+\-!]\]|[-*•>])\s+)?["']?([A-Za-z][A-Za-z0-9_.\-\/ ()]{1,42}?)["']?\s*(?:: base64:|:|=)\s*(\S[^\r\n]*)$/;
   var _XML_LEAF_GLOBAL_RE = /<([A-Za-z][A-Za-z0-9_.:-]{1,39})(?:\s+([^>\r\n]*))?>([^<\r\n]{1,256})<\/\1>|(<\/(?:[A-Za-z0-9_.-]+:)?(?:logonCredentials|credentials|server|account|user|connection|entry|item|record|host|profile)>)/gi;
+  var _XML_ATTR_LEAF_GLOBAL_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b([^>\r\n]*)\/?>/gi;
   var _HTML_LAYOUT_TAG_RE = /^(?:td|th|tr|div|span|p|a|li|ul|ol|h[1-6]|b|i|u|strong|em|code|pre|title|option|label|button|script|style)$/i;
   var _XML_CLOSE_BLOCK_RE = /^\s*<\/(?:[A-Za-z0-9_.-]+:)?(?:logonCredentials|credentials|server|account|user|connection|entry|item|record|host|profile)>\s*$/i;
   var _BLOCK_START_KEY_RE = /^(?:dn|distinguishedname|cn|samaccountname|name|username|user|account|login|principal|member|uid|upn|userprincipalname|spn|serviceprincipalname|objectsid|sid|template[ _]?name|ca[ _]?name|taskname|service[ _]?name|service|target|object|trustee|host|ip|id)$/i;
@@ -641,20 +697,25 @@
     var blocks = [], cur = null;
     if (!Array.isArray(lines)) return blocks;
     var limit = Math.min(lines.length, 100000);
+    var docHasLt = fullText ? (fullText.indexOf('<') >= 0) : true;
 
     for (var i = 0; i < limit; i++) {
       var raw = lines[i];
       if (!raw || raw.length > 2048) continue;
       var t = raw.trim();
-      if (!t || /^[-=*]{3,}$/.test(t) || /^[{}[\],]+$/.test(t) || _XML_CLOSE_BLOCK_RE.test(t) || (t.length <= 240 && _SECTION_DIVIDER_RE.test(t))) {
+      var c0 = t ? t.charCodeAt(0) : 0;
+      if (!t || ((c0 === 45 || c0 === 61 || c0 === 42 || c0 === 91 || c0 === 93 || c0 === 123 || c0 === 125 || c0 === 44 || c0 === 60)
+          && (/^[-=*]{3,}$/.test(t) || /^[{}[\],]+$/.test(t) || (docHasLt && c0 === 60 && _XML_CLOSE_BLOCK_RE.test(t)) || (t.length <= 240 && _SECTION_DIVIDER_RE.test(t))))) {
         if (cur && cur._count >= 2) blocks.push(cur);
         cur = null;
         continue;
       }
+      var lineHasLt = docHasLt && t.indexOf('<') >= 0;
+      if (!lineHasLt && ((c0 >= 48 && c0 <= 57) || (raw.indexOf(':') < 0 && raw.indexOf('=') < 0))) continue;
       if (_isInteractivePasswordPromptEcho(lines, i, fullText, command)) continue;
 
       var pairs = [];
-      if (t.indexOf('<') >= 0 && t.indexOf('</') > 1) {
+      if (lineHasLt && t.indexOf('</') > 1) {
         _XML_LEAF_GLOBAL_RE.lastIndex = 0;
         var xm;
         while ((xm = _XML_LEAF_GLOBAL_RE.exec(raw)) !== null) {
@@ -670,6 +731,22 @@
           if (/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(xAttrs) || /\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(xAttrs)) continue;
           if (/^(?:pass(?:word|wd)?|pwd|secret)$/i.test(xTag) && /^AQAAANCMnd8BFdER/.test(xVal)) continue;
           pairs.push({ k: xTag, v: xVal });
+        }
+      }
+      if (!pairs.length && lineHasLt && t.indexOf('=') > 1) {
+        _XML_ATTR_LEAF_GLOBAL_RE.lastIndex = 0;
+        var xam;
+        while ((xam = _XML_ATTR_LEAF_GLOBAL_RE.exec(raw)) !== null) {
+          var xaBody = xam[1] || '';
+          if (/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(xaBody) || /\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(xaBody)) continue;
+          var xaKeyM = /\b(?:name|key|id)\s*=\s*(?:"([^"\r\n]{1,64})"|'([^'\r\n]{1,64})')/i.exec(xaBody);
+          var xaValM = /\bvalue\s*=\s*(?:"([^"\r\n]{1,256})"|'([^'\r\n]{1,256})')/i.exec(xaBody);
+          if (!xaKeyM || !xaValM) continue;
+          var xaKey = (xaKeyM[1] || xaKeyM[2] || '').trim();
+          var xaVal = (xaValM[1] || xaValM[2] || '').trim();
+          if (!xaKey || !xaVal) continue;
+          if (/^(?:[A-Za-z0-9_.-]*(?:pass(?:word|wd)?|pwd)|pw|secret)$/i.test(xaKey) && /^AQAAANCMnd8BFdER/.test(xaVal)) continue;
+          pairs.push({ k: xaKey, v: xaVal });
         }
       }
       if (!pairs.length) {
@@ -808,7 +885,7 @@
     return false;
   }
 
-  function _extract_atoms(text, ws, cmdSem) {
+  function _extract_atoms(text, ws, cmdSem, preSplitLines) {
     var s = String(text || '');
     if (s.length > 10485760) s = s.slice(0, 10485760);
     var target = (ws && ws.target) || '';
@@ -832,17 +909,19 @@
     }
 
     var m, seenRawIp = Object.create(null);
-    _ATOM_IPV4_RE.lastIndex = 0;
-    while ((m = _ATOM_IPV4_RE.exec(s)) !== null) {
-      if (ipv4s.length >= MAX_ATOM_ITEMS) break;
-      var ip = m[0];
-      if (seenRawIp[ip]) continue;
-      seenRawIp[ip] = 1;
-      if (!_isPrivateIpv4(ip, false)) continue;
-      pushUniq(ipv4s, ip);
-      var sub = _subnet24(ip);
-      if (ip !== target && ip !== lhost && sub && sub !== targetSub && sub !== lhostSub) {
-        pushUniq(newSubnetIps, ip);
+    if (s.indexOf('.') >= 0) {
+      _ATOM_IPV4_RE.lastIndex = 0;
+      while ((m = _ATOM_IPV4_RE.exec(s)) !== null) {
+        if (ipv4s.length >= MAX_ATOM_ITEMS) break;
+        var ip = m[0];
+        if (seenRawIp[ip]) continue;
+        seenRawIp[ip] = 1;
+        if (!_isPrivateIpv4(ip, false)) continue;
+        pushUniq(ipv4s, ip);
+        var sub = _subnet24(ip);
+        if (ip !== target && ip !== lhost && sub && sub !== targetSub && sub !== lhostSub) {
+          pushUniq(newSubnetIps, ip);
+        }
       }
     }
     if (s.indexOf('/') >= 0) {
@@ -942,17 +1021,19 @@
       while ((m = _ATOM_JWT_RE.exec(s)) !== null) { if (jwts.length >= MAX_ATOM_ITEMS) break; pushUniq(jwts, m[0]); }
     }
 
-    var sLines = s.split(/\r?\n/);
+    var sLines = (Array.isArray(preSplitLines) && text === s) ? preSplitLines : s.split(/\r?\n/);
     var sLineCap = Math.min(sLines.length, 100000);
     var kvHintRe = /(?:pass|pwd|[a-z0-9_]pw\b|\bpw\s*[:=]|secret|key|token|admpwd|cleartext)/i;
-    var hasXmlNonPlainEnc = /<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(s);
+    var docHasLt = s.indexOf('<') >= 0;
+    var hasXmlNonPlainEnc = docHasLt && s.indexOf('encryptionMethod') >= 0 && /<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(s);
     var xmlSecTagRe = /<(?:[A-Za-z0-9_.-]+:)?(pass(?:word|wd)?|pwd|pw|secret|cpassword|apikey|api_key)(?:\s+([^>\r\n]*))?>([^<\r\n]{3,128})<\/(?:[A-Za-z0-9_.-]+:)?\1>/gi;
+    var xmlAttrSecRe = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option)\b([^>\r\n]*)\/?>/gi;
     for (var sli = 0; sli < sLineCap; sli++) {
       var sLn = sLines[sli];
       if (!sLn || sLn.length > 2048 || !kvHintRe.test(sLn)) continue;
       if (_isInteractivePasswordPromptEcho(sLines, sli, s, cmdSem && cmdSem.raw)) continue;
       if (_windowHasDecodeFailure(sLines, sli)) continue;
-      if (!hasXmlNonPlainEnc && sLn.indexOf('<') >= 0 && sLn.indexOf('</') > 1) {
+      if (docHasLt && !hasXmlNonPlainEnc && sLn.indexOf('<') >= 0 && sLn.indexOf('</') > 1) {
         xmlSecTagRe.lastIndex = 0;
         var xsm, matchedXmlSec = false;
         while ((xsm = xmlSecTagRe.exec(sLn)) !== null) {
@@ -966,12 +1047,33 @@
         }
         if (matchedXmlSec) continue;
       }
+      if (docHasLt && !hasXmlNonPlainEnc && sLn.indexOf('<') >= 0 && sLn.indexOf('=') > 1) {
+        xmlAttrSecRe.lastIndex = 0;
+        var xasm, matchedXmlAttrSec = false;
+        while ((xasm = xmlAttrSecRe.exec(sLn)) !== null) {
+          var xasBody = xasm[1] || '';
+          if (/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(xasBody) || /\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(xasBody)) continue;
+          var xasKeyM = /\b(?:name|key|id)\s*=\s*(?:"([^"\r\n]{1,64})"|'([^'\r\n]{1,64})')/i.exec(xasBody);
+          var xasValM = /\bvalue\s*=\s*(?:"([^"\r\n]{3,128})"|'([^'\r\n]{3,128})')/i.exec(xasBody);
+          if (!xasKeyM || !xasValM) continue;
+          var xasKey = (xasKeyM[1] || xasKeyM[2] || '').trim();
+          if (!/^(?:(?!(?:no|by)pass)[A-Za-z0-9_.-]*(?:pass(?:word|wd)?|pwd)|pw|secret|cpassword|apikey|api_key|access_token|auth_token)$/i.test(xasKey)) continue;
+          matchedXmlAttrSec = true;
+          var xasVal = (xasValM[1] || xasValM[2] || '').trim();
+          if (!/^AQAAANCMnd8BFdER/.test(xasVal) && !isPlaceholderSecret(xasVal, echoSet)) {
+            pushUniq(kvSecrets, xasVal);
+          }
+        }
+        if (matchedXmlAttrSec) continue;
+      }
       _ATOM_KV_SECRET_RE.lastIndex = 0;
       var checkedNeg = false, isNeg = false;
       while ((m = _ATOM_KV_SECRET_RE.exec(sLn)) !== null) {
+        if (/^(?:no|by)pass(?:word|wd)?\s*[:=]/i.test(m[0])) continue;
         if (!checkedNeg) { checkedNeg = true; isNeg = _lineHasNegPolarity(sLines, sli); }
         if (isNeg) break;
         var secVal = (m[1] || m[2] || m[3] || '').trim();
+        if (!m[1] && !m[2] && /^(?:\/(?:bin|sbin|usr|etc|var|opt|srv|home|root|tmp|dev|proc|sys|lib)\b|~\/|[A-Za-z]:\\)/i.test(secVal)) continue;
         if (/^\s*pwd?\s*[:=]/i.test(m[0]) && /^(?:\/|~\/|[A-Za-z]:\\)/.test(secVal)) continue;
         if (!isPlaceholderSecret(secVal, echoSet)) pushUniq(kvSecrets, secVal);
       }
@@ -1006,18 +1108,28 @@
         pushUniq(uncPaths, m[0]);
       }
     }
-    _ATOM_POSIX_PATH_RE.lastIndex = 0;
-    while ((m = _ATOM_POSIX_PATH_RE.exec(s)) !== null) { if (posixPaths.length >= MAX_ATOM_ITEMS) break; pushUniq(posixPaths, m[1]); }
+    if (s.indexOf('/') >= 0) {
+      _ATOM_POSIX_PATH_RE.lastIndex = 0;
+      while ((m = _ATOM_POSIX_PATH_RE.exec(s)) !== null) { if (posixPaths.length >= MAX_ATOM_ITEMS) break; pushUniq(posixPaths, m[1]); }
+    }
     _ATOM_PERM_MODE_RE.lastIndex = 0;
     while ((m = _ATOM_PERM_MODE_RE.exec(s)) !== null) { if (permModes.length >= MAX_ATOM_ITEMS) break; pushUniq(permModes, m[0]); }
-    _ATOM_ACL_VERB_RE.lastIndex = 0;
-    while ((m = _ATOM_ACL_VERB_RE.exec(s)) !== null) { if (aclVerbs.length >= MAX_ATOM_ITEMS) break; pushUniq(aclVerbs, m[1]); }
-    _ATOM_ADCS_FLAG_RE.lastIndex = 0;
-    while ((m = _ATOM_ADCS_FLAG_RE.exec(s)) !== null) { if (adcsFlags.length >= MAX_ATOM_ITEMS) break; pushUniq(adcsFlags, m[1]); }
-    _ATOM_DELEG_RE.lastIndex = 0;
-    while ((m = _ATOM_DELEG_RE.exec(s)) !== null) { if (delegAttrs.length >= MAX_ATOM_ITEMS) break; pushUniq(delegAttrs, m[1]); }
-    _ATOM_WIN_PRIV_RE.lastIndex = 0;
-    while ((m = _ATOM_WIN_PRIV_RE.exec(s)) !== null) { if (winPrivs.length >= MAX_ATOM_ITEMS) break; pushUniq(winPrivs, m[1]); }
+    if (s.indexOf('Generic') >= 0 || s.indexOf('Write') >= 0 || s.indexOf('ForceChange') >= 0 || s.indexOf('Add') >= 0 || s.indexOf('AllExtended') >= 0 || s.indexOf('Read') >= 0) {
+      _ATOM_ACL_VERB_RE.lastIndex = 0;
+      while ((m = _ATOM_ACL_VERB_RE.exec(s)) !== null) { if (aclVerbs.length >= MAX_ATOM_ITEMS) break; pushUniq(aclVerbs, m[1]); }
+    }
+    if (s.indexOf('ESC') >= 0 || s.indexOf('ENROLLEE') >= 0 || s.indexOf('Certificate') >= 0 || s.indexOf('Any Purpose') >= 0) {
+      _ATOM_ADCS_FLAG_RE.lastIndex = 0;
+      while ((m = _ATOM_ADCS_FLAG_RE.exec(s)) !== null) { if (adcsFlags.length >= MAX_ATOM_ITEMS) break; pushUniq(adcsFlags, m[1]); }
+    }
+    if (s.indexOf('msDS-') >= 0 || s.indexOf('TRUSTED_') >= 0) {
+      _ATOM_DELEG_RE.lastIndex = 0;
+      while ((m = _ATOM_DELEG_RE.exec(s)) !== null) { if (delegAttrs.length >= MAX_ATOM_ITEMS) break; pushUniq(delegAttrs, m[1]); }
+    }
+    if (s.indexOf('Privilege') >= 0 || s.indexOf('privilege') >= 0) {
+      _ATOM_WIN_PRIV_RE.lastIndex = 0;
+      while ((m = _ATOM_WIN_PRIV_RE.exec(s)) !== null) { if (winPrivs.length >= MAX_ATOM_ITEMS) break; pushUniq(winPrivs, m[1]); }
+    }
 
     var httpStatusM = _ATOM_HTTP_STATUS_RE.exec(s);
     var httpStatus = httpStatusM ? parseInt(httpStatusM[1] || httpStatusM[2] || httpStatusM[3] || httpStatusM[4], 10) : 0;
@@ -1086,29 +1198,52 @@
       if (m.id && cmdLow.indexOf(m.id.toLowerCase()) >= 0) score += 8;
 
       for (var c = 0; c < m.commands.length; c++) {
-        var cRun = _strip_cmd_wrappers(String((m.commands[c] && m.commands[c].run) || '')).toLowerCase();
-        var cTool = _canonicalToolName((m.commands[c] && m.commands[c].tool) || m.tool || cRun.split(/\s+/)[0]);
-        var cRunTool = _canonicalToolName(cRun.split(/\s+/)[0]);
+        var cmdObj = m.commands[c];
+        if (!cmdObj) continue;
+        var mToolRaw = m.tool || '';
+        var meta = cmdObj._infMeta;
+        if (!meta || meta.mTool !== mToolRaw) {
+          var rawRun = _strip_cmd_wrappers(String(cmdObj.run || '')).toLowerCase();
+          var rawFlags = rawRun ? (rawRun.replace(/\{\{[^}]+\}\}/g, '').match(/(?:--?[a-zA-Z0-9_-]+|\b(?:smb|ldap|winrm|mssql|ssh|ftp|rdp|find|auth|req|shadow|account|get|set|add|dump|enum|shares|users|groups|pass-pol|laps|gmsa|bloodhound|spider_plus)\b)/g) || []) : [];
+          var uniqFlags = [], seenMetaFl = Object.create(null);
+          for (var mf = 0; mf < rawFlags.length; mf++) {
+            var mfl = rawFlags[mf];
+            if (mfl.length < 2 || /^-(?:u|p|d|h|i|t|o|v)$/i.test(mfl) || seenMetaFl[mfl]) continue;
+            seenMetaFl[mfl] = 1;
+            var mIsFlag = mfl.charAt(0) === '-';
+            uniqFlags.push({
+              fl: mfl,
+              isFlag: mIsFlag,
+              isHttpShortNoise: /^-(?:x|s|k|l|b|c)$/i.test(mfl),
+              isCommonWord: !mIsFlag && /^(?:users|admin|login|index)$/i.test(mfl),
+              wordRe: mIsFlag ? null : new RegExp('(?:^|[^a-z0-9_\\\\/])' + mfl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z0-9_\\\\/])', 'i')
+            });
+          }
+          meta = {
+            mTool: mToolRaw,
+            cRun: rawRun,
+            cTool: _canonicalToolName(cmdObj.tool || mToolRaw || (rawRun ? rawRun.split(/\s+/)[0] : '')),
+            cRunTool: rawRun ? _canonicalToolName(rawRun.split(/\s+/)[0]) : '',
+            flags: uniqFlags
+          };
+          try { Object.defineProperty(cmdObj, '_infMeta', { value: meta, enumerable: false, configurable: true }); } catch (_e) {}
+        }
+        var cRun = meta.cRun;
         if (!cRun) continue;
 
-        if (cmdTool && (cTool === cmdTool || cRunTool === cmdTool || cRun.indexOf(cmdTool) === 0)) {
+        if (cmdTool && (meta.cTool === cmdTool || meta.cRunTool === cmdTool || cRun.indexOf(cmdTool) === 0)) {
           score = Math.max(score, 3);
-          var tmplFlags = cRun.replace(/\{\{[^}]+\}\}/g, '').match(/(?:--?[a-zA-Z0-9_-]+|\b(?:smb|ldap|winrm|mssql|ssh|ftp|rdp|find|auth|req|shadow|account|get|set|add|dump|enum|shares|users|groups|pass-pol|laps|gmsa|bloodhound|spider_plus)\b)/g) || [];
-          var seenFl = Object.create(null);
+          var tmplFlags = meta.flags;
           var flagHits = 0, flagMisses = 0;
           for (var f = 0; f < tmplFlags.length; f++) {
-            var fl = tmplFlags[f];
-            if (fl.length < 2 || /^-(?:u|p|d|h|i|t|o|v)$/i.test(fl) || (isHttpTool && /^-(?:x|s|k|l|b|c)$/i.test(fl)) || seenFl[fl]) continue;
-            seenFl[fl] = 1;
-            var isFlag = fl.charAt(0) === '-';
-            if (!isFlag && /^(?:users|admin|login|index)$/i.test(fl) && !hasExploitOrAuthOp) continue;
-            var flEsc = fl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            var hit = isFlag
-              ? (cmdLow.indexOf(fl) >= 0)
-              : new RegExp('(?:^|[^a-z0-9_\\\\/])' + flEsc + '(?:$|[^a-z0-9_\\\\/])', 'i').test(cmdForWords);
+            var fObj = tmplFlags[f];
+            if (isHttpTool && fObj.isHttpShortNoise) continue;
+            if (fObj.isCommonWord && !hasExploitOrAuthOp) continue;
+            var fl = fObj.fl;
+            var hit = fObj.isFlag ? (cmdLow.indexOf(fl) >= 0) : fObj.wordRe.test(cmdForWords);
             if (hit) {
               flagHits += (fl.length > 4 ? 3 : ((isHttpTool && fl === '-f') ? 2 : 1));
-            } else if (fl.length > 4 && isFlag) {
+            } else if (fl.length > 4 && fObj.isFlag) {
               flagMisses += 2;
             }
           }
@@ -1182,10 +1317,23 @@
       if (osFamily === 'linux' && !hostDomain && f.scope && f.scope.indexOf('domain:') === 0) continue;
       var v = f.value || {};
       if (f.kind === 'ad.user_list' && Array.isArray(v.users)) {
-        v.users.forEach(function (u) {
-          var clean = String(u || '').trim().replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
-          if (clean && !isBoilerplateUser(clean)) users[clean.toLowerCase()] = clean;
-        });
+        var cachedUsers = v.users._infCleanCache;
+        if (!cachedUsers || cachedUsers.len !== v.users.length) {
+          var pairs = [];
+          for (var ui = 0; ui < v.users.length; ui++) {
+            var rawU = String(v.users[ui] || '').trim();
+            if (!rawU) continue;
+            var clean = (rawU.indexOf('\\') >= 0 || rawU.indexOf('/') >= 0) ? rawU.replace(/^.*[\\\/]/, '') : rawU;
+            if (clean.indexOf('@') >= 0) clean = clean.slice(0, clean.indexOf('@'));
+            if (clean && !isBoilerplateUser(clean)) pairs.push(clean.toLowerCase(), clean);
+          }
+          cachedUsers = { len: v.users.length, pairs: pairs };
+          try { Object.defineProperty(v.users, '_infCleanCache', { value: cachedUsers, enumerable: false, configurable: true }); } catch (_e) {}
+        }
+        var uPairs = cachedUsers.pairs;
+        for (var upi = 0; upi < uPairs.length; upi += 2) {
+          users[uPairs[upi]] = uPairs[upi + 1];
+        }
       }
       if (/^credential\.|^hash\./.test(f.kind)) {
         var cu = v.user || v.username || '';
@@ -1218,9 +1366,9 @@
   // ---- Tier 3: Main Wittgensteinian Contextual Inference Pass ----------------------------------
   function _parse_inference(text, ws, command, source, facts, actionId, opts) {
     text = String(text || '');
-    if (C._normalize_cr) text = C._normalize_cr(text);
-    if (C._strip_tmux_split) text = C._strip_tmux_split(text);
-    if (C._unwrap_kerberos_hashes) text = C._unwrap_kerberos_hashes(text);
+    if (C._normalize_cr && text.indexOf('\r') >= 0) text = C._normalize_cr(text);
+    if (C._strip_tmux_split && (text.indexOf('\u2502') >= 0 || text.indexOf('\u2503') >= 0)) text = C._strip_tmux_split(text);
+    if (C._unwrap_kerberos_hashes && (text.indexOf('$krb5') >= 0 || text.indexOf('$KRB5') >= 0)) text = C._unwrap_kerberos_hashes(text);
     if (text.length > 10485760) text = text.slice(0, 10485760);
     var hasCtxPromptTelemetry = !!(ws && ws.context && (ws.context.followPrompt || ws.context.promptLine));
     if (!text.trim() && !hasCtxPromptTelemetry) return;
@@ -1236,13 +1384,13 @@
     var domScope = (rawDomScope && rawDomScope !== 'domain:domain' && rawDomScope !== 'domain:') ? rawDomScope : h;
 
     // 1. Extract Prompt Telemetry, Command Semantics, Wrapper Delta, and Global Entity Index
-    var promptMeta = _extract_prompt_telemetry(text, ws);
+    var promptMeta = _extract_prompt_telemetry(text, ws, command);
     var cmdSem = _extract_command_semantics(command, ws);
     var delta = _compute_wrapper_delta(text, ws, command);
     var fullLines = text.split(/\r?\n/);
     var analysisText = (delta && delta.deltaText) ? delta.deltaText : text;
     var lines = analysisText === text ? fullLines : analysisText.split(/\r?\n/);
-    var atoms = _extract_atoms(analysisText, ws, cmdSem);
+    var atoms = _extract_atoms(analysisText, ws, cmdSem, lines);
     var globalIdx = _build_global_entity_index(ws);
 
     // Resolve Active Move Intent (Attention Frame -> Explicit ActionId -> Catalog-Wide Move Match)
@@ -1268,7 +1416,7 @@
     var hasSubstantiveTier1Fact = facts.some(function (f) {
       if (!f || !f.kind || (f.value && (f.value.via === 'shape' || f.value.via === 'vulnmatch'))) return false;
       if (/^(?:http|ldap|smb|db|ssh|ftp|winrm|kerberos|rdp|rpc|mssql|mysql)\.reachable$/.test(f.kind)) return false;
-      if (/^(?:web\.server|host\.os_hint|host\.os_family|host\.up|vuln\.|loot\.shadow$|blocker\.|credential\.(?:validation|authorization)$)/.test(f.kind)) return false;
+      if (/^(?:web\.(?:server|source_disclosed)|host\.os_hint|host\.os_family|host\.up|vuln\.|loot\.shadow$|blocker\.|credential\.(?:validation|authorization)$)/.test(f.kind)) return false;
       if (f.kind === 'credential.candidate' && (!f.value || (!f.value.user && !f.value.password && !f.value.nthash && !f.value.hash))) return false;
       return true;
     });
@@ -1284,7 +1432,8 @@
       if (fromCtx && fact.value && typeof fact.value === 'object') fact.value.prompt_only = true;
       return fact;
     }
-    if (promptMeta.locus === 'local' && promptMeta.hasCommand && !isRemoteScanner && !isWebClient && !isSshCmd) {
+    var isRawHttpDumpWithoutTargetShell = isWebClient && !promptMeta.fromContextPrompt && /^HTTP\/[12]\./im.test(text) && !promptMeta.host;
+    if (promptMeta.locus === 'local' && promptMeta.hasCommand && !isRemoteScanner && !isRawHttpDumpWithoutTargetShell && !isSshCmd) {
       if (promptMeta.osFamily === 'linux') {
         if (!hasKind(facts, 'foothold.linux') && !globalIdx.hasFoothold) {
           var fVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
@@ -1300,7 +1449,9 @@
             _add(facts, _tagPromptFact(mkFact('access.admin', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
           }
         }
-      } else if (promptMeta.osFamily === 'windows') {
+      } else if (promptMeta.osFamily === 'windows'
+          && !_is_dos_emulator_ctx(command, text, promptMeta.promptLine)
+          && !(globalIdx.osFamily === 'linux' && !/^(?:\*?Evil-WinRM\*?\s+)?PS\s+/i.test(promptMeta.promptLine || '') && !/Microsoft Windows|Volume Serial Number|C:\\Windows|NT AUTHORITY\\/i.test(text))) {
         if (!hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
           var wVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
           if (promptMeta.user) wVal.identity = promptMeta.user;
@@ -1309,6 +1460,27 @@
         }
         if (promptMeta.isPrivileged && !hasKind(facts, 'access.admin')) {
           _add(facts, _tagPromptFact(mkFact('access.admin', h, { identity: promptMeta.user || 'Administrator', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
+        }
+      }
+    } else if (isSshCmd && promptMeta.locus === 'local' && promptMeta.osFamily === 'linux' && !promptMeta.fromContextPrompt
+        && !/\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Host key verification failed|No route to host|Could not resolve hostname)\b/i.test(text)) {
+      if (!hasKind(facts, 'ssh.authenticated')) {
+        var sshFpAuth = { service: 'ssh', via: 'prompt-telemetry' };
+        if (promptMeta.user) sshFpAuth.user = promptMeta.user;
+        _add(facts, _tagPromptFact(mkFact('ssh.authenticated', h, sshFpAuth, S, source), false));
+      }
+      if (!hasKind(facts, 'foothold.linux') && !globalIdx.hasFoothold) {
+        var sshFpFh = { method: 'ssh', via: 'prompt-telemetry' };
+        if (promptMeta.user) sshFpFh.identity = promptMeta.user;
+        _add(facts, _tagPromptFact(mkFact('foothold.linux', h, sshFpFh, S, source), false));
+        if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'linux', promptMeta.promptLine, 'high', 'ssh', true);
+      }
+      if (promptMeta.isPrivileged) {
+        if (!hasKind(facts, 'access.root')) {
+          _add(facts, _tagPromptFact(mkFact('access.root', h, { identity: 'root', method: 'ssh', via: 'prompt-telemetry' }, S, source), false));
+        }
+        if (!hasKind(facts, 'access.admin')) {
+          _add(facts, _tagPromptFact(mkFact('access.admin', h, { identity: 'root', method: 'ssh', via: 'prompt-telemetry' }, S, source), false));
         }
       }
     }
@@ -1385,7 +1557,9 @@
       return false;
     });
     var isDedicatedTier1CredTool = /\b(?:mimikatz|sekurlsa|lsadump|pypykatz|secretsdump|samdump2|hashdump|gmsadumper|lsassy|nanodump|nxc|netexec|crackmapexec|cme|ldapsearch|bloodhound|sharphound|certipy|linpeas|winpeas|privesccheck|powerview|get-netuser|get-domainuser|sqlmap)\b/i.test(command || '')
-      || /^(?:linpeas|winpeas|linux-enum|windows-enum|dcsync|sam-dump|lsass-dump|ntds-dump|sqlmap)/.test(actionId || '');
+      || /^(?:linpeas|winpeas|linux-enum|windows-enum|dcsync|sam-dump|lsass-dump|ntds-dump|sqlmap)/.test(actionId || '')
+      || /^\s*(?:sudo\s+(?:-[A-Za-z]*l\b|--list\b)|doas\b)/i.test(command || '')
+      || hasKind(facts, 'privesc.sudo_rights');
     function _hasExtractedSecretFor(uCand, sCand) {
       var uLow = String(uCand || '').trim().toLowerCase();
       var sClean = String(sCand || '').trim();
@@ -1406,15 +1580,18 @@
       if ((pk === 'web.rce' || pk === 'foothold.linux') && hasKind(facts, 'web.cmdi_confirmed')) return true;
       return false;
     });
+    var hasPositionalMd5Tuple = (analysisText.indexOf("',") >= 0 || analysisText.indexOf('",') >= 0 || analysisText.indexOf("' ,") >= 0 || analysisText.indexOf('" ,') >= 0)
+      && /(?:array\s*\(|[\[(])\s*['"][A-Za-z0-9_.\-$]{2,48}['"]\s*,\s*['"][0-9a-fA-F]{32}['"]/i.test(analysisText);
     var hasUnhandledMultiSectionCredOrTable = !isDedicatedTier1CredTool
-      && (atoms.kvSecrets.length > 0 || /^\s*[+|│┃║][^\r\n]+[+|│┃║]\s*$/m.test(analysisText));
+      && (atoms.kvSecrets.length > 0 || atoms.modHashes.length > 0 || atoms.ntHashes.length > 0
+        || hasPositionalMd5Tuple
+        || /^\s*[+|│┃║][^\r\n]+[+|│┃║]\s*$/m.test(analysisText));
     if (hasSubstantiveTier1Fact && !hasEngagementCtx && !delta && !hasUnmetContract && !hasUnhandledMultiSectionCredOrTable) return;
 
     // 3. 2D Structural Geometry: Dynamic Tables (always parsed on fullLines so wrapper-delta never strips table headers) & Key-Value Blocks
     var isAdTableCtx = expects('ad.user_list') || expects('ad.computer_list') || /\bget-(?:net|ad|domain)(?:user|groupmember|computer|member)\b/i.test(command || '');
     var tables = _parse_dynamic_tables(fullLines, { adTableCtx: isAdTableCtx });
     var kvBlocks = _group_kv_blocks(lines, analysisText, command);
-    var outliers = _find_statistical_outliers(lines);
 
     // 3A. Dynamic Table Inference (Survives column reordering & format changes)
     for (var ti = 0; ti < tables.length; ti++) {
@@ -1677,15 +1854,31 @@
     // 4. Global Engagement Entity Cross-Referencing (Known User + New Secret/Hash/Right on Same Line)
     if (globalIdx.userKeys.length > 0 && !hasTier1CredOrHash) {
       var entityLineCap = Math.min(lines.length, 100000);
+      var entityKvHintRe = /(?:pass|pwd|[a-z0-9_]pw\b|\bpw\s*[:=]|secret|key|token|admpwd|cleartext)/i;
+      _ATOM_HEX32_RE.lastIndex = 0;
+      var docHasHex32 = _ATOM_HEX32_RE.test(analysisText);
       for (var li = 0; li < entityLineCap; li++) {
         var ln = lines[li].trim();
         if (!ln || ln.length > 2048) continue;
         // Fast pre-check: skip lines without any secret or hash candidate before scanning globalIdx.userKeys or polarity
-        _ATOM_KV_SECRET_RE.lastIndex = 0;
-        _ATOM_NTHASH_PAIR_RE.lastIndex = 0;
-        _ATOM_MOD_HASH_RE.lastIndex = 0;
-        _ATOM_HEX32_RE.lastIndex = 0;
-        var hasLineSecret = _ATOM_KV_SECRET_RE.test(ln) || _ATOM_NTHASH_PAIR_RE.test(ln) || _ATOM_MOD_HASH_RE.test(ln) || _ATOM_HEX32_RE.test(ln);
+        var hasKvCand = false, hasNtCand = false, hasModCand = false, hasHexCand = false;
+        if (atoms.kvSecrets.length > 0 && (ln.indexOf('=') >= 0 || ln.indexOf(':') >= 0) && entityKvHintRe.test(ln)) {
+          _ATOM_KV_SECRET_RE.lastIndex = 0;
+          hasKvCand = _ATOM_KV_SECRET_RE.test(ln);
+        }
+        if (!hasKvCand && atoms.ntHashes.length > 0 && ln.indexOf(':') >= 0) {
+          _ATOM_NTHASH_PAIR_RE.lastIndex = 0;
+          hasNtCand = _ATOM_NTHASH_PAIR_RE.test(ln);
+        }
+        if (!hasKvCand && !hasNtCand && atoms.modHashes.length > 0 && (ln.indexOf('$') >= 0 || ln.indexOf('pbkdf2') >= 0)) {
+          _ATOM_MOD_HASH_RE.lastIndex = 0;
+          hasModCand = _ATOM_MOD_HASH_RE.test(ln);
+        }
+        if (!hasKvCand && !hasNtCand && !hasModCand && docHasHex32 && ln.length >= 32) {
+          _ATOM_HEX32_RE.lastIndex = 0;
+          hasHexCand = _ATOM_HEX32_RE.test(ln);
+        }
+        var hasLineSecret = hasKvCand || hasNtCand || hasModCand || hasHexCand;
         if (!hasLineSecret || _lineHasNegPolarity(lines, li) || _windowHasDecodeFailure(lines, li)) continue;
         var lnLow = ln.toLowerCase();
 
@@ -1796,11 +1989,11 @@
     }
 
     // 7B. Statistical Outlier & Per-Line URI + HTTP Status Co-Occurrence
-    if (!hasKind(facts, 'web.paths')) {
+    if (!hasKind(facts, 'web.paths') && (atoms.uriPaths.length > 0 || analysisText.indexOf('/') >= 0)) {
       var coPaths = [], coPathsSeen = Object.create(null);
       for (var uli = 0; uli < maxLineScan && coPaths.length < 500; uli++) {
         var uLine = lines[uli];
-        if (uLine.length > 2048) continue;
+        if (uLine.length > 2048 || uLine.indexOf('/') < 0) continue;
         var stMatch = /\b(?:Status|Code|HTTP(?:\/[12](?:\.\d)?)?)\s*[:=\/]?\s*(200|201|204|301|302|307|401|403)\b/i.exec(uLine)
           || /\[\s*(200|201|204|301|302|307|401|403)\b/.exec(uLine)
           || /^\s*(200|201|204|301|302|307|401|403)\s+(?:GET|POST|HEAD|\d+[BKMbkm]?|\S+\s+\/)/i.exec(uLine);
@@ -1811,7 +2004,8 @@
           if (!coPathsSeen[upM[1]]) { coPathsSeen[upM[1]] = 1; coPaths.push(upM[1]); }
         }
       }
-      if (!coPaths.length && outliers.length > 0 && (expects('web.paths') || atoms.httpStatus > 0)) {
+      if (!coPaths.length && (expects('web.paths') || atoms.httpStatus > 0)) {
+        var outliers = _find_statistical_outliers(lines);
         for (var oi = 0; oi < outliers.length; oi++) {
           _ATOM_URI_PATH_RE.lastIndex = 0;
           var om = _ATOM_URI_PATH_RE.exec(outliers[oi]);
@@ -1828,7 +2022,7 @@
     }
 
     // 7C. Port + Positive Polarity Co-Occurrence (`80/tcp ... OPEN` or `Port 445 (tcp) ... OPEN/SUCCEEDED`)
-    if (!hasPrefix(facts, 'port:')) {
+    if (!hasPrefix(facts, 'port:') && (atoms.ports.length > 0 || /\b(?:tcp|udp)\b/i.test(analysisText))) {
       var atomOpenPorts = [];
       for (var pli = 0; pli < maxLineScan; pli++) {
         var pLine = lines[pli];
@@ -1864,8 +2058,13 @@
         _add(facts, mkFact('foothold.linux', h, { identity: atoms.posixId.user, method: isWebClient ? 'web-rce' : (cmdSem.tool || 'shell'), via: 'context-cooccurrence' }, S, source));
         if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'linux', 'uid=' + atoms.posixId.uid + '(' + atoms.posixId.user + ')', 'high', 'id', true);
       }
-      if (atoms.posixId.uid === 0 && !hasKind(facts, 'access.root') && !_ATTACKER_HOSTS.test(atoms.posixId.user)) {
-        _add(facts, mkFact('access.root', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+      if (atoms.posixId.uid === 0 && !_ATTACKER_HOSTS.test(atoms.posixId.user)) {
+        if (!hasKind(facts, 'access.root')) {
+          _add(facts, mkFact('access.root', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+        }
+        if (!hasKind(facts, 'access.admin')) {
+          _add(facts, mkFact('access.admin', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+        }
       }
     }
 
@@ -1966,20 +2165,22 @@
     }
 
     // 7E. Unhandled NTLM Pair (`lm:nt`) & Modular Hash (`$2y$`, `$6$`, `$krb5tgs$`, `$krb5asrep$`, `$DCC2$`) Co-Occurrence
-    if ((atoms.ntHashes.length > 0 || atoms.modHashes.length > 0)
+    if ((atoms.ntHashes.length > 0 || atoms.modHashes.length > 0 || hasPositionalMd5Tuple)
         && !hasTier1CredOrHash && !hasKind(facts, 'hash.ntlm')
         && !hasKind(facts, 'hash.tgs') && !hasKind(facts, 'hash.asrep') && !hasKind(facts, 'hash.crackable')) {
       for (var hli = 0; hli < maxLineScan; hli++) {
         var hLine = lines[hli].trim();
         if (!hLine || hLine.length > 2048 || _lineHasNegPolarity(lines, hli)) continue;
 
-        // Extract candidate username from the same line (`DOMAIN\user`, `user@domain`, `user:rid:lm:nt`, `user:$2y$...`)
+        // Extract candidate username from the same line (`DOMAIN\user`, `user@domain`, `user:rid:lm:nt`, `user:$2y$...`, or `array('user', '$2a$...')`)
         var lineUser = '', lineDom = '';
         _ATOM_DOM_USER_RE.lastIndex = 0;
         var duM = _ATOM_DOM_USER_RE.exec(hLine);
         if (duM && !isBoilerplateUser(duM[2])) { lineDom = duM[1]; lineUser = duM[2]; }
         if (!lineUser) {
-          var colonUserM = /^([A-Za-z0-9_.\-$]{2,48}):(?:\d+:|\$)/.exec(hLine) || /\b(?:user(?:name)?|account|login)\s*[:=]\s*['"]?([A-Za-z0-9_.\-$]{2,48})/i.exec(hLine);
+          var colonUserM = /^([A-Za-z0-9_.\-$]{2,48}):(?:\d+:|\$)/.exec(hLine)
+            || /\b(?:user(?:name)?|account|login)\s*[:=]\s*['"]?([A-Za-z0-9_.\-$]{2,48})/i.exec(hLine)
+            || /(?:array\s*\(|[\[(])\s*['"]([A-Za-z0-9_.\-$]{2,48})['"]\s*,\s*['"](?:\$(?:1|2[abxy]|5|6|y|apr1)\$|pbkdf2_sha(?:1|256|512)\$|[0-9a-fA-F]{32}['"])/i.exec(hLine);
           if (colonUserM && !isBoilerplateUser(colonUserM[1])) lineUser = colonUserM[1];
         }
 
@@ -1997,6 +2198,19 @@
         var modM = _ATOM_MOD_HASH_RE.exec(hLine);
         if (modM && modM[0] && !cmdSem.echoSet[modM[0].toLowerCase()]) {
           _emit_credential_facts(facts, h, { user: lineUser, domain: lineDom, hash: modM[0], via: 'context-cooccurrence' }, source);
+          continue;
+        }
+
+        var tupleMd5M = /(?:array\s*\(|[\[(])\s*['"]([A-Za-z0-9_.\-$]{2,48})['"]\s*,\s*['"]([0-9a-fA-F]{32})['"]/.exec(hLine);
+        if (tupleMd5M && !isBoilerplateUser(tupleMd5M[1])) {
+          var tupleHex = tupleMd5M[2].toLowerCase();
+          if (tupleHex !== _EMPTY_MD5 && tupleHex !== _EMPTY_NTHASH && tupleHex !== _EMPTY_LMHASH
+              && !/^(?:0{32}|f{32})$/.test(tupleHex) && !cmdSem.echoSet[tupleHex]) {
+            var tupVal = { user: tupleMd5M[1], hash: tupleHex, hash_type: 'md5', format: 'md5', via: 'context-cooccurrence' };
+            _add(facts, mkFact('credential.candidate', h, tupVal, S, source));
+            _add(facts, mkFact('hash.crackable', h, tupVal, S, source));
+            _add(facts, mkFact('hash.candidate', h, tupVal, S, source));
+          }
         }
       }
     }
@@ -2090,7 +2304,7 @@
         if (!pxLine || pxLine.length > 2048) continue;
         if (pxLine.indexOf('s') >= 0 || pxLine.indexOf('S') >= 0 || pxLine.indexOf('w') >= 0) {
           var pxTrim = pxLine.trim();
-          if (/^-[rwx-]{2}[sS][rwxstS-]{6}\b/.test(pxTrim)) {
+          if (/^-[rwx-]{2}[sS][rwxstS-]{6}[.+@]?\s+\d+\s+/.test(pxTrim)) {
             _ATOM_POSIX_PATH_RE.lastIndex = 0;
             var spM = _ATOM_POSIX_PATH_RE.exec(pxLine);
             if (spM && spM[1] && !suidSeen[spM[1]]) {
@@ -2100,7 +2314,7 @@
               var isNonStdSuidPath = /(?:^|\/)(?:opt|usr\/local|home|var|srv|tmp)\//i.test(sPath);
               var isInterestingSuid = (C._SUID_INTERESTING && (C._SUID_INTERESTING.test(sBase) || C._SUID_INTERESTING.test(sBaseNorm)))
                 || (isNonStdSuidPath && !(C._is_stock_suid && C._is_stock_suid(sPath)));
-              if (isInterestingSuid && !/^(?:passwd|su|sudo|gpasswd|newgrp|chsh|chfn|mount|umount|fusermount3?|ping6?|unix_chkpwd|ssh-keysign|polkit-agent-helper-1|dbus-daemon-launch-helper)$/i.test(sBase)) {
+              if (isInterestingSuid && !(C._is_stock_suid && C._is_stock_suid(sPath)) && !/^(?:passwd|su|sudo|gpasswd|newgrp|chsh|chfn|mount|umount|fusermount3?|ping6?|unix_chkpwd|ssh-keysign|polkit-agent-helper-1|dbus-daemon-launch-helper|halt|reboot|poweroff|shutdown|telinit|runlevel)$/i.test(sBase)) {
                 suidSeen[sPath] = 1;
                 suidBins.push(sPath);
               }
@@ -2355,7 +2569,7 @@
           C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows SYSTEM access', 'high', 'entailment', true);
         }
       }
-      else if (/^privesc\.(?:sudo|sudo_rights|sudo_binary|script_sink|suid|suid_candidate|capabilities|capability|cron|cron_writable|cron_wildcard|writable_etc|passwd_writable|PATH|ld_preload|docker|docker_group|lxd|lxd_group|group_lxd|container_group)$/.test(k) && !isWebOrRemoteCmd) {
+      else if (/^privesc\.(?:sudo|sudo_rights|sudo_binary|script_sink|suid|suid_candidate|capabilities|capability|cron|cron_writable|cron_wildcard|writable_etc|passwd_writable|PATH|ld_preload|docker|docker_group|lxd|lxd_group|group_lxd|container_group|privileged_group)$/.test(k) && !isWebOrRemoteCmd) {
         ensureFact('host.up', h, { target: ws.target });
         ensureFact('foothold.linux', h, { method: 'entailed-by-privesc' });
         if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {

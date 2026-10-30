@@ -170,6 +170,7 @@ function runFactsAxis(opts) {
       command: entry.unit.command,
       stdout: entry.unit.output,
       promptLine: entry.unit.promptLine || '',
+      followPrompt: entry.unit.followPrompt || '',
       source: entry.unit.command || ''
     });
     return { mode: 'show', entry: entry, probed: probed };
@@ -197,6 +198,7 @@ function runFactsAxis(opts) {
         command: entry.unit.command,
         stdout: entry.unit.output,
         promptLine: entry.unit.promptLine || '',
+        followPrompt: entry.unit.followPrompt || '',
         source: entry.unit.command || ''
       });
       const outKind = (probed.outcome && probed.outcome.kind) || 'unknown';
@@ -258,6 +260,7 @@ function runFactsAxis(opts) {
         command: entry.unit.command,
         stdout: entry.unit.output,
         promptLine: entry.unit.promptLine || '',
+        followPrompt: entry.unit.followPrompt || '',
         source: entry.unit.command || ''
       });
       const outKind = (probed.outcome && probed.outcome.kind) || 'unknown';
@@ -276,6 +279,7 @@ function runFactsAxis(opts) {
   const cases = [];
   const outputs = Object.create(null);
   const promptLines = Object.create(null);
+  const followPrompts = Object.create(null);
   const probeCache = Object.create(null);
 
   for (const lab of labelDoc.cases || []) {
@@ -286,6 +290,7 @@ function runFactsAxis(opts) {
     }
     outputs[lab.id] = entry.unit.output;
     promptLines[lab.id] = entry.unit.promptLine || '';
+    followPrompts[lab.id] = entry.unit.followPrompt || '';
     const targetIp = inferTargetIp(entry.unit.output + ' ' + entry.unit.command, '10.10.10.10');
     cases.push({
       id: lab.id,
@@ -297,22 +302,32 @@ function runFactsAxis(opts) {
     });
   }
 
-  const idByCmdAndOut = new Map();
+  const idsByCmdAndOut = new Map();
   for (const c of cases) {
-    idByCmdAndOut.set(c.command + '\u0000' + (outputs[c.id] || ''), c.id);
+    const key = c.command + '\u0000' + (outputs[c.id] || '');
+    let bucket = idsByCmdAndOut.get(key);
+    if (!bucket) {
+      bucket = { ids: [], idx: 0 };
+      idsByCmdAndOut.set(key, bucket);
+    }
+    bucket.ids.push(c.id);
   }
   const usePromptLineInMatrix = opts.includePromptLine === true
     || (opts.includePromptLine !== false && Number(labelDoc.version || 1) >= 2);
 
   function parseAdapter(parseOpts) {
     const key = (parseOpts.command || '') + '\u0000' + (parseOpts.stdout || '');
-    const cid = idByCmdAndOut.get(key) || '';
+    const bucket = idsByCmdAndOut.get(key);
+    const cid = bucket
+      ? (bucket.ids[bucket.idx < bucket.ids.length ? bucket.idx++ : bucket.ids.length - 1] || '')
+      : '';
     const probed = probeBlockStateless(OBOL, {
       actionId: parseOpts.actionId || '',
       command: parseOpts.command || '',
       stdout: parseOpts.stdout || '',
       stderr: parseOpts.stderr || '',
       promptLine: (usePromptLineInMatrix && cid) ? (promptLines[cid] || '') : '',
+      followPrompt: (usePromptLineInMatrix && cid) ? (followPrompts[cid] || '') : '',
       source: parseOpts.source !== undefined ? parseOpts.source : (parseOpts.command || ''),
       scope: parseOpts.scope,
       domain: parseOpts.domain || ''
@@ -351,7 +366,8 @@ function runFactsAxis(opts) {
     const probed = probeCache[c.id] || probeBlockStateless(OBOL, {
       command: entry.unit.command,
       stdout: entry.unit.output,
-      promptLine: entry.unit.promptLine || '',
+      promptLine: (usePromptLineInMatrix && entry.unit.promptLine) ? entry.unit.promptLine : '',
+      followPrompt: (usePromptLineInMatrix && entry.unit.followPrompt) ? entry.unit.followPrompt : '',
       source: entry.unit.command || ''
     });
 

@@ -204,6 +204,7 @@
     {
       "id": "lfi-probe",
       "title": "Local File Inclusion Probe",
+      "phase": "access",
       "hypothesis": "Parameters that pull in content by its name (page=, file=, include=) are prime LFI suspects. A traversal string settles it: when ../../../../etc/passwd hands back the passwd file, arbitrary local reads are possible, and that spirals into source disclosure, lifting credentials out of config files, and now and then RCE via log poisoning or wrappers.",
       "tool": "curl",
       "tools": [
@@ -250,6 +251,7 @@
     {
       "id": "file-upload",
       "title": "File Upload Abuse",
+      "phase": "access",
       "hypothesis": "An upload form that accepts a script and stores it somewhere web-reachable is immediate RCE. Start by mapping what the form allows, extension blacklist versus whitelist, MIME inspection, content inspection. Then confirm the file was stored, confirm you can reach it, and only after that fire it off.",
       "tool": "curl",
       "tools": [
@@ -302,6 +304,7 @@
     {
       "id": "sqli-basics",
       "title": "SQL Injection Confirmation",
+      "phase": "access",
       "hypothesis": "A parameter whose results shift the moment you add a quote is a SQLi candidate. Nail it down by hand with boolean or error-based signals, grasp the injection before turning to tooling, since exploiting blind cases requires knowing what the query looks like.",
       "tool": "curl",
       "tools": [
@@ -349,6 +352,7 @@
     {
       "id": "manual-sqli-exploitation",
       "title": "Manual SQL Injection Exploitation",
+      "phase": "access",
       "hypothesis": "Automated injection tools such as sqlmap are prohibited under OSCP examination conditions, so a confirmed injection must be exploited entirely by hand. The workflow is fixed: determine the column count, identify the reflected columns with a UNION SELECT, fingerprint the database and the account it runs as, then extract data one table at a time. Where no output is reflected, fall back to an inference (blind) oracle that recovers one character per request. Where the database account holds the FILE privilege, the same injection reads local files and writes a web shell to the document root, converting data access into code execution.",
       "tool": "curl",
       "tools": [
@@ -417,6 +421,7 @@
     {
       "id": "sqlmap-automation",
       "title": "SQLmap Exploitation (post-confirmation)",
+      "phase": "access",
       "hypothesis": "Once you've verified SQLi by hand, sqlmap takes over the heavy lifting: dumping databases, executing OS commands, staging shells. WARNING: sqlmap is EXPLICITLY PROHIBITED on the OSCP exam, regard this card as lab-only. Under exam conditions everything it does must be performed by hand (see manual-sqli-exploitation). Away from the exam, hand it a captured raw request so the auth cookies and parameters are exactly right.",
       "tool": "sqlmap",
       "tools": [
@@ -567,6 +572,7 @@
     {
       "id": "ssrf",
       "title": "Server-Side Request Forgery (SSRF)",
+      "phase": "access",
       "hypothesis": "Whatever feature retrieves a URL for you (link previews, imports, webhooks, image-by-URL, XML parsing) doubles as a proxy for requests into the network sitting behind the server. In labs the usual reward is reading cloud metadata (169.254.169.254), reaching admin panels exposed only internally, or sweeping the internal network's ports through the app.",
       "tool": "curl",
       "tools": [
@@ -624,6 +630,7 @@
     {
       "id": "ssti",
       "title": "Server-Side Template Injection (SSTI)",
+      "phase": "access",
       "hypothesis": "When user input passes through a template engine, {{7*7}} coming back as 49 shows the server is running template code, and template code leads to RCE. Jinja2, Twig, and classic ASP/Razor appear frequently in the field. Spotting it is the same across engines, but exploiting it is engine-specific, so pin down the engine first (its template-error output usually names it).",
       "tool": "curl",
       "tools": [
@@ -671,6 +678,7 @@
     {
       "id": "xxe",
       "title": "XML External Entity (XXE) Injection",
+      "phase": "access",
       "hypothesis": "An endpoint that reads XML (uploads, APIs, SAML, docx/xlsx handlers) may resolve external entities, giving file reads, SSRF, and now and then RCE. Find the XML parsers by submitting content or switching Content-Type to application/xml and watching for parse errors.",
       "tool": "curl",
       "tools": [
@@ -719,6 +727,7 @@
     {
       "id": "deserialization",
       "title": "Insecure Deserialization",
+      "phase": "access",
       "hypothesis": "Serialized objects riding in cookies, ViewStates, or API bodies become execution primitives wherever the server trusts them blindly. Tell-tale markers: Java (rO0AB base64 / \\xac\\xed).NET (__VIEWSTATE, /wEP), PHP (O:4:). Exploiting requires a gadget chain matching the libraries in play, ysoserial (Java), ysoserial.net (.NET), and phpggc (PHP) build them.",
       "tool": "ysoserial",
       "tools": [
@@ -772,6 +781,7 @@
     {
       "id": "jwt-attacks",
       "title": "JWT Attacks",
+      "phase": "access",
       "hypothesis": "A JSON Web Token is no stronger than its signing secret and the code that verifies it. The escalation ladder: (1) decode it and read the claims, (2) attempt alg:none, (3) crack weak HMAC secrets offline, (4) where you've obtained the app source (git-exposed, LFI), lift the hardcoded secret and mint admin tokens, which is often the fastest path to privilege escalation.",
       "tool": "hashcat",
       "tools": [
@@ -826,6 +836,7 @@
     {
       "id": "ssti-to-rce",
       "title": "SSTI to Code Execution",
+      "phase": "access",
       "hypothesis": "A confirmed template injection is one engine-specific payload away from running commands. Fingerprint the engine from how it evaluated your probe (Jinja2, Twig, Freemarker, Velocity, Mako, ERB each have a known RCE gadget), then escalate from {{7*7}} to a command, and from a command to a reverse shell. This is the step that turns 'the template evaluated my math' into a foothold.",
       "tool": "curl",
       "tools": [
@@ -877,6 +888,7 @@
     {
       "id": "http-put-webshell",
       "title": "Upload a Webshell via HTTP PUT",
+      "phase": "access",
       "hypothesis": "When the allowed-methods check showed PUT (or a WebDAV verb) enabled, the server will often write a file you hand it straight into the web root - and a file you can write and then request is code execution. Confirm PUT works, drop a webshell for the server's language, and call it. This is a direct foothold that costs one request.",
       "tool": "curl",
       "tools": [
@@ -928,6 +940,7 @@
     {
       "id": "authz-abuse",
       "title": "Abuse the Authorization Bypass",
+      "phase": "access",
       "hypothesis": "An auth bypass - a forged JWT, a NoSQL/GraphQL/mass-assignment flaw, request smuggling, or a stolen admin session from XSS - is only the doorway. The win is what the privileged surface behind it lets you do: dump the user table for reusable credentials, flip your own account to admin, and above all find the admin-only file upload, config writer, or template editor that turns 'I am admin' into code execution.",
       "tool": "curl",
       "tools": [
@@ -979,6 +992,7 @@
     {
       "id": "nosql-injection",
       "title": "NoSQL Injection",
+      "phase": "access",
       "hypothesis": "Logins backed by MongoDB will frequently accept operator objects in place of plain strings: user[$ne]=x&pass[$ne]=x signs you in as the first account (typically admin). And where equality holds but you still need the password, pulling it out with $regex leaks it one character at a time, the Mango approach.",
       "tool": "curl",
       "tools": [
@@ -1023,6 +1037,7 @@
     {
       "id": "tomcat-deploy",
       "title": "Tomcat Manager WAR Deploy",
+      "phase": "access",
       "hypothesis": "Credentials for the Tomcat manager (defaults like tomcat:s3cret, tomcat:tomcat, admin:admin, or ones recovered from tomcat-users.xml via LFI) become RCE once you deploy a WAR webshell. It works through the HTML manager interface or the text API, and the text API scripts neatly with curl.",
       "tool": "msfvenom",
       "tools": [
@@ -1075,6 +1090,7 @@
     {
       "id": "jenkins-access",
       "title": "Jenkins Exploitation",
+      "phase": "access",
       "hypothesis": "Jenkins (8080 out of the box) with any near-admin access is code execution: the Script Console runs Groovy as the Jenkins user, and a project build with a shell step does the same. Even instances with no authentication give up data, the CLI @file read flaw and anonymous job listings both turn up in the corpus.",
       "tool": "curl",
       "tools": [
@@ -1131,6 +1147,7 @@
     {
       "id": "wordpress",
       "title": "WordPress Attack Surface",
+      "phase": "enum",
       "hypothesis": "WordPress calls for wpscan: enumerate the plugins, themes, and users, tie their versions to CVEs, then either exploit a flawed plugin or (should you land admin credentials) edit a theme file (Appearance → Editor) or upload a plugin zip to get the shell. XML-RPC (xmlrpc.php) offers an amplified channel for brute-forcing logins.",
       "tool": "wpscan",
       "tools": [
@@ -1144,6 +1161,8 @@
       ],
       "produces": [
         "web.users",
+        "web.tech",
+        "exploit.versioned_banner",
         "exploit.candidate"
       ],
       "priority": 80,
@@ -1183,6 +1202,7 @@
     {
       "id": "nikto-scan",
       "title": "Web Server Vulnerability Scan (nikto)",
+      "phase": "enum",
       "hypothesis": "nikto probes for files known to be dangerous, stale server software, and the usual misconfigurations, catching what content discovery overlooks (default scripts, sample apps, hazardous HTTP methods). It is SLOW and VERY loud, so let it run in the background while you enumerate by hand, and treat each result as a lead to confirm rather than a verdict.",
       "tool": "nikto",
       "tools": [
@@ -1228,6 +1248,7 @@
     {
       "id": "command-injection",
       "title": "OS Command Injection",
+      "phase": "access",
       "hypothesis": "A parameter that flows into a system call (ping forms, IP lookups, filename converters, PDF generators) can let you tack on your own commands. Verify with an innocuous probe, then enumerate with id/hostname, and only afterwards go for a shell. The separator makes all the difference: ; | && || a newline and $() each behave differently, and the output-hiding ones (|, &&) still run even when nothing appears (that's blind injection: demonstrate it with sleep).",
       "tool": "curl",
       "tools": [
@@ -1390,6 +1411,7 @@
     {
       "id": "idor-harvest",
       "title": "Harvest Data Through the IDOR",
+      "phase": "access",
       "hypothesis": "A confirmed IDOR is a key that fits every lock in the series. If /account?id=1001 is yours, walk the range and pull every other user's record: profiles leak names and emails for a spray list, and account/export/invoice endpoints leak API keys, reset tokens, and passwords outright. Automate the walk so one off-by-one becomes the whole user table.",
       "tool": "ffuf",
       "tools": [
@@ -1431,6 +1453,7 @@
     {
       "id": "verb-tampering",
       "title": "HTTP Verb Tampering",
+      "phase": "access",
       "hypothesis": "Authentication rules and framework settings frequently account for GET and POST alone: <Limit GET POST> in Apache, route decorators, WAF rules. Striking the same endpoint with HEAD, PUT, OPTIONS, or PATCH can slip straight past authentication, or grant file writes (PUT) and resource deletion (DELETE). It costs almost nothing to try anywhere: every 401/403 endpoint is worth a verb sweep.",
       "tool": "curl",
       "tools": [
@@ -1482,6 +1505,7 @@
     {
       "id": "web-shells",
       "title": "Web Shells (Laudanum & Friends)",
+      "phase": "access",
       "hypothesis": "As soon as you can write into a webroot (via upload, LFI-to-log, SQL OUTFILE, a redis write, a verb-tampered PUT), you need a shell file suited to the server's technology. Kali bundles vetted sets: Laudanum (asp/aspx/jsp/php/cfm) and the /usr/share/webshells directory (php-reverse-shell, simple-backdoor, qsd). Learn the locations so you aren't hand-writing shell code at 3am, choose the right file, drop in your IP and port, upload, trigger.",
       "tool": "sh",
       "tools": [
@@ -1540,6 +1564,7 @@
     {
       "id": "xss-basics",
       "title": "Cross-Site Scripting (Cookie Theft Angle)",
+      "phase": "access",
       "hypothesis": "On a CTF or lab box XSS is seldom the objective itself, it's a credential cannon: grab the admin's session cookie (or coerce the admin's browser into fetching a URL that reveals a page only they can view), then hijack their session. Try every input that reflects back (search, comments, usernames, error pages), then arm it with a callback to your listener. Reflected XSS depends on delivery (someone clicking a link); stored XSS goes off by itself and is the one you're hoping for.",
       "tool": "curl",
       "tools": [
@@ -1593,7 +1618,7 @@
     {
       "id": "ajp-ghostcat",
       "title": "Tomcat AJP Ghostcat (CVE-2020-1938)",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "Tomcat's AJP connector on 8009 trusts the request attributes a front-end proxy would normally set, so an attacker who reaches 8009 directly can set them too. Ghostcat (CVE-2020-1938) abuses that to make Tomcat read any file under the web application root, WEB-INF/web.xml, config files, source, which leaks credentials and app structure. Where the app also lets you upload a file (even a non-executable one), the same flaw includes it as a JSP and becomes remote code execution.",
       "tool": "ajpShooter.py",
       "tools": [
@@ -1648,7 +1673,7 @@
     {
       "id": "java-rmi",
       "title": "Java RMI Registry Enumeration & Deserialization",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "A Java RMI registry on 1099 publishes remote objects a client can call. Two classic weaknesses follow: the registry and its bound objects often accept a serialized Java object as an argument, so a deserialization gadget (via ysoserial or remote-method-guesser) turns a method call into code execution, and older servers expose a remote codebase (the useCodebaseOnly=false case) that loads attacker classes outright. Enumerate the bound names first, then attack the one that deserializes.",
       "tool": "rmg",
       "tools": [
@@ -1797,7 +1822,7 @@
     {
       "id": "graphql-abuse",
       "title": "GraphQL Introspection and Broken Authorization",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "A GraphQL endpoint fronts the whole data model from one URL and is routinely under-secured. Introspection often stays on, handing you every type, query, and mutation; from there you probe for authorization enforced per-resolver rather than centrally, which means a query returning another user's data or a mutation you should not be allowed to call. Batched queries can also bypass rate limits. Introspect first, map the sensitive operations, then test each for missing authorization and injection.",
       "tool": "curl",
       "tools": [
@@ -1951,7 +1976,7 @@
     {
       "id": "http-request-smuggling",
       "title": "HTTP Request Smuggling (CL.TE / TE.CL)",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "When a front-end proxy and a back-end server disagree about where a request ends (Content-Length vs Transfer-Encoding), you can smuggle a second request inside the first. The back-end treats your trailing bytes as the start of the next victim request, letting you poison the next response, bypass front-end access controls, or capture other users traffic. It only exists where a request passes through more than one HTTP parser.",
       "tool": "curl",
       "tools": [
@@ -1999,7 +2024,7 @@
     {
       "id": "prototype-pollution",
       "title": "Prototype Pollution to Privilege / RCE",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "If a Node app merges attacker-controlled keys into an object without filtering __proto__, you can set properties on the shared Object.prototype that every object then inherits. Server-side that is privilege escalation (set an isAdmin the app later reads), denial of service, or RCE where a polluted property feeds a template or child_process gadget. The tell is a JSON merge, Object.assign, or a nested query-string parser.",
       "tool": "curl",
       "tools": [
@@ -2046,7 +2071,7 @@
     {
       "id": "mass-assignment",
       "title": "Mass Assignment / Autobinding",
-      "phase": "web",
+      "phase": "access",
       "hypothesis": "When a framework binds every field of a request body straight onto a model, you can set fields the UI never exposes. Add role, isAdmin, verified, or balance to a profile update or signup, and if the binder is not allow-listed you set a property you were never meant to control. It is a one-request privilege escalation: diff the fields the app returns against the fields it accepts, then send the privileged one back.",
       "tool": "curl",
       "tools": [

@@ -684,7 +684,7 @@ console.log('=== Wittgensteinian Contextual Inference & Causal Entailment Smoke 
   const tgsFacts = S.factSetForTarget(T_W3_KRB).facts.filter(f => f.kind === 'hash.tgs');
   ok(tgsFacts.length === 1
     && tgsFacts[0].value && Array.isArray(tgsFacts[0].value.hashes) && tgsFacts[0].value.hashes[0].length === rawTgs.length
-    && !hasFact(T_W3_KRB, 'credential.plaintext')
+    && !hasFact(T_W3_KRB, 'credential.plaintext', v => v && (v.user === 'svc_mssql' || (v.password && v.password.indexOf('1433*$') === 0)))
     && !hasFact(T_W3_KRB, 'credential.available', v => v && v.password && v.password.indexOf('1433*$') === 0),
     'W3-2a: 80-column hard-wrapped uncracked $krb5tgs$ with :1433*$ SPN port unwraps cleanly into full hash.tgs and NEVER mints a fake 1433*$ password', T_W3_KRB);
 

@@ -64,10 +64,10 @@ const TOOL_HEAD_TOKENS = new Set((
   'nikto nuclei feroxbuster ffuf gobuster dirb dirsearch whatweb httpx curl wget sqlmap ' +
   'hydra dig host nslookup fierce dnsrecon dnsenum volatility vol.py git-dumper ike-scan ' +
   'penelope ftp lftp snmpwalk onesixtyone showmount rpcinfo id whoami sudo doas uname hostname ' +
-  'ipconfig ifconfig systeminfo net netstat ss ps find findstr grep awk sed cat type head ' +
+  'ipconfig ifconfig systeminfo net netstat ss ps find findstr getcap grep awk sed cat type head ' +
   'tail more less ls dir tree chmod chown cp mv rm scp ssh ssh-keygen tar unzip zip base64 ' +
-  'certutil powershell pwsh cmd msfvenom msfconsole searchsploit linpeas winpeas pspy ' +
-  'chisel ligolo-ng ligolo-proxy ligolo-agent agent socat nc ncat netcat rlwrap ' +
+  'certutil powershell pwsh cmd msfvenom msfconsole searchsploit linpeas winpeas pspy pspy32 pspy64 pspy32s pspy64s ' +
+  'perl ruby chisel ligolo-ng ligolo-proxy ligolo-agent agent socat nc ncat netcat rlwrap ' +
   'mssqlclient mysql psql sqlite3 redis-cli xfreerdp xfreerdp3 rdesktop ' +
   'diskshadow robocopy borg restic swaks tshark tcpdump mimikatz seatbelt certify ' +
   'printspoofer godpotato juicypotato sweetpotato lazagne'
@@ -75,7 +75,7 @@ const TOOL_HEAD_TOKENS = new Set((
 
 const EXPLOIT_DB_HEADER_RE = /(?:^\s*(?:#|\/\/|\/\*+|\*|--|;)\s*Exploit\s+Title\s*:|Exploit\s+Database|\bExploit-DB\b|^\s*(?:#|\/\/|\*)\s*CVE\s*:\s*CVE-\d{4}-\d+)/im;
 
-const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|FolderPerms\s*:)/;
+const RAW_ARTIFACT_HEADER_RE = /^(?:-----BEGIN [A-Z0-9 ]+-----$|commit [0-9a-f]{40}(?:\s+\([^\r\n]+\))?$|diff --git \S+|User accounts for \\\\|[╔╚╠═]{2,}|\u2563\s+[A-Z][A-Za-z0-9 &/_-]{2,}|-{3,}\s*[A-Z][A-Za-z0-9_-]*Enum\s*-{3,}\s*$|FolderPerms\s*:)/;
 
 const PEM_ENVELOPE_RE = /-----BEGIN [A-Z0-9 ]+-----[\s\S]+?-----END [A-Z0-9 ]+-----/;
 
@@ -109,6 +109,10 @@ const STEP_CAPTION_HEADER_RE = /^Step\s+\d+\s*(?:[-:.)]\s*.*)?$/i;
 
 const UNPROMPTED_SETUP_LEAD_RE = /^(?:cd\s+(?:-[LP]\s+)?(?:"[^"]+"|'[^']+'|[^;&|<>\s]+)|git\s+clone\s+(?:-\S+\s+)*\S+(?:\s+\S+)?)\s*$/i;
 
+const LINUX_CAPABILITY_LINE_RE = /^\s*\/\S+\s+(?:=\s*)?cap_[a-z0-9_,]+[+=][eip]+(?:\s+cap_[a-z0-9_,]+[+=][eip]+)*\s*$/i;
+const CONFIG_PATH_SECTION_HEADER_RE = /^#{1,2}\s+\/(?:etc|var|opt|srv|home|root|usr\/local)\/[A-Za-z0-9_./-]+(?:[:\s]|$)/m;
+const TWO_COL_CRED_TABLE_RE = /^[ \t]*(?:user(?:name)?|login)[ \t]{2,}(?:pass(?:word)?|hash|secret)[ \t]*$/im;
+
 const TERMINAL_CONTENT_SIG_RE = new RegExp([
   'Nmap scan report for',
   'Starting Nmap',
@@ -130,7 +134,15 @@ const TERMINAL_CONTENT_SIG_RE = new RegExp([
   '^\\s*\\[\\+\\]\\s+\\S+',
   '^\\s*\\[\\*\\]\\s+\\S+',
   '^\\/[A-Za-z0-9._\\/-]+\\s+\\(Status:\\s*\\d{3}\\)',
-  '^[0-9a-fA-F]{32}\\s*$'
+  '^[0-9a-fA-F]{32}\\s*$',
+  '^[ \\t]*\\u2563\\s+[A-Z][A-Za-z0-9 &/_-]{2,}',
+  '^root:[x*!]:0:0:[^:\\r\\n]*:\\/[^:\\r\\n]*:\\/',
+  '^\\s*\\/\\S+\\s+(?:=\\s*)?cap_[a-z0-9_,]+[+=][eip]+(?:\\s+cap_[a-z0-9_,]+[+=][eip]+)*\\s*$',
+  '^\\s*\\[\\s*[#~+!*$-]\\s*\\]\\s*(?:Custom\\s+|Interesting\\s+|Default\\s+)?SUID\\s+Binaries\\b',
+  '^-{3,}\\s*[A-Z][A-Za-z0-9_-]*Enum\\s*-{3,}\\s*$',
+  'gtfobins\\.github\\.io\\/gtfobins\\/[A-Za-z0-9_.-]+',
+  '^Report\\s+(?:[A-Za-z0-9_.-]+\\s+)?bugs\\s+to\\s+(?:<?[A-Za-z0-9_.+-]+@(?:gnu\\.org|[A-Za-z0-9.-]+\\.[A-Za-z]{2,})>?|https?:\\/\\/\\S+)',
+  'GNU\\s+coreutils\\s+online\\s+help:\\s*<https?:\\/\\/www\\.gnu\\.org\\/software\\/'
 ].join('|'), 'im');
 
 const STATIC_SOURCE_LOOK_RE = /^(?:\s*(?:import\s+[A-Za-z0-9_.]+|from\s+[A-Za-z0-9_.]+\s+import|def\s+[A-Za-z_]\w*\s*\(|class\s+[A-Za-z_]\w*[\s(:]|function\s+[A-Za-z_]\w*\s*\(|<\?php\b|<!DOCTYPE\s+html|<html\b|#include\s*[<"]|using\s+System;|package\s+[a-z0-9_.]+;))/m;
@@ -206,7 +218,7 @@ function stripAnsi(s) {
 }
 
 function isBareHashCommand(cand) {
-  const trimmed = String(cand || '').trim();
+  const trimmed = String(cand || '').trim().replace(/^#\s+/, '');
   if (!trimmed) return false;
   if (HASH_PROSE_COMMENT_RE.test(trimmed)) return false;
   let s = trimmed
@@ -254,6 +266,21 @@ function isBareHashCommand(cand) {
   if (PROSE_VERB_BARE_HASH_GUARD.has(base) && toks.length >= 3
       && toks.slice(1).every(w => /^[A-Za-z]{2,}[,.:;!?]?$/.test(w) && !/\.[A-Za-z0-9]{1,5}$/.test(w))) {
     return false;
+  }
+  const unquoted = unwrapped.replace(/'[^']*'|"[^"]*"/g, ' ');
+  if (/(?:(?:^|\s)>\s*(?:wget|curl|chmod|chown|invoke|run|execute|upload|download|transfer|nc|ncat|netcat|bash|sh|python3?|perl|ruby|php|gcc|compile|privesc|escalate|exploit|trigger|shell|root|enum|crack|login|ssh)\b[^>\r\n]*){2,}/i.test(unquoted)) {
+    return false;
+  }
+  if (base !== 'echo' && base !== 'printf') {
+    const uqToks = unquoted.split(/\s+/).filter(Boolean);
+    if (!uqToks.slice(1, 3).some(t => /^-[A-Za-z0-9-]/.test(t))) {
+      const earlyWords = uqToks.slice(1, 6).map(w => w.replace(/^[,;:!?()]+|[,;:!?()]+$/g, '').toLowerCase());
+      const copulaIdx = earlyWords.findIndex(w => /^(?:files?|are|is|was|were|not|cannot|can't|doesn't|don't|didn't|won't|shouldn't|should|must|will|would|could|viewable|accessible|reachable|writable|readable|vulnerable|exposed|available|allowed|required|needed)$/.test(w));
+      if (copulaIdx >= 0) {
+        const hasSecondStopword = earlyWords.some((w, idx) => idx !== copulaIdx && /^(?:are|is|was|were|not|to|via|from|in|on|for|with|by|the|a|an|that|this|which|because|when|where|into|onto|over|through)$/.test(w));
+        if (hasSecondStopword) return false;
+      }
+    }
   }
   return true;
 }
@@ -361,9 +388,9 @@ const CAPTION_CLI_EXTRA_BINS = new Set([
   'pfx2john', 'ssh2john', 'iwr', 'irm', 'iex', 'git', 'cmdkey', 'netsh', 'accesschk'
 ]);
 
-const SESSION_LAUNCHER_RE = /^(?:evil-winrm|impacket-(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)|(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)(?:\.py)?|ssh|ftp|lftp|mysql|mariadb|psql)$/i;
+const SESSION_LAUNCHER_RE = /^(?:evil-winrm|impacket-(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)|(?:mssqlclient|psexec|wmiexec|smbexec|smbclient)(?:\.py)?|ssh|sshpass|telnet|ftp|lftp|sftp|rpcclient|mysql|mariadb|psql|sqlite3?|redis-cli|mongosh?|msfconsole)$/i;
 
-const ENUM_SCRIPT_NO_SUBSHELL_RE = /\b(?:linpeas|winpeas|pspy|linux-exploit-suggester|lse\.sh|unix-privesc-check)\b/i;
+const ENUM_SCRIPT_NO_SUBSHELL_RE = /\b(?:linpeas|winpeas|pspy(?:32|64)?s?|linux-exploit-suggester|lse\.sh|unix-privesc-check)\b/i;
 
 const NON_SHELL_READER_HEAD_RE = /^(?:cat|type|head|tail|more|less|grep|egrep|fgrep|rg|awk|sed|cut|sort|uniq|wc|tr|diff|git|curl|wget|strings|xxd|hexdump|od|file|stat|ls|dir|tree|get-content|gc|get-childitem|gci|select-string|ldapsearch|nmap|rustscan|masscan|nikto|gobuster|feroxbuster|ffuf|dirb|dirsearch|wfuzz|whatweb|httpx|searchsploit|sqlmap|wpscan|enum4linux|enum4linux-ng|smbmap|rpcclient|nxc|netexec|crackmapexec|cme|secretsdump|impacket-secretsdump|getuserspns|impacket-getuserspns|getnpusers|impacket-getnpusers|kerbrute|certipy|certipy-ad|bloodhound-python|sharphound|dig|host|nslookup|whois|id|whoami|hostname|uname|ipconfig|ifconfig|ip|netstat|ss|ps|env|printenv|export|alias|echo|printf|pwd|cd|chmod|chown|cp|mv|rm|mkdir|touch|tar|unzip|zip|base64|hashcat|john)$/i;
 
@@ -389,6 +416,26 @@ function isBareHashSubshellLauncher(cmd) {
 function getSessionLauncherTool(cmd) {
   let s = String(cmd || '').trim();
   if (!s) return '';
+  let preChanged = true;
+  while (preChanged) {
+    preChanged = false;
+    const nextPre = s
+      .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/, '')
+      .replace(/^(?:proxychains4?(?:\s+-q|\s+-f\s+\S+)*|time|rlwrap(?:\s+-\S+)*)\s+/i, '');
+    if (nextPre !== s) {
+      s = nextPre.trim();
+      preChanged = true;
+    }
+  }
+  if (/\bpty\.spawn\s*\(|\bscript\s+(?:-[A-Za-z0-9]+\s+)*\/dev\/null\b/i.test(s)) {
+    return 'pty-spawn';
+  }
+  if (/^(?:sudo|doas)\s+(?:-[A-Za-z]*[is]\b|su\b|(?:-\S+\s+)*(?:\/usr\/local|\/usr)?\/bin\/(?:ba|da|z|k|a)?sh\b)/i.test(s)) {
+    return 'sudo-shell';
+  }
+  if (/^su(?:\s+-|\s+[A-Za-z0-9_.-]+|\s*$)/i.test(s)) {
+    return 'su';
+  }
   let changed = true;
   while (changed) {
     changed = false;
@@ -399,6 +446,12 @@ function getSessionLauncherTool(cmd) {
       s = next.trim();
       changed = true;
     }
+  }
+  if (/^(?:nc|ncat|netcat)\b/i.test(s) && /\s-[A-Za-z]*l[A-Za-z]*\d*\b/.test(s)) {
+    return 'listener';
+  }
+  if (/^socat\b/i.test(s) && /\b(?:TCP\d*-LISTEN|UDP\d*-LISTEN|OPENSSL-LISTEN)\b/i.test(s)) {
+    return 'listener';
   }
   const head = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '').split(/[\\/]/).pop();
   return SESSION_LAUNCHER_RE.test(head) ? head.toLowerCase() : '';
@@ -550,18 +603,23 @@ function isCommandLikeLine(line) {
   const trimmed = String(line || '').trim();
   if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
   if (STEP_CAPTION_HEADER_RE.test(trimmed)) return false;
+  if (LINUX_CAPABILITY_LINE_RE.test(trimmed)) return false;
   let s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
   if (!s) return false;
   const first = s.split(/[\s|;&><]+/)[0].replace(/^["']|["']$/g, '');
   if (!first) return false;
   if (first.indexOf(':') >= 0 && !/^[A-Za-z]:[\\/]/.test(first)) return false;
   if (hasTitleCaseEnglishProseLook(first, s)) return false;
+  const base = first.split(/[\\/]/).pop().toLowerCase();
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
+  if (stem === 'perl' || stem === 'ruby') {
+    const rest = s.slice(first.length).trim();
+    return /(?:^|\s)-[eEIMcw]\b|\.(?:pl|rb)\b/i.test(rest);
+  }
   if (/^(?:\.\/|\.\\|\/usr\/|\/bin\/|\/sbin\/|\/opt\/|[A-Za-z]:\\)/.test(first)) return true;
   if (/^(?:Invoke|Get|Set|New|Import|Start|Stop|Enter|Add|Enable|Disable|Test|Select|Out|ConvertTo|ConvertFrom)-[A-Za-z0-9]+$/i.test(first)) {
     return true;
   }
-  const base = first.split(/[\\/]/).pop().toLowerCase();
-  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin|bat|cmd)$/i, '');
   const archStem = stem.replace(/(?:[-_.]?(?:x64|x86|amd64|64|32))$/i, '');
   return TOOL_HEAD_TOKENS.has(base) || TOOL_HEAD_TOKENS.has(stem) || TOOL_HEAD_TOKENS.has(archStem) || /^impacket-[a-z0-9_-]+$/i.test(base);
 }
@@ -635,7 +693,8 @@ function hasEarlyPemRawArtifact(body, nonEmptyLines) {
   return head5.some(l => RAW_ARTIFACT_HEADER_RE.test(l));
 }
 
-function classifyFenceBlock(lang, text) {
+function classifyFenceBlock(lang, text, contextOpts) {
+  contextOpts = contextOpts || {};
   const normLang = String(lang || '').trim().split(/\s+/)[0].toLowerCase();
   const body = String(text || '');
   if (!body.trim()) return { include: false, reason: 'empty' };
@@ -657,6 +716,15 @@ function classifyFenceBlock(lang, text) {
     if (hasShellPrompt(body)) {
       return { include: true, reason: 'prompt-inside-code-fence', lang: normLang };
     }
+    if (normLang === 'json' && Array.isArray(contextOpts.prevProseLines) && contextOpts.prevProseLines.length) {
+      const hasTargetHttpUrl = contextOpts.prevProseLines.some(pl => {
+        const urls = String(pl || '').match(/https?:\/\/[^\s)>\]"'`]+/gi) || [];
+        return urls.some(u => !isExternalReferenceUrlOrCommand(u));
+      });
+      if (hasTargetHttpUrl && /"(?:user(?:name)?|login|email|pass(?:word|wd)?|secret|token|api[_-]?key)"\s*:/i.test(body)) {
+        return { include: true, reason: 'http-api-json', lang: normLang };
+      }
+    }
     return { include: false, reason: 'static-code-lang', lang: normLang };
   }
 
@@ -667,6 +735,9 @@ function classifyFenceBlock(lang, text) {
   if (hasShellPrompt(body)) return { include: true, reason: 'bare-prompt', lang: normLang };
   if (EXPLOIT_DB_HEADER_RE.test(body)) return { include: true, reason: 'bare-exploit-db', lang: normLang };
   if (TERMINAL_CONTENT_SIG_RE.test(body)) return { include: true, reason: 'bare-content-sig', lang: normLang };
+  if (nonEmptyLines.length >= 2 && TWO_COL_CRED_TABLE_RE.test(body)) {
+    return { include: true, reason: 'bare-content-sig', lang: normLang };
+  }
 
   const activeLines = nonEmptyLines.filter(l => !l.startsWith('#') && !l.startsWith('//'));
   let leadIdx = 0;
@@ -687,6 +758,9 @@ function classifyFenceBlock(lang, text) {
   const hadHashCaption = nonEmptyLines.some(l => /^#\s+/.test(l) && isPlainEnglishCaptionLine(l.replace(/^#+\s*/, '')));
   if (firstActive && (hadHashCaption || skippedLead) && isCaptionFollowCliLine(firstActive)) {
     return { include: true, reason: 'bare-tool-command', lang: normLang };
+  }
+  if (nonEmptyLines.length >= 2 && CONFIG_PATH_SECTION_HEADER_RE.test(body)) {
+    return { include: true, reason: 'bare-config-dump', lang: normLang };
   }
   if (STATIC_SOURCE_LOOK_RE.test(body)) {
     return { include: false, reason: 'bare-static-source', lang: normLang };
@@ -882,7 +956,13 @@ function extractBlocks(md, opts) {
       keep = true;
       classification = { include: true, reason: 'html-terminal-lang', lang: b.lang };
     } else {
-      classification = classifyFenceBlock(b.lang, b.text);
+      const prevStartForClass = i > 0 ? allBlocks[i - 1].end : Math.max(0, b.start - 600);
+      const prevProseLines = src.slice(prevStartForClass, b.start)
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean)
+        .slice(-3);
+      classification = classifyFenceBlock(b.lang, b.text, { prevProseLines: prevProseLines });
       keep = classification.include;
       if (!keep && forceIncludeIndices.has(i)) {
         keep = true;
@@ -1013,6 +1093,7 @@ function segmentBlock(blockOrText, opts) {
   const baseLine = isObj ? (blockOrText.contentLineStart || blockOrText.lineStart || 1) : (opts.lineStart || 1);
   const heading = isObj ? (blockOrText.heading || '') : (opts.heading || '');
   const lang = isObj ? String(blockOrText.lang || '').toLowerCase() : String(opts.lang || '').toLowerCase();
+  const classificationReason = isObj ? String(blockOrText.classificationReason || '') : String(opts.classificationReason || '');
   const includeUnprompted = opts.includeUnprompted !== false;
 
   const wrapped = joinWrappedPromptLines(text.split('\n'), opts);
@@ -1025,6 +1106,39 @@ function segmentBlock(blockOrText, opts) {
   let inBareHashSubshell = false;
   let seenUnpromptedNonLauncher = false;
   let checkedUnpromptedLead = false;
+  const prePromptLines = [];
+  let prePromptFirstOffset = -1;
+
+  function flushPrePromptArtifactIfAny() {
+    if (!includeUnprompted || !prePromptLines.length) {
+      prePromptLines.length = 0;
+      return;
+    }
+    const nonEmptyPre = prePromptLines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    if (nonEmptyPre.length >= 2) {
+      const preText = prePromptLines.join('\n');
+      const hasPreArtifactSig = prePromptLines.some(l => RAW_ARTIFACT_HEADER_RE.test(l.trim()))
+        || TERMINAL_CONTENT_SIG_RE.test(preText)
+        || /\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{50,}|\$(?:1|5|6|y|apr1)\$[^\s:]{12,}/i.test(preText);
+      if (hasPreArtifactSig) {
+        rawUnits.push({
+          promptLine: '',
+          followPrompt: '',
+          tool: '',
+          rawCommand: '',
+          command: '',
+          kind: 'unprompted',
+          user: '',
+          host: '',
+          hostHint: '',
+          lineStart: baseLine + (prePromptFirstOffset >= 0 ? prePromptFirstOffset : 0),
+          heading: heading,
+          outLines: prePromptLines.slice()
+        });
+      }
+    }
+    prePromptLines.length = 0;
+  }
 
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
@@ -1035,6 +1149,7 @@ function segmentBlock(blockOrText, opts) {
     if (topM && i + 1 < lines.length) {
       const botM = lines[i + 1].match(ZSH_BOT_PROMPT_RE);
       if (botM) {
+        if (!sawPrompt) flushPrePromptArtifactIfAny();
         sawPrompt = true;
         sawDecoratedPrompt = true;
         if (cur) rawUnits.push(cur);
@@ -1069,27 +1184,64 @@ function segmentBlock(blockOrText, opts) {
     });
     const p = matchPromptLine(ln, matchOpts);
     if (p) {
+      if (!sawPrompt) flushPrePromptArtifactIfAny();
       sawPrompt = true;
       if (!p.isHash && !p.isDollar) {
         sawDecoratedPrompt = true;
       }
       const curLauncher = cur ? getSessionLauncherTool(cur.command) : '';
-      if (curLauncher && isInteractiveTargetOrReplPrompt(p)) {
-        const fp = stripPromptPrefix(ln, p.rawCommand);
+      const strippedNextPfx = stripPromptPrefix(ln, p.rawCommand);
+      const shouldAttachFollow = Boolean(
+        cur &&
+        isInteractiveTargetOrReplPrompt(p) &&
+        (Boolean(curLauncher) || !p.rawCommand)
+      );
+      if (shouldAttachFollow) {
+        const fp = strippedNextPfx;
         if (fp && !cur.followPrompt) cur.followPrompt = fp;
+        if (fp && curLauncher === 'pty-spawn' && rawUnits.length > 0) {
+          const prevU = rawUnits[rawUnits.length - 1];
+          if (prevU && !prevU.followPrompt && getSessionLauncherTool(prevU.command)) {
+            prevU.followPrompt = fp;
+          }
+        }
         if (p.isWinOpenSsh && cur.promptLine && curLauncher === 'ssh') {
           cur.outLines.push(ln);
           continue;
         }
+      } else if (!cur && !p.rawCommand && isInteractiveTargetOrReplPrompt(p) && rawUnits.length > 0) {
+        const prevU = rawUnits[rawUnits.length - 1];
+        const prevLauncher = prevU ? getSessionLauncherTool(prevU.command) : '';
+        if (prevLauncher) {
+          const fp = strippedNextPfx;
+          if (fp && !prevU.followPrompt) prevU.followPrompt = fp;
+          if (fp && prevLauncher === 'pty-spawn' && rawUnits.length > 1) {
+            const prevPrevU = rawUnits[rawUnits.length - 2];
+            if (prevPrevU && !prevPrevU.followPrompt && getSessionLauncherTool(prevPrevU.command)) {
+              prevPrevU.followPrompt = fp;
+            }
+          }
+        }
       }
       if (cur) rawUnits.push(cur);
-      // Preserve standalone landing-prompt fences; skip trailing idle prompts after earlier turns
+      // Preserve standalone landing-prompt fences; skip idle command-less prompts with no body
       const isSingleLandingFence = !p.rawCommand
         && rawUnits.length === 0
         && Boolean(matchStandaloneLandingPromptFence(text));
-      if (!p.rawCommand && i === lines.length - 1 && !isSingleLandingFence) {
-        cur = null;
-        continue;
+      if (!p.rawCommand && !isSingleLandingFence) {
+        let hasOutputBeforeNextPrompt = false;
+        for (let k = i + 1; k < lines.length; k++) {
+          if (ZSH_TOP_PROMPT_RE.test(lines[k]) && k + 1 < lines.length && ZSH_BOT_PROMPT_RE.test(lines[k + 1])) break;
+          if (matchPromptLine(lines[k], matchOpts)) break;
+          if (lines[k].trim()) {
+            hasOutputBeforeNextPrompt = true;
+            break;
+          }
+        }
+        if (!hasOutputBeforeNextPrompt) {
+          cur = null;
+          continue;
+        }
       }
       if (p.isHash) {
         inBareHashSubshell = true;
@@ -1113,48 +1265,68 @@ function segmentBlock(blockOrText, opts) {
       };
     } else if (cur) {
       cur.outLines.push(ln);
-    } else if (!sawPrompt && !checkedUnpromptedLead) {
-      const trimmed = ln.trim();
-      if (!trimmed || (trimmed.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(trimmed)) || isPlainEnglishCaptionLine(trimmed)) {
-        continue;
-      }
-      checkedUnpromptedLead = true;
-      if (isBareHashSubshellLauncher(trimmed)) {
-        inBareHashSubshell = true;
-      } else {
-        seenUnpromptedNonLauncher = true;
-      }
-      if (includeUnprompted && getSessionLauncherTool(trimmed)) {
-        let hasLaterTargetPrompt = false;
-        for (let j = i + 1; j < lines.length; j++) {
-          const pj = matchPromptLine(lines[j], opts);
-          if (pj && (isInteractiveTargetOrReplPrompt(pj) || pj.isHash)) {
-            hasLaterTargetPrompt = true;
-            break;
-          }
+    } else if (!sawPrompt) {
+      if (prePromptFirstOffset < 0 && ln.trim()) prePromptFirstOffset = origOffset;
+      prePromptLines.push(ln);
+      if (!checkedUnpromptedLead) {
+        const trimmed = ln.trim();
+        if (!trimmed || (trimmed.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(trimmed)) || isPlainEnglishCaptionLine(trimmed)) {
+          continue;
         }
-        if (hasLaterTargetPrompt) {
-          cur = {
-            promptLine: '',
-            followPrompt: '',
-            tool: '',
-            rawCommand: trimmed,
-            command: trimmed,
-            kind: 'unprompted',
-            user: '',
-            host: '',
-            hostHint: '',
-            lineStart: baseLine + origOffset,
-            heading: heading,
-            outLines: []
-          };
+        checkedUnpromptedLead = true;
+        if (isBareHashSubshellLauncher(trimmed)) {
+          inBareHashSubshell = true;
+        } else {
+          seenUnpromptedNonLauncher = true;
+        }
+        if (includeUnprompted && getSessionLauncherTool(trimmed)) {
+          let hasLaterTargetPrompt = false;
+          for (let j = i + 1; j < lines.length; j++) {
+            const pj = matchPromptLine(lines[j], opts);
+            if (pj && (isInteractiveTargetOrReplPrompt(pj) || pj.isHash)) {
+              hasLaterTargetPrompt = true;
+              break;
+            }
+          }
+          if (hasLaterTargetPrompt) {
+            prePromptLines.length = 0;
+            cur = {
+              promptLine: '',
+              followPrompt: '',
+              tool: '',
+              rawCommand: trimmed,
+              command: trimmed,
+              kind: 'unprompted',
+              user: '',
+              host: '',
+              hostHint: '',
+              lineStart: baseLine + origOffset,
+              heading: heading,
+              outLines: []
+            };
+          }
         }
       }
     }
   }
   if (cur) rawUnits.push(cur);
 
-  if (!sawPrompt && includeUnprompted) {
+  if (!sawPrompt && includeUnprompted && classificationReason === 'http-api-json') {
+    rawUnits.push({
+      promptLine: '',
+      followPrompt: '',
+      tool: 'curl',
+      rawCommand: '',
+      command: 'curl',
+      kind: 'unprompted',
+      user: '',
+      host: '',
+      hostHint: '',
+      lineStart: baseLine,
+      heading: heading,
+      outLines: lines
+    });
+  } else if (!sawPrompt && includeUnprompted) {
     // Handle unprompted CommonMark blocks (command-first or raw stdout paste)
     let origFirstIdx = -1;
     let sawHashCaption = false;
@@ -1572,7 +1744,7 @@ const TOOLS = [
   [/\bssh\b/i, 'ssh'], [/\bftp\b/i, 'ftp'], [/\b(mysql|mariadb)\b/i, 'mysql'],
   [/\b(psql|postgres)\b/i, 'postgres'], [/\b(mssqlclient|impacket-mssqlclient)\b/i, 'mssql'],
   [/\bsqlite3?\b/i, 'sqlite'], [/\bredis-cli\b/i, 'redis'],
-  [/\blinpeas\b/i, 'linpeas'], [/\bwinpeas\b/i, 'winpeas'], [/\bpspy\b/i, 'pspy'],
+  [/\blinpeas\b/i, 'linpeas'], [/\bwinpeas\b/i, 'winpeas'], [/\bpspy(?:32|64)?s?\b/i, 'pspy'],
   [/\bsudo\s+(?:-[A-Za-z]*l\b|--list\b)/i, 'sudo-l'], [/\bcertipy(?:-ad)?\b/i, 'certipy'], [/\bldapsearch\b/i, 'ldapsearch'],
   [/\b(dig|nslookup|dnsrecon|dnsenum|host)\b/i, 'dns']
 ];
@@ -1581,8 +1753,8 @@ const WRAPPER_PREFIX_RE = /^(?:\s*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[
 const SHELL_WRAPPER_BINS = new Set(['for', 'while', 'if', 'xargs', 'watch', 'parallel', 'eval', 'exec']);
 
 function detectTool(u) {
-  if (u && u.tool) return u.tool;
-  const hay = ((u && u.command) || '').trim();
+  if (u && typeof u === 'object' && u.tool) return u.tool;
+  const hay = (typeof u === 'string' ? u : ((u && u.command) || '')).trim();
   if (!hay) return 'other';
   if (/\bsudo\s+(?:-[A-Za-z]*l\b|--list\b)/i.test(hay)) return 'sudo-l';
   let stripped = hay.replace(WRAPPER_PREFIX_RE, '').trim();

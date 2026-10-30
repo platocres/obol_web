@@ -40,7 +40,39 @@
       var cmsVal = { cms: 'wordpress', tool: 'wpscan' };
       if (version && version.groups && version.groups.v) cmsVal.version = version.groups.v;
       _add(facts, mkFact('web.cms', h, cmsVal, S, source));
-      _add(facts, mkFact('web.tech', h, { items: [{ name: 'WordPress', value: cmsVal.version || 'detected' }], tool: 'wpscan' }, S, source));
+      var wpMeta = _extract_web_origin(text, '', ws);
+      if (!facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+        var wpHr = { via: 'wpscan' };
+        if (wpMeta.origin) wpHr.origin = wpMeta.origin;
+        if (wpMeta.port) wpHr.port = wpMeta.port;
+        _add(facts, mkFact('http.reachable', h, wpHr, S, source));
+      }
+      var techItems = [{ name: 'WordPress', value: cmsVal.version || 'detected' }];
+      var seenSlugVer = Object.create(null);
+      var stanzas = String(text || '').split(/^\s*\[\+\]\s+/m);
+      for (var si = 1; si < stanzas.length; si++) {
+        var stz = stanzas[si];
+        var locM = /\bLocation:\s*https?:\/\/[^\s'"]*\/wp-content\/(plugins|themes)\/([A-Za-z0-9_.-]+)\/?/i.exec(stz);
+        var hdrSlugM = !locM && /^(?:WordPress\s+theme\s+in\s+use:\s*)?([a-z0-9][a-z0-9_-]{1,63})[ \t]*\r?\n/i.exec(stz);
+        var verM = /^\s*\|\s*Version:\s*([0-9][0-9.a-zA-Z_-]*)/im.exec(stz);
+        if (!verM) continue;
+        var extKind = locM ? locM[1].toLowerCase() : (/^WordPress\s+theme\s+in\s+use:/i.test(stz) ? 'themes' : (/\bLocation:\s*https?:\/\/|\bFound By:/i.test(stz) ? 'plugins' : ''));
+        var slug = locM ? locM[2] : (hdrSlugM ? hdrSlugM[1] : '');
+        if (!extKind || !slug || /^(?:wordpress|headers|xmlrpc|readme|robots|users|enumerating|finished)$/i.test(slug)) continue;
+        var extVer = verM[1];
+        var svKey = extKind + ':' + slug.toLowerCase() + ':' + extVer;
+        if (seenSlugVer[svKey]) continue;
+        seenSlugVer[svKey] = 1;
+        var isTheme = extKind === 'themes';
+        techItems.push({ name: slug, value: extVer, category: isTheme ? 'wordpress-theme' : 'wordpress-plugin' });
+        _add(facts, mkFact('exploit.versioned_banner', h, {
+          product: (isTheme ? 'WordPress Theme ' : 'WordPress Plugin ') + slug,
+          version: extVer,
+          search_query: slug + ' ' + extVer,
+          via: 'wpscan'
+        }, S, source));
+      }
+      _add(facts, mkFact('web.tech', h, { items: techItems, tool: 'wpscan' }, S, source));
     }
     var section = reSearch(C._WPSCAN_USER_SECTION_RE, text);
     var users = [];
@@ -177,13 +209,22 @@
   C._exposed_artifacts = _exposed_artifacts;
 
   function _parse_web_content(text, ws, source, facts, command) {
-    var paths = {};
+    var paths = {}, pathCodes = Object.create(null), hasLiveStatus = false;
+    function recordPath(normP, code) {
+      if (!normP) return;
+      paths[normP] = true;
+      if (code) {
+        var cStr = String(code);
+        if (!pathCodes[normP] || /^(?:200|201|204|301|302|307|308)$/.test(cStr)) pathCodes[normP] = cStr;
+        if (/^(?:200|201|204|301|302|307|308|401|403)$/.test(cStr)) hasLiveStatus = true;
+      }
+    }
     var isGobusterCtx = /\bgobuster\b/i.test(command || '') || /\bGobuster\s+v?\d/i.test(text || '') || /\(Status:\s*\d{3}\)[ \t]+\[Size:\s*\d+\]/i.test(text || '');
     reAll(C._WEB_GOBUSTER_RE, text).forEach(function (m) {
       if (m.groups.code !== '404') {
         var rawP = m.groups.path || '';
         var normP = rawP.charAt(0) === '/' || /^https?:\/\//i.test(rawP) ? C._url_path(rawP) : C._url_path('/' + rawP);
-        if (normP) paths[normP] = true;
+        recordPath(normP, m.groups.code);
       }
     });
     reAll(_GOBUSTER_REL_RE, text).forEach(function (m) {
@@ -192,39 +233,42 @@
       if (!rawRel) return;
       if (rawRel.charAt(0) !== '/' && !m.groups.origin && !isGobusterCtx) return;
       var normRel = rawRel.charAt(0) === '/' ? C._url_path(rawRel) : C._url_path('/' + rawRel);
-      if (normRel) paths[normRel] = true;
+      recordPath(normRel, m.groups.code);
     });
-    reAll(C._WEB_FEROX_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true; });
-    reAll(C._WEB_DIRB_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true; });
+    reAll(C._WEB_FEROX_RE, text).forEach(function (m) { if (m.groups.code !== '404') recordPath(C._url_path(m.groups.url), m.groups.code); });
+    reAll(C._WEB_DIRB_RE, text).forEach(function (m) { if (m.groups.code !== '404') recordPath(C._url_path(m.groups.url), m.groups.code); });
     if (C._WEB_DIRSEARCH_RE) {
       reAll(C._WEB_DIRSEARCH_RE, text).forEach(function (m) {
-        if (m.groups.code !== '404') paths[C._url_path(m.groups.path || m.groups.url)] = true;
+        if (m.groups.code !== '404') recordPath(C._url_path(m.groups.path || m.groups.url), m.groups.code);
       });
     }
     reAll(C._WEB_FFUF_RE, text).forEach(function (m) {
       var token = m.groups.token;
       if (m.groups.code === '404' || token[0] === ':' || token.toLowerCase() === 'status' || token === '[Status:') return;
       var p = /^https?:\/\//i.test(token) ? C._url_path(token) : (token[0] === '/' ? token : '/' + token);
-      if (p) paths[p] = true;
+      recordPath(p, m.groups.code);
     });
     reAll(/\[\s*Status:\s*(?<code>\d{3})[^\]]*\][\s\S]{0,160}?\|\s*URL\s*\|\s*(?<url>https?:\/\/\S+)/gi, text).forEach(function (m) {
-      if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true;
+      if (m.groups.code !== '404') recordPath(C._url_path(m.groups.url), m.groups.code);
     });
     reAll(C._WEB_WFUZZ_RE, text).forEach(function (m) {
       if (m.groups.code === '404') return;
       var payload = m.groups.payload.trim();
       if (!payload) return;
       var p = /^https?:\/\//i.test(payload) ? C._url_path(payload) : (payload[0] === '/' ? payload : '/' + payload);
-      if (p) paths[p] = true;
+      recordPath(p, m.groups.code);
     });
     if (command && C._is_web_content_command && C._is_web_content_command(command)) {
       reAll(/^\s*(?<url>https?:\/\/[^\s"'<>]+)\s*$/gim, text).forEach(function (m) {
         var p = C._url_path(m.groups.url);
-        if (p && p !== '/') paths[p] = true;
+        if (p && p !== '/') {
+          recordPath(p, '200');
+        }
       });
     }
     var keys = Object.keys(paths).filter(function (p) { return p && p.toLowerCase().indexOf('http') !== 0; });
     if (!keys.length) return;
+    var h = 'host:' + ws.target;
     var ordered = C.uniqueSortedCI(keys);
     var meta = _extract_web_origin(text, command, ws);
     var value = { paths: ordered.slice(0, 500), count: ordered.length };
@@ -232,10 +276,35 @@
     if (meta.port) value.port = meta.port;
     var interesting = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
     if (interesting.length) value.interesting = interesting.slice(0, 200);
-    _add(facts, mkFact('web.content_map', 'host:' + ws.target, value, S, source));
-    _add(facts, mkFact('web.paths', 'host:' + ws.target, value, S, source));
+    _add(facts, mkFact('web.content_map', h, value, S, source));
+    _add(facts, mkFact('web.paths', h, value, S, source));
+    if (hasLiveStatus && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+      var hrVal = { via: 'web-content' };
+      if (meta.origin) hrVal.origin = meta.origin;
+      if (meta.port) hrVal.port = meta.port;
+      _add(facts, mkFact('http.reachable', h, hrVal, S, source));
+    }
+    var wpCoreSeen = Object.create(null), wpCoreCount = 0;
+    for (var wpi = 0; wpi < ordered.length; wpi++) {
+      var wpM = /^\/(wp-admin|wp-content|wp-includes|wp-login\.php|xmlrpc\.php)(?:\/|$|\?)/i.exec(ordered[wpi]);
+      if (wpM) {
+        var wpKey = wpM[1].toLowerCase();
+        if (!wpCoreSeen[wpKey]) { wpCoreSeen[wpKey] = 1; wpCoreCount++; }
+      }
+    }
+    if (wpCoreCount >= 2 && !facts.some(function (f) { return f && f.kind === 'web.cms' && f.scope === h; })) {
+      _add(facts, mkFact('web.cms', h, { cms: 'wordpress', via: 'web-content' }, S, source));
+    }
+    var loginPath = ordered.find(function (p) {
+      if (!/^\/(?:wp-login\.php|(?:[a-z0-9_-]+\/)?login(?:\.php|\.html|\.htm|\.aspx|\.asp|\.jsp)?|signin(?:\.php|\.html)?)(?:\/|$|\?)/i.test(p)) return false;
+      var code = pathCodes[p];
+      return !code || /^(?:200|301|302|307|308)$/.test(code);
+    });
+    if (loginPath && !facts.some(function (f) { return f && f.kind === 'web.login_form' && f.scope === h; })) {
+      _add(facts, mkFact('web.login_form', h, { path: loginPath, evidence: 'login endpoint discovered: ' + loginPath, via: 'web-content' }, S, source));
+    }
     var uploadPath = ordered.find(function (p) { return /(?:^|\/)upload(?:s|\.[a-z0-9]+)?(?:\b|\/|$)/i.test(p); });
-    if (uploadPath) _add(facts, mkFact('web.upload_form', 'host:' + ws.target, { path: uploadPath, evidence: 'upload endpoint discovered: ' + uploadPath }, S, source));
+    if (uploadPath) _add(facts, mkFact('web.upload_form', h, { path: uploadPath, evidence: 'upload endpoint discovered: ' + uploadPath }, S, source));
     _exposed_artifacts(ordered, command || '', ws, source, facts, meta.origin);
   }
   C._parse_web_content = _parse_web_content;
@@ -837,14 +906,22 @@
       _add(facts, mkFact('loot.files', h, { files: uniq, via: method, tool: 'web' }, S, source));
       if (isXxe) _add(facts, mkFact('web.xxe_confirmed', h, { files: uniq, evidence: passwdHead ? C._line_for_match(text, passwdHead) : 'file content returned' }, S, source));
     }
-    if (osFamily) C._add_os_observation(facts, ws, source, osFamily, (passwdHead || win) ? C._line_for_match(text, passwdHead || win) : osFamily, 'medium', 'web-' + (actionId || 'lfi'), false);
+    if (osFamily) C._add_os_observation(facts, ws, source, osFamily, (passwdHead || shadowHead || environHit || win) ? C._line_for_match(text, passwdHead || shadowHead || environHit || win) : osFamily, 'high', 'web-' + (actionId || 'lfi'), true);
   }
   C._parse_web_lfi = _parse_web_lfi;
+
+  var _WEBSHELL_UPLOAD_RECEIPT_RE = /(?:(?:File\s+Renamed\s+to|Shell\s+(?:Uploaded|URL|Location|Ready)|Uploaded\s+(?:to|shell|file)?|Webshell\s+(?:at|url|uploaded|location)?)\s*(?:!?\s*(?:Access\s+at|URL|at))?\s*[:\-=>]+\s*(?:https?:\/\/[^\s"'<>]+|\/[^\s"'<>]+|[A-Za-z0-9_./-]+\.(?:php[0-9]?|phtml|jsp|jspx|asp|aspx))\b|(?:https?:\/\/[^\s"'<>]+|\/[^\s"'<>]*)\/(?:wp-content\/uploads|uploads?|files?|media|content)\/[^\s"'<>]+\.(?:php[0-9]?|phtml|jsp|jspx|asp|aspx)\b)/i;
+  var _WEB_EXPLOIT_REPL_WHOAMI_RE = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]+)?whoami[ \t]*\r?\n(?:[ \t]*(?:\[[^\]\r\n]{1,24}\][^\r\n]{0,160}|(?:Result|Output|Response)[ \t]*:[ \t]*)\r?\n){0,2}[ \t]*(www-data|apache|nginx|http|httpd|lighttpd|tomcat\d*|nobody|root)[ \t]*$/im;
+  C._WEBSHELL_UPLOAD_RECEIPT_RE = _WEBSHELL_UPLOAD_RECEIPT_RE;
+  C._WEB_EXPLOIT_REPL_WHOAMI_RE = _WEB_EXPLOIT_REPL_WHOAMI_RE;
 
   function _parse_web_cmdi(actionId, text, ws, command, source, facts) {
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var h = 'host:' + ws.target;
-    var cmdAndText = (command || '') + '\n' + (text || '');
+    var cmdStr = String(command || '');
+    var cmdAndText = cmdStr + '\n' + (text || '');
+    var isContentScannerCmd = (C._is_web_content_command && C._is_web_content_command(cmdStr))
+      || /\b(?:gobuster|ffuf|feroxbuster|dirb|dirsearch|wfuzz|nikto|wpscan|whatweb)\b/i.test(cmdStr);
     // SSTI math / config evaluation check (e.g., {{7*7}} -> 49 or 7777777)
     if (actionId === 'ssti' || (/(\{\{\s*7\s*\*\s*(?:7|'7')|\$\{\s*7\s*\*\s*7|<%=\s*7\s*\*\s*7)/.test(cmdAndText))) {
       var sstiHit = reSearch(/\b(?:49|7777777)\b|<Config\b|\bssti/i, text);
@@ -852,9 +929,18 @@
         _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: C._line_for_match(text, sstiHit) }, S, source));
       }
     }
-    // File upload / verb-tampering HTTP 201 or JSON upload success check
-    if (actionId === 'file-upload' || actionId === 'verb-tampering' || actionId === 'http-put-webshell') {
-      var upHit = reSearch(/"status"\s*:\s*"uploaded"|\b(?:file|shell)\s+uploaded\b|HTTP\/[12](?:\.\d)?\s+201\s+Created/i, text);
+    var isHttpOrExploitScriptCtx = !isContentScannerCmd && (
+      /\b(?:curl|wget|httpie|burp|ysoserial|python3?|ruby|perl|php)\b/i.test(cmdStr)
+      || /\bhttps?:\/\/[^\s'"]+/i.test(cmdAndText)
+      || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')
+      || /^\s*\[\+\]/m.test(text || '')
+    );
+    // File upload / verb-tampering HTTP 201, JSON upload success, or exploit webshell upload receipt
+    var uploadReceiptHit = !isContentScannerCmd && (
+      /\[\+\]|\b(?:uploaded|renamed|webshell|exploit|success|shell)\b|HTTP\/[12](?:\.\d)?\s+20[01]\b/i.test(cmdAndText)
+    ) ? reSearch(_WEBSHELL_UPLOAD_RECEIPT_RE, text) : null;
+    if (uploadReceiptHit || actionId === 'file-upload' || actionId === 'verb-tampering' || actionId === 'http-put-webshell') {
+      var upHit = uploadReceiptHit || reSearch(/"status"\s*:\s*"uploaded"|\b(?:file|shell)\s+uploaded\b|HTTP\/[12](?:\.\d)?\s+201\s+Created/i, text);
       if (upHit) {
         _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: C._line_for_match(text, upHit) }, S, source));
       }
@@ -862,23 +948,43 @@
     var uid = reSearch(C._CMDI_UID_RE, text) || reSearch(C._LINUX_ID_RE, text);
     var win = reSearch(C._CMDI_WIN_RE, text)
       || reSearch(/\b(?:nt authority\\(?:system|network service|local service)|iis apppool\\[a-z0-9_.-]+)\b/i, text);
-    if (!uid && !win) return;
+    var replWhoami = null;
+    if (!uid && !win && !isContentScannerCmd && /\bwhoami\b/i.test(text)) {
+      var wm = reSearch(_WEB_EXPLOIT_REPL_WHOAMI_RE, text);
+      if (wm) {
+        var hasReplPromptPrefix = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]*)whoami\b/i.test(wm[0]);
+        if (hasReplPromptPrefix || (isHttpOrExploitScriptCtx && !/^\s*whoami\s*$/i.test(cmdStr))) {
+          replWhoami = wm;
+        }
+      }
+    }
+    var hasUploadExecSuccess = !!(uploadReceiptHit && (
+      uid || win || replWhoami
+      || /\[\+\]\s*(?:[^\r\n]*\b(?:shell|rce|executed|exploited|pwned|success|ready|uploaded)\b)|(?:\bshell\s+(?:uploaded|ready|url|location)\b|\bFile\s+Renamed\s+to\b)/i.test(text)
+    ));
+    if (!uid && !win && !replWhoami && !hasUploadExecSuccess) return;
     var effId = actionId;
     if (!effId || effId === 'operator-ingest') {
-      if (/ysoserial|ObjectInputStream|rO0AB|java\.io/i.test(cmdAndText)) effId = 'deserialization';
+      if (uploadReceiptHit) effId = 'file-upload';
+      else if (/ysoserial|ObjectInputStream|rO0AB|java\.io/i.test(cmdAndText)) effId = 'deserialization';
       else if (/\/scriptText|--data-urlencode\s+['"]?script=|println\s*\(/i.test(cmdAndText)) effId = 'jenkins-access';
       else if (/ognl|#context|struts/i.test(cmdAndText)) effId = 'check-struts2';
-      else if (/\{\{|\$\{/.test(command || '')) effId = 'ssti';
-      else if (/\.(?:php|jsp|asp|aspx)\?(?:cmd|c|exec)=/i.test(command || '')) effId = 'web-shells';
+      else if (/\{\{|\$\{/.test(cmdStr)) effId = 'ssti';
+      else if (/\.(?:php|jsp|asp|aspx)\?(?:cmd|c|exec)=/i.test(cmdStr)) effId = 'web-shells';
       else effId = 'command-injection';
     }
     var method = { 'command-injection': 'os_command_injection', ssti: 'template_injection', 'web-shells': 'web_shell', 'file-upload': 'uploaded_web_shell', deserialization: 'insecure_deserialization', 'tomcat-deploy': 'tomcat_war_deploy', 'jenkins-access': 'jenkins_script_console' }[effId] || effId;
-    var osFamily = uid ? 'linux' : 'windows';
-    var evidence = C._line_for_match(text, uid || win);
-    _add(facts, mkFact('web.cmdi_confirmed', h, { os: osFamily, method: method, evidence: evidence }, S, source));
-    var hasHttpTransport = /\bhttps?:\/\/[^\s'"]+/i.test(command || '')
+    var isAspUpload = !!(uploadReceiptHit && /\.(?:asp|aspx)\b/i.test(uploadReceiptHit[0]));
+    var osFamily = (uid || replWhoami) ? 'linux' : (win || isAspUpload ? 'windows' : 'linux');
+    var activeHit = uid || win || replWhoami || uploadReceiptHit;
+    var evidence = C._line_for_match(text, activeHit);
+    var cmdiVal = { os: osFamily, method: method, evidence: evidence };
+    if (replWhoami && replWhoami[1]) cmdiVal.user = replWhoami[1].toLowerCase();
+    _add(facts, mkFact('web.cmdi_confirmed', h, cmdiVal, S, source));
+    var hasHttpTransport = /\bhttps?:\/\/[^\s'"]+/i.test(cmdAndText)
       || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')
-      || (/\b(?:curl|wget|httpie)\b/i.test(command || '') && !/\bftp:\/\/[^\s'"]+/i.test(command || ''));
+      || Boolean(replWhoami || uploadReceiptHit)
+      || (/\b(?:curl|wget|httpie)\b/i.test(cmdStr) && !/\bftp:\/\/[^\s'"]+/i.test(cmdStr));
     if (hasHttpTransport && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
       var hrMeta = _extract_web_origin(text, command, ws);
       var hrVal = { via: 'web-cmdi' };
@@ -888,7 +994,7 @@
     }
     if (method === 'template_injection') _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: evidence }, S, source));
     else if (method === 'insecure_deserialization') _add(facts, mkFact('web.deserial_confirmed', h, { method: 'insecure_deserialization', evidence: evidence }, S, source));
-    if (effId === 'file-upload') _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: evidence }, S, source));
+    if (effId === 'file-upload' && !uploadReceiptHit) _add(facts, mkFact('web.upload_confirmed', h, { method: 'executable_upload', evidence: evidence }, S, source));
     // For the moves whose purpose is to land a shell (SSTI->RCE, a PUT'd webshell, abusing an authz
     // bypass into an upload), command output in the paste is the foothold itself.
     if (C._WEB_RCE_FOOTHOLD_IDS && C._WEB_RCE_FOOTHOLD_IDS.has(effId)) _add(facts, mkFact('foothold.webshell', h, { os: osFamily, method: method, evidence: evidence }, S, source));
@@ -1044,7 +1150,7 @@
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var isGeneric = !actionId || actionId === 'operator-ingest';
     if (isGeneric || C._WEB_LFI_ACTION_IDS.has(actionId)) _parse_web_lfi(actionId, text, ws, command, source, facts);
-    if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (isGeneric && (/\b(?:curl|wget|httpie|burp|ysoserial)\b|\bhttps?:\/\/[^\s'"]+/i.test(command || '') || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b|<\/?(?:!doctype|html|head|body|pre)\b/im.test(text)))) {
+    if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (isGeneric && (/\b(?:curl|wget|httpie|burp|ysoserial|python3?|ruby|perl|php)\b|\bhttps?:\/\/[^\s'"]+/i.test(command || '') || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b|<\/?(?:!doctype|html|head|body|pre)\b/im.test(text) || _WEBSHELL_UPLOAD_RECEIPT_RE.test(text) || _WEB_EXPLOIT_REPL_WHOAMI_RE.test(text)))) {
       _parse_web_cmdi(actionId, text, ws, command, source, facts);
     }
     if (isGeneric || C._WEB_SQLI_ACTION_IDS.has(actionId)) _parse_web_sqli_manual(text, ws, source, facts);

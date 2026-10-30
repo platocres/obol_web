@@ -23,7 +23,7 @@
     var inLs = false, curVol = '/', found = [];
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i];
-      var hdrM = /^\s*\|[_ ]?\s*http-ls:\s*(.*)$/i.exec(raw);
+      var hdrM = /^\s*(?:\|[_ ]*)?http-ls:\s*(.*)$/i.exec(raw);
       if (hdrM) {
         inLs = true;
         curVol = '/';
@@ -33,7 +33,7 @@
       }
       if (!inLs) continue;
       if (!/^\s*\|/.test(raw)) { inLs = false; continue; }
-      if (/^\s*\|[_ ]?\s*[a-z0-9]+-[a-z0-9_-]+:/i.test(raw)) { inLs = false; continue; }
+      if (/^\s*(?:\|[_ ]*)?[a-z0-9]+-[a-z0-9_.-]+:(?!\/\/)/i.test(raw)) { inLs = false; continue; }
       var body = raw.replace(/^\s*\|[_ ]?\s*/, '');
       var volM = /^Volume\s+(\/\S*)/i.exec(body);
       if (volM) { curVol = volM[1].trim() || '/'; continue; }
@@ -48,6 +48,103 @@
       }
     }
     return C.uniqueSortedCI(found);
+  }
+
+  function _extract_http_enum_paths(blockText) {
+    if (!blockText || !/http-enum:/i.test(blockText)) return [];
+    var lines = String(blockText).split(/\r?\n/);
+    var inEnum = false, found = [];
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var hdrM = /^\s*(?:\|[_ ]*)?http-enum:\s*(.*)$/i.exec(raw);
+      if (hdrM) {
+        var inlineM = /^(\/[A-Za-z0-9._~\/%-]{1,120}?):\s+/.exec(hdrM[1] || '');
+        if (inlineM) {
+          var inNorm = C._url_path(inlineM[1]);
+          if (inNorm && inNorm !== '/') found.push(inNorm);
+        }
+        inEnum = !/^\s*\|_/.test(raw);
+        continue;
+      }
+      if (!inEnum) continue;
+      if (!/^\s*\|/.test(raw)) { inEnum = false; continue; }
+      if (/^\s*(?:\|[_ ]*)?[a-z0-9]+-[a-z0-9_.-]+:(?!\/\/)/i.test(raw)) { inEnum = false; continue; }
+      var rowM = /^\s*\|[_ ]\s+(\/[A-Za-z0-9._~\/%-]{1,120}?):\s+/.exec(raw);
+      if (rowM) {
+        var norm = C._url_path(rowM[1]);
+        if (norm && norm !== '/') found.push(norm);
+      }
+      if (/^\s*\|_/.test(raw)) inEnum = false;
+    }
+    return C.uniqueSortedCI(found);
+  }
+
+  function _push_robots_tokens(chunk, out) {
+    if (!chunk) return;
+    chunk.trim().split(/\s+/).forEach(function (tok) {
+      if (!tok || tok.charAt(0) !== '/') return;
+      var cleaned = tok.replace(/\*+$/, '').replace(/[?#].*$/, '');
+      if (!cleaned || cleaned === '/' || !/^\/[A-Za-z0-9._~\/%-]{1,120}$/.test(cleaned)) return;
+      var norm = C._url_path(cleaned);
+      if (norm && norm !== '/') out.push(norm);
+    });
+  }
+
+  function _extract_http_robots_paths(blockText) {
+    if (!blockText || !/http-robots\.txt:/i.test(blockText)) return [];
+    var lines = String(blockText).split(/\r?\n/);
+    var inRobots = false, found = [];
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var hdrM = /^\s*(?:\|[_ ]*)?http-robots\.txt:\s*(.*)$/i.exec(raw);
+      if (hdrM) {
+        var hdrRest = (hdrM[1] || '').trim();
+        if (/\b0\s+disallowed\s+entries\b|couldn't\s+find/i.test(hdrRest)) {
+          inRobots = false;
+          continue;
+        }
+        var afterHdr = hdrRest.replace(/^.*?\bdisallowed\s+entr(?:y|ies)(?:\s*\(\d+\s+shown\))?\s*/i, '');
+        if (afterHdr !== hdrRest && afterHdr) _push_robots_tokens(afterHdr, found);
+        inRobots = !/^\s*\|_/.test(raw);
+        continue;
+      }
+      if (!inRobots) continue;
+      if (!/^\s*\|/.test(raw)) { inRobots = false; continue; }
+      if (/^\s*(?:\|[_ ]*)?[a-z0-9]+-[a-z0-9_.-]+:(?!\/\/)/i.test(raw)) { inRobots = false; continue; }
+      var body = raw.replace(/^\s*\|(?:_\s*|\s+)/, '').trim();
+      _push_robots_tokens(body, found);
+      if (/^\s*\|_/.test(raw)) inRobots = false;
+    }
+    return C.uniqueSortedCI(found);
+  }
+
+  function _collect_nmap_http_paths(blockText) {
+    if (!blockText || !/http-(?:ls|enum|robots\.txt):/i.test(blockText)) return null;
+    var all = [], tools = [];
+    if (/http-ls:/i.test(blockText)) {
+      var ls = _extract_http_ls_paths(blockText);
+      if (ls.length) { all = all.concat(ls); tools.push('nmap-http-ls'); }
+    }
+    if (/http-enum:/i.test(blockText)) {
+      var en = _extract_http_enum_paths(blockText);
+      if (en.length) { all = all.concat(en); tools.push('nmap-http-enum'); }
+    }
+    if (/http-robots\.txt:/i.test(blockText)) {
+      var rb = _extract_http_robots_paths(blockText);
+      if (rb.length) { all = all.concat(rb); tools.push('nmap-http-robots'); }
+    }
+    var paths = C.uniqueSortedCI(all);
+    if (!paths.length) return null;
+    var val = {
+      paths: paths.slice(0, 500),
+      count: paths.length,
+      tool: tools.length === 1 ? tools[0] : 'nmap-nse'
+    };
+    if (C._WEB_INTERESTING_RE) {
+      var interesting = paths.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
+      if (interesting.length) val.interesting = interesting.slice(0, 200);
+    }
+    return val;
   }
 
   function _clean_version(v) {
@@ -124,7 +221,20 @@
     }
     if (port === 1433 || sl === 'ms-sql-s' || sl.indexOf('mssql') >= 0) {
       _add(facts, mkFact('mssql.reachable', h, value, S, source));
+      _add(facts, mkFact('db.reachable', h, value, S, source));
       C._add_os_observation(facts, ws, source, 'windows', port + '/' + proto + ' ' + (service || 'ms-sql-s'), 'medium', 'nmap', promoteWin);
+    }
+    if (port === 5432 || sl.indexOf('postgres') >= 0) {
+      _add(facts, mkFact('postgres.reachable', h, value, S, source));
+      _add(facts, mkFact('db.reachable', h, value, S, source));
+    }
+    if (port === 3306 || sl.indexOf('mysql') >= 0 || sl.indexOf('mariadb') >= 0) {
+      _add(facts, mkFact('mysql.reachable', h, value, S, source));
+      _add(facts, mkFact('db.reachable', h, value, S, source));
+    }
+    if (port === 6379 || sl.indexOf('redis') >= 0) {
+      _add(facts, mkFact('redis.reachable', h, value, S, source));
+      _add(facts, mkFact('db.reachable', h, value, S, source));
     }
     if (port === 3389 || sl === 'ms-wbt-server' || sl.indexOf('rdp') >= 0) {
       _add(facts, mkFact('rdp.reachable', h, value, S, source));
@@ -141,7 +251,7 @@
     }
     // WS-Management / HTTPAPI on 5985/5986/47001 is WinRM/HTTP.sys, not a browsable web app, so it must not
     // mint http.reachable (nmap labels it "http") or it would unlock the web-exploit moves on an AD box.
-    if (!isWinrmPort && !isHttpApiPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http')) _add(facts, mkFact('http.reachable', h, value, S, source));
+    if (!isWinrmPort && !isHttpApiPort && ([80, 443, 8080, 8000, 8443].indexOf(port) >= 0 || sl === 'http' || sl === 'https' || sl === 'ssl/http' || sl === 'http-proxy' || sl === 'http-alt' || sl === 'https-alt' || sl === 'ssl/http-proxy' || sl === 'ssl/http-alt')) _add(facts, mkFact('http.reachable', h, value, S, source));
   }
   C._parse_service_reachability = _parse_service_reachability;
 
@@ -234,6 +344,16 @@
       context.name = nameKeys[0];
       _add(facts, mkFact('host.hostname', h, { name: context.name }, S, source));
     }
+    var redirects = C.uniqueSortedCI(reAll(C._NMAP_HTTP_REDIRECT_RE, text).map(function (m) { return m.groups.location.trim(); }).filter(Boolean));
+    redirects.forEach(function (loc) {
+      var hm = /^https?:\/\/(?!\[)(?:[^\/:?#"'\s@]+@)?([^\/:?#"'\s]+)/i.exec(loc);
+      var candHost = hm ? hm[1].replace(/\.$/, '').toLowerCase() : '';
+      if (!candHost || C._IPV4_RE.test(candHost) || /^\d+(?:\.\d+)+$/.test(candHost)) return;
+      if (/^localhost(?:\.|$)/i.test(candHost)) return;
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(candHost)) return;
+      if (!/\.[a-z][a-z0-9-]*$/i.test(candHost)) return;
+      fqdns[candHost] = true;
+    });
     C.uniqueSortedCI(Object.keys(fqdns)).forEach(function (fqdn) {
       var parts = fqdn.split('.').filter(Boolean);
       var value = { fqdn: fqdn };
@@ -307,15 +427,10 @@
       reAll(/^\|\s*_?([^\s|][^\r\n]*)$/gim, tBlk).forEach(function (m) { tFiles.push(m[1].trim()); });
       if (tFiles.length) _add(facts, mkFact('loot.files', h, { files: tFiles, tool: 'nmap-tftp' }, S, source));
     }
-    if (/http-ls:/i.test(text) && !facts.some(function (f) { return f && f.kind === 'web.paths'; })) {
-      var lsPaths = _extract_http_ls_paths(text);
-      if (lsPaths.length) {
-        var lsVal = { paths: lsPaths.slice(0, 500), count: lsPaths.length, tool: 'nmap-http-ls' };
-        if (C._WEB_INTERESTING_RE) {
-          var lsInt = lsPaths.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-          if (lsInt.length) lsVal.interesting = lsInt.slice(0, 200);
-        }
-        _add(facts, mkFact('web.paths', h, lsVal, S, source));
+    if (/http-(?:ls|enum|robots\.txt):/i.test(text) && !facts.some(function (f) { return f && f.kind === 'web.paths'; })) {
+      var scriptPathsVal = _collect_nmap_http_paths(text);
+      if (scriptPathsVal) {
+        _add(facts, mkFact('web.paths', h, scriptPathsVal, S, source));
       }
     }
     var hasHttpReachable = facts.some(function (f) { return f && f.kind === 'http.reachable'; });
@@ -336,9 +451,18 @@
     if (headers.length) _add(facts, mkFact('web.server', h, { headers: headers.slice(0, 10) }, S, source));
     var generators = C.uniqueSortedCI(reAll(C._NMAP_HTTP_GENERATOR_RE, text).map(function (m) { return m.groups.generator.trim(); }).filter(Boolean));
     var tech = generators.map(function (item) { return { name: 'generator', value: item }; });
-    var redirects = C.uniqueSortedCI(reAll(C._NMAP_HTTP_REDIRECT_RE, text).map(function (m) { return m.groups.location.trim(); }).filter(Boolean));
     if (redirects.length) _add(facts, mkFact('http.redirect', h, { locations: redirects.slice(0, 10) }, S, source));
     if (tech.length) _add(facts, mkFact('web.tech', h, { items: tech.slice(0, 20), tool: 'nmap' }, S, source));
+    generators.forEach(function (gen) {
+      var cmsM = /^(WordPress|Joomla!?|Drupal|Magento|Ghost|MediaWiki|TYPO3)(?:\s+CMS)?(?:\s+v?([0-9][0-9A-Za-z._-]*))?(?=$|[\s(\-])/i.exec(gen);
+      if (cmsM) {
+        _add(facts, mkFact('web.cms', h, {
+          cms: cmsM[1].toLowerCase().replace(/!$/, ''),
+          version: cmsM[2] || '',
+          tool: 'nmap'
+        }, S, source));
+      }
+    });
     if (reSearch(C._NMAP_FTP_ANON_RE, text)) {
       _add(facts, mkFact('ftp.reachable', h, { tool: 'nmap' }, S, source));
       _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'nmap' }, S, source));
@@ -470,7 +594,7 @@
         curPortKey = pNum + '/' + pProto;
         return;
       }
-      if (curPortKey && /^\s*\|/.test(ln)) {
+      if (curPortKey && (/^\s*\|/.test(ln) || /^\s+[a-z0-9]+-[a-z0-9_.-]+:(?!\/\/)/i.test(ln))) {
         portBlocks[curPortKey] = (portBlocks[curPortKey] ? portBlocks[curPortKey] + '\n' : '') + ln;
       } else if (!/^\s*$/.test(ln)) {
         curPortKey = '';
@@ -635,15 +759,11 @@
         }
       }
 
-      if (value.protocol === 'tcp' && pBlk && /http-ls:/i.test(pBlk)) {
-        var portLsPaths = _extract_http_ls_paths(pBlk);
-        if (portLsPaths.length) {
-          var portLsVal = { paths: portLsPaths.slice(0, 500), count: portLsPaths.length, port: value.port, tool: 'nmap-http-ls' };
-          if (C._WEB_INTERESTING_RE) {
-            var portLsInt = portLsPaths.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
-            if (portLsInt.length) portLsVal.interesting = portLsInt.slice(0, 200);
-          }
-          _add(facts, mkFact('web.paths', h, portLsVal, S, source));
+      if (value.protocol === 'tcp' && pBlk && /http-(?:ls|enum|robots\.txt):/i.test(pBlk)) {
+        var portPathsVal = _collect_nmap_http_paths(pBlk);
+        if (portPathsVal) {
+          portPathsVal.port = value.port;
+          _add(facts, mkFact('web.paths', h, portPathsVal, S, source));
         }
       }
 

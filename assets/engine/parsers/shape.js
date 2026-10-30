@@ -53,19 +53,21 @@
         if (C._parse_service_reachability) C._parse_service_reachability(port, proto, value.service || '', ws, source, facts);
         summary.push(port);
       }
-      text.split(/\r?\n/).forEach(function (line) {
-        var mm = rowRe.exec(line);
-        if (mm) { addShapePort(parseInt(mm[1], 10), mm[2], mm[3]); return; }
-        var dm = discRe.exec(line);
-        if (dm) { addShapePort(parseInt(dm[1], 10), dm[2], ''); return; }
-        var rm = rustRe.exec(line);
-        if (rm) { addShapePort(parseInt(rm[1], 10), 'tcp', ''); return; }
-        var gm;
-        gnmapRe.lastIndex = 0;
-        while ((gm = gnmapRe.exec(line)) !== null) {
-          addShapePort(parseInt(gm[1], 10), gm[2], gm[3]);
-        }
-      });
+      if (/\/(?:tcp|udp)\b|->\s*\[/i.test(text)) {
+        text.split(/\r?\n/).forEach(function (line) {
+          var mm = rowRe.exec(line);
+          if (mm) { addShapePort(parseInt(mm[1], 10), mm[2], mm[3]); return; }
+          var dm = discRe.exec(line);
+          if (dm) { addShapePort(parseInt(dm[1], 10), dm[2], ''); return; }
+          var rm = rustRe.exec(line);
+          if (rm) { addShapePort(parseInt(rm[1], 10), 'tcp', ''); return; }
+          var gm;
+          gnmapRe.lastIndex = 0;
+          while ((gm = gnmapRe.exec(line)) !== null) {
+            addShapePort(parseInt(gm[1], 10), gm[2], gm[3]);
+          }
+        });
+      }
       if (summary.length) {
         _add(facts, mkFact('ports.open', h, { ports: uniqNums(summary), via: 'shape' }, S, source));
         if (!hasKind(facts, 'host.os_family') && C._add_os_from_text) {
@@ -101,10 +103,10 @@
     //     already cracking output (e.g. hashcat --show `<hash>:<plaintext>`), so the plaintext isn't
     //     re-appended into the hash token.
     var isCrack = (C._is_cracking_command && C._is_cracking_command(source))
-      || /\$krb5(?:asrep|tgs)\$[^\s:]+\$[0-9a-f]{32,}:[^\s:]+/i.test(text)
-      || /\b[A-Za-z0-9_.$ -]{1,64}::[A-Za-z0-9_.-]{1,64}:[0-9a-f]{16}:(?:[0-9a-f]{32}|[0-9a-f]{48}):[0-9a-f]{32,}:[^\s:]+/i.test(text);
-    if (!isCrack && /\$krb5asrep\$/i.test(text) && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
-    if (!isCrack && /\$krb5tgs\$/i.test(text) && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
+      || (text.indexOf('$krb5') >= 0 && /\$krb5(?:asrep|tgs)\$[^\s:]+\$[0-9a-f]{32,}:[^\s:]+/i.test(text))
+      || (text.indexOf('::') >= 0 && /\b[A-Za-z0-9_.$ -]{1,64}::[A-Za-z0-9_.-]{1,64}:[0-9a-f]{16}:(?:[0-9a-f]{32}|[0-9a-f]{48}):[0-9a-f]{32,}:[^\s:]+/i.test(text));
+    if (!isCrack && text.indexOf('$krb5asrep$') >= 0 && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
+    if (!isCrack && text.indexOf('$krb5tgs$') >= 0 && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
     if (!isCrack && text.indexOf('::') >= 0 && !hasKind(facts, 'credential.netntlm')) {
       var netNtlmShapeRe = /\b([A-Za-z0-9_.$ -]{1,64})::([A-Za-z0-9_.-]{1,64}):([0-9a-fA-F]{16}):([0-9a-fA-F]{32}|[0-9a-fA-F]{48}):([0-9a-fA-F]{32,})(?![^\s"'])/g, mNn;
       var seenNnShape = Object.create(null);
@@ -124,7 +126,7 @@
     if (/^(?:ServicePrincipalName\s+Name|Name\s+MemberOf\s+PasswordLastSet)/im.test(text) && !hasKind(facts, 'ad.user_list') && C._parse_impacket_roast_table) {
       C._parse_impacket_roast_table(text, ws, source, facts);
     }
-    if (!isCrack && !hasKind(facts, 'hash.ntlm') && !hasKind(facts, 'loot.sam')
+    if (!isCrack && text.indexOf(':::') >= 0 && !hasKind(facts, 'hash.ntlm') && !hasKind(facts, 'loot.sam')
         && /^(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9_.$-]+:\d{3,6}:(?:[0-9a-fA-F]{32}|NO PASSWORD\*+|\.{2,4}|\*+):[0-9a-fA-F]{32}:::/m.test(text)) {
       var samParser = C._parse_sam_hashes || C._parse_ntlm_dump;
       if (samParser) samParser(text, ws, '', source, facts);
@@ -286,6 +288,104 @@
       }
     }
 
+    // (6c-posix) POSIX ls -l rows and multi-entry directory/find listings containing canonical flag files
+    if (!isHttpShape && !/[╔╚╠═]{2,}|══╣|\bLinEnum\b|\bSuidEnum\b/i.test(text)) {
+      var posixLsRe = /^[ \t]*[dl-][rwxstST-]{9}[.+@]?[ \t]+\d+[ \t]+\S+[ \t]+\S+[ \t]+\d+(?:[.,]\d+)?[KMGTPE]?[ \t]+(?:[A-Z][a-z]{2}[ \t]+\d{1,2}[ \t]+(?:\d{2}:\d{2}|\d{4})|\d{4}-\d{2}-\d{2}[ \t]+\d{2}:\d{2}(?::\d{2})?(?:[ \t]*[+-]\d{4})?)[ \t]+([^\r\n]+)$/gim;
+      var lsFiles = [], lsSeen = Object.create(null), mLs;
+      var promptCwd = '';
+      var ctxPromptStr = (ws && ws.context && ws.context.promptLine) ? String(ws.context.promptLine) : '';
+      if (ctxPromptStr) {
+        var pCwdM = /(?:\[[^\]:\s]+@[^\]:\s]+[:\s]+([^\]]+)\]|[^\s@]+@[^\s:]+:([^\r\n$#%>\]]+))\s*[#$%]/.exec(ctxPromptStr);
+        var rawCwd = pCwdM ? String(pCwdM[1] || pCwdM[2] || '').trim() : '';
+        if (rawCwd && rawCwd.charAt(0) === '/') promptCwd = rawCwd.replace(/\/+$/, '');
+      }
+      if (!promptCwd && source) {
+        var pgDirM = /\bpg_ls_dir\s*\(\s*'(\/[^'\r\n]+)'\s*\)/i.exec(String(source));
+        if (pgDirM && pgDirM[1]) promptCwd = pgDirM[1].replace(/\/+$/, '');
+      }
+      function recordFlagCandidate(entryName) {
+        var cleanEntry = String(entryName || '').replace(/\s+->\s+.*$/, '').trim();
+        if (!cleanEntry || cleanEntry === '.' || cleanEntry === '..') return;
+        var base = cleanEntry.split(/[\\\/]/).pop();
+        if (!/^(?:local|user|proof|root)\.txt$/i.test(base)) return;
+        var resolvedPath = (cleanEntry.indexOf('/') < 0 && cleanEntry.indexOf('\\') < 0 && promptCwd)
+          ? (promptCwd + '/' + cleanEntry)
+          : cleanEntry;
+        var slot = /^(?:proof|root)\.txt$/i.test(base) ? 'root' : 'local';
+        var alreadySlot = facts.some(function (f) {
+          return f && f.kind === 'objective.flag_located' && f.value && (f.value.slot === slot || f.value.file === resolvedPath || f.value.path === resolvedPath);
+        });
+        if (!alreadySlot) {
+          _add(facts, mkFact('objective.flag_located', h, {
+            path: resolvedPath,
+            file: resolvedPath,
+            slot: slot,
+            via: 'shape'
+          }, S, source));
+        }
+      }
+      if (/[dl-][rwx-]{2}[rwxstST-][rwx-]{2}[rwxstST-][rwx-]{2}[rwxstST-]/.test(text)) {
+        while ((mLs = posixLsRe.exec(text)) !== null) {
+          if (mLs[1].indexOf('--->') >= 0) continue;
+          var lsEntry = mLs[1].replace(/\s+->\s+.*$/, '').trim();
+          if (!lsEntry || lsEntry === '.' || lsEntry === '..' || lsSeen[lsEntry]) continue;
+          if (/^\/(?:usr\/(?:bin|sbin|lib|lib64|libexec)|bin|sbin|lib|lib64)\//i.test(lsEntry)) continue;
+          lsSeen[lsEntry] = 1;
+          lsFiles.push(lsEntry);
+          recordFlagCandidate(lsEntry);
+        }
+      }
+      if (lsFiles.length && !hasKind(facts, 'loot.files')) {
+        _add(facts, mkFact('loot.files', h, { files: lsFiles.slice(0, 200), count: lsFiles.length, tool: 'ls', via: 'shape' }, S, source));
+      }
+      if ((text.indexOf('.txt') >= 0 || text.indexOf('.TXT') >= 0) && /(?:^|[\\\/\s])(?:local|user|proof|root)\.txt\b/i.test(text)) {
+        var findFlagRe = /^[ \t]*((?:\/|\.\.?\/|[A-Za-z]:\\)[^\r\n:*?"<>|]*?[\\\/](?:local|user|proof|root)\.txt)[ \t]*$/gim;
+        var mFf, findFiles = [];
+        while ((mFf = findFlagRe.exec(text)) !== null) {
+          var ffPath = mFf[1].trim();
+          findFiles.push(ffPath);
+          recordFlagCandidate(ffPath);
+        }
+        if (findFiles.length && !hasKind(facts, 'loot.files')) {
+          _add(facts, mkFact('loot.files', h, { files: findFiles.slice(0, 200), count: findFiles.length, tool: 'find', via: 'shape' }, S, source));
+        }
+        var isBareLsCmd = /^\s*(?:sudo\s+)?(?:ls|dir)\b|\bpg_ls_dir\s*\(/i.test(source || '');
+        if (!lsFiles.length && !findFiles.length) {
+          var rawDirLines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+          if (rawDirLines.length >= (isBareLsCmd ? 1 : 2) && rawDirLines.length <= 60) {
+            var dirToks = [], allFilenameLines = true;
+            for (var dli = 0; dli < rawDirLines.length; dli++) {
+              var curDirLn = rawDirLines[dli];
+              if (/^total\s+\d+$/i.test(curDirLn) || /^\(\d+\s+rows?\)$/i.test(curDirLn) || /^[-+]{3,}$/.test(curDirLn)) continue;
+              if (dli + 1 < rawDirLines.length && /^[-+]{3,}$/.test(rawDirLines[dli + 1]) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(curDirLn)) continue;
+              if (dli === rawDirLines.length - 1 && /^[A-Za-z_][A-Za-z0-9_]*=[#>-]$/.test(curDirLn)) continue;
+              if (/^\|.*\|$/.test(curDirLn)) curDirLn = curDirLn.replace(/^\|\s*|\s*\|$/g, '');
+              var lToks = curDirLn.split(/\s+/).filter(Boolean);
+              if (!lToks.length) continue;
+              if (lToks.length > 8) { allFilenameLines = false; break; }
+              for (var dti = 0; dti < lToks.length; dti++) {
+                var dTok = lToks[dti];
+                if (dTok === '.' || dTok === '..') continue;
+                if (!/^\.?[A-Za-z0-9_.-]{1,64}\/?$/.test(dTok) || /^(?:cat|type|more|less|head|tail|find|ls|dir|cd|rm|cp|mv)$/i.test(dTok)) {
+                  allFilenameLines = false;
+                  break;
+                }
+                dirToks.push(dTok.replace(/\/$/, ''));
+              }
+              if (!allFilenameLines) break;
+            }
+            if (allFilenameLines && dirToks.length >= (isBareLsCmd ? 1 : 2)
+                && dirToks.some(function (tk) { return /^(?:local|user|proof|root)\.txt$/i.test(tk); })) {
+              for (var fti = 0; fti < dirToks.length; fti++) recordFlagCandidate(dirToks[fti]);
+              if (!hasKind(facts, 'loot.files')) {
+                _add(facts, mkFact('loot.files', h, { files: dirToks.slice(0, 200), count: dirToks.length, tool: 'ls', via: 'shape' }, S, source));
+              }
+            }
+          }
+        }
+      }
+    }
+
     // (6d) Document metadata (exiftool / PDF metadata) Author & Creator username shape
     if (!hasKind(facts, 'web.users') && /^[ \t]*(?:Author|Creator)[ \t]*:/im.test(text)) {
       var hasExifBanner = /^[ \t]*ExifTool Version Number[ \t]*:[ \t]*\S/im.test(text);
@@ -337,10 +437,31 @@
       }
     }
 
-    // (6f) Command-less 10-field BSD master.passwd and LinPEAS box-drawing section slices
-    if (!hasKind(facts, 'loot.shadow') && C._parse_shadow_file
+    // (6f) Command-less 10-field BSD master.passwd, standard 7-field /etc/passwd, and LinPEAS box-drawing section slices
+    if (!hasKind(facts, 'loot.shadow') && text.indexOf(':$') >= 0 && C._parse_shadow_file
         && /^[a-z_][a-z0-9_.-]{0,31}:\$(?:1|2[abxy]|5|6|y)\$[^\s:]+:\d+:\d+:[^:\r\n]*:\d+:\d+:[^:\r\n]*:\/[^\s:]*:[^\r\n]*$/im.test(text)) {
       C._parse_shadow_file(text, '', ws, source, facts);
+    }
+    if (!isHttpShape && text.indexOf(':/') >= 0 && !/\b(?:curl|wget|httpie|burp|ffuf|wfuzz|sqlmap)\b|\bhttps?:\/\//i.test(source || '')) {
+      var pwRowRe = /^[ \t]*([a-z_][a-z0-9_.-]{0,31}):([^:\r\n]*):(\d+):(\d+):([^:\r\n]*):(\/[^\s:]*):(\/[^\s:\r\n]*)[ \t]*$/gm;
+      var pwRows = [], pwHumans = [], pwSeen = Object.create(null), mPw;
+      while ((mPw = pwRowRe.exec(text)) !== null) {
+        var pwUser = mPw[1], pwUid = parseInt(mPw[3], 10), pwShell = mPw[7];
+        pwRows.push(mPw[0].trim());
+        var hasLoginShell = /(?:\/(?:ba|da|z|k|a|tc|c)?sh|\/fish)$/i.test(pwShell) && !/(?:nologin|false)$/i.test(pwShell);
+        if ((pwUid === 0 || (pwUid >= 1000 && pwUid < 65534) || hasLoginShell) && !pwSeen[pwUser]) {
+          pwSeen[pwUser] = 1;
+          pwHumans.push(pwUser);
+        }
+      }
+      if (pwRows.length >= 3) {
+        if (C._add_os_observation) {
+          C._add_os_observation(facts, ws, source, 'linux', pwRows[0], 'high', 'passwd-shape', true);
+        }
+        if (!hasKind(facts, 'config.review')) {
+          _add(facts, mkFact('config.review', h, { kind: 'passwd', users: pwHumans, count: pwRows.length, via: 'shape' }, S, source));
+        }
+      }
     }
     if (/(?:\u2554\u2550+\u2563|\u2560\u2550+\u2563)\s*[A-Za-z]/.test(text)
         && !(C._looks_like_winpeas && C._looks_like_winpeas(text))
@@ -349,7 +470,8 @@
     }
 
     // (6g) Colon-aligned `<principal> : <32-hex>` NTLM hash summary table shape
-    if (!isCrack && !hasKind(facts, 'hash.ntlm') && text.indexOf(':') >= 0) {
+    if (!isCrack && !hasKind(facts, 'hash.ntlm') && text.indexOf(':') >= 0
+        && /^[ \t]*[A-Za-z0-9_.$\\@-]{2,64}[ \t]*:[ \t]*[0-9a-fA-F]{32}[ \t]*$/m.test(text.length > 8192 ? text.slice(0, 8192) : text)) {
       var colonTblLines = text.split(/\r?\n/);
       var colonRowRe = /^[ \t]*([A-Za-z0-9_.$\\@-]{2,64})[ \t]*:[ \t]*([0-9a-fA-F]{32})[ \t]*$/;
       var colonRows = [], colonSeen = Object.create(null), colonContentCount = 0;
@@ -474,6 +596,10 @@
     if (!text.trim()) return;
     var h = 'host:' + ws.target;
     var domScope = C._scope_for_domain ? C._scope_for_domain(ws) : h;
+    if (text.length > 65536
+        && !/\b(?:GenericAll|GenericWrite|WriteDacl|WriteOwner|ForceChangePassword|AddMember|AddSelf|AllExtendedRights|ENROLLEE_SUPPLIES_SUBJECT|ESC\d+|SeImpersonatePrivilege|SeAssignPrimaryTokenPrivilege|SeBackupPrivilege|SeRestorePrivilege|NOPASSWD|cap_[a-z_]+\+[eip]+)\b/i.test(text)) {
+      return;
+    }
     var lines = text.split(/\r?\n/);
 
     // 1. AD ACL / Object Control Family
@@ -644,7 +770,7 @@
     { fact: 'vuln.zabbix', re: /\bZabbix\b|CVE-2022-23131/i, cve: 'CVE-2022-23131' },
     { fact: 'vuln.splunk', re: /\bSplunk\b|CVE-2023-46214/i, cve: '' },
     { fact: 'vuln.text4shell', re: /\bText4Shell\b|commons[-_. ]?text|CVE-2022-42889/i, cve: 'CVE-2022-42889' },
-    { fact: 'vuln.freeswitch', re: /\bFreeSWITCH\b|\bmod_event_socket\b/i, cve: '' },
+    { fact: 'vuln.freeswitch', re: /(?:(?<![\/\\.-])\bFreeSWITCH\b(?![\/\\.-])|\bmod_event_socket\b|\b8021\/tcp\s+open[^\r\n]{0,80}?[Ff]ree[Ss][Ww][Ii][Tt][Cc][Hh]|\b[Cc]ontent-[Tt]ype:\s*auth\/request\b)/, cve: '' },
     { fact: 'vuln.jdwp', re: /JDWP-?Handshake|Java Debug Wire|-Xrunjdwp:transport=dt_socket|-agentlib:jdwp=(?:transport=dt_socket|[^\s]*address=)|Found Runtime\.getRuntime\(\)/i, cve: '' },
     { fact: 'vuln.aerospike', re: /\bAerospike\s+(?:Server|Enterprise|Community|Database|\d)|3000\/tcp\s+open[^\r\n]{0,80}?aerospike|"service(?:Name)?"\s*:\s*"aerospike"|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
     { fact: 'vuln.aerospike_udf', re: /\bAerospike[^\r\n]{0,60}?\b5\.[01]\b|cve-2020-13151/i, cve: 'CVE-2020-13151' },
@@ -669,7 +795,7 @@
     { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
   ];
   var _VULN_SIGS_HINT_RE = /(?:CVE-\d{4}-|EDB-\d+|vsftpd|proftpd|mod_copy|samba|smbd|SMBGhost|BlueKeep|rdp-vuln|Shellshock|cgi-bin|Heartbleed|Drupal|phpMyAdmin|MiniServ|Webmin|Usermin|OFBiz|Cacti|Zabbix|Splunk|Text4Shell|commons|FreeSWITCH|mod_event_socket|JDWP|Java Debug|Xrunjdwp|agentlib:jdwp|getRuntime|Aerospike|aerospike|Pico|screen-4\.5|Screen 4|Mouse|Solr|AChat|Nibbleblog|IIS|WebDAV|ScStoragePathFromUrl|ExplodingCan|PRTG|GitLab|October|HttpFileServer|HFS|rejetto|ColdFusion|CFIDE|Oracle TNS|TNSLSNR|1521\/tcp|H2 Database|h2-console|8082\/tcp|9092\/tcp|chkrootkit|10050\/tcp|MyFaces|ViewState|node-serialize|ND_FUNC|Gitea|cup of tea)/i;
-  function _parse_vulnmatch(text, ws, source, facts) {
+  function _parse_vulnmatch(text, ws, source, facts, command) {
     text = String(text || ''); if (!text.trim() || !_VULN_SIGS_HINT_RE.test(text)) return;
     var cleanText = /\b(?:closed|filtered|unfiltered|open\|filtered)\b/i.test(text)
       ? text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
@@ -678,10 +804,13 @@
         && !/\buid=\d+\(|NT AUTHORITY\\SYSTEM|^\s*\[\+\]\s*(?:shell|pwned|vulnerable|success|executed|command)\b/im.test(cleanText)) {
       return;
     }
-    var isNmapContext = /\b(?:Nmap scan report for|Starting Nmap|fingerprint-strings:|SF-Port\d+)\b/i.test(cleanText) || /\bnmap\b/i.test(source || '');
+    var cmdCheck = String(command !== undefined ? command : (source || '')).trim();
+    var isLocalPathListingCmd = /^\s*(?:sudo\s+)?(?:find|ls|dir|pwd|cd|locate|which|whereis)\b/i.test(cmdCheck);
+    var isNmapContext = /\b(?:Nmap scan report for|Starting Nmap|fingerprint-strings:|SF-Port\d+)\b/i.test(cleanText) || /\bnmap\b/i.test(cmdCheck);
     var h = 'host:' + ws.target;
     for (var i = 0; i < VULN_SIGS.length; i++) {
       var s = VULN_SIGS[i];
+      if (isLocalPathListingCmd && s.fact !== 'vuln.screen_suid' && s.fact !== 'vuln.chkrootkit') continue;
       if (!s.re.test(cleanText) || hasKind(facts, s.fact)) continue;
       if (s.fact === 'vuln.shellshock' && !_SHELLSHOCK_EXPLICIT_RE.test(cleanText)) {
         if (isNmapContext) continue;
