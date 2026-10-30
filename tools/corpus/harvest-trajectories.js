@@ -47,11 +47,14 @@ const {
 const {
   ATTACKER_HOST,
   extractWalkthroughTurns,
-  discoverAlternates
+  discoverAlternates,
+  discoverCorpusEntries
 } = require('./markdown-extractor');
 
 const QA_ROOT = path.resolve(__dirname, '..', '..');
-const DEFAULT_CORPUS_DIR = path.join(QA_ROOT, 'tests', 'corpus', '0xdf-oscp', 'walkthroughs');
+const DEFAULT_CORPUS_DIR = fs.existsSync(path.join(QA_ROOT, 'tests', 'corpus', '0xdf-oscp', 'walkthroughs'))
+  ? path.join(QA_ROOT, 'tests', 'corpus', '0xdf-oscp', 'walkthroughs')
+  : path.resolve(QA_ROOT, '..', '0xdf-offsec-complete-2026-08-20');
 
 const STALL_BUCKETS = [
   'PARSE_OR_SHAPE_MISS',
@@ -170,6 +173,127 @@ function extractPrimaryTool(cmd) {
   return first;
 }
 
+function applyIpAliases(text, ipAliasMap) {
+  let s = String(text || '');
+  if (!s || !ipAliasMap) return s;
+  const fromIps = Object.keys(ipAliasMap);
+  if (!fromIps.length) return s;
+  for (const fromIp of fromIps) {
+    const toIp = ipAliasMap[fromIp];
+    if (!fromIp || !toIp || fromIp === toIp) continue;
+    const re = new RegExp('(?<![\\d.])' + fromIp.replace(/\./g, '\\.') + '(?![\\d.])', 'g');
+    s = s.replace(re, toIp);
+  }
+  return s;
+}
+
+function detectSequentialRevertAliases(turns, selfIps, preferredTarget) {
+  const spansByIp = Object.create(null);
+  const cooccurringPairs = new Set();
+
+  for (let idx = 0; idx < (turns || []).length; idx++) {
+    const t = turns[idx] || {};
+    const cmd = String(t.command || '');
+    const out = String(t.stdout || t.output || '');
+    const turnIps = new Set();
+
+    let m;
+    IPV4_GLOBAL_RE.lastIndex = 0;
+    while ((m = IPV4_GLOBAL_RE.exec(cmd)) !== null) {
+      const ip = m[1];
+      if (isPrivateLabIpv4(ip) && !selfIps.has(ip) && !ATTACKER_SUBNET_RE.test(ip)) {
+        turnIps.add(ip);
+      }
+    }
+    const nmapM = /Nmap scan report for (?:[^\r\n(]+\()?(\d{1,3}(?:\.\d{1,3}){3})\)?/i.exec(out);
+    if (nmapM && isPrivateLabIpv4(nmapM[1]) && !selfIps.has(nmapM[1]) && !ATTACKER_SUBNET_RE.test(nmapM[1])) {
+      turnIps.add(nmapM[1]);
+    }
+    const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
+    if (nxcM && isPrivateLabIpv4(nxcM[1]) && !selfIps.has(nxcM[1]) && !ATTACKER_SUBNET_RE.test(nxcM[1])) {
+      turnIps.add(nxcM[1]);
+    }
+
+    const allInTurn = [];
+    IPV4_GLOBAL_RE.lastIndex = 0;
+    while ((m = IPV4_GLOBAL_RE.exec(cmd + '\n' + out)) !== null) {
+      const ip = m[1];
+      if (isPrivateLabIpv4(ip) && !selfIps.has(ip) && !ATTACKER_SUBNET_RE.test(ip)) {
+        if (allInTurn.indexOf(ip) < 0) allInTurn.push(ip);
+      }
+    }
+    for (let i = 0; i < allInTurn.length; i++) {
+      for (let j = i + 1; j < allInTurn.length; j++) {
+        const a = allInTurn[i];
+        const b = allInTurn[j];
+        cooccurringPairs.add(a < b ? (a + '|' + b) : (b + '|' + a));
+      }
+    }
+
+    for (const ip of turnIps) {
+      const p = ip.split('.');
+      const prefix2 = p[0] + '.' + p[1];
+      if (prefix2 !== '192.168' && prefix2 !== '10.10') continue;
+      if (!spansByIp[ip]) {
+        spansByIp[ip] = {
+          ip: ip,
+          prefix2: prefix2,
+          oct3: p[2],
+          host4: p[3],
+          firstTurn: idx,
+          lastTurn: idx
+        };
+      } else {
+        spansByIp[ip].lastTurn = idx;
+      }
+    }
+  }
+
+  const groups = Object.create(null);
+  for (const ip of Object.keys(spansByIp)) {
+    const sp = spansByIp[ip];
+    const key = sp.prefix2 + '.*.' + sp.host4;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(sp);
+  }
+
+  const aliasMap = Object.create(null);
+  for (const key of Object.keys(groups)) {
+    const grp = groups[key];
+    if (grp.length < 2) continue;
+    grp.sort((a, b) => a.firstTurn - b.firstTurn);
+    let nonOverlapping = true;
+    for (let i = 0; i < grp.length - 1; i++) {
+      if (grp[i].lastTurn >= grp[i + 1].firstTurn) {
+        nonOverlapping = false;
+        break;
+      }
+    }
+    if (!nonOverlapping) continue;
+
+    let anyCooccurred = false;
+    for (let i = 0; i < grp.length && !anyCooccurred; i++) {
+      for (let j = i + 1; j < grp.length; j++) {
+        const a = grp[i].ip;
+        const b = grp[j].ip;
+        if (cooccurringPairs.has(a < b ? (a + '|' + b) : (b + '|' + a))) {
+          anyCooccurred = true;
+          break;
+        }
+      }
+    }
+    if (anyCooccurred) continue;
+
+    const canonical = (preferredTarget && grp.some(g => g.ip === preferredTarget))
+      ? preferredTarget
+      : grp[0].ip;
+    for (const g of grp) {
+      if (g.ip !== canonical) aliasMap[g.ip] = canonical;
+    }
+  }
+  return aliasMap;
+}
+
 function inferEngagementNetworking(turns, opts) {
   opts = opts || {};
   let lhost = opts.lhost || '';
@@ -179,16 +303,6 @@ function inferEngagementNetworking(turns, opts) {
   const varMap = Object.create(null);
   const candidateCounts = Object.create(null);
   const candidateOrder = [];
-
-  function noteTargetIp(ip, weight) {
-    if (!isPrivateLabIpv4(ip)) return;
-    if (selfIps.has(ip) || ATTACKER_SUBNET_RE.test(ip)) return;
-    if (!candidateCounts[ip]) {
-      candidateCounts[ip] = 0;
-      candidateOrder.push(ip);
-    }
-    candidateCounts[ip] += (weight || 1);
-  }
 
   for (const t of turns || []) {
     const pLine = String(t.promptLine || '');
@@ -228,13 +342,30 @@ function inferEngagementNetworking(turns, opts) {
     }
   }
 
+  const ipAliasMap = detectSequentialRevertAliases(turns, selfIps, opts.target || '');
+
+  function resolveIp(rawIp) {
+    return (rawIp && ipAliasMap[rawIp]) ? ipAliasMap[rawIp] : rawIp;
+  }
+
+  function noteTargetIp(rawIp, weight) {
+    const ip = resolveIp(rawIp);
+    if (!isPrivateLabIpv4(ip)) return;
+    if (selfIps.has(ip) || ATTACKER_SUBNET_RE.test(ip)) return;
+    if (!candidateCounts[ip]) {
+      candidateCounts[ip] = 0;
+      candidateOrder.push(ip);
+    }
+    candidateCounts[ip] += (weight || 1);
+  }
+
   for (const t of turns || []) {
-    const cmd = String(t.command || '').trim();
-    const out = String(t.stdout || t.output || '');
+    const cmd = applyIpAliases(String(t.command || '').trim(), ipAliasMap);
+    const out = applyIpAliases(String(t.stdout || t.output || ''), ipAliasMap);
 
     const vm = SHELL_VAR_ASSIGN_RE.exec(cmd);
     if (vm && isPrivateLabIpv4(vm[3]) && !selfIps.has(vm[3])) {
-      varMap[vm[1]] = vm[3];
+      varMap[vm[1]] = resolveIp(vm[3]);
       noteTargetIp(vm[3], 5);
     }
 
@@ -244,11 +375,13 @@ function inferEngagementNetworking(turns, opts) {
     const nxcM = /^(?:SMB|LDAP|WINRM|MSSQL|RDP|SSH|FTP|WMI)\s+(\d{1,3}(?:\.\d{1,3}){3})\s+\d+/im.exec(out);
     if (nxcM) noteTargetIp(nxcM[1], 5);
 
-    let cm;
-    IPV4_GLOBAL_RE.lastIndex = 0;
-    while ((cm = IPV4_GLOBAL_RE.exec(cmd)) !== null) {
-      const ip = cm[1];
-      if (!selfIps.has(ip)) noteTargetIp(ip, 3);
+    if (isAttackerTurn(t) || /\b(?:ssh|scp|evil-winrm|impacket-[\w-]+|(?:psexec|wmiexec|smbexec|atexec|dcomexec|mssqlclient)(?:\.py)?|nxc|netexec|crackmapexec|cme|nmap|rustscan|masscan|Enter-PSSession|Invoke-Command)\b/i.test(cmd)) {
+      let cm;
+      IPV4_GLOBAL_RE.lastIndex = 0;
+      while ((cm = IPV4_GLOBAL_RE.exec(cmd)) !== null) {
+        const ip = cm[1];
+        if (!selfIps.has(ip)) noteTargetIp(ip, 3);
+      }
     }
   }
 
@@ -259,7 +392,7 @@ function inferEngagementNetworking(turns, opts) {
     .filter(ip => !selfIps.has(ip))
     .sort((a, b) => (candidateCounts[b] - candidateCounts[a]) || (candidateOrder.indexOf(a) - candidateOrder.indexOf(b)));
 
-  const primaryTarget = opts.target || sortedTargets[0] || '10.10.10.50';
+  const primaryTarget = resolveIp(opts.target || sortedTargets[0] || '10.10.10.50');
   if (sortedTargets.indexOf(primaryTarget) < 0) sortedTargets.unshift(primaryTarget);
 
   return {
@@ -267,7 +400,8 @@ function inferEngagementNetworking(turns, opts) {
     primaryTarget: primaryTarget,
     targets: sortedTargets,
     selfIps: Array.from(selfIps),
-    varMap: varMap
+    varMap: varMap,
+    ipAliasMap: ipAliasMap
   };
 }
 
@@ -312,6 +446,10 @@ function isHousekeepingTurn(turn) {
 
   if (SHELL_VAR_ASSIGN_RE.test(rawCmd) || /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)$/.test(rawCmd)) {
     return { housekeeping: true, reason: 'shell_var_assignment' };
+  }
+
+  if (/^(?:sudo\s+-(?:i|s)(?:\s+-u\s+\S+)?|sudo\s+su(?:\s+-|\s+root)?|su(?:\s+-|\s+root)?|powershell(?:\.exe)?(?:\s+(?:-(?:ep|exec(?:utionpolicy)?)\s+\S+|-nop(?:rofile)?|-sta|-w(?:indowstyle)?\s+\S+|-i(?:nteractive)?))*|pwsh(?:\.exe)?(?:\s+-(?:nop(?:rofile)?|ep\s+\S+))*|cmd(?:\.exe)?|\/bin\/(?:ba|z|da|k|a)?sh(?:\s+-[ip]+)?|(?:ba|z|da|k)?sh(?:\s+-[ip]+)?)\s*$/i.test(rawCmd)) {
+    return { housekeeping: true, reason: 'subshell_entry' };
   }
 
   const clean = stripCommandWrappers(rawCmd);
@@ -374,20 +512,96 @@ function isFlagCollectionMove(a) {
   return prod.length > 0 && prod.some(k => /^objective\.(?:local_flag|root_flag|flag)$/.test(k));
 }
 
+const STANDALONE_SUBCMD_KEYWORDS = new Set([
+  'smb', 'ldap', 'winrm', 'mssql', 'ssh', 'ftp', 'rdp', 'wmi', 'dir', 'vhost', 'dns', 'fuzz',
+  'req', 'auth', 'shadow', 'account', 'dump', 'shares', 'users', 'groups', 'pass-pol',
+  'rid-brute', 'kerberoasting', 'asreproast', 'bloodhound', 'spider_plus', 'just-dc',
+  'just-dc-ntlm', 'request', 'getcap', 'linpeas', 'winpeas', 'systeminfo', 'cmdkey',
+  'socks', 'server', 'client'
+]);
+
+const GENERIC_INTERPRETERS = new Set([
+  'python', 'python2', 'python3', 'powershell', 'pwsh', 'cmd', 'sh', 'bash', 'zsh',
+  'perl', 'ruby', 'php', 'certutil', 'iwr', 'invoke-webrequest', 'curl', 'wget'
+]);
+
+const ANON_EPOCH_MOVE_IDS = [
+  'recon-smb-anon',
+  'smb-anon-shares',
+  'ad-anon-ldap-enum',
+  'ldap-anon-bind',
+  'rpc-null-enum',
+  'fix-samr-null-denied'
+];
+
 function extractCommandFlags(cmdStr) {
   const noTemplates = String(cmdStr || '').replace(/\{\{[^}]+\}\}/g, ' ');
-  const matches = noTemplates.match(/(?:--[a-zA-Z0-9][a-zA-Z0-9_-]*|-[a-zA-Z0-9]{1,8}|\b(?:smb|ldap|winrm|mssql|ssh|ftp|rdp|wmi|dir|vhost|dns|fuzz|find|req|auth|shadow|account|get|set|add|dump|shares|users|groups|pass-pol|rid-brute|kerberoasting|asreproast|bloodhound|spider_plus|just-dc|just-dc-ntlm|request|perm|getcap|linpeas|winpeas|systeminfo|cmdkey|socks|server|client)\b)/gi) || [];
+  const rawTokens = noTemplates.split(/[\s;|&'"]+/).filter(Boolean);
+  const isWinStyle = /[A-Za-z]:\\|\b(?:whoami|xfreerdp|cmd|dir|reg|schtasks|icacls|runas)\b/i.test(noTemplates);
   const out = [];
   const seen = Object.create(null);
-  for (const raw of matches) {
-    const tok = raw.toLowerCase();
-    if (/^-(?:u|p|d|h|i|t|o|v|n|w|x|c|e|f|q|a|r|s)$/.test(tok)) continue;
-    if (!seen[tok]) {
-      seen[tok] = 1;
-      out.push(tok);
+
+  function pushTok(t) {
+    if (!t || seen[t]) return;
+    seen[t] = 1;
+    out.push(t);
+  }
+
+  for (const raw of rawTokens) {
+    if (raw === '-H') {
+      pushTok('-H');
+      continue;
+    }
+    if (/^--[a-zA-Z0-9][a-zA-Z0-9_-]*(?:=.*)?$/.test(raw)) {
+      const eqIdx = raw.indexOf('=');
+      const baseFlag = (eqIdx > 0 ? raw.slice(0, eqIdx) : raw).toLowerCase();
+      if (baseFlag === '--format' && eqIdx > 0) {
+        const fmtVal = raw.slice(eqIdx + 1).trim().toLowerCase();
+        if (fmtVal && fmtVal !== 'token') pushTok('--format=' + fmtVal);
+        else pushTok('--format');
+      } else {
+        pushTok(baseFlag);
+      }
+      continue;
+    }
+    if (/^-[a-zA-Z0-9]{1,8}$/.test(raw)) {
+      const low = raw.toLowerCase();
+      if (/^-(?:u|p|d|h|i|t|o|v|n|w|x|c|e|f|q|a|r|s)$/.test(low)) continue;
+      pushTok(low);
+      continue;
+    }
+    if (isWinStyle && /^\/[a-zA-Z]{2,10}(?::|$)/.test(raw)) {
+      pushTok(raw.split(':')[0].toLowerCase());
+      continue;
+    }
+    // Only treat standalone bare words (never filenames/paths containing '.', '/', '\\', ':') as subcommand tokens
+    if (/^[a-zA-Z0-9_-]+$/.test(raw)) {
+      const low = raw.toLowerCase();
+      if (STANDALONE_SUBCMD_KEYWORDS.has(low)) pushTok(low);
     }
   }
   return out;
+}
+
+function hasExplicitAuthenticatedCreds(cleanCmd) {
+  const s = String(cleanCmd || '');
+  const uMatch = /(?:^|\s)-u\s+(?:'([^']*)'|"([^"]*)"|(\S+))/i.exec(s);
+  if (uMatch) {
+    const uVal = (uMatch[1] !== undefined ? uMatch[1] : (uMatch[2] !== undefined ? uMatch[2] : uMatch[3])).trim();
+    const isAnonUser = !uVal || /^(?:''|""|guest|anonymous|-)$/i.test(uVal);
+    if (!isAnonUser) {
+      const pMatch = /(?:^|\s)(?:-p\s+(?:'([^']+)'|"([^"]+)"|(?!''(?:\s|$)|""(?:\s|$))(\S+))|--password(?:=|\s+)\S+|-H\s+\S+|--hashes(?:=|\s+)\S+|-hashes\s+\S+)/.exec(s);
+      if (pMatch) return true;
+    }
+  }
+  const smbU = /(?:^|\s)-U\s+(?:'([^']+)'|"([^"]+)"|(\S+))/.exec(s);
+  if (smbU) {
+    const up = (smbU[1] || smbU[2] || smbU[3] || '').trim();
+    if (up && up.indexOf('%') > 0 && !/^(?:guest|anonymous)?%/i.test(up) && !/%$/.test(up)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function matchTurnToCatalogMoves(OBOL, turn, ctx) {
@@ -397,14 +611,15 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   if (!pack.length) return [];
 
   const rawCmd = String((turn && turn.command) || '').trim();
-  const stdout = String((turn && (turn.stdout || turn.output)) || '');
   if (!rawCmd) return [];
 
   const cleanCmd = stripCommandWrappers(rawCmd);
-  const lowCmd = cleanCmd.toLowerCase();
+  const rawHeadBin = canonicalTool((cleanCmd.split(/\s+/)[0] || ''));
   const cmdTool = extractPrimaryTool(cleanCmd);
   const cmdFlags = extractCommandFlags(cleanCmd);
-  const onTarget = !isAttackerTurn(turn) || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|uname|crontab)\b/i.test(cleanCmd));
+  const onTarget = !isAttackerTurn(turn) || !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd));
+  const hasAdminOrSystem = !!(facts && (facts.has('access.admin') || facts.has('access.system')));
+  const hasNtdsLoot = !!(facts && facts.has('loot.ntds'));
 
   const byId = Object.create(null);
   const actionableMoves = [];
@@ -417,20 +632,103 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   }
 
   const scored = Object.create(null);
+  const excludedIds = new Set();
   function bump(id, pts) {
-    if (!byId[id]) return;
+    if (!byId[id] || excludedIds.has(id)) return;
     scored[id] = Math.max(scored[id] || 0, pts);
   }
 
-  // High-precision domain-independent tool/intent equivalences against live catalog IDs
-  if (/(?:^|\s)(?:cat|type|Get-Content|more|head|tail)\s+[^\r\n;|&]*\b(local|user|root|proof)\.txt\b/i.test(cleanCmd)) {
+  const hasHashAuth = /(?:^|\s)-H(?:\s|$)/.test(cleanCmd) || /(?:^|\s)(?:--hashes|-hashes|\/pth:)(?:\s|=|$)/i.test(cleanCmd);
+  const isRemoteSessionTool = /^(?:evil-winrm|xfreerdp|psexec|wmiexec|smbexec|atexec|dcomexec)$/.test(cmdTool);
+  const hasPassAuth = isRemoteSessionTool
+    ? (/(?:^|\s)(?:-p|--password|\/p:)(?:\s|=|$)/i.test(cleanCmd) || (!hasHashAuth && /\/[^/\s:]+:[^@\s]+@/.test(cleanCmd)))
+    : /(?:^|\s)(?:-p\s+(?!''(?:\s|$)|""(?:\s|$))\S+|--password(?:=|\s+)\S+)/i.test(cleanCmd);
+  const explicitAuth = hasExplicitAuthenticatedCreds(cleanCmd);
+
+  // Exclude anonymous-epoch moves whenever explicit non-anonymous credentials (-u + -p/-H) are supplied
+  if (explicitAuth) {
+    for (const anonId of ANON_EPOCH_MOVE_IDS) excludedIds.add(anonId);
+  }
+
+  // Exclude post-NTDS domain-admin PTH move whenever authenticating with a plaintext password or pre-NTDS hash
+  if ((hasPassAuth && !hasHashAuth) || (hasHashAuth && !hasNtdsLoot)) {
+    excludedIds.add('own-domain-pth');
+  }
+
+  // B2.1: Password vs Hash remote interactive / lateral session disambiguation
+  if (isRemoteSessionTool) {
+    const hasInlineFlagRead = /\b(?:local|user|root|proof)\.txt\b/i.test(cleanCmd);
+    if (!hasInlineFlagRead) {
+      excludedIds.add('flag-hunt-windows');
+      excludedIds.add('flag-hunt-root-windows');
+    }
+    if (hasPassAuth && !hasHashAuth) {
+      bump('win-interactive-shell', 25);
+      bump('rdp-interactive', 25);
+      bump('lateral-exec', 23);
+      bump('validate-credential', 21);
+    } else if (hasHashAuth) {
+      if (hasNtdsLoot) {
+        bump('own-domain-pth', 24);
+        bump('win-interactive-shell', 23);
+        bump('lateral-exec', 22);
+      } else {
+        bump('win-interactive-shell', 25);
+        bump('lateral-exec', 23);
+        bump('validate-credential', 21);
+      }
+    }
+  }
+
+  // B2.2: Explicit flag file reads vs recursive user/loot/config sweeps on Windows
+  const isExplicitFlagRead = /(?:^|\s)(?:cat|type|Get-Content|gc|more|head|tail)\s+[^\r\n;|&]*\b(local|user|root|proof)\.txt\b/i.test(cleanCmd);
+  if (isExplicitFlagRead) {
     const isRootFlag = /\b(?:root|proof)\.txt\b/i.test(cleanCmd);
-    const isWin = turn.kind === 'powershell' || turn.kind === 'cmd' || /\btype\b|Get-Content|[A-Za-z]:\\/i.test(cleanCmd) || !!(facts && facts.has('foothold.windows'));
+    const isWin = turn.kind === 'powershell' || turn.kind === 'cmd' || /\btype\b|Get-Content|\bgc\b|[A-Za-z]:\\/i.test(cleanCmd) || !!(facts && facts.has('foothold.windows'));
     if (isWin) {
       bump(isRootFlag ? 'flag-hunt-root-windows' : 'flag-hunt-windows', 25);
     } else {
       bump(isRootFlag ? 'flag-hunt-root-linux' : 'flag-hunt-linux', 25);
     }
+  } else if (/^(?:Get-ChildItem|gci|dir|tree|where(?:\.exe)?)$/i.test(cleanCmd.split(/\s+/)[0] || '')) {
+    const mentionsRootFlag = /\b(?:proof|root)\.txt\b|C:\\Users\\Administrator\\Desktop/i.test(cleanCmd);
+    const mentionsUserFlag = /\b(?:local|user)\.txt\b/i.test(cleanCmd);
+    const extMatches = cleanCmd.match(/\*\.[A-Za-z0-9]{2,8}\b/g) || [];
+    const hasLootExtensions = /\.(?:pdf|xlsx?|docx?|ini|cfg|xml|kdbx|kbdx|bak|ps1|config|ppk|rdg|pfx|key|env|sql|mdb|accdb|pst)\b/i.test(cleanCmd)
+      || extMatches.length >= 2;
+    const isLootPath = /\b(?:PSReadLine|ConsoleHost_history|AppData|Program\s*Files|inetpub|xampp|wamp|unattend|sysprep|web\.config)\b/i.test(cleanCmd);
+
+    if (hasLootExtensions || isLootPath) {
+      excludedIds.add('flag-hunt-root-windows');
+      excludedIds.add('flag-hunt-windows');
+      bump('windows-loot-hunt', 25);
+      bump('stored-credentials', 24);
+      bump('windows-enum', 23);
+    } else if (mentionsRootFlag && hasAdminOrSystem) {
+      bump('flag-hunt-root-windows', 25);
+    } else if (mentionsUserFlag || (/\bDesktop\b/i.test(cleanCmd) && !hasAdminOrSystem)) {
+      if (!hasAdminOrSystem) excludedIds.add('flag-hunt-root-windows');
+      bump('flag-hunt-windows', 24);
+      bump('windows-enum', 20);
+    } else if (!hasAdminOrSystem && /\bUsers\b|[A-Za-z]:\\/i.test(cleanCmd)) {
+      excludedIds.add('flag-hunt-root-windows');
+      bump('windows-loot-hunt', 24);
+      bump('windows-enum', 23);
+      bump('stored-credentials', 22);
+      bump('flag-hunt-windows', 20);
+    }
+  } else if (onTarget && /^(?:type|Get-Content|gc|cat|more)\b/i.test(cleanCmd) && /\b(?:ConsoleHost_history|PSReadLine|unattend\.xml|sysprep|web\.config|confCons\.xml|\.ini\b|\.config\b)\b/i.test(cleanCmd)) {
+    excludedIds.add('flag-hunt-root-windows');
+    excludedIds.add('flag-hunt-windows');
+    bump('windows-loot-hunt', 25);
+    bump('stored-credentials', 24);
+    bump('windows-enum', 23);
+  }
+
+  // B2.4: Archive cracking (zip2john/rar2john/7z2john and john --format=zip/rar/7z)
+  if (/\b(?:zip|rar|7z)2john\b/i.test(cleanCmd) || (cmdTool === 'john' && /(?:--format=(?:zip|pkzip|rar|rar5|7z)\b|\b[^\s/\\]*(?:zip|rar|7z)[^\s/\\]*\.hash\b)/i.test(cleanCmd))) {
+    excludedIds.add('cisco-decrypt');
+    bump('crack-archive', 25);
   }
 
   if (cmdTool === 'nmap' || cmdTool === 'rustscan' || cmdTool === 'masscan') {
@@ -465,11 +763,48 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     bump('recon-web-triage', 22);
   }
 
-  if ((cmdTool === 'smbclient' && /\s-L\b/.test(cleanCmd) && /\s-N\b|-U\s*['"]?['"]?(?:\s|$)|anonymous/i.test(cleanCmd))
+  // B2.3: Authenticated vs Anonymous SMB enumeration & nxc module disambiguation
+  if (cmdTool === 'nxc' && !/-M\s+smbghost\b/i.test(cleanCmd)) {
+    excludedIds.add('smbghost');
+  }
+  if (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd) && /-M\s+(?:gpp_password|gpp_autologin)\b/i.test(cleanCmd)) {
+    bump('smb-share-inventory', 25);
+    bump('gpp-passwords', 24);
+  }
+  if (!explicitAuth && (
+      (cmdTool === 'smbclient' && /\s-L\b/.test(cleanCmd) && (/\s-N\b|anonymous/i.test(cleanCmd) || /-U\s*(?:''|""|%)(?=\s|$)/i.test(cleanCmd)))
       || (cmdTool === 'enum4linux')
-      || (cmdTool === 'smbmap' && /(?:-u\s*(?:''|""|anonymous|guest)|\s-H\s+\S+\s*$)/i.test(cleanCmd))
-      || (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd) && /-u\s*(?:''|""|guest|anonymous)\b/i.test(cleanCmd))) {
-    bump('recon-smb-anon', 23);
+      || (cmdTool === 'smbmap' && /(?:-u\s*(?:''|""|anonymous|guest)(?=\s|$)|\s-H\s+\S+\s*$)/i.test(cleanCmd))
+      || (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd) && /-u\s*(?:''|""|(?:guest|anonymous)\b)/i.test(cleanCmd)))) {
+    if (!/-M\s+(?:gpp_password|gpp_autologin|spider_plus)\b/i.test(cleanCmd)) {
+      bump('recon-smb-anon', 23);
+    } else {
+      bump('smb-share-inventory', 24);
+      bump('recon-smb-anon', 20);
+    }
+  } else if (explicitAuth) {
+    if (cmdTool === 'nxc' && /\bsmb\b/i.test(cleanCmd)) {
+      if (/--shares\b|-M\s+spider_plus\b/i.test(cleanCmd)) {
+        bump('smb-share-inventory', 24);
+        bump('validate-credential', 22);
+      } else if (!/\s-[xX]\b|--sam\b|--lsa\b|--ntds\b|-M\s+(?:lsassy|ntds|dcsync)/i.test(cleanCmd)) {
+        if (/\/\d{1,2}\b/.test(cleanCmd)) {
+          bump('cred-reuse-sweep', 24);
+          bump('pivot-enumerate-neighbors', 23);
+          bump('validate-credential', 21);
+        } else {
+          bump('validate-credential', 24);
+          bump('lateral-exec', 21);
+        }
+      }
+    } else if ((cmdTool === 'smbclient' || cmdTool === 'smbmap') && !/\s-N\b/.test(cleanCmd)) {
+      bump('smb-share-inventory', 24);
+      if (cmdTool === 'smbclient' && !/\s-L\b/.test(cleanCmd)) {
+        bump('smb-share-browse-download', 23);
+      } else {
+        bump('validate-credential', 21);
+      }
+    }
   }
 
   if (onTarget && /^sudo\s+(?:-l|--list)\b/i.test(cleanCmd)) {
@@ -488,56 +823,92 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     bump('linux-enum', 23);
   }
 
-  if (onTarget && (/\bwinpeas/i.test(cleanCmd) || /^whoami\s+\/(?:priv|all)\b/i.test(cleanCmd) || /^systeminfo\b/i.test(cleanCmd) || /^cmdkey\s+\/list\b/i.test(cleanCmd))) {
-    bump('windows-enum', 23);
-    if (/^whoami\s+\/priv\b/i.test(cleanCmd) && facts && facts.has('privesc.se_impersonate')) {
+  if (onTarget && (/\bwinpeas/i.test(cleanCmd) || /^whoami(?:\.exe)?\s+\/(?:priv|groups|all)\b/i.test(cleanCmd) || /^systeminfo\b/i.test(cleanCmd) || /^cmdkey\s+\/list\b/i.test(cleanCmd))) {
+    bump('windows-enum', 24);
+    if (/^whoami(?:\.exe)?\s+\/priv\b/i.test(cleanCmd) && facts && facts.has('privesc.se_impersonate')) {
       bump('seimpersonate', 21);
+    }
+    if (/^whoami(?:\.exe)?\s+\/groups\b/i.test(cleanCmd) && !(facts && facts.has('privesc.uac_bypass')) && !/\b(?:fodhelper|eventvwr|computerdefaults|sdclt|ms-settings)\b/i.test(cleanCmd)) {
+      excludedIds.add('uac-bypass');
     }
   }
 
-  // Consult OBOL.inference.matchCatalogMove as an engine-native signal
+  // Consult OBOL.inference.matchCatalogMove as an engine-native signal (guarded against exclusions and generic interpreters)
   if (OBOL.inference && typeof OBOL.inference.matchCatalogMove === 'function') {
     const nativeHit = OBOL.inference.matchCatalogMove(cleanCmd, null, { target: ctx.target || '' });
-    if (nativeHit && nativeHit.id && byId[nativeHit.id]) {
-      bump(nativeHit.id, Math.max(10, (nativeHit.score || 5) + 5));
+    if (nativeHit && nativeHit.id && byId[nativeHit.id] && !excludedIds.has(nativeHit.id)) {
+      let allowNative = true;
+      if (GENERIC_INTERPRETERS.has(rawHeadBin) || GENERIC_INTERPRETERS.has(cmdTool)) {
+        const hitCmds = byId[nativeHit.id].commands || [];
+        const specificTools = hitCmds
+          .map(c => extractPrimaryTool(stripCommandWrappers(String((c && c.run) || '').replace(/\{\{[^}]+\}\}/g, 'TOKEN'))))
+          .filter(t => t && !GENERIC_INTERPRETERS.has(t));
+        if (specificTools.length > 0 && specificTools.indexOf(cmdTool) < 0) {
+          allowNative = false;
+        }
+      }
+      if (allowNative) {
+        bump(nativeHit.id, Math.max(10, (nativeHit.score || 5) + 5));
+      }
     }
   }
 
   // General structural scoring across every sub-clause of every action's commands[]
   for (const a of actionableMoves) {
+    if (excludedIds.has(a.id)) continue;
     const cmds = a.commands || [];
     let bestActionScore = scored[a.id] || 0;
 
     for (let i = 0; i < cmds.length; i++) {
       const cObj = cmds[i];
       if (!cObj || !cObj.run) continue;
+      if (hasPassAuth && !hasHashAuth && /(?:\{\{dahash\}\}|\{\{nthash\}\}|\s-H\s|--hashes|-hashes)/i.test(cObj.run) && !/(?:\{\{password\}\}|\s-p\s)/i.test(cObj.run)) {
+        continue;
+      }
       const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
       for (const clause of clauses) {
         const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
         if (!cleanClause) continue;
         const clauseTool = extractPrimaryTool(cleanClause);
         const declaredTool = canonicalTool(cObj.tool || a.tool || '');
-        if (!cmdTool || (cmdTool !== clauseTool && cmdTool !== declaredTool)) continue;
+        const matchedViaClause = Boolean(cmdTool && cmdTool === clauseTool);
+        const matchedViaDeclared = Boolean(
+          cmdTool
+          && !matchedViaClause
+          && cmdTool === declaredTool
+          && !GENERIC_INTERPRETERS.has(declaredTool)
+          && (!clauseTool || GENERIC_INTERPRETERS.has(clauseTool))
+        );
+        if (!matchedViaClause && !matchedViaDeclared) continue;
 
-        let s = 6;
+        const isGenericTool = GENERIC_INTERPRETERS.has(cmdTool) || GENERIC_INTERPRETERS.has(rawHeadBin);
+        let s = isGenericTool ? 2 : 6;
         const clauseFlags = extractCommandFlags(cleanClause);
         let hits = 0;
+        let distinctiveHits = 0;
         let misses = 0;
         for (const fl of clauseFlags) {
-          if (cmdFlags.indexOf(fl) >= 0 || lowCmd.indexOf(fl) >= 0) {
-            hits += fl.length > 4 ? 4 : 2;
+          if (cmdFlags.indexOf(fl) >= 0) {
+            const weight = fl.length > 4 ? 4 : 2;
+            hits += weight;
+            if (fl.length > 4 && fl !== '--cmd') distinctiveHits++;
           } else if (fl.startsWith('--') && fl.length > 5) {
             misses += 2;
           }
         }
+        if (isGenericTool && distinctiveHits === 0) continue;
         s += hits - misses;
         if (s > bestActionScore) bestActionScore = s;
       }
     }
 
-    if (bestActionScore >= 9) {
+    if (bestActionScore >= 9 && !excludedIds.has(a.id)) {
       scored[a.id] = bestActionScore;
     }
+  }
+
+  for (const exId of excludedIds) {
+    delete scored[exId];
   }
 
   const rankedIds = Object.keys(scored).sort((idA, idB) => {
@@ -565,7 +936,8 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
 
 function inspectMoveCommandReadiness(OBOL, session, move, facts, targetIp) {
   const eng = session.eng;
-  const params = Object.assign({}, eng.params || {}, { target: targetIp });
+  const moveCtxParams = (move && move.resolvedContext && move.resolvedContext.params) || {};
+  const params = Object.assign({}, eng.params || {}, moveCtxParams, { target: targetIp });
   const wsTokens = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {};
   const cmds = move.commands || [];
   if (!cmds.length) {
@@ -580,7 +952,9 @@ function inspectMoveCommandReadiness(OBOL, session, move, facts, targetIp) {
   const filledAll = OBOL.command.fillAll(move, facts, {
     params: params,
     profile: eng.profile,
-    workspace: wsTokens
+    workspace: wsTokens,
+    resolvedContext: move.resolvedContext,
+    context: move.resolvedContext
   });
   const earnedSet = (OBOL.command && OBOL.command.EARNED_TOKENS) || {};
 
@@ -663,8 +1037,20 @@ function gateEvidencePresentInHistory(gateOrTokens, historyTurns) {
     }
   }
 
+  const NEGATIVE_OUTCOME_KINDS = new Set([
+    'completed-negative',
+    'authorization-denied',
+    'rejected',
+    'environment-error'
+  ]);
   const prev = historyTurns[historyTurns.length - 1];
-  if (prev && !prev.housekeeping && String(prev.stdout || '').trim().length >= 24 && (prev.minted_count || 0) === 0) {
+  if (
+    prev
+    && !prev.housekeeping
+    && !NEGATIVE_OUTCOME_KINDS.has(String(prev.outcome_kind || ''))
+    && String(prev.stdout || '').trim().length >= 24
+    && (prev.minted_count || 0) === 0
+  ) {
     return { found: true, reason: 'immediately_preceding_turn_had_unminted_stdout' };
   }
 
@@ -691,7 +1077,7 @@ function isInitialMultiPortReconFork(OBOL, session, facts, targetIp) {
   return nonNmapTargetActs === 0;
 }
 
-function simulateRetireMoveInSandbox(OBOL, session, card, targetIp) {
+function simulateRetireMoveInSandbox(OBOL, session, card, targetIp, targetMoveId) {
   if (isFlagCollectionMove(card)) {
     OBOL.store.setChecklist(card.id, 'done');
     return { method: 'flag_checklist_done', outcomes: ['done'] };
@@ -704,43 +1090,63 @@ function simulateRetireMoveInSandbox(OBOL, session, card, targetIp) {
   }
 
   const outcomes = [];
-  const maxAttempts = Math.min(cmds.length, 6);
+  const seenAttemptSigs = new Set();
+  const maxAttempts = Math.max(Math.min(cmds.length * 3, 12), 6);
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const coachNow = session.computeCoach(targetIp);
     const stillAtHead = coachNow.onFlow.findIndex(x => x.id === card.id);
     if (stillAtHead < 0) break;
-    if (attempt > 0 && stillAtHead > 0) break;
+    if (attempt > 0) {
+      if (targetMoveId) {
+        const targetIdxNow = coachNow.onFlow.findIndex(x => x.id === targetMoveId);
+        if (targetIdxNow >= 0 && stillAtHead > targetIdxNow) break;
+      } else if (stillAtHead > 0) {
+        break;
+      }
+    }
 
+    const liveCard = coachNow.onFlow[stillAtHead] || card;
+    const liveCmds = liveCard.commands || cmds;
+    const cardCtx = liveCard.resolvedContext || card.resolvedContext || undefined;
+    const cardCtxParams = (cardCtx && cardCtx.params) || {};
     const factsNow = coachNow.facts || session.factSetForTarget(targetIp);
-    const params = Object.assign({}, session.eng.params || {}, { target: targetIp });
+    const params = Object.assign({}, session.eng.params || {}, cardCtxParams, { target: targetIp });
     const wsTokens = (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(session.eng) : {};
     const bestIdx = (OBOL.command && typeof OBOL.command.bestCommandIndex === 'function')
-      ? OBOL.command.bestCommandIndex(card, factsNow, {
+      ? OBOL.command.bestCommandIndex(liveCard, factsNow, {
           params: params,
           profile: session.eng.profile,
           workspace: wsTokens,
           activities: session.eng.activities
         })
       : 0;
-    const cmdObj = cmds[bestIdx] || cmds[0];
+    const cmdObj = liveCmds[bestIdx] || liveCmds[0];
+    const cmdFacts = (factsNow && typeof factsNow.forAction === 'function')
+      ? factsNow.forAction(liveCard, cmdObj)
+      : factsNow;
+    const cmdCtx = (cmdFacts && cmdFacts._resolvedContext) || cardCtx;
     const filled = (OBOL.command && typeof OBOL.command.fillCommand === 'function')
-      ? OBOL.command.fillCommand(card, factsNow, {
-          params: params,
+      ? OBOL.command.fillCommand(liveCard, cmdFacts || factsNow, {
+          params: (cmdCtx && cmdCtx.params) || params,
           profile: session.eng.profile,
           workspace: wsTokens
         }, bestIdx)
-      : { filled: (cmdObj && cmdObj.run) || card.id };
+      : { filled: (cmdObj && cmdObj.run) || liveCard.id };
+    const filledCmd = (filled && filled.filled) || (cmdObj && cmdObj.run) || liveCard.id;
+    const attemptSig = filledCmd + '::' + ((cmdCtx && cmdCtx.credentialId) || '');
+    if (seenAttemptSigs.has(attemptSig)) break;
+    seenAttemptSigs.add(attemptSig);
 
-    const res = OBOL.ingest.run({
-      text: DRY_PROBE_SENTINEL,
-      command: (filled && filled.filled) || (cmdObj && cmdObj.run) || card.id,
-      actionId: card.id,
-      source: 'paste',
-      scope: 'host:' + targetIp,
+    const turnRes = session.ingestTurn({
+      command: filledCmd,
+      stdout: DRY_PROBE_SENTINEL,
+      actionId: liveCard.id,
+      target: targetIp,
       forceTarget: targetIp,
-      commandObj: cmdObj
+      commandObj: cmdObj,
+      resolvedContext: cmdCtx
     });
-    outcomes.push((res && res.outcome && res.outcome.kind) || 'unknown');
+    outcomes.push((turnRes && turnRes.outcome && turnRes.outcome.kind) || 'unknown');
   }
 
   return { method: 'completed_negative_dry_probe', outcomes: outcomes };
@@ -840,7 +1246,7 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
           break;
         }
 
-        simulateRetireMoveInSandbox(OBOL, session, head, targetIp);
+        simulateRetireMoveInSandbox(OBOL, session, head, targetIp, targetMoveId);
         const afterCoach = session.computeCoach(targetIp);
         const afterFlow = afterCoach.onFlow || [];
         const newHeadIdx = afterFlow.findIndex(m => m.id === head.id);
@@ -888,10 +1294,35 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
     };
   }
 
+  const targetHistory = historyTurns.filter(h => !h.target_ip || h.target_ip === targetIp);
+
   // 3. No candidate is in Ready Now: check if already executed & settled earlier in this replay
+  //    or if the operator is running a subsequent sub-command of a multi-command move already reached on this host
   for (const cand of candidates) {
     const cmdInfo = inspectMoveCommandReadiness(OBOL, session, cand.move, facts, targetIp);
-    if (executedMoveIds.has(cand.id) && (doneIds[cand.id] || cmdInfo.allSettled)) {
+    const seenReachableInHistory = targetHistory.some(h =>
+      h.was_reachable &&
+      ((Array.isArray(h.matched_moves) && h.matched_moves.indexOf(cand.id) >= 0) || h.executed_move_id === cand.id)
+    );
+    const seenAnyInHistory = targetHistory.some(h =>
+      (Array.isArray(h.matched_moves) && h.matched_moves.indexOf(cand.id) >= 0) || h.executed_move_id === cand.id
+    );
+    const allProducesSatisfied =
+      Array.isArray(cand.move.produces) &&
+      cand.move.produces.length > 0 &&
+      cand.move.produces.every(p => facts.has(p));
+    const actionSettled =
+      allProducesSatisfied ||
+      (typeof cand.move.settled === 'function' && cand.move.settled(facts)) ||
+      (typeof cand.move.obsolete === 'function' && cand.move.obsolete(facts));
+    const isCandEligible = typeof cand.move.eligible === 'function' ? cand.move.eligible(facts) : true;
+    const alreadySatisfiedOnTarget = isCandEligible && Boolean(doneIds[cand.id] || allProducesSatisfied);
+    const priorSubcmdContinuation =
+      seenReachableInHistory &&
+      isCandEligible &&
+      !comingUp.some(m => m.id === cand.id);
+
+    if (alreadySatisfiedOnTarget || ((executedMoveIds.has(cand.id) || seenAnyInHistory) && (doneIds[cand.id] || cmdInfo.allSettled || actionSettled)) || priorSubcmdContinuation) {
       return {
         reachable: true,
         mode: 'already_settled_repeat',
@@ -899,7 +1330,7 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
         initial_rank: null,
         retired_preceding: [],
         stall_bucket: null,
-        detail: 'Operator repeated a sub-command of an already settled move'
+        detail: 'Operator repeated or continued a sub-command of an already settled or reached move'
       };
     }
   }
@@ -915,7 +1346,7 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
     const missingAny = hasAny ? [] : (move.requires_any || []).slice();
     const missingGates = missingAll.concat(missingAny);
 
-    const histProbe = gateEvidencePresentInHistory(missingGates, historyTurns);
+    const histProbe = gateEvidencePresentInHistory(missingGates, targetHistory);
     if (histProbe.found) {
       return {
         reachable: false,
@@ -941,7 +1372,7 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
 
   const cmdReadiness = inspectMoveCommandReadiness(OBOL, session, move, facts, targetIp);
   if (!cmdReadiness.hasRunnableTokens && cmdReadiness.unfilledEarnedTokens.length > 0) {
-    const histProbe = gateEvidencePresentInHistory(cmdReadiness.unfilledEarnedTokens, historyTurns);
+    const histProbe = gateEvidencePresentInHistory(cmdReadiness.unfilledEarnedTokens, targetHistory);
     if (histProbe.found) {
       return {
         reachable: false,
@@ -983,9 +1414,10 @@ function evaluateClosedLoopReachability(session, candidates, turn, opts) {
   };
 }
 
-function evaluateCheckpoint(session, cp) {
+function evaluateCheckpoint(session, cp, ipAliasMap) {
   const OBOL = session.OBOL;
-  const targetIp = cp.target_ip || session.getActiveTarget();
+  const aliasedCpTarget = cp.target_ip ? applyIpAliases(cp.target_ip, ipAliasMap) : '';
+  const targetIp = aliasedCpTarget || session.getActiveTarget();
   const coach = session.computeCoach(targetIp);
   const facts = coach.facts || session.factSetForTarget(targetIp);
   const errors = [];
@@ -1047,6 +1479,16 @@ function evaluateCheckpoint(session, cp) {
   };
 }
 
+const OUTBOUND_REMOTE_CMD_RE = /\b(?:ssh|scp|sftp|evil-winrm|impacket-[\w-]+|(?:psexec|wmiexec|smbexec|atexec|dcomexec|mssqlclient|secretsdump|GetUserSPNs|GetNPUsers)(?:\.py)?|nxc|netexec|crackmapexec|cme|nmap|rustscan|masscan|Enter-PSSession|Invoke-Command|New-PSSession|PsExec(?:64)?\.exe|mstsc|xfreerdp3?|rdesktop)\b/i;
+
+function stripAttackerCallbackArgsForTargetRouting(cmd) {
+  return String(cmd || '')
+    .replace(/\bLHOST\s*=\s*\S+/gi, ' ')
+    .replace(/--lhost(?:=|\s+)\S+/gi, ' ')
+    .replace(/(?:^|\s)-l\s+\d{1,3}(?:\.\d{1,3}){3}\b/g, ' ')
+    .replace(/--socks\d*(?:=|\s+)\S+/gi, ' ');
+}
+
 function replayWalkthrough(OBOL, walkthroughInput, opts) {
   opts = opts || {};
   const slug = walkthroughInput.slug
@@ -1075,7 +1517,8 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     target: opts.target,
     lhost: opts.lhost
   });
-  const multiTarget = !!opts.multiTarget || net.targets.length > 1 && !!opts.autoMultiTarget;
+  const hasIpAliases = Boolean(net.ipAliasMap && Object.keys(net.ipAliasMap).length > 0);
+  const multiTarget = !!opts.multiTarget || (net.targets.length > 1 && !!opts.autoMultiTarget);
 
   const session = createEngagementSession(OBOL, {
     name: 'Replay:' + slug,
@@ -1088,11 +1531,12 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
 
   // Optional SharpHound / BloodHound JSON bundle ingestion (either pre-supplied or discovered on disk)
   let bloodhoundResult = null;
+  const bhSlug = walkthroughInput.labSlug || slug;
   const bhPayload = walkthroughInput.bloodhound
-    || (opts.bloodhoundDir && fs.existsSync(path.join(opts.bloodhoundDir, slug))
-        ? path.join(opts.bloodhoundDir, slug)
-        : (walkthroughInput.corpusRoot && fs.existsSync(path.join(walkthroughInput.corpusRoot, 'bloodhound', slug))
-            ? path.join(walkthroughInput.corpusRoot, 'bloodhound', slug)
+    || (opts.bloodhoundDir && fs.existsSync(path.join(opts.bloodhoundDir, bhSlug))
+        ? path.join(opts.bloodhoundDir, bhSlug)
+        : (walkthroughInput.corpusRoot && fs.existsSync(path.join(walkthroughInput.corpusRoot, 'bloodhound', bhSlug))
+            ? path.join(walkthroughInput.corpusRoot, 'bloodhound', bhSlug)
             : null));
 
   const checkpointsByStep = Object.create(null);
@@ -1118,27 +1562,71 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
   let unmappedSteps = 0;
   let housekeepingSteps = 0;
   let bhIngested = false;
+  let ligoloAgentHost = '';
+  let activeTunnelTarget = '';
 
   for (let idx = 0; idx < turns.length; idx++) {
     const rawTurn = turns[idx];
+    const aliasedTurn = hasIpAliases
+      ? Object.assign({}, rawTurn, {
+          command: applyIpAliases(rawTurn.command || '', net.ipAliasMap),
+          rawCommand: rawTurn.rawCommand ? applyIpAliases(rawTurn.rawCommand, net.ipAliasMap) : rawTurn.rawCommand,
+          stdout: applyIpAliases(rawTurn.stdout || '', net.ipAliasMap),
+          output: rawTurn.output ? applyIpAliases(rawTurn.output, net.ipAliasMap) : rawTurn.output,
+          promptLine: rawTurn.promptLine ? applyIpAliases(rawTurn.promptLine, net.ipAliasMap) : rawTurn.promptLine,
+          followPrompt: rawTurn.followPrompt ? applyIpAliases(rawTurn.followPrompt, net.ipAliasMap) : rawTurn.followPrompt
+        })
+      : rawTurn;
     const activeBefore = session.getActiveTarget();
-    const expandedCmd = expandShellTargetVars(rawTurn.command || '', activeBefore, net.varMap);
-    const turn = Object.assign({}, rawTurn, { command: expandedCmd });
+    const expandedCmd = applyIpAliases(
+      expandShellTargetVars(aliasedTurn.command || '', activeBefore, net.varMap),
+      net.ipAliasMap
+    );
+    const turn = Object.assign({}, aliasedTurn, { command: expandedCmd });
 
-    // Determine target IP for this turn in multi-target mode BEFORE grading reachability
+    // Determine target IP for this turn in multi-target mode BEFORE grading reachability.
+    // Never scan general stdout for target routing (prevents ipconfig/arp/hosts/download-peer hijack).
     let turnTarget = activeBefore;
     if (multiTarget) {
-      let m;
-      IPV4_GLOBAL_RE.lastIndex = 0;
-      const foundIps = [];
-      while ((m = IPV4_GLOBAL_RE.exec(expandedCmd + '\n' + (turn.stdout || ''))) !== null) {
-        if (isPrivateLabIpv4(m[1]) && net.selfIps.indexOf(m[1]) < 0) {
-          foundIps.push(m[1]);
+      const isLocalIpRouteCmd = isAttackerTurn(turn) && /^(?:sudo\s+)?ip\s+(?:route|tuntap|link|addr)\b/i.test(expandedCmd.trim());
+      if (!isLocalIpRouteCmd && /\b240\.0\.0\.1\b/.test(expandedCmd)) {
+        turnTarget = ligoloAgentHost || activeTunnelTarget || activeBefore;
+        if (turnTarget && turnTarget !== activeBefore) {
+          session.setActiveTarget(turnTarget);
+        }
+      } else if (!isAttackerTurn(turn) && !OUTBOUND_REMOTE_CMD_RE.test(expandedCmd)) {
+        turnTarget = activeBefore;
+      } else if (!isLocalIpRouteCmd) {
+        const cmdForIp = stripAttackerCallbackArgsForTargetRouting(expandedCmd);
+        let m;
+        IPV4_GLOBAL_RE.lastIndex = 0;
+        const foundIps = [];
+        while ((m = IPV4_GLOBAL_RE.exec(cmdForIp)) !== null) {
+          const ip = m[1];
+          if (isPrivateLabIpv4(ip) && net.selfIps.indexOf(ip) < 0 && !ATTACKER_SUBNET_RE.test(ip)) {
+            foundIps.push(ip);
+          }
+        }
+        if (!foundIps.length && !turn.rawCommand && /^\s*(?:sudo\s+)?nmap\b/i.test(expandedCmd)) {
+          const nmapHeaderM = /^Nmap scan report for (?:[^\r\n(]+\()?(\d{1,3}(?:\.\d{1,3}){3})\)?/im.exec(turn.stdout || '');
+          if (nmapHeaderM && isPrivateLabIpv4(nmapHeaderM[1]) && net.selfIps.indexOf(nmapHeaderM[1]) < 0 && !ATTACKER_SUBNET_RE.test(nmapHeaderM[1])) {
+            foundIps.push(nmapHeaderM[1]);
+          }
+        }
+        if (foundIps.length > 0) {
+          turnTarget = foundIps[0];
+          session.setActiveTarget(turnTarget);
+          if (turnTarget !== net.primaryTarget) {
+            activeTunnelTarget = turnTarget;
+          }
         }
       }
-      if (foundIps.length > 0) {
-        turnTarget = foundIps[0];
-        session.setActiveTarget(turnTarget);
+
+      if (/\b(?:ligolo-)?agent(?:\.exe)?\b[\s\S]*?-connect\b/i.test(expandedCmd) || /\bchisel(?:\.exe)?\s+client\b/i.test(expandedCmd)) {
+        if (turnTarget) {
+          ligoloAgentHost = turnTarget;
+          activeTunnelTarget = turnTarget;
+        }
       }
     }
 
@@ -1151,7 +1639,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     // Evaluate any trajectory checkpoints pinned BEFORE step idx
     if (checkpointsByStep[idx]) {
       for (const cp of checkpointsByStep[idx]) {
-        checkpointResults.push(evaluateCheckpoint(session, cp));
+        checkpointResults.push(evaluateCheckpoint(session, cp, net.ipAliasMap));
       }
     }
 
@@ -1191,9 +1679,10 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
 
     // Execute / ingest turn into stateful engagement session
     let ingestReport = null;
+    let matchedActionId = '';
     const hasPayload = Boolean((expandedCmd && !hk.housekeeping) || String(turn.stdout || '').trim());
     if (hasPayload) {
-      const matchedActionId = (reachability && reachability.matched_move_id)
+      matchedActionId = (reachability && reachability.matched_move_id)
         || (candidates[0] && candidates[0].id)
         || '';
       ingestReport = session.ingestTurn({
@@ -1201,6 +1690,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
         command: expandedCmd,
         stdout: turn.stdout || '',
         promptLine: turn.promptLine || '',
+        followPrompt: turn.followPrompt || '',
         target: turnTarget,
         forceTarget: turnTarget
       });
@@ -1210,13 +1700,19 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     const mintedKinds = ingestReport
       ? (ingestReport.minted_facts || []).map(f => f.kind)
       : [];
+    const outcomeKind = (ingestReport && ingestReport.outcome && ingestReport.outcome.kind) || null;
 
     historyTurns.push({
       step_index: idx,
+      target_ip: turnTarget,
       command: expandedCmd,
       stdout: turn.stdout || '',
       housekeeping: hk.housekeeping,
-      minted_count: mintedKinds.length
+      minted_count: mintedKinds.length,
+      outcome_kind: outcomeKind,
+      matched_moves: candidates.map(c => c.id),
+      executed_move_id: matchedActionId,
+      was_reachable: Boolean(reachability && reachability.reachable)
     });
 
     stepReports.push({
@@ -1230,7 +1726,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
       matched_moves: candidates.map(c => c.id),
       reachability: reachability,
       minted_kinds: mintedKinds,
-      outcome_kind: (ingestReport && ingestReport.outcome && ingestReport.outcome.kind) || null
+      outcome_kind: outcomeKind
     });
   }
 
@@ -1242,7 +1738,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
 
   if (checkpointsByStep[turns.length]) {
     for (const cp of checkpointsByStep[turns.length]) {
-      checkpointResults.push(evaluateCheckpoint(session, cp));
+      checkpointResults.push(evaluateCheckpoint(session, cp, net.ipAliasMap));
     }
   }
 
@@ -1250,6 +1746,7 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
     slug: slug,
     multi_target: multiTarget,
     lhost: net.lhost,
+    ip_aliases: net.ipAliasMap || {},
     targets_observed: session.getTargets().map(t => t.ip),
     ocr_turns_spliced: extracted.ocrCount || 0,
     bloodhound_ingested: bhIngested,
@@ -1274,47 +1771,27 @@ function replayWalkthrough(OBOL, walkthroughInput, opts) {
 
 function runTrajectoryHarvest(opts) {
   opts = opts || {};
-  const resolved = resolveWalkthroughDir(opts.corpusDir);
-  if (!fs.existsSync(resolved.walkthroughDir)) {
-    throw new Error('Walkthrough directory not found: ' + resolved.walkthroughDir);
-  }
-
-  const slugFilter = opts.slugs
-    ? new Set(String(opts.slugs).split(',').map(s => s.trim().replace(/\.md$/i, '')).filter(Boolean))
-    : null;
-
-  let entries = fs.readdirSync(resolved.walkthroughDir)
-    .filter(f => f.endsWith('.md'))
-    .sort()
-    .map(f => ({
-      slug: path.basename(f, '.md'),
-      mdPath: path.join(resolved.walkthroughDir, f),
-      corpusRoot: resolved.corpusRoot,
-      isAlternate: false
-    }));
-
-  if (slugFilter) {
-    entries = entries.filter(e => slugFilter.has(e.slug));
-  }
-
-  if (opts.includeAlternates) {
-    const baseEntries = entries.slice();
-    for (const base of baseEntries) {
-      const alts = discoverAlternates(resolved.corpusRoot, base.slug);
-      for (const alt of alts) {
-        entries.push({
-          slug: path.basename(alt.file, '.md'),
-          mdPath: alt.path,
-          corpusRoot: resolved.corpusRoot,
-          isAlternate: true
-        });
-      }
+  const rawDir = opts.corpusDir ? path.resolve(opts.corpusDir) : DEFAULT_CORPUS_DIR;
+  let discovered;
+  try {
+    discovered = discoverCorpusEntries(rawDir, {
+      slugs: opts.slugs,
+      limit: opts.limit && Number(opts.limit) > 0 ? Number(opts.limit) : undefined,
+      includeAlternates: !!opts.includeAlternates,
+      includeHosts: !!opts.includeHosts
+    });
+  } catch (e) {
+    if (e && e.code === 'CORPUS_NOT_FOUND') {
+      throw new Error('Walkthrough directory not found: ' + rawDir);
     }
+    throw e;
   }
 
-  if (opts.limit && Number(opts.limit) > 0) {
-    entries = entries.slice(0, Number(opts.limit));
-  }
+  const resolved = {
+    corpusRoot: discovered.corpusRoot,
+    walkthroughDir: discovered.walkthroughsDir
+  };
+  const entries = discovered.entries;
 
   const OBOL = opts.OBOL || createSandbox();
   const walkthroughReports = [];
@@ -1417,6 +1894,7 @@ function parseCliArgs(argv) {
     slugs: '',
     multiTarget: false,
     includeAlternates: false,
+    includeHosts: false,
     bloodhoundDir: '',
     limit: 0,
     lens: '',
@@ -1428,6 +1906,7 @@ function parseCliArgs(argv) {
     else if (a === '--slugs' && argv[i + 1]) opts.slugs = argv[++i];
     else if (a === '--multi-target') opts.multiTarget = true;
     else if (a === '--include-alternates') opts.includeAlternates = true;
+    else if (a === '--include-hosts') opts.includeHosts = true;
     else if (a === '--bloodhound-dir' && argv[i + 1]) opts.bloodhoundDir = argv[++i];
     else if (a === '--limit' && argv[i + 1]) opts.limit = parseInt(argv[++i], 10) || 0;
     else if (a === '--lens' && argv[i + 1]) opts.lens = argv[++i];
@@ -1470,10 +1949,13 @@ if (require.main === module) {
 
 module.exports = {
   STALL_BUCKETS: STALL_BUCKETS,
+  applyIpAliases: applyIpAliases,
   isHousekeepingTurn: isHousekeepingTurn,
   inferEngagementNetworking: inferEngagementNetworking,
   expandShellTargetVars: expandShellTargetVars,
   matchTurnToCatalogMoves: matchTurnToCatalogMoves,
+  gateEvidencePresentInHistory: gateEvidencePresentInHistory,
+  simulateRetireMoveInSandbox: simulateRetireMoveInSandbox,
   evaluateClosedLoopReachability: evaluateClosedLoopReachability,
   replayWalkthrough: replayWalkthrough,
   runTrajectoryHarvest: runTrajectoryHarvest

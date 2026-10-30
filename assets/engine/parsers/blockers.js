@@ -29,7 +29,7 @@
     // Windows Defender / AMSI eating a payload.
     { kind: 'blocker.amsi', re: /This script contains malicious content and has been blocked|contains a virus or potentially unwanted software|Operation did not complete successfully because the file contains a virus|AMSI_RESULT_DETECTED|failed with error code 0x80508023/i },
     // SeImpersonate potato that picked the wrong technique for the Windows build.
-    { kind: 'blocker.potato', re: /CoGetInstanceFromIStorage|RpcServerRegisterIf.*failed|the handle is invalid|CreateProcessAsUser.*(?:failed|1314)|BITS.*(?:not|disabled)|potato.*fail/i },
+    { kind: 'blocker.potato', re: /CoGetInstanceFromIStorage|RpcServerRegisterIf.*failed|the handle is invalid|CreateProcessAsUser.*(?:failed|1314)|BITS.*(?:not|disabled)|potato.*fail|Operation failed or timed out/i },
     // web fuzzing throttled by a WAF / rate limiter. The separator before "limit" must be a space or a
     // hyphen ("rate limited", "rate-limiting"), NOT nothing: "ratelimit" with no separator is nmap's own
     // --defeat-rst-ratelimit flag line, which is informational and must never raise this blocker.
@@ -157,6 +157,9 @@
         var isRemoteTargetCurl = (tgtStr && (String(command || '').indexOf(tgtStr) >= 0 || t.indexOf(tgtStr) >= 0))
           || (command && /^\s*curl\b/i.test(command) && !/\s-(?:o|O|-output)\b/i.test(command) && !/\|\s*(?:sh|bash)\b/i.test(command));
         if (isRemoteTargetCurl) continue;
+      }
+      if (w.kind === 'blocker.potato' && /Operation failed or timed out/i.test(t) && !/CoGetInstanceFromIStorage|RpcServerRegisterIf.*failed|the handle is invalid|CreateProcessAsUser.*(?:failed|1314)|BITS.*(?:not|disabled)|potato.*fail/i.test(t)) {
+        if (!/(?:printspoofer|[a-z0-9_]*potato)/i.test(String(command || '') + '\n' + t)) continue;
       }
       if (w.kind === 'blocker.logon_failure' && (enum4linuxSucceeded || /\\\$krb5(?:asrep|tgs)\$|Testing credentials \(\$krb5/i.test(t) || (/^(?:bloodyad-acl|dcsync)\b/i.test(command || '') && /Traceback \(most recent call last\):|SessionError:\s*STATUS_LOGON_FAILURE/i.test(t)))) continue;
       if (w.re.test(t)) addWall(w, t);

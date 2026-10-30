@@ -5,6 +5,57 @@
   "license": "Project-authored data. No third-party copyleft obligation.",
   "actions": [
     {
+      "id": "nmap-udp-top",
+      "title": "Nmap Focused UDP Check",
+      "hypothesis": "Scanning UDP is slow, noisy, and simple to overdo, yet a narrow pass can surface DNS, SNMP, Kerberos, NTP, TFTP, and other services that reshape your route. Save it for after the TCP backbone is mapped, or when the TCP results are thin.",
+      "tool": "nmap",
+      "tools": [
+        "nmap"
+      ],
+      "os": [
+        "linux",
+        "windows"
+      ],
+      "requires_all": [
+        "host.up"
+      ],
+      "requires_any": [],
+      "obsoleted_by": [
+        "scan.nmap.udp"
+      ],
+      "deprioritize_when": [
+        "loot.ntds",
+        "scan.nmap.version",
+        "foothold.linux",
+        "foothold.windows",
+        "access.shell"
+      ],
+      "produces": [
+        "scan.nmap.udp"
+      ],
+      "priority": 10,
+      "phase": "recon",
+      "proves": "produces evidence from a narrowly scoped UDP scan",
+      "does_not_prove": "UDP exposure by itself, not that the service is exploitable, and no access, credential, or privilege",
+      "report": {
+        "finding": "Focused UDP Surface Checked",
+        "severity": "informational"
+      },
+      "refs": [],
+      "commands": [
+        {
+          "tool": "nmap",
+          "run": "sudo nmap -Pn -sU --top-ports 20 --open -oN {{scandir}}/nmap-udp-top20.txt {{target}}",
+          "note": "A workable UDP starting point. It requires elevated rights and can be slow, but it picks up the UDP services that tend to be important."
+        },
+        {
+          "tool": "nmap",
+          "run": "sudo nmap -Pn -sU -p 53,67,68,69,88,123,137,138,161,162,500,514,520,1900,4500 --open -oN {{scandir}}/nmap-udp-common.txt {{target}}",
+          "note": "A hand-picked UDP port list covering DNS, DHCP, TFTP, Kerberos, NTP, NetBIOS, SNMP, VPN, syslog, routing, UPnP, and IPsec."
+        }
+      ]
+    },
+    {
       "diagnostic": true,
       "eliminates": [
         "smb-anon-access",
@@ -245,6 +296,11 @@
           "tool": "snmp-check",
           "run": "snmp-check {{target}} -c public",
           "note": "A tidier, sectioned view, accounts, processes, network, installed software."
+        },
+        {
+          "tool": "snmpwalk",
+          "run": "snmpwalk -v2c -c {{community|public}} {{target}} NET-SNMP-EXTEND-MIB::nsExtendObjects",
+          "note": "Query the NET-SNMP-EXTEND-MIB extension table directly, where custom monitoring scripts and inline service credentials are frequently exposed."
         }
       ],
       "requires_all": []

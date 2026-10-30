@@ -42,12 +42,18 @@
     return String(s || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[@-_]/g, '');
   }
 
-  function makeWs(scope, domain, context) {
+  function makeWs(scope, domain, context, opts) {
     var s = String(scope || '').trim();
     var target = (s.indexOf('host:') === 0 ? s.slice(5) : (C && C._IPV4_RE && C._IPV4_RE.test(s) ? s : '')) || 'target';
     var seed = [];
+    var infFs = opts && opts._inferenceContext && (opts._inferenceContext.factSet || opts._inferenceContext.globalFacts);
     if (context && context.facts) {
       seed = context.facts.facts || context.facts;
+    } else if (opts && (opts.seedFacts || opts.facts)) {
+      var of = opts.seedFacts || opts.facts;
+      seed = of.facts || of;
+    } else if (infFs) {
+      seed = infFs.facts || infFs;
     } else if (root.OBOL && root.OBOL.store && typeof root.OBOL.store.active === 'function') {
       var activeEng = root.OBOL.store.active();
       if (activeEng && activeEng.facts) {
@@ -56,6 +62,7 @@
         });
       }
     }
+    if (!Array.isArray(seed)) seed = [];
     return { target: target, domainSeed: domain || '', seedFacts: seed, facts: seed, context: context || {} };
   }
 
@@ -69,7 +76,7 @@
     var stdout = opts.stdout || '';
     var stderr = opts.stderr || '';
     var source = (opts.source !== undefined && opts.source !== null) ? _stripAnsi(opts.source) : command;
-    var ws = makeWs(opts.scope, opts.domain, opts.context);
+    var ws = makeWs(opts.scope, opts.domain, opts.context, opts);
     var text = _stripAnsi([stdout, stderr].filter(Boolean).join('\n'));
     // Normalize CRLF, mid-line carriage-return progress spinner overwrites, tmux vertical split bleed, and wrapped Kerberos hashes
     text = (C && C._normalize_cr) ? C._normalize_cr(text) : text.replace(/\r+\n/g, '\n').replace(/^[^\n]*\r(?!\n)/gm, '');
@@ -103,8 +110,11 @@
 
     domainHint = has('_domain_from_text') ? guarded._domain_from_text(text) : '';
 
-    var looksLikeNmapContent = /<nmaprun\b|Nmap scan report for\b|Starting Nmap\b|Discovered open port \d+\/(?:tcp|udp) on \d|^Open \d{1,3}(?:\.\d{1,3}){3}:\d+/im.test(text)
-      || ((text.indexOf('/tcp') >= 0 || text.indexOf('/udp') >= 0) && C._NMAP_PORT_RE && C._NMAP_PORT_RE.test(text) && (/Service Info:|Host script results:|^\|[_ ]|MAC Address:|OS details:/im.test(text)));
+    var _nmapOpenRe = C._NMAP_OPEN_RE || C._NMAP_PORT_RE;
+    var looksLikeNmapContent = /<nmaprun\b|Nmap scan report for\b|Starting Nmap\b|Discovered open port \d+\/(?:tcp|udp) on \d|^[ \t]*Open \d{1,3}(?:\.\d{1,3}){3}:\d+/im.test(text)
+      || ((text.indexOf('/tcp') >= 0 || text.indexOf('/udp') >= 0) && _nmapOpenRe && _nmapOpenRe.test(text)
+        && (/Service Info:|Host script results:|^[ \t]*\|[_ ][a-z0-9-]+:|^[ \t]*\|[_ ]|MAC Address:|OS details:|^[ \t]*PORT[ \t]+STATE[ \t]+SERVICE\b/im.test(text)
+          || (C.reAll && C.reAll(_nmapOpenRe, text).length >= 2)));
     if (/\b(?:nmap|masscan|rustscan)\b/.test(lc) || looksLikeNmapContent) {
       if (has('_parse_nmap')) guarded._parse_nmap(text, ws, source, facts, actionId, command);
     }
@@ -182,8 +192,20 @@
     if ((actionId === 'trust-enum' || lc.indexOf('domain_trusts') >= 0 || lc.indexOf('domaintrust') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('nltest') >= 0 || /Domain Trusts|SourceName\s*:\s*\S+[\s\S]{1,160}?TargetName\s*:\s*\S+|TrustDirection\s*:/i.test(text)) && has('_parse_domain_trusts')) guarded._parse_domain_trusts(text, ws, source, facts);
     if ((actionId === 'zerologon-check' || lc.indexOf('zerologon') >= 0 || /CVE-2020-1472|Success!\s+DC can be fully compromised by a Zerologon attack/i.test(text)) && has('_parse_zerologon_scan')) guarded._parse_zerologon_scan(text, ws, source, facts);
 
-    if ((actionId === 'powerview-enum' || lc.indexOf('get-netuser') >= 0 || lc.indexOf('get-domainuser') >= 0 || lc.indexOf('get-aduser') >= 0 || /samaccountname\s*:\s*\S+[\s\S]{1,300}?(?:serviceprincipalname|useraccountcontrol|admincount|description)\s*:/i.test(text)) && has('_parse_powerview')) guarded._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
+    var looksLikePowerViewContent = /samaccountname\s*:\s*\S+[\s\S]{1,300}?(?:serviceprincipalname|useraccountcontrol|admincount|description)\s*:|Forest\s*:\s*\S+[\s\S]{1,240}?DomainControllers\s*:/i.test(text)
+      || /^[^\r\n]*\b(?:samaccountname|userprincipalname|dnshostname|membername)\b[^\r\n]*\r?\n[ \t]*-+(?:[ \t]+-+)*[ \t]*$/im.test(text)
+      || /^[ \t]*Name[ \t]+Type[ \t]+Remark[ \t]+ComputerName[ \t]*$/im.test(text)
+      || /^[ \t]*\\\\[A-Za-z0-9_.-]+\\[^\s\\]+[ \t]+-[ \t]*[^\r\n]*$/im.test(text)
+      || (!command && /^[ \t]*\\\\[A-Za-z0-9_.-]+\\[^\s\\]+[ \t]*$/im.test(text));
+    if ((actionId === 'powerview-enum' || /\b(?:get-(?:net|domain|ad)user|get-(?:net)?domain(?:controller)?|get-(?:net|domain)groupmember|get-(?:net|domain)computer|invoke-sharefinder)\b/i.test(lc) || looksLikePowerViewContent) && has('_parse_powerview')) guarded._parse_powerview(text, ws, command, source, facts, { domain_hint: domainHint });
     if ((['get-netgroup', 'get-domaingroup', 'get-netcomputer', 'get-domaincomputer', 'objectacl', 'get-acl', 'find-interestingdomainacl'].some(function (k) { return lc.indexOf(k) >= 0; }) || /(?:ObjectDN|ObjectSID)\s*:\s*\S+[\s\S]{1,250}?ActiveDirectoryRights\s*:/i.test(text)) && has('_parse_powerview_objects')) guarded._parse_powerview_objects(text, ws, command, source, facts, { domain_hint: domainHint });
+    if (/\bget-gppermission\b/i.test(lc) || (has('_looks_like_gp_permission') && guarded._looks_like_gp_permission(text)) || /Trustee\s*:\s*\S+[\s\S]{1,160}?TrusteeType\s*:\s*\S+[\s\S]{1,160}?Permission\s*:/i.test(text)) {
+      if (has('_parse_gp_permission')) guarded._parse_gp_permission(text, ws, command, source, facts, { domain_hint: domainHint });
+      else if (OBOL._directoryParsers && typeof OBOL._directoryParsers._parse_gp_permission === 'function') {
+        try { OBOL._directoryParsers._parse_gp_permission(text, ws, command, source, facts, { domain_hint: domainHint }); }
+        catch (gpErr) { diagnostics.push({ parser: '_parse_gp_permission', message: (gpErr && gpErr.message) || String(gpErr) }); }
+      }
+    }
 
     if (lc.indexOf('kerbrute') >= 0 || /VALID USERNAME:\s*\S+@\S+|VALID LOGIN:\s*\S+@\S+/i.test(text)) guarded._parse_kerbrute(text, ws, source, facts, { domain_hint: domainHint });
 
@@ -207,13 +229,13 @@
     if (has('_looks_like_timeroast') && guarded._looks_like_timeroast(text)) guarded._parse_timeroast(text, ws, command, source, facts);
 
     // Structured cleartext credential blocks (Domain: ... Username: ... Password: ...) and process leaks.
-    if (has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(text)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
+    if (has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(text, command, ws)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
 
     if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0 || /\b\d{8,14}_(?:bloodhound|computers|users|groups|domains)\.zip\b|Done in \d+M \d+S/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts);
     if (lc.indexOf('bloodhound') >= 0 || /Compromised-Owned-Principal|Shortest Paths to Domain Admins/i.test(text)) guarded._parse_bloodhound_analysis(text, ws, source, facts);
 
-    if ((' ' + lc + ' ').indexOf(' winrm ') >= 0 || lc.indexOf('evil-winrm') >= 0 || /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\/i.test(text)) guarded._parse_evil_winrm(text, ws, command, source, facts);
-    if ((lc.indexOf('xfreerdp') >= 0 || lc.indexOf('freerdp') >= 0 || text.indexOf('[com.freerdp.') >= 0 || text.indexOf('Logon Info V') >= 0 || text.indexOf('Authentication only, exit status 0') >= 0) && has('_parse_xfreerdp')) guarded._parse_xfreerdp(text, ws, command, source, facts);
+    if ((' ' + lc + ' ').indexOf(' winrm ') >= 0 || lc.indexOf('evil-winrm') >= 0 || /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\/i.test([text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n'))) guarded._parse_evil_winrm(text, ws, command, source, facts);
+    if ((lc.indexOf('xfreerdp') >= 0 || lc.indexOf('freerdp') >= 0 || text.indexOf('[com.freerdp.') >= 0 || text.indexOf('Logon Info V') >= 0 || text.indexOf('Authentication only, exit status 0') >= 0 || /Remote framebuffer format PIXEL_FORMAT_|Loading Dynamic Virtual Channel rdpgfx/i.test(text)) && has('_parse_xfreerdp')) guarded._parse_xfreerdp(text, ws, command, source, facts);
 
     var isSsh = C._is_ssh_command(command);
     if (isSsh) guarded._parse_ssh_exec(text, ws, command, source, facts);
@@ -256,7 +278,21 @@
     var isWinInteractivePaste = (C._INTERACTIVE_RE && C._INTERACTIVE_RE.test(text)) || /\b(?:impacket-)?(?:wmiexec|psexec|smbexec|atexec|dcomexec)(?:\.py)?\b/i.test(text)
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(lc)
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(text);
-    if ((C._is_exec_command(command) || isWhoamiId || isWinInteractivePaste || (!command && (/^\s*nt authority\\system\s*$/im.test(text) || /^Directory of [A-Za-z]:\\/im.test(text)))) && !isSsh && has('_parse_command_execution')) guarded._parse_command_execution(text, ws, command, source, facts);
+    var sshExecCtx = [text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
+    var hasSshAuthFail = /\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Host key verification failed|No route to host|Could not resolve hostname)\b/i.test(text);
+    var isSshWindowsExec = isSsh && !hasSshAuthFail && (
+      /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/im.test(sshExecCtx)
+      || /^\s*(?:[A-Za-z0-9_.-]+\\)?[A-Za-z0-9_.$-]+@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.test(sshExecCtx)
+      || /\bVolume in drive [A-Za-z]\b|^\s*Directory of [A-Za-z]:\\|Microsoft Windows \[Version/im.test(text)
+      || (C._WHOAMI_ID_RE && C._WHOAMI_ID_RE.test(text))
+    );
+    if (isSshWindowsExec && C._add && C.mkFact) {
+      var sshWinUserM = /(?:^|\s)['"]?(?:[A-Za-z0-9_.-]+\\)?([A-Za-z0-9_.$-]+)@[A-Za-z0-9_.-]+/.exec(command || '');
+      var sshWinAuthVal = { service: 'ssh', os: 'windows' };
+      if (sshWinUserM && sshWinUserM[1]) sshWinAuthVal.user = C._clean_username ? C._clean_username(sshWinUserM[1]) : sshWinUserM[1];
+      C._add(facts, C.mkFact('ssh.authenticated', 'host:' + ws.target, sshWinAuthVal, C.ProofState.SUPPORTED, source));
+    }
+    if (((C._is_exec_command(command) || isWhoamiId || isWinInteractivePaste || (!command && (/^\s*nt authority\\system\s*$/im.test(text) || /^Directory of [A-Za-z]:\\/im.test(text)))) && !isSsh || isSshWindowsExec) && has('_parse_command_execution')) guarded._parse_command_execution(text, ws, command, source, facts);
 
     // A confirmed file transfer / tool staged onto the host (certutil URLCache, wget "saved", scp "100%",
     // bitsadmin, copy): mint a terminal host.tool_staged receipt. The reader self-gates on a tool-specific
@@ -264,13 +300,13 @@
     if ((/\b(?:certutil|wget|scp|bitsadmin|xcopy|smbclient|upload)\b/i.test(lc) || /\bcopy\b/i.test(lc) || /putting file\s+\S+\s+as\s+\\|CertUtil:\s*-\w[\w-]*\s*command completed successfully|\bsaved\s+\[\d|\b\d+\s+file\(s\)\s+copied\b/i.test(text)) && has('_parse_transfer_success')) guarded._parse_transfer_success(text, ws, command, source, facts);
 
     if (lc.indexOf('penelope') >= 0 || (C._PENELOPE_GOT_RE && C._PENELOPE_GOT_RE.test(text)) || (C._PENELOPE_UPGRADE_RE && C._PENELOPE_UPGRADE_RE.test(text))) guarded._parse_penelope(text, ws, source, facts);
-    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || /\bListening on\s+/i.test(text)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
+    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(text)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) {
       guarded._parse_privesc_output(actionId, text, ws, command, source, facts);
     } else if (has('_parse_privesc_output')) {
       var isRemoteScanner = /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|curl|wget|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc) || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
-      if (!isRemoteScanner && has('_looks_like_linux_enum') && (guarded._looks_like_linux_enum(text) || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b/i.test(lc) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow)\b/i.test(text)))) {
+      if (!isRemoteScanner && has('_looks_like_linux_enum') && (guarded._looks_like_linux_enum(text) || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b/i.test(lc) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
       if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b/i.test(lc))) {
@@ -299,7 +335,7 @@
     if ((lc.indexOf('schtasks') >= 0 || (has('_looks_like_schtasks') && guarded._looks_like_schtasks(text))) && has('_parse_schtasks')) guarded._parse_schtasks(text, ws, command, source, facts);
     if ((lc.indexOf('reg query') >= 0 || (has('_looks_like_reg_query') && guarded._looks_like_reg_query(text))) && has('_parse_reg_query')) guarded._parse_reg_query(text, ws, command, source, facts);
     if ((lc.indexOf('klist') >= 0 || (has('_looks_like_klist') && guarded._looks_like_klist(text))) && has('_parse_klist')) guarded._parse_klist(text, ws, command, source, facts);
-    if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || (has('_looks_like_icacls_accesschk') && guarded._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) guarded._parse_icacls_accesschk(text, ws, command, source, facts);
+    if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || /\bget-acl\b/i.test(lc) || (has('_looks_like_icacls_accesschk') && guarded._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) guarded._parse_icacls_accesschk(text, ws, command, source, facts);
 
     // endpoint defensive posture (read-only): languagemode / Get-MpComputerStatus / Get-MpPreference /
     // Get-AppLockerPolicy -> defense.control, so the coach can prefer remote-first and warn before on-host runs.
@@ -328,29 +364,30 @@
     else if (has('_parse_bloodyad_writable') && guarded._looks_like_bloodyad_writable(text)) guarded._parse_bloodyad_writable(text, ws, command, source, facts);
     if (has('_parse_ad_delegation_surface') && (isNxc || ['ldapsearch', 'bloodyad', 'get-adcomputer', 'get-adserviceaccount', 'getaduser', 'finddelegation', ' ldap '].some(function (k) { return lc.indexOf(k) >= 0; }) || /\b(?:Delegation\s+RightsTo|msDS-AllowedToDelegateTo|msDS-AllowedToActOnBehalfOfOtherIdentity|TRUSTED_FOR_DELEGATION|TRUSTED_TO_AUTH_FOR_DELEGATION)\b/i.test(text))) guarded._parse_ad_delegation_surface(text, ws, command, source, facts);
 
-    if ((lc.indexOf('ffuf') >= 0 || /"commandline"\s*:\s*"[^"]*ffuf/i.test(text)) && has('_parse_ffuf_json')) guarded._parse_ffuf_json(text, ws, source, facts);
-    if ((lc.indexOf('feroxbuster') >= 0 || /"type"\s*:\s*"response"[\s\S]{1,200}?"status"\s*:/i.test(text)) && has('_parse_feroxbuster_json')) guarded._parse_feroxbuster_json(text, ws, source, facts);
+    if ((lc.indexOf('ffuf') >= 0 || /"commandline"\s*:\s*"[^"]*ffuf/i.test(text)) && has('_parse_ffuf_json')) guarded._parse_ffuf_json(text, ws, source, facts, command);
+    if ((lc.indexOf('feroxbuster') >= 0 || /"type"\s*:\s*"response"[\s\S]{1,200}?"status"\s*:/i.test(text)) && has('_parse_feroxbuster_json')) guarded._parse_feroxbuster_json(text, ws, source, facts, command);
     if ((lc.indexOf('httpx') >= 0 || /"status_code"\s*:\s*\d{3}[\s\S]{1,300}?"(?:webserver|tech)"\s*:/i.test(text)) && has('_parse_httpx_json')) guarded._parse_httpx_json(text, ws, source, facts);
     if ((lc.indexOf('nuclei') >= 0 || /"template-id"\s*:\s*"[^"]+"[\s\S]{1,400}?"matched-at"\s*:/i.test(text)) && has('_parse_nuclei_json')) guarded._parse_nuclei_json(text, ws, source, facts);
     if (has('_is_web_vhost_command') && C._is_web_vhost_command(command)) { if (has('_parse_web_vhosts')) guarded._parse_web_vhosts(text, ws, source, facts); }
     // Content-discovery output pasted WITHOUT the command still dispatches on its own shape. The gobuster path
     // line is [Found: ][http://host]/path (Status: NNN) with zero or more trailing bracket groups (mirroring
-    // the leading forms _WEB_GOBUSTER_RE parses): old gobuster v2.0.1 had none, gobuster 3.x adds [Size: N], a
-    // redirect adds [--> url]. The old (Status)-only form was the real miss (the sniff used to require [Size:]).
+    // the leading forms _WEB_GOBUSTER_RE parses): old gobuster v2.0.1 had none, gobuster 3.x adds [Size: N],
+    // gobuster 3.8+ emits bare relative paths with (Status: NNN) [Size: N], and a redirect adds [--> url].
     // Anchoring to end-of-line keeps prose that merely mentions a path out, and _parse_web_content self-gates
     // (no path lines -> no fact), so this stays additive.
-    else if (C._is_web_content_command(command) || /\[Status:\s*\d{3},\s*Size:\s*\d+/i.test(text) || ((text.indexOf('http://') >= 0 || text.indexOf('https://') >= 0) && /^\s*\d{3}\s+(?:(?:GET|POST|HEAD)\s+)?\d+l\s+\d+w\s+\d+c\s+https?:\/\//im.test(text)) || (/\(Status:\s*\d{3}\)/i.test(text) && /^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?\/\S+\s+\(Status:\s*\d{3}\)\s*(?:\[[^\]]*\]\s*)*$/im.test(text))) guarded._parse_web_content(text, ws, source, facts, command);
+    else if (C._is_web_content_command(command) || /\[Status:\s*\d{3},\s*Size:\s*\d+/i.test(text) || /\bGobuster\s+v?\d/i.test(text) || ((text.indexOf('http://') >= 0 || text.indexOf('https://') >= 0) && /^\s*\d{3}\s+(?:(?:GET|POST|HEAD)\s+)?\d+l\s+\d+w\s+\d+c\s+https?:\/\//im.test(text)) || (/\(Status:\s*\d{3}\)/i.test(text) && (/^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?\/\S+\s+\(Status:\s*\d{3}\)\s*(?:\[[^\]]*\]\s*)*$/im.test(text) || /^\s*(?:Found:\s*)?[A-Za-z0-9_.~%-][^\s()]*\s+\(Status:\s*\d{3}\)\s+\[Size:\s*\d+\](?:\s*\[[^\]]*\])*\s*$/im.test(text)))) guarded._parse_web_content(text, ws, source, facts, command);
     if ((lc.indexOf('arjun') >= 0 || /Parameters found(?:\s+for\s+\S+)?\s*:\s*[a-zA-Z0-9_,\s-]+|\[\+\]\s+Heuristic scanner found\s+\d+\s+parameters/i.test(text)) && has('_parse_arjun')) guarded._parse_arjun(text, ws, command, source, facts);
     if (lc.indexOf('sqlmap') >= 0 || /sqlmap identified the following injection point|---\nParameter:\s*\S+\s*\((?:GET|POST|URI|Cookie|Header)\)/i.test(text)) guarded._parse_sqlmap(text, ws, source, facts, command);
-    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || C._GIT_HEAD_RE.test(text)) guarded._parse_git_source(text, ws, command, source, facts);
-    if ((lc.indexOf('nikto') >= 0 || /^- Nikto v\d+\.\d+/im.test(text)) && has('_parse_nikto')) guarded._parse_nikto(text, ws, source, facts);
+    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || /\bgit\s+(?:show|log|diff)\b/i.test(lc) || /^diff --git\s+a\//m.test(text) || C._GIT_HEAD_RE.test(text)) guarded._parse_git_source(text, ws, command, source, facts);
+    if ((lc.indexOf('nikto') >= 0 || /^- Nikto v\d+\.\d+/im.test(text)) && has('_parse_nikto')) guarded._parse_nikto(text, ws, source, facts, command);
     if (isWebExploitCmd) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
-    if (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text)) guarded._parse_http_metadata(text, ws, source, facts);
+    var isSqlClientSession = !!(C._is_sql_client_output && C._is_sql_client_output(text, ws, command));
+    if (!isSqlClientSession && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(text))) guarded._parse_http_metadata(text, ws, source, facts);
     // Product fingerprints (Jenkins, NVMS-1000) run content-first on any web-ish
     // paste (nmap http-* scripts, curl -I, whatweb, a pasted page/headers). The
     // parser self-gates on a definitive signature, so an unrelated paste mints
     // nothing; a hit lights the precise exploit move instead of a bare port gate.
-    if (has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
+    if (!isSqlClientSession && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
     // LAPS read (nxc -M laps / --laps, ldapsearch/Get-ADComputer ms-MCS-AdmPwd):
     // content-gated on a LAPS signature, and self-gated to require a real
     // Password:/attribute value so the "No result found" failure mints nothing.
@@ -360,9 +397,10 @@
     if (has('_parse_nsclient_ini') && (lc.indexOf('nsclient') >= 0 || /nsclient|\[\/settings\//i.test(text))) guarded._parse_nsclient_ini(text, ws, command, source, facts);
     // KeePass database/dump in hand (.kdbx, $keepass$ hash, master-key dump).
     if (has('_parse_keepass_dump') && (/keepass|\.kdbx/i.test(lc) || /\$keepass\$|\.kdbx/i.test(text))) guarded._parse_keepass_dump(text, ws, command, source, facts);
-    if (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(text)) guarded._parse_web_surface(text, ws, command, source, facts);
+    if (!isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(text) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+/im.test(text))) guarded._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(text)) guarded._parse_snmp_output(text, ws, command, source, facts);
-    if (['mysql', 'mssqlclient', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL>\s|^mysql>\s|^MariaDB \[[^\]]*\]>\s|^postgres=#\s/im.test(text) || (text.indexOf('|') >= 0 && text.indexOf('$') >= 0 && /^\s*\d+\|[^|\r\n]+\|\$(?:2[aby]|1|5|6|y|P|H|apr1)\$/im.test(text))) guarded._parse_database_output(text, ws, command, source, facts);
+    var dbSessionCheckText = [text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
+    if (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || (text.indexOf('|') >= 0 && text.indexOf('$') >= 0 && /^\s*\d+\|[^|\r\n]+\|\$(?:2[aby]|1|5|6|y|P|H|apr1)\$/im.test(text))) guarded._parse_database_output(text, ws, command, source, facts);
     if ((lc.indexOf('sqlite3') >= 0 || ((text.indexOf('|') >= 0 || /CREATE TABLE\s+/i.test(text)) && /CREATE TABLE\s+|^\s*\d+\|[^|\r\n]+\|[^|\r\n]+/im.test(text))) && has('_parse_sqlite_dump')) guarded._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0 || /^\s*(?:200 PORT command successful|2(?:27|29) Entering (?:Passive|Extended Passive) Mode|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting))/im.test(text)) guarded._parse_ftp_output(text, ws, command, source, facts);
@@ -389,8 +427,8 @@
 
     // Section 33 content-gated OSWE parsers (only the ported ones run)
     if (has('_has_source_secret') && C._has_source_secret(text)) guarded._parse_source_secret(text, ws, command, source, facts);
-    if (has('_has_windows_creds') && C._has_windows_creds(text)) guarded._parse_windows_creds(text, ws, command, source, facts);
-    if (has('_has_product_signature') && C._has_product_signature(text)) guarded._parse_product_signature(text, ws, command, source, facts);
+    if (has('_has_windows_creds') && C._has_windows_creds(text, command)) guarded._parse_windows_creds(text, ws, command, source, facts);
+    if (has('_has_product_signature') && C._has_product_signature(text, ws, command)) guarded._parse_product_signature(text, ws, command, source, facts);
     if (has('_has_sqli_oracle') && C._has_sqli_oracle(text)) guarded._parse_sqli_oracle(text, ws, command, source, facts);
     if (has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
     if (has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
@@ -483,8 +521,8 @@
   OBOL.parsers.parseActionOutput = parseActionOutput;
   OBOL.parsers.parse_action_output = parseActionOutput; // python-name alias
 
-  var _PROMPT_PREFIX_RE = /^\s*(?:\([^)]+\)\s*)?(?:\[?[a-zA-Z0-9_.-]+@[a-zA-Z0-9_.-]+[:\s][^\r\n$#%>\]]*\]?[$#%>]|(?:PS\s+)?[A-Za-z]:\\[^\r\n>]*>|(?:sh|bash|zsh|dash)-[\d.]+[$#]|[$#>])\s+/;
-  var _KNOWN_CMD_LINE_RE = /^\s*(?:sudo\s+|proxychains4?\s+)?(?:nmap|masscan|rustscan|nxc|netexec|crackmapexec|cme|impacket-[a-z0-9_-]+|[A-Za-z0-9_-]+\.py|ldapsearch|smbclient|smbmap|rpcclient|enum4linux(?:-ng)?|kerbrute|bloodhound(?:-python)?|sharphound|bloodyad|certipy(?:-ad)?|certify(?:\.exe)?|rubeus(?:\.exe)?|mimikatz(?:\.exe)?|pypykatz|evil-winrm|ssh|sshpass|hashcat|john|hydra|medusa|ncrack|crowbar|ffuf|feroxbuster|gobuster|dirb|dirsearch|wfuzz|httpx|nuclei|nikto|whatweb|wpscan|arjun|sqlmap|git-dumper|curl|wget|snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|mysql|psql|redis-cli|mongosh|sqlite3|sqlplus|odat|dig|nslookup|host|dnsrecon|chisel|ligolo[a-z_-]*|sshuttle|responder|ike-scan|ipmitool|nth|hashid|hash-identifier|haiti|searchsploit|linpeas|winpeas|whoami|id|uname|find|getcap|ps|netstat|ss|ip|ifconfig|ipconfig|arp|route|systeminfo|schtasks|reg|cmdkey|icacls|accesschk|klist|nltest|powerview|get-net\w+|get-domain\w+|get-ad\w+|invoke-\w+|cat|type|strings|ltrace|strace|ldd|readelf|objdump|ilspycmd|wmic|systemctl|2to3|gcc|python[23]?|pip[23]?|sc(?=\s+qc\b)|head(?=\s+-|\s+\d{3,6}\.))\b/i;
+  var _PROMPT_PREFIX_RE = /^\s*(?:\([^)]+\)\s*)?(?:\[?(?:[a-zA-Z0-9_.-]+\\)?[a-zA-Z0-9_.$-]+@[a-zA-Z0-9_.-]+[:\s][^\r\n$#%>\]]*\]?[$#%>]|(?:PS\s+)?[A-Za-z]:\\[^\r\n>]*>|(?:sh|bash|zsh|dash)-[\d.]+[$#]|[$#>])\s+/;
+  var _KNOWN_CMD_LINE_RE = /^\s*(?:sudo\s+|proxychains4?\s+)?(?:nmap|masscan|rustscan|nxc|netexec|crackmapexec|cme|impacket-[a-z0-9_-]+|[A-Za-z0-9_-]+\.py|ldapsearch|smbclient|smbmap|rpcclient|enum4linux(?:-ng)?|kerbrute|bloodhound(?:-python)?|sharphound|bloodyad|certipy(?:-ad)?|certify(?:\.exe)?|rubeus(?:\.exe)?|mimikatz(?:\.exe)?|pypykatz|evil-winrm|xfreerdp|ssh|sshpass|hashcat|john|hydra|medusa|ncrack|crowbar|ffuf|feroxbuster|gobuster|dirb|dirsearch|wfuzz|httpx|nuclei|nikto|whatweb|wpscan|arjun|sqlmap|git-dumper|git|curl|wget|snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|mysql|mssqlclient|sqlcmd|psql|redis-cli|mongosh|sqlite3|sqlplus|odat|dig|nslookup|host|dnsrecon|chisel|ligolo[a-z_-]*|sshuttle|responder|ike-scan|ipmitool|nth|hashid|hash-identifier|haiti|searchsploit|exiftool|linpeas|winpeas|whoami|id|uname|find|getcap|ps|netstat|ss|ip|ifconfig|ipconfig|arp|route|systeminfo|schtasks|reg|cmdkey|icacls|accesschk|klist|nltest|powerview|get-net\w+|get-domain\w*|get-ad\w+|get-gppermission|get-acl|get-childitem|gci|invoke-\w+|cat|type|strings|ltrace|strace|ldd|readelf|objdump|ilspycmd|wmic|systemctl|2to3|gcc|javac|python[23]?|pip[23]?|sc(?=\s+qc\b)|head(?=\s+-|\s+\d{3,6}\.))\b/i;
 
   // Convenience for pasted terminal output without a specific action card.
   OBOL.parsers.analyzeTerminal = function (text, opts) {

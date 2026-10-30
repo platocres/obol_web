@@ -79,7 +79,7 @@
     'secretsdump': {
       looksFor: 'secretsdump / mimikatz / pypykatz dumps - NTLM hashes, the full NTDS, the krbtgt key, cached (DCC2) hashes, Linux /etc/shadow, and any cleartext.',
       regex: 'user:rid:lm:nt:::, $DCC2$, krbtgt:502',
-      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'hash.mscache2', 'credential.plaintext', 'loot.shadow', 'loot.sam'],
+      emits: ['hash.ntlm', 'loot.ntds', 'hash.krbtgt', 'hash.mscache', 'hash.mscache2', 'credential.plaintext', 'loot.shadow', 'loot.sam', 'access.system', 'credential.ntlm_hash', 'credential.available', 'credential.candidate'],
     },
     'cracked': {
       looksFor: "john/hashcat cracked lines - a recovered 'hash:password' pair, plus hash identifier output (hashid/nth) and IKE PSK / IPMI RAKP hash captures.",
@@ -90,19 +90,19 @@
       looksFor: "nxc / evil-winrm auth results - the '[+] domain\\\\user:secret (Pwn3d!)' success and the failure lines, over SMB, WinRM, and RDP.",
       regex: '[+] …:… (Pwn3d!)',
       emits: ['credential.validation', 'credential.validated', 'credential.available', 'winrm.authenticated', 'rdp.authenticated',
-        'smb.authenticated', 'ftp.authenticated', 'ssh.authenticated', 'access.admin'],
+        'smb.authenticated', 'ldap.authenticated', 'mssql.authenticated', 'ftp.authenticated', 'ssh.authenticated', 'access.admin', 'credential.authorization'],
     },
     'responder': {
       looksFor: 'Responder / ntlmrelay output - a captured NetNTLMv2 hash on the wire.',
       regex: '[SMB] NTLMv2-SSP Hash : …',
-      emits: ['credential.netntlm', 'hash.ntlm'],
+      emits: ['credential.netntlm', 'hash.ntlm', 'hash.candidate', 'hash.crackable', 'credential.candidate'],
     },
     'ad-abuse': {
       looksFor: 'BloodHound / bloodyAD / PowerView output - collected graph, attack and control paths, ACL edges (GenericAll/WriteDacl), delegation, GPO and gMSA control, the objects you can now add or own, and a recovered LAPS local-admin password (ms-MCS-AdmPwd / msLAPS-Password, via nxc -M laps or ldapsearch).',
       regex: 'GenericAll, Unconstrained, has control over, Computer:X Password:Y',
       emits: ['ad.graph.collected', 'ad.attack_paths', 'ad.control_paths', 'ad.acl_lead', 'ad.acl_paths', 'ad.domain_control',
         'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added',
-        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd', 'ad.nopac', 'ad.maq_allow'],
+        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd', 'ad.nopac', 'ad.maq_allow', 'ad.gpo_abuse', 'ad.unconstrained_delegation', 'ad.kerberoastable', 'ad.asrep_roastable', 'ad.dcsync_principals', 'ad.high_value', 'ad.esc_templates', 'ad.foreign_principals', 'ad.targeted_kerberoast'],
     },
     'adcs': {
       looksFor: 'certipy / pywhisker output - a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',
@@ -153,7 +153,7 @@
     'database': {
       looksFor: "a database session's output - a version/current-user banner or engine prompt that proves the login (db.session), listed databases and tables, and dumped credential rows.",
       regex: 'mysql>, SQL>, List of databases, Server version:',
-      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.authenticated', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'foothold.windows'],
+      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.authenticated', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'credential.validated', 'hash.candidate', 'hash.crackable', 'foothold.windows'],
     },
     'snmp': {
       looksFor: 'snmpwalk / snmp-check output - the community string that worked, running processes and users, and any credentials in the MIB.',
@@ -168,12 +168,12 @@
     'websource': {
       looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
       regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, password = "…", DBPassword=…, [... account] + user + pass, ghp_…',
-      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.available', 'credential.candidate', 'credential.certificate', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink'],
+      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.password', 'credential.available', 'credential.candidate', 'credential.certificate', 'db.creds', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink', 'exploit.versioned_banner', 'vuln.text4shell'],
     },
     'shell-exec': {
       looksFor: "a caught shell or a command's result - an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",
       regex: 'uid=0(root), nt authority\\system',
-      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'access.root', 'host.os_family', 'host.kernel', 'host.rdp_enabled', 'host.winrm_enabled', 'pivot.active'],
+      emits: ['access.shell', 'foothold.linux', 'foothold.windows', 'access.system', 'access.root', 'access.admin', 'access.desktop', 'ssh.authenticated', 'blocker.account_restricted', 'host.os_family', 'host.kernel', 'host.rdp_enabled', 'host.winrm_enabled', 'pivot.active'],
     },
     'auth-blocker': {
       looksFor: "a credential that is valid but refused for a fixable reason - a forced password change (STATUS_PASSWORD_MUST_CHANGE / expired), Kerberos clock skew (KRB_AP_ERR_SKEW), NTLM disabled (STATUS_NOT_SUPPORTED → use -k), account lockout (STATUS_ACCOUNT_LOCKED_OUT) or a disabled/restricted account.",
@@ -221,9 +221,9 @@
       emits: ['scan.local.interfaces', 'scan.local.routes', 'scan.local.neighbors', 'scan.local.listeners', 'scan.local.dns', 'host.multihomed', 'host.arp_neighbor', 'listener.open', 'network.subnet_candidate', 'pivot.candidate', 'pivot.ports', 'tunnel.socks', 'tunnel.route', 'tunnel.dns'],
     },
     'edb': {
-      looksFor: 'a non-stock versioned third-party product banner (after subtracting stock OS/server/framework baselines), a searchsploit ASCII table or JSON result (filtering DoS/shellcodes and demoting Metasploit-only modules), and a mirrored Exploit-DB PoC script (extracting argparse/sys.argv CLI flags, hardcoded target/LHOST constants, and Python 2, Burp proxy, or C compile hazards).',
+      looksFor: 'a non-stock versioned third-party product banner (after subtracting stock OS/server/framework baselines), a searchsploit ASCII table or JSON result (filtering DoS/shellcodes and demoting Metasploit-only modules), and a mirrored Exploit-DB PoC script (extracting argparse/sys.argv CLI flags, hardcoded target/LHOST constants, and Python 2/3 syntax, Burp proxy, C compile, Java target, or version-gate hazards).',
       regex: 'Exploit Title | Path (/usr/share/exploitdb/exploits/...), RESULTS_EXPLOIT, # Exploit Title: / # EDB-ID: + add_argument / sys.argv',
-      emits: ['service.version', 'exploit.versioned_banner', 'exploit.edb_candidate', 'exploit.script_inspected', 'vuln.edb_poc_inspected', 'exploit.hazard_py2', 'exploit.hazard_burp_proxy', 'exploit.hazard_c_compile'],
+      emits: ['service.version', 'exploit.versioned_banner', 'exploit.edb_candidate', 'exploit.script_inspected', 'vuln.edb_poc_inspected', 'exploit.hazard_py2', 'exploit.hazard_py3_syntax', 'exploit.hazard_burp_proxy', 'exploit.hazard_c_compile', 'exploit.hazard_java_target', 'exploit.hazard_version_gate'],
     },
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -765,6 +765,19 @@
       "mistakes": [
         "Skipping the process list, which is where credentials hide."
       ]
+    },
+    {
+      "when": "When standard SNMP walks look quiet or you suspect custom health-check scripts.",
+      "land": [
+        "Walk NET-SNMP-EXTEND-MIB::nsExtendObjects directly with the working community string."
+      ],
+      "look": [
+        "nsExtendCommand, nsExtendArgs, and nsExtendOutputFull lines revealing custom script arguments, API tokens, or inline passwords."
+      ],
+      "win": "Custom Net-SNMP extend commands or script outputs print.",
+      "mistakes": [
+        "Walking only system/HOST-RESOURCES MIBs and missing NET-SNMP-EXTEND-MIB, which default snmpwalk without -On or OID target skips."
+      ]
     }
   ],
   "recon-ike-vpn": [
@@ -5148,6 +5161,19 @@
       "mistakes": [
         "Not matching the SOCKS port in proxychains.conf."
       ]
+    },
+    {
+      "when": "On the foothold: expose a single loopback-only service (127.0.0.1:3306, 8000, 8080) directly on Kali without proxychains.",
+      "land": [
+        "Run chisel client with R:<port>:127.0.0.1:<port> against your running chisel server --reverse."
+      ],
+      "look": [
+        "Connected message on the foothold and 127.0.0.1:<port> listening locally on Kali."
+      ],
+      "win": "Your Kali tools can talk directly to 127.0.0.1:<port> as if the target loopback service were local.",
+      "mistakes": [
+        "Binding a local Kali port that is already in use by a local service such as local MySQL or Burp."
+      ]
     }
   ],
   "pivot-ligolo": [
@@ -7310,6 +7336,19 @@
       "win": "The replaced binary runs as the service account.",
       "mistakes": [
         "Not backing up the original binary."
+      ]
+    },
+    {
+      "when": "Once icacls confirms F, M, or W rights on the service executable itself.",
+      "land": [
+        "Copy the original .exe to .bak, overwrite the service binary with your staged payload, then restart the service with net stop and net start."
+      ],
+      "look": [
+        "1 file(s) copied and the service restarting (or a SYSTEM callback/local-admin grant firing on restart or reboot)."
+      ],
+      "win": "Service Control Manager launches your replacement binary as NT AUTHORITY\\SYSTEM.",
+      "mistakes": [
+        "Trying to overwrite the binary while the running process holds an exclusive file lock (stop the service first or rename the in-use binary if folder permissions allow)."
       ]
     }
   ],
@@ -9947,6 +9986,32 @@
       "mistakes": [
         "Stopping at the first SMB [+] and missing that the same credential also opens a WinRM shell."
       ]
+    },
+    {
+      "when": "Domain authentication returned STATUS_LOGON_FAILURE on a domain-joined Windows member server.",
+      "land": [
+        "Retry the switchless SMB check with --local-auth to test the local SAM database instead of the domain controller."
+      ],
+      "look": [
+        "A green [+] against the host's local computer name (and (Pwn3d!) if the local account has administrative rights)."
+      ],
+      "win": "A credential recovered from an application or config authenticates as a local SAM account even though no matching domain account accepted it.",
+      "mistakes": [
+        "Running --local-auth against a Domain Controller (DCs have no separate local SAM accounts)."
+      ]
+    },
+    {
+      "when": "Port 22 is open on the target and you hold a recovered plaintext password.",
+      "land": [
+        "Run nxc ssh to confirm whether the password authenticates over SSH before launching an interactive session."
+      ],
+      "look": [
+        "A green [+] SSH line confirming password authentication succeeded."
+      ],
+      "win": "SSH password reuse is confirmed, making ssh user@target an immediate interactive shell.",
+      "mistakes": [
+        "Testing only Windows protocols when an open SSH daemon on Linux or Windows OpenSSH accepts the same password."
+      ]
     }
   ],
   "lateral-exec": [
@@ -12310,6 +12375,19 @@
       "mistakes": [
         "Overlooking a GPO linked to a privileged OU."
       ]
+    },
+    {
+      "when": "You already hold a Windows foothold on a domain-joined host linked to the writable GPO.",
+      "land": [
+        "Run SharpGPOAbuse.exe --AddLocalAdmin targeting the writable GPO display name, then run gpupdate /force to apply it immediately."
+      ],
+      "look": [
+        "SharpGPOAbuse confirming the local-admin preference was written to SYSVOL and Computer Policy update has completed successfully."
+      ],
+      "win": "Your controlled domain user is added to the local Administrators group on the linked computer.",
+      "mistakes": [
+        "Forgetting gpupdate /force (or forgetting to open a fresh elevated/network logon session after the group refresh)."
+      ]
     }
   ],
   "dnsadmins-abuse": [
@@ -14395,29 +14473,42 @@
   ],
   "ftp-webroot-upload-webshell": [
     {
-      "when": "Target exposes an anonymous FTP service with write access mapped to webroot.",
+      "when": "Target exposes an IIS webroot (iisstart.htm, web.config, aspnet_client) over anonymous or authenticated writable FTP.",
       "land": [
-        "Upload an ASPX or PHP webshell directly into the FTP root directory."
+        "Upload an ASPX webshell into the writable FTP directory using anonymous or recovered FTP credentials."
       ],
       "look": [
-        "FTP 226 transfer complete response indicating file was written."
+        "FTP 226 transfer complete response confirming shell.aspx was written to the directory."
       ],
-      "win": "Webshell uploaded directly into web server docroot.",
+      "win": "ASPX webshell uploaded directly into the IIS document root.",
       "mistakes": [
-        "Uploading with wrong extension (.asp vs .aspx) for target IIS version."
+        "Uploading .php to an IIS server that only executes .aspx/.asp, or omitting --user when authenticated FTP is required."
       ]
     },
     {
-      "when": "Webshell has been uploaded to FTP docroot and needs verification.",
+      "when": "Target exposes an Apache or Nginx PHP webroot (index.php, wp-config.php) over anonymous or authenticated writable FTP.",
       "land": [
-        "Issue HTTP GET request targeting the uploaded webshell path with test command parameter."
+        "Upload a minimal PHP command shell into the writable FTP directory."
       ],
       "look": [
-        "Command output (e.g. iis apppool\\defaultapppool) rendered in HTTP response body."
+        "FTP 226 transfer complete response confirming shell.php landed in the webroot."
       ],
-      "win": "Webshell execution confirmed; initial foothold established.",
+      "win": "PHP webshell uploaded directly into the Linux/PHP web server document root.",
       "mistakes": [
-        "Requesting wrong URL path or encountering anti-virus quarantine on payload."
+        "Uploading into a parent FTP home directory instead of the public_html/htdocs/wwwroot subdirectory served over HTTP."
+      ]
+    },
+    {
+      "when": "The webshell has been uploaded to the FTP-backed webroot and needs HTTP verification.",
+      "land": [
+        "Request the uploaded webshell URL on the active HTTP/HTTPS origin with a harmless identity command (whoami or id)."
+      ],
+      "look": [
+        "OS command output (such as iis apppool\\defaultapppool or uid=33(www-data)) rendered in the HTTP response body."
+      ],
+      "win": "Remote code execution over HTTP confirmed; initial web foothold established.",
+      "mistakes": [
+        "Hitting port 80 when the FTP-mapped virtual host actually listens on an alternate HTTP/HTTPS port."
       ]
     }
   ],
@@ -14955,6 +15046,73 @@
       "win": "CMS user or administrator password recovered in plaintext.",
       "mistakes": [
         "Using -m 0 (raw MD5) instead of -m 400 for salted phpass hashes."
+      ]
+    },
+    {
+      "when": "You extracted a bare 32-character hex digest from a web app database or legacy config file that looks like unsalted MD5.",
+      "land": [
+        "Run hashcat -m 0 against rockyou.txt to test raw MD5 at full speed."
+      ],
+      "look": [
+        "<32-hex-digest>:<plaintext> in hashcat's cracked output."
+      ],
+      "win": "Unsalted MD5 application password hash cracked in seconds.",
+      "mistakes": [
+        "Confusing a Windows NTLM 32-hex hash (-m 1000) with a web database raw-MD5 32-hex hash (-m 0); test both if origin is ambiguous."
+      ]
+    },
+    {
+      "when": "You have a bare 32-hex raw-MD5 hash on a CPU-only VM where John is preferred over OpenCL hashcat.",
+      "land": [
+        "Pass --format=raw-md5 explicitly to both john and john --show."
+      ],
+      "look": [
+        "Cracked plaintext printed by john --show --format=raw-md5."
+      ],
+      "win": "Raw-MD5 digest cracked cleanly on CPU via John the Ripper.",
+      "mistakes": [
+        "Omitting --format=raw-md5, causing John to misidentify a bare 32-hex string as LM or NT."
+      ]
+    }
+  ],
+  "jdwp-local-privesc": [
+    {
+      "when": "Local socket enumeration (ss -tulpn / netstat) on a Linux foothold shows a root-owned java process listening on loopback JDWP (e.g. 127.0.0.1:8000 or 5005).",
+      "land": [
+        "Forward the loopback JDWP port back to Kali with ssh -N -L (or chisel reverse port forward if you do not have SSH access)."
+      ],
+      "look": [
+        "127.0.0.1:{{jdwp_port|8000}} open locally on Kali and answering the JDWP-Handshake banner."
+      ],
+      "win": "The target's root JVM debugger socket is reachable from Kali localhost.",
+      "mistakes": [
+        "Trying to connect directly to the target's external IP when JDWP is bound strictly to 127.0.0.1."
+      ]
+    },
+    {
+      "when": "The forwarded JDWP port is reachable on 127.0.0.1 from Kali.",
+      "land": [
+        "Run jdwp-shellifier.py with --break-on 'java.lang.String.indexOf' (or java.net.ServerSocket.accept) and --cmd to copy /bin/bash to /tmp/rootbash with SUID set."
+      ],
+      "look": [
+        "Command successfully executed output from jdwp-shellifier once the JVM hits the breakpoint."
+      ],
+      "win": "The root JVM executes your command payload inside Runtime.getRuntime().exec().",
+      "mistakes": [
+        "Setting a breakpoint on a Java method that never runs while idle; curl or browse the Java service to trigger activity so the breakpoint fires."
+      ]
+    },
+    {
+      "when": "jdwp-shellifier confirms the payload executed on the target.",
+      "land": [
+        "On your target foothold shell, verify /tmp/rootbash is root-owned SUID and run /tmp/rootbash -p."
+      ],
+      "look": [
+        "euid=0(root) in id output."
+      ],
+      "win": "Interactive root shell achieved from the unauthenticated JDWP debugger.",
+      "mistakes": [
+        "Forgetting -p on bash, which causes bash to drop effective uid 0 back to your unprivileged user."
       ]
     }
   ],
@@ -15812,7 +15970,8 @@
     'prototype-pollution': { what: 'In JavaScript every object inherits from a shared prototype, so if an app merges your keys into an object without filtering __proto__, you can add a property like isAdmin to every object at once, which flips an authorization check.' },
     'mass-assignment': { what: 'When a framework maps every field of a request body onto a model, you add a field the form never shows (role, isAdmin) and the app saves it. A fresh admin account is cleaner than escalating a watched one.' },
     'smb-share-browse-download': { what: 'When an SMB share is readable, listing the root directory is rarely enough: credentials and policy files live buried inside nested folders. This move connects with smbclient or smbmap to walk the share or bulk-pull the entire directory tree to your Kali box.' },
-    'crack-modular-hash': { what: 'Web frameworks and modern apps store passwords as modular hashes (PBKDF2, Argon2, Flask/Werkzeug, Gitea, WordPress phpass). Cracking them offline with hashcat or John turns a leaked database row into a reusable plaintext password.' },
+    'crack-modular-hash': { what: 'Web frameworks and modern apps store passwords as modular or unsalted digests (PBKDF2, Argon2, bcrypt, sha512crypt, WordPress phpass, raw MD5). Cracking them offline with hashcat or John turns a leaked database row into a reusable plaintext password.' },
+    'jdwp-local-privesc': { what: 'Java Debug Wire Protocol (JDWP) has no authentication by design and lets an attached debugger invoke Runtime.exec() inside the JVM. When a root-owned Java service leaves a JDWP port listening on 127.0.0.1, forwarding that loopback port and attaching jdwp-shellifier turns local foothold access into immediate root execution.' },
     'writable-etc-shadow-sudoers': { what: 'When /etc/shadow or /etc/sudoers is writable by your user or group, you do not need an exploit: replace root password hash or grant yourself NOPASSWD sudo and step straight into a root shell.' },
     'linux-root-cred-harvest': { what: 'Getting root on one machine is often the key to the next one. Sweeping /etc/shadow, SSH keys, shell history, and app configs as root harvests the passwords and keys that unlock neighboring hosts.' },
     'runas-savedcred-exec': { what: 'Windows Credential Manager sometimes caches an Administrator password so scheduled jobs or admins do not have to retype it. When cmdkey /list shows a saved credential, runas /savecred lets you run a command or shell as that user with no password prompt.' },
@@ -15887,6 +16046,9 @@
     'blocker.access_denied': { title: 'Access Denied (Insufficient Privileges)', why: 'The operation was refused with Access is denied / Permission denied / EACCES.', body: 'Your current account or integrity level lacks the required ACL or privilege. On Windows, check if you are a filtered local admin needing UAC bypass (whoami /groups) or missing a token privilege (whoami /priv); on Linux, check sudo -l, group memberships (id), and file ownership.', code: 'whoami /groups & whoami /priv' },
     'blocker.samr_null_denied': { title: 'SAMR Null Session Denied (RestrictAnonymousSAM)', why: 'Anonymous SMB connected, but SAMR user enumeration (enumdomusers / --users) returned NT_STATUS_ACCESS_DENIED.', body: 'Modern Windows hosts block anonymous SAMR queries by default. Pivot to Guest RID cycling (--rid-brute), LSARPC SID lookups (lsaenumsid / lookupsid), or authenticate with a discovered credential.', code: "nxc smb <target> -u 'guest' -p '' --rid-brute" },
     'exploit.hazard_py2': { title: 'Pre-Flight Hazard: Legacy Python 2 Exploit Syntax Detected', why: 'Static inspection spotted Python 2 print statements, raw_input(), or removed stdlib modules (urllib2, cookielib, urlparse, httplib) that will crash under Python 3.', body: 'Normalize CRLF line endings, insert a UTF-8 coding header for non-ASCII author comments, and convert the script in place with 2to3 -w before executing it.', code: "dos2unix {{edb_file|exploit.py}} 2>/dev/null; sed -i '1i # -*- coding: utf-8 -*-' {{edb_file|exploit.py}} && 2to3 -w {{edb_file|exploit.py}}" },
+    'exploit.hazard_py3_syntax': { title: 'Pre-Flight Hazard: Unterminated Multi-Line String Literal in Python PoC', why: 'Static inspection spotted an unterminated single- or double-quoted string literal split across a raw newline, which raises SyntaxError before the PoC can execute.', body: 'Wrap multi-line HTTP/payload blocks in triple quotes ("""...""") or join split lines with explicit \\r\\n escapes in your local copy, then verify syntax with py_compile before firing.', code: 'python3 -m py_compile {{edb_file|exploit.py}}' },
+    'exploit.hazard_version_gate': { title: 'Pre-Flight Hazard: Strict Banner / Version Gate in Exploit', why: 'The PoC checks a hardcoded version banner or regex before sending its payload and exits early if the target hides or customizes its version string.', body: 'Compare the script version check against the actual service banner; pass --force if supported, or comment out the brittle pre-check in your local copy when the underlying endpoint is still unpatched.', code: "grep -nE 'version|not vulnerable|sys\\.exit|exit\\(' <exploit.py>" },
+    'exploit.hazard_java_target': { title: 'Pre-Flight Hazard: Java Bytecode Target or Retired -source/-target Flag', why: 'Modern JDKs (Java 17/21) reject retired javac -source/-target 1.5/1.6/1.7 flags and emit class version 61/65 bytecode that fails on older Java 8/11 targets with UnsupportedClassVersionError.', body: 'Compile Java payloads with --release 8 (or update hardcoded -source/-target 1.5/1.6/1.7 flags in wrapper scripts to -source 8 -target 8) so compilation succeeds and runs on Java 8+ runtimes.', code: 'javac --release 8 <exploit.java>' },
     'exploit.hazard_burp_proxy': { title: 'Pre-Flight Hazard: Hardcoded Localhost Burp Proxy (127.0.0.1:8080)', why: 'The mirrored PoC contains an active proxies = {... 127.0.0.1:8080 ...} setting left behind by the exploit author, which will fail with ProxyError if Burp Suite is closed.', body: 'Clear the hardcoded proxy dictionary in your local PoC copy (or start Burp on 127.0.0.1:8080 to intercept the exploit traffic) before firing.', code: "sed -i -E \"s/proxies\\s*=\\s*\\{[^}]*127\\.0\\.0\\.1:(8080|8081|8000|8888)[^}]*\\}/proxies = {}/g\" {{edb_file|exploit.py}}" },
     'exploit.hazard_c_compile': { title: 'Pre-Flight Hazard: C / C++ Exploit Requires Matched Compilation', why: 'This Exploit-DB entry is raw C/C++ source code that must be compiled for the target OS, architecture, and libc version before running.', body: 'Compile on the target when gcc is present, or link statically (-static) on Kali so host GLIBC version skew does not break execution on older targets.', code: 'gcc {{edb_file|exploit.c}} -o exploit_bin -static -pthread || gcc -m32 {{edb_file|exploit.c}} -o exploit32 -static' },
     'blocker.py2_syntax_or_module': { title: 'Python 2 Exploit Syntax or Module Under Python 3', why: 'The PoC crashed with Missing parentheses in call to print, No module named urllib2/urlparse/httplib/cookielib, or a Python 3 str/bytes TypeError.', body: 'Convert the legacy Python 2 Exploit-DB script in place with dos2unix + 2to3 -w (and prepend a UTF-8 coding header), or invoke it with python2 if installed. Check socket.send() and base64 calls for bytes (.encode()).', code: "dos2unix {{edb_file|exploit.py}}; sed -i '1i # -*- coding: utf-8 -*-' {{edb_file|exploit.py}} && 2to3 -w {{edb_file|exploit.py}}" },

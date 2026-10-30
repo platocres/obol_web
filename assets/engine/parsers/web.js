@@ -12,7 +12,27 @@
   var mkFact = C.mkFact, _add = C._add, S = C.ProofState.SUPPORTED;
   var reAll = C.reAll, reSearch = C.reSearch;
 
+  function _is_sql_client_output(text, ws, command) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    if (/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)) return false;
+    if (/<(?:!doctype\s+html|html|head|body|form|input|script|title|meta)\b/i.test(t)) return false;
+    if (/\b(?:curl|wget|httpie|whatweb|ffuf|gobuster|feroxbuster|nikto|httpx|nuclei|wpscan)\b/i.test(cmd)) return false;
+    var promptCtx = [
+      ws && ws.context && ws.context.promptLine,
+      ws && ws.context && ws.context.followPrompt
+    ].filter(Boolean).join('\n');
+    var combined = promptCtx ? (promptCtx + '\n' + t) : t;
+    if (/^\s*(?:mysql|MariaDB\s*\[[^\]]*\]|postgres[-=#]*|sqlite3?|SQL(?:\s*\([^)]*\))?)\s*>/im.test(combined)) return true;
+    if (/^\s*(?:sudo\s+)?(?:mysql|psql|sqlite3?|mssqlclient(?:\.py)?|impacket-mssqlclient|sqlcmd|sqlplus)\b/i.test(cmd)) return true;
+    if (/\b\d+\s+rows?\s+in\s+set\b/i.test(t) && /^\s*\|\s*Database\s*\|\s*$/im.test(t)) return true;
+    if (/^\s*\(\d+\s+rows?\)\s*$/im.test(t) && /^\s*List of databases\b/im.test(t)) return true;
+    return false;
+  }
+  C._is_sql_client_output = _is_sql_client_output;
+
   function _parse_wpscan(text, ws, source, facts) {
+    if (_is_sql_client_output(text, ws, '')) return;
     var h = 'host:' + ws.target;
     var isWpscan = /WordPress version|\bWPScan\b|wp-content|wp-includes|\bwordpress\b/i.test(text);
     var version = reSearch(C._WPSCAN_VERSION_RE, text);
@@ -78,6 +98,56 @@
   var _ARTIFACT_ARCHIVE_RE = /\.(?:zip|rar|7z|tar|tar\.gz|tgz|tar\.bz2)$/i;
   var _ARTIFACT_CONFIG_RE = /\.(?:env|config|conf|cfg|ini|ya?ml|json|xml|properties|sql|bak|old|save|swp|inc)$|(?:config|configuration|settings|wp-config|web\.config|\.env)(?:\.php|\.inc)?$/i;
   var _BASE_URL_RE = /(?<base>https?:\/\/[^/\s"']+)/i;
+  var _GOBUSTER_REL_RE = /^[ \t]*(?:Found:[ \t]*)?(?:(?<origin>https?:\/\/[^/\s]+))?(?<path>\/?[A-Za-z0-9_.~%-][^\s()]*)[ \t]+\(Status:[ \t]*(?<code>\d{3})\)(?:[ \t]+\[Size:[ \t]*\d+\])?(?:[ \t]+\[-->[^\]]*\])?[ \t]*$/gim;
+
+  function _normalize_origin_url(rawOrigin) {
+    var m = /^(https?):\/\/([^/\s"'?#:]+)(?::(\d{1,5}))?/i.exec(String(rawOrigin || '').trim());
+    if (!m) return { origin: '', port: 0 };
+    var scheme = m[1].toLowerCase();
+    var host = m[2];
+    var port = m[3] ? parseInt(m[3], 10) : (scheme === 'https' ? 443 : 80);
+    if (!port || port < 1 || port > 65535) port = (scheme === 'https' ? 443 : 80);
+    var isDefault = (scheme === 'http' && port === 80) || (scheme === 'https' && port === 443);
+    return {
+      origin: scheme + '://' + host + (isDefault ? '' : ':' + port),
+      port: port
+    };
+  }
+
+  function _extract_web_origin(text, command, ws) {
+    var cmd = String(command || '').replace(/(?:^|\s)(?:-x|--proxy|--replay-proxy)\s+(?:"[^"]*"|'[^']*'|\S+)/gi, ' ');
+    var t = String(text || '');
+    var flagM = /(?:^|\s)(?:-u|--url|-host|-h)\s+['"]?(https?:\/\/[^/\s"'?#]+)/i.exec(cmd);
+    if (flagM) return _normalize_origin_url(flagM[1]);
+    var cmdUrlM = /(https?:\/\/[^/\s"'?#]+)/i.exec(cmd);
+    if (cmdUrlM) return _normalize_origin_url(cmdUrlM[1]);
+    var bannerM = /(?:^\s*\[\+\]\s*Url:\s*|^\s*[+|*]?\s*Target(?:\s+URL)?\s*:\s*|::\s*URL\s*:\s*|URL_BASE\s*:\s*)(https?:\/\/[^/\s"'?#]+)/im.exec(t);
+    if (bannerM) return _normalize_origin_url(bannerM[1]);
+    var rowUrlM = /(https?:\/\/[^/\s"'?#]+)\//i.exec(t);
+    if (rowUrlM) return _normalize_origin_url(rowUrlM[1]);
+    var niktoPortM = /^\+\s*Target Port:\s*(\d{1,5})\b/im.exec(t);
+    if (niktoPortM) {
+      var nPort = parseInt(niktoPortM[1], 10);
+      var nHostM = /^\+\s*Target (?:Hostname|IP):\s*([^\s\r\n]+)/im.exec(t);
+      var nHost = (nHostM && nHostM[1]) || (ws && ws.target) || '';
+      var nScheme = (/^\+\s*SSL Info:/im.test(t) || nPort === 443 || nPort === 8443) ? 'https' : 'http';
+      if (nHost && nPort >= 1 && nPort <= 65535) {
+        return _normalize_origin_url(nScheme + '://' + nHost + ':' + nPort);
+      }
+    }
+    var niktoCmdPortM = /\bnikto\b[^\r\n]*?(?:-p|-port)\s+(\d{1,5})\b/i.exec(cmd);
+    if (niktoCmdPortM) {
+      var ncPort = parseInt(niktoCmdPortM[1], 10);
+      var ncHostM = /(?:-h|-host)\s+['"]?([^/\s"':]+)/i.exec(cmd);
+      var ncHost = (ncHostM && ncHostM[1]) || (ws && ws.target) || '';
+      var ncScheme = (/\s-ssl\b/i.test(cmd) || ncPort === 443 || ncPort === 8443) ? 'https' : 'http';
+      if (ncHost && ncPort >= 1 && ncPort <= 65535) {
+        return _normalize_origin_url(ncScheme + '://' + ncHost + ':' + ncPort);
+      }
+    }
+    return { origin: '', port: 0 };
+  }
+  C._extract_web_origin = _extract_web_origin;
 
   function _classify_artifact(path) {
     if (reSearch(_ARTIFACT_GIT_RE, path)) return 'git';
@@ -88,9 +158,9 @@
   }
   C._classify_artifact = _classify_artifact;
 
-  function _exposed_artifacts(paths, command, ws, source, facts) {
+  function _exposed_artifacts(paths, command, ws, source, facts, fallbackOrigin) {
     var m = reSearch(_BASE_URL_RE, command || '');
-    var base = m ? m.groups.base : '';
+    var base = m ? m.groups.base : (fallbackOrigin || '');
     var seen = {}, count = 0;
     for (var i = 0; i < paths.length; i++) {
       var path = paths[i];
@@ -108,7 +178,22 @@
 
   function _parse_web_content(text, ws, source, facts, command) {
     var paths = {};
-    reAll(C._WEB_GOBUSTER_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.path)] = true; });
+    var isGobusterCtx = /\bgobuster\b/i.test(command || '') || /\bGobuster\s+v?\d/i.test(text || '') || /\(Status:\s*\d{3}\)[ \t]+\[Size:\s*\d+\]/i.test(text || '');
+    reAll(C._WEB_GOBUSTER_RE, text).forEach(function (m) {
+      if (m.groups.code !== '404') {
+        var rawP = m.groups.path || '';
+        var normP = rawP.charAt(0) === '/' || /^https?:\/\//i.test(rawP) ? C._url_path(rawP) : C._url_path('/' + rawP);
+        if (normP) paths[normP] = true;
+      }
+    });
+    reAll(_GOBUSTER_REL_RE, text).forEach(function (m) {
+      if (m.groups.code === '404') return;
+      var rawRel = (m.groups.path || '').trim();
+      if (!rawRel) return;
+      if (rawRel.charAt(0) !== '/' && !m.groups.origin && !isGobusterCtx) return;
+      var normRel = rawRel.charAt(0) === '/' ? C._url_path(rawRel) : C._url_path('/' + rawRel);
+      if (normRel) paths[normRel] = true;
+    });
     reAll(C._WEB_FEROX_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true; });
     reAll(C._WEB_DIRB_RE, text).forEach(function (m) { if (m.groups.code !== '404') paths[C._url_path(m.groups.url)] = true; });
     if (C._WEB_DIRSEARCH_RE) {
@@ -141,14 +226,17 @@
     var keys = Object.keys(paths).filter(function (p) { return p && p.toLowerCase().indexOf('http') !== 0; });
     if (!keys.length) return;
     var ordered = C.uniqueSortedCI(keys);
+    var meta = _extract_web_origin(text, command, ws);
     var value = { paths: ordered.slice(0, 500), count: ordered.length };
+    if (meta.origin) value.origin = meta.origin;
+    if (meta.port) value.port = meta.port;
     var interesting = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
     if (interesting.length) value.interesting = interesting.slice(0, 200);
     _add(facts, mkFact('web.content_map', 'host:' + ws.target, value, S, source));
     _add(facts, mkFact('web.paths', 'host:' + ws.target, value, S, source));
     var uploadPath = ordered.find(function (p) { return /(?:^|\/)upload(?:s|\.[a-z0-9]+)?(?:\b|\/|$)/i.test(p); });
     if (uploadPath) _add(facts, mkFact('web.upload_form', 'host:' + ws.target, { path: uploadPath, evidence: 'upload endpoint discovered: ' + uploadPath }, S, source));
-    _exposed_artifacts(ordered, command || '', ws, source, facts);
+    _exposed_artifacts(ordered, command || '', ws, source, facts, meta.origin);
   }
   C._parse_web_content = _parse_web_content;
 
@@ -168,11 +256,14 @@
     });
     var pKeys = C.uniqueSortedCI(Object.keys(paths));
     if (pKeys.length) {
+      var meta = _extract_web_origin(text, command, ws);
       var val = { paths: pKeys.slice(0, 500), count: pKeys.length, tool: 'nikto' };
+      if (meta.origin) val.origin = meta.origin;
+      if (meta.port) val.port = meta.port;
       var inter = pKeys.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
       if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', h, val, S, source));
-      _exposed_artifacts(pKeys, command || '', ws, source, facts);
+      _exposed_artifacts(pKeys, command || '', ws, source, facts, meta.origin);
     }
     vulns.slice(0, 10).forEach(function (v) {
       _add(facts, mkFact('exploit.candidate', h, { key: 'nikto', name: v, source: 'nikto' }, S, source));
@@ -184,26 +275,30 @@
     try {
       var obj = JSON.parse(text);
       if (!obj || !Array.isArray(obj.results)) return false;
-      var paths = {};
+      var paths = {}, firstUrl = '';
       obj.results.forEach(function (r) {
         if (!r || r.status === 404) return;
+        if (!firstUrl && r.url) firstUrl = r.url;
         var p = r.url ? C._url_path(r.url) : (r.input && r.input.FUZZ ? '/' + r.input.FUZZ : '');
         if (p) paths[p] = true;
       });
       var ordered = C.uniqueSortedCI(Object.keys(paths));
       if (!ordered.length) return true;
+      var meta = _extract_web_origin(firstUrl || (obj.config && obj.config.url) || '', command || (obj.commandline || ''), ws);
       var val = { paths: ordered.slice(0, 500), count: ordered.length };
+      if (meta.origin) val.origin = meta.origin;
+      if (meta.port) val.port = meta.port;
       var inter = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
       if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', 'host:' + ws.target, val, S, source));
-      _exposed_artifacts(ordered, command || '', ws, source, facts);
+      _exposed_artifacts(ordered, command || '', ws, source, facts, meta.origin);
       return true;
     } catch (e) { return false; }
   }
   C._parse_ffuf_json = _parse_ffuf_json;
 
   function _parse_feroxbuster_json(text, ws, source, facts, command) {
-    var paths = {}, matched = false;
+    var paths = {}, matched = false, firstUrl = '';
     String(text || '').split(/\r?\n/).forEach(function (line) {
       line = line.trim();
       if (!line || line.charAt(0) !== '{') return;
@@ -211,6 +306,7 @@
         var r = JSON.parse(line);
         if (r && (r.type === 'response' || r.url) && r.status && r.status !== 404) {
           matched = true;
+          if (!firstUrl && r.url) firstUrl = r.url;
           var p = C._url_path(r.url || r.path || '');
           if (p) paths[p] = true;
         }
@@ -219,11 +315,14 @@
     if (!matched) return false;
     var ordered = C.uniqueSortedCI(Object.keys(paths));
     if (ordered.length) {
+      var meta = _extract_web_origin(firstUrl, command, ws);
       var val = { paths: ordered.slice(0, 500), count: ordered.length };
+      if (meta.origin) val.origin = meta.origin;
+      if (meta.port) val.port = meta.port;
       var inter = ordered.filter(function (p) { return reSearch(C._WEB_INTERESTING_RE, p); });
       if (inter.length) val.interesting = inter.slice(0, 200);
       _add(facts, mkFact('web.content_map', 'host:' + ws.target, val, S, source));
-      _exposed_artifacts(ordered, command || '', ws, source, facts);
+      _exposed_artifacts(ordered, command || '', ws, source, facts, meta.origin);
     }
     return true;
   }
@@ -330,19 +429,166 @@
   var _FORM_INPUT_RE = /<input\b[^>]*\bname\s*=/i;
   var _UPLOAD_FORM_RE = /type\s*=\s*["']?\s*file\b|enctype\s*=\s*["']?\s*multipart\/form-data/i;
   var _LOGIN_FORM_RE = /<input\b[^>]*\btype\s*=\s*["']?\s*password\b/i;
+  var _OCR_USER_INPUT_RE = /\[Input[^\]]*(?:User(?:name)?|Email|Login|Account)[^\]]*\]/i;
+  var _OCR_PASS_INPUT_RE = /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]/i;
+  var _HTTP_AUTH_PARAM_USER_RE = /(?:^|[?&\s"'{,])["']?(?:user(?:name)?|email|login|uid|usr)["']?\s*[:=]\s*["']?[^&\s"',}]+/i;
+  var _HTTP_AUTH_PARAM_PASS_RE = /(?:^|[?&\s"'{,])["']?(?:pass(?:word|wd)?|pwd)["']?\s*[:=]\s*["']?[^&\s"',}]+/i;
+  var _HTTP_AUTH_ENDPOINT_RE = /(?:^(?:>\s*)?(?:POST|GET)\s+\/[^\s?]*?(?:login|signin|sign-in|auth|authenticate)\b|https?:\/\/[^/\s"']+\/[^\s"'?#]*?(?:login|signin|sign-in|auth|authenticate)\b)/im;
 
   function _parse_web_surface(text, ws, command, source, facts) {
-    var t = text || '', h = 'host:' + ws.target;
-    if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || reSearch(_PARAM_URL_RE, command || '')) _add(facts, mkFact('web.parameterized', h, { evidence: 'parameter or form input observed' }, S, source));
+    if (_is_sql_client_output(text, ws, command)) return;
+    var t = text || '', cmd = command || '', h = 'host:' + ws.target;
+    var cmdAndText = cmd + '\n' + t;
+    var hasOcrLogin = reSearch(_OCR_USER_INPUT_RE, t) && reSearch(_OCR_PASS_INPUT_RE, t);
+    var isHttpExchange = /\b(?:curl|wget|httpie)\b/i.test(cmd)
+      || /^(?:[<>]\s*)?(?:POST|GET)\s+\/\S+\s+HTTP\/[12]/im.test(t)
+      || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)
+      || /^URL:\s*https?:\/\/\S+/im.test(t);
+    var hasHttpAuthParams = isHttpExchange && reSearch(_HTTP_AUTH_PARAM_USER_RE, cmdAndText) && reSearch(_HTTP_AUTH_PARAM_PASS_RE, cmdAndText);
+    var hasHttpAuthPost = isHttpExchange && reSearch(_HTTP_AUTH_ENDPOINT_RE, cmdAndText)
+      && (/\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd) || /^(?:>\s*)?POST\s+\//im.test(t) || hasHttpAuthParams);
+    var hasConnFailure = /curl:\s*\(\d+\)|Connection refused|Could not resolve host|Failed to connect|No route to host/i.test(t);
+
+    if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || reSearch(_PARAM_URL_RE, cmd) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
+      _add(facts, mkFact('web.parameterized', h, { evidence: hasOcrLogin ? 'OCR browser form input controls' : 'parameter or form input observed' }, S, source));
+    }
     if (reSearch(_UPLOAD_FORM_RE, t)) _add(facts, mkFact('web.upload_form', h, { evidence: 'file-upload form' }, S, source));
-    if (reSearch(_LOGIN_FORM_RE, t)) _add(facts, mkFact('web.login_form', h, { evidence: 'password input form' }, S, source));
+    if (reSearch(_LOGIN_FORM_RE, t) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
+      _add(facts, mkFact('web.login_form', h, { evidence: hasOcrLogin ? 'OCR browser login form controls' : 'password input form' }, S, source));
+    }
+    if ((hasOcrLogin || ((hasHttpAuthParams || hasHttpAuthPost) && t.trim().length > 0)) && !hasConnFailure) {
+      _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : 'http-auth-surface' }, S, source));
+    }
   }
   C._parse_web_surface = _parse_web_surface;
+
+  var _DIFF_CRED_DENY = {
+    changeme: 1, change_me: 1, password: 1, secret: 1, example: 1, placeholder: 1,
+    none: 1, null: 1, true: 1, false: 1, todo: 1, redacted: 1, xxx: 1, xxxx: 1,
+    your_password: 1, your_user: 1, username: 1, user: 1
+  };
+  var _DIFF_USER_ASSIGN_RE = /^(?:define\(\s*['"]([\w.-]*?(?:user(?:name)?|usr|uid|login|account)[\w.-]*)['"]\s*,\s*['"]([^'"\r\n]{1,96})['"]|(?:(?:public|private|protected|var|let|const|static|final|export)\s+)*['"$@]?((?:[A-Za-z_][\w.-]*?)?(?:user(?:name)?|usr|uid|login|account)[\w.-]*)['"]?\s*(?:=>|[:=])\s*['"]([^'"\r\n]{1,96})['"])/i;
+  var _DIFF_PASS_ASSIGN_RE = /^(?:define\(\s*['"]([\w.-]*?(?:pass(?:word|wd)?|pwd|secret|key)[\w.-]*)['"]\s*,\s*['"]([^'"\r\n]{3,128})['"]|(?:(?:public|private|protected|var|let|const|static|final|export)\s+)*['"$@]?((?:[A-Za-z_][\w.-]*?)?(?:pass(?:word|wd)?|pwd|secret|key)[\w.-]*)['"]?\s*(?:=>|[:=])\s*['"]([^'"\r\n]{3,128})['"])/i;
+
+  function _valid_diff_token(v, isUser) {
+    var s = String(v || '').trim();
+    if (!s || (isUser ? s.length < 2 : s.length < 3) || s.length > 128) return false;
+    var low = s.toLowerCase();
+    if (_DIFF_CRED_DENY[low]) return false;
+    if (isUser && (low === 'user' || low === 'username' || low === 'dbuser' || low === 'db_user')) return false;
+    if (/^\$\{.*\}$|^<.*>$|^%.*%$|^\$\w+$|^\{\{.*\}\}$/.test(s)) return false;
+    if (!isUser && /^(?:https?:\/\/|\/|\.\.?\/|[A-Za-z]:\\)/.test(s)) return false;
+    return true;
+  }
+
+  function _extract_diff_cred_pairs(text) {
+    var t = String(text || '');
+    if (!/^@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@|^diff --git\s+/m.test(t)) return [];
+    var lines = t.split(/\r?\n/);
+    var pairs = [], seen = {};
+    var curFile = '', inHunk = false;
+    var usersMinus = [], usersPlus = [], usersCtx = [];
+    var passMinus = [], passPlus = [], passCtx = [];
+    var hunkText = [];
+
+    function flushHunk() {
+      if (!inHunk) return;
+      var hunkBlob = curFile + '\n' + hunkText.join('\n');
+      var isDb = /(?:database|db_|_db\b|mysql|mysqli|pdo|pgsql|postgres|mssql|sqlsrv|sqlite|jdbc|hibernate|datasource|wp-config|configuration\.php)/i.test(hunkBlob);
+      function pairLists(uList, pList, requireChanged) {
+        for (var ui = 0; ui < uList.length; ui++) {
+          for (var pi = 0; pi < pList.length; pi++) {
+            if (requireChanged && !uList[ui].changed && !pList[pi].changed) continue;
+            var u = uList[ui].val, p = pList[pi].val;
+            var k = u + '\x00' + p;
+            if (seen[k]) continue;
+            seen[k] = true;
+            pairs.push({
+              user: u,
+              password: p,
+              userKey: uList[ui].key,
+              passKey: pList[pi].key,
+              file: curFile,
+              isDb: isDb || /(?:db|sql|mysql|pg|mongo|redis)/i.test(uList[ui].key + ' ' + pList[pi].key)
+            });
+          }
+        }
+      }
+      pairLists(usersMinus, passMinus, false);
+      pairLists(usersPlus, passPlus, false);
+      if (!pairs.length || (usersMinus.length + usersPlus.length === 0) || (passMinus.length + passPlus.length === 0)) {
+        var allU = usersMinus.concat(usersPlus, usersCtx);
+        var allP = passMinus.concat(passPlus, passCtx);
+        pairLists(allU, allP, true);
+      }
+      usersMinus = []; usersPlus = []; usersCtx = [];
+      passMinus = []; passPlus = []; passCtx = [];
+      hunkText = [];
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var dgM = /^diff --git a\/(\S+)\s+b\/(\S+)/.exec(raw);
+      if (dgM) {
+        flushHunk();
+        inHunk = false;
+        curFile = dgM[2] || dgM[1];
+        continue;
+      }
+      var fhM = /^(?:---|\+\+\+)\s+(?:[ab]\/)?(\S+)/.exec(raw);
+      if (fhM && fhM[1] !== '/dev/null') {
+        flushHunk();
+        inHunk = false;
+        curFile = fhM[1];
+        continue;
+      }
+      if (/^@@\s+-\d+(?:,\d+)?\s+\+\d+(?:,\d+)?\s+@@/.test(raw)) {
+        flushHunk();
+        inHunk = true;
+        continue;
+      }
+      if (!inHunk) continue;
+      var pfx = raw.charAt(0);
+      if (pfx !== '+' && pfx !== '-' && pfx !== ' ') {
+        if (/^(?:commit\s+[0-9a-f]{7,40}|index\s+[0-9a-f]+\.\.[0-9a-f]+)/i.test(raw)) {
+          flushHunk();
+          inHunk = false;
+        }
+        continue;
+      }
+      var body = raw.slice(1).trim();
+      if (!body || /^(?:\/\/|#|\/\*|\*)/.test(body)) continue;
+      hunkText.push(body);
+      var um = _DIFF_USER_ASSIGN_RE.exec(body);
+      if (um) {
+        var uKey = um[1] || um[3], uVal = um[2] || um[4];
+        if (!/(?:pass(?:word|wd)?|pwd|secret)/i.test(uKey) && _valid_diff_token(uVal, true)) {
+          var uEntry = { key: uKey, val: uVal.trim(), changed: pfx === '+' || pfx === '-' };
+          if (pfx === '-') usersMinus.push(uEntry);
+          else if (pfx === '+') usersPlus.push(uEntry);
+          else usersCtx.push(uEntry);
+        }
+      }
+      var pm = _DIFF_PASS_ASSIGN_RE.exec(body);
+      if (pm) {
+        var pKey = pm[1] || pm[3], pVal = pm[2] || pm[4];
+        if (!/(?:user(?:name)?|usr|uid|login|account)/i.test(pKey) && _valid_diff_token(pVal, false)) {
+          var pEntry = { key: pKey, val: pVal.trim(), changed: pfx === '+' || pfx === '-' };
+          if (pfx === '-') passMinus.push(pEntry);
+          else if (pfx === '+') passPlus.push(pEntry);
+          else passCtx.push(pEntry);
+        }
+      }
+    }
+    flushHunk();
+    return pairs;
+  }
+  C._extract_diff_cred_pairs = _extract_diff_cred_pairs;
 
   function _secret_snippets(text) {
     var snippets = [], seen = {};
     text.split(/\r?\n/).forEach(function (raw) {
-      var line = raw.trim();
+      var line = raw.trim().replace(/^[+-]\s*/, '');
       if (!line || line.length > 260) return;
       var m = reSearch(C._SOURCE_SECRET_RE, line);
       if (!m) return;
@@ -356,19 +602,34 @@
   C._secret_snippets = _secret_snippets;
 
   function _parse_git_source(text, ws, command, source, facts) {
+    var h = 'host:' + ws.target;
     var branch = '';
     var head = reSearch(C._GIT_HEAD_RE, text);
     if (head) branch = head.groups.branch;
-    var lc = command.toLowerCase();
+    var lc = (command || '').toLowerCase();
+    var hasGitDiff = /^diff --git\s+a\//m.test(text) || (/^commit\s+[0-9a-f]{7,40}\b/m.test(text) && /^@@\s+-\d+/m.test(text)) || (/\bgit\s+(?:show|log|diff)\b/.test(lc) && /^@@\s+-\d+/m.test(text));
     var hasGitDumpSuccess = (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) && reSearch(C._GIT_DUMPER_SUCCESS_RE, text);
-    var sourceFound = !!head || (hasGitDumpSuccess && (!/\b(?:error|failed|not found|403|404)\b/i.test(text) || /(?:Fetching|Downloading)\s+[^\r\n]*\b(?:HEAD|refs\/heads|objects\/pack|config|index)\b|\[\+\]\s*Running\s+git\s+checkout/i.test(text)));
+    var sourceFound = !!head || hasGitDiff || (hasGitDumpSuccess && (!/\b(?:error|failed|not found|403|404)\b/i.test(text) || /(?:Fetching|Downloading)\s+[^\r\n]*\b(?:HEAD|refs\/heads|objects\/pack|config|index)\b|\[\+\]\s*Running\s+git\s+checkout/i.test(text)));
     if (sourceFound) {
-      var value = { kind: 'git', tool: (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) ? 'git-dumper' : 'curl' };
+      var toolName = (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) ? 'git-dumper' : (hasGitDiff ? 'git' : 'curl');
+      var value = { kind: 'git', tool: toolName };
       if (branch) value.branch = branch;
-      _add(facts, mkFact('web.source', 'host:' + ws.target, value, S, source));
+      _add(facts, mkFact('web.source', h, value, S, source));
     }
+    var diffPairs = _extract_diff_cred_pairs(text);
+    diffPairs.forEach(function (pair) {
+      var credVal = { user: pair.user, password: pair.password, method: 'git-diff' };
+      if (pair.file) credVal.file = pair.file;
+      _add(facts, mkFact('credential.plaintext', h, credVal, S, source));
+      _add(facts, mkFact('credential.password', h, credVal, S, source));
+      _add(facts, mkFact('credential.available', h, credVal, S, source));
+      _add(facts, mkFact('credential.candidate', h, { kind: 'git_diff_credential', user: pair.user, password: pair.password, file: pair.file || undefined, via: 'git-diff' }, S, source));
+      if (pair.isDb) {
+        _add(facts, mkFact('db.creds', h, { user: pair.user, password: pair.password, file: pair.file || undefined, via: 'git-diff' }, S, source));
+      }
+    });
     var secrets = _secret_snippets(text);
-    if (secrets.length) _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'source_secret', count: secrets.length, secrets: secrets.slice(0, 20) }, S, source));
+    if (secrets.length && !diffPairs.length) _add(facts, mkFact('credential.candidate', h, { kind: 'source_secret', count: secrets.length, secrets: secrets.slice(0, 20) }, S, source));
   }
   C._parse_git_source = _parse_git_source;
 
@@ -779,6 +1040,7 @@
 
   function _parse_web_fingerprint(text, ws, source, facts) {
     if (!text || !text.trim()) return;
+    if (_is_sql_client_output(text, ws, '')) return;
     var h = 'host:' + ws.target;
     if (reSearch(_FP_JENKINS_RE, text)) {
       _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'response-header', evidence: C._line_for_match(text, reSearch(_FP_JENKINS_RE, text)) }, S, source));

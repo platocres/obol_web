@@ -26,6 +26,7 @@ const path = require('path');
 const { createSandbox, probeBlockStateless, inferTargetIp } = require('./sandbox-loader.js');
 const {
   extractWalkthroughTurns,
+  discoverCorpusEntries,
   detectTool,
   classifyAxis,
   outputHead,
@@ -45,15 +46,15 @@ const DEFAULT_WORKSHEET = path.resolve(__dirname, 'reports', '0xdf-facts-workshe
 function buildCorpusIndex(corpusRoot, walkthroughsDir) {
   const substantialIndex = new Map();
   const negativeOrEmptyIndex = new Map();
-  const files = fs.readdirSync(walkthroughsDir)
-    .filter(f => f.toLowerCase().endsWith('.md'))
-    .sort((a, b) => a.localeCompare(b));
+  const discovered = discoverCorpusEntries(corpusRoot, { includeHosts: true });
+  const entries = discovered.entries;
 
-  for (const file of files) {
-    const md = fs.readFileSync(path.join(walkthroughsDir, file), 'utf8');
+  for (const item of entries) {
+    const file = item.file;
+    const md = fs.readFileSync(item.fullPath, 'utf8');
     const extracted = extractWalkthroughTurns(md, {
       corpusDir: corpusRoot,
-      slug: file.slice(0, -3)
+      slug: item.slug
     });
     for (const u of extracted.turns) {
       const id = blockId(file, u.rawCommand != null ? u.rawCommand : u.command, u.output);
@@ -81,7 +82,7 @@ function buildCorpusIndex(corpusRoot, walkthroughsDir) {
     if (!allIndex.has(id)) allIndex.set(id, entry);
   }
   return {
-    filesCount: files.length,
+    filesCount: entries.length,
     allIndex: allIndex,
     substantialCount: substantialIndex.size,
     shortOrEmptyCount: negativeOrEmptyIndex.size
@@ -609,7 +610,7 @@ if (require.main === module) {
   }
   const missKinds = Object.keys(r.per_kind)
     .filter(k => r.per_kind[k].miss > 0)
-    .sort((a, b) => r.per_kind[k].miss - r.per_kind[a].miss);
+    .sort((a, b) => r.per_kind[b].miss - r.per_kind[a].miss);
   if (missKinds.length) {
     console.log('\n  misses by kind (the facts-axis backlog):');
     for (const k of missKinds) {

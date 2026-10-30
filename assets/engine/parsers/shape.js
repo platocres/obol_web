@@ -79,7 +79,8 @@
     //     command. The dispatcher gates its HTTP parsers on curl/whatweb/wget/etc., so a raw response
     //     saved to a file mints nothing. A status line or a Server header is an unambiguous web signal.
     var isNslookup = /^Server:[ \t]*\S+[ \t]*\r?\nAddress(?:es)?[ \t]*:/im.test(text);
-    var isHttpShape = !isNslookup && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text));
+    var isSqlPaste = !!(C._is_sql_client_output && C._is_sql_client_output(text, ws, source));
+    var isHttpShape = !isNslookup && !isSqlPaste && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text));
     if (isHttpShape && !hasKind(facts, 'http.reachable')) {
       _add(facts, mkFact('http.reachable', h, { via: 'shape' }, S, source));
       var servers = [];
@@ -99,9 +100,27 @@
     // (3) A crackable-hash blob, pasted without the tool that produced it. Skip if the paste is
     //     already cracking output (e.g. hashcat --show `<hash>:<plaintext>`), so the plaintext isn't
     //     re-appended into the hash token.
-    var isCrack = (C._is_cracking_command && C._is_cracking_command(source)) || /\$krb5(?:asrep|tgs)\$[^\s:]+\$[0-9a-f]{32,}:[^\s:]+/i.test(text);
+    var isCrack = (C._is_cracking_command && C._is_cracking_command(source))
+      || /\$krb5(?:asrep|tgs)\$[^\s:]+\$[0-9a-f]{32,}:[^\s:]+/i.test(text)
+      || /\b[A-Za-z0-9_.$ -]{1,64}::[A-Za-z0-9_.-]{1,64}:[0-9a-f]{16}:(?:[0-9a-f]{32}|[0-9a-f]{48}):[0-9a-f]{32,}:[^\s:]+/i.test(text);
     if (!isCrack && /\$krb5asrep\$/i.test(text) && !hasKind(facts, 'hash.asrep') && C._parse_asrep_hashes) C._parse_asrep_hashes(text, ws, source, facts);
     if (!isCrack && /\$krb5tgs\$/i.test(text) && !hasKind(facts, 'hash.tgs') && C._parse_tgs_hashes) C._parse_tgs_hashes(text, ws, source, facts);
+    if (!isCrack && text.indexOf('::') >= 0 && !hasKind(facts, 'credential.netntlm')) {
+      var netNtlmShapeRe = /\b([A-Za-z0-9_.$ -]{1,64})::([A-Za-z0-9_.-]{1,64}):([0-9a-fA-F]{16}):([0-9a-fA-F]{32}|[0-9a-fA-F]{48}):([0-9a-fA-F]{32,})(?![^\s"'])/g, mNn;
+      var seenNnShape = Object.create(null);
+      while ((mNn = netNtlmShapeRe.exec(text)) !== null) {
+        var nnFull = mNn[0].trim();
+        if (seenNnShape[nnFull]) continue;
+        seenNnShape[nnFull] = 1;
+        var nnUser = mNn[1].trim(), nnDom = mNn[2].trim();
+        var nnFmt = mNn[4].length === 48 ? 'netntlmv1' : 'netntlmv2';
+        var nnVal = { user: nnUser, domain: nnDom, hash: nnFull, format: nnFmt, hash_type: nnFmt, via: 'shape' };
+        _add(facts, mkFact('credential.netntlm', h, nnVal, S, source));
+        _add(facts, mkFact('hash.crackable', h, nnVal, S, source));
+        _add(facts, mkFact('hash.candidate', h, nnVal, S, source));
+        _add(facts, mkFact('credential.candidate', h, { user: nnUser, domain: nnDom, hash: nnFull, kind: nnFmt, via: 'shape' }, S, source));
+      }
+    }
     if (/^(?:ServicePrincipalName\s+Name|Name\s+MemberOf\s+PasswordLastSet)/im.test(text) && !hasKind(facts, 'ad.user_list') && C._parse_impacket_roast_table) {
       C._parse_impacket_roast_table(text, ws, source, facts);
     }
@@ -120,9 +139,158 @@
       _add(facts, mkFact('pivot.active', h, { via: 'ligolo', shape: true }, S, source));
     }
 
-    // (6) Raw SQLite database dump or table schema shape pasted without command
-    if ((text.indexOf('|') >= 0 || /SQLite format 3|CREATE TABLE\s+/i.test(text)) && /(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
+    // (6) Raw SQLite database dump, table schema, or multi-row delimited user + digest dump shape
+    var hasSqliteSchema = /SQLite format 3|CREATE TABLE\s+/i.test(text);
+    if ((text.indexOf('|') >= 0 || hasSqliteSchema) && /(SQLite format 3|CREATE TABLE\s+(?:partners|users|accounts|credentials)|^\s*\d+\|[a-zA-Z0-9_.-]+\|\$2[aby]\$)/im.test(text) && !hasKind(facts, 'loot.material')) {
       _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', via: 'shape' }, S, source));
+    }
+    var _EMPTY_SHAPE_DIGEST_RE = /^(?:d41d8cd98f00b204e9800998ecf8427e|31d6cfe0d16ae931b73c59d7e0c089c0|aad3b435b51404eeaad3b435b51404ee|da39a3ee5e6b4b0d3255bfef95601890afd80709|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855|0{32,128}|f{32,128})$/i;
+    function _detectShapeDigestFormat(tok) {
+      if (!tok || tok.length < 16) return '';
+      if (/^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{50,}$/.test(tok)) return 'bcrypt';
+      if (/^\$(?:1|5|6|y|apr1|P|H|NT)\$[^\s|,;]{8,}$/.test(tok)) return 'modular';
+      if (/^[0-9a-fA-F]{32}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-md5';
+      if (/^[0-9a-fA-F]{40}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-sha1';
+      if (/^[0-9a-fA-F]{64}$/.test(tok) && !_EMPTY_SHAPE_DIGEST_RE.test(tok)) return 'raw-sha256';
+      return '';
+    }
+    if (!isCrack && !hasKind(facts, 'hash.crackable') && !hasKind(facts, 'hash.ntlm')
+        && (text.indexOf('\t') >= 0 || text.indexOf('|') >= 0 || text.indexOf(',') >= 0 || text.indexOf(';') >= 0)) {
+      var delims = ['\t', '|', ',', ';'];
+      var rawShapeLines = text.split(/\r?\n/);
+      var maxDumpScan = Math.min(rawShapeLines.length, 5000);
+      for (var dIdx = 0; dIdx < delims.length; dIdx++) {
+        var dCh = delims[dIdx];
+        if (text.indexOf(dCh) < 0) continue;
+        var dumpRows = [], seenDumpPair = Object.create(null);
+        for (var rli = 0; rli < maxDumpScan; rli++) {
+          var rLn = rawShapeLines[rli].trim();
+          if (!rLn || rLn.indexOf(dCh) < 0 || /^[+\-=|\s]+$/.test(rLn)) continue;
+          if (/^[0-9a-fA-F]{32,64}\s{2,}\S/.test(rLn) || /^[A-Za-z0-9_.$-]+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/.test(rLn)) continue;
+          var dTrim = dCh === '|' ? rLn.replace(/^\||\|$/g, '') : rLn;
+          var dCells = dTrim.split(dCh).map(function (c) { return c.trim().replace(/^['"]|['"]$/g, '').trim(); });
+          if (dCells.length < 2 || dCells.length > 12) continue;
+          var startCol = /^\d{1,10}$/.test(dCells[0]) ? 1 : 0;
+          var rowUser = '', rowHash = '', rowFmt = '';
+          for (var ci = startCol; ci < dCells.length; ci++) {
+            var cellVal = dCells[ci];
+            if (!cellVal) continue;
+            if (!rowFmt) {
+              var candFmt = _detectShapeDigestFormat(cellVal);
+              if (candFmt) { rowHash = cellVal; rowFmt = candFmt; continue; }
+            }
+            if (!rowUser && /^[A-Za-z0-9._@-]{2,48}$/.test(cellVal) && /[A-Za-z]/.test(cellVal)
+                && !/^[0-9a-fA-F]{16,}$/.test(cellVal)
+                && !/^(?:id|uid|user|username|name|login|email|mail|pass|password|passwd|hash|digest|role|active|enabled|true|false|null|none|status|created_at|updated_at)$/i.test(cellVal)
+                && (cellVal.indexOf('@') > 0 || !/\.(?:txt|php|html?|js|css|png|jpg|jpeg|gif|zip|tar|gz|exe|dll|sh|py|sql|db|bak|log|xml|json)$/i.test(cellVal))) {
+              rowUser = cellVal;
+            }
+          }
+          if (rowUser && rowHash && rowFmt) {
+            var dpKey = rowUser.toLowerCase() + ':' + rowHash;
+            if (!seenDumpPair[dpKey]) {
+              seenDumpPair[dpKey] = 1;
+              dumpRows.push({ user: rowUser, hash: rowHash, format: rowFmt });
+            }
+          }
+        }
+        var minDumpRows = hasSqliteSchema ? 1 : 2;
+        if (dumpRows.length >= minDumpRows) {
+          for (var dri = 0; dri < dumpRows.length; dri++) {
+            var dr = dumpRows[dri];
+            var dhVal = { user: dr.user, hash: dr.hash, format: dr.format, hash_type: dr.format, via: 'shape' };
+            _add(facts, mkFact('hash.candidate', h, dhVal, S, source));
+            _add(facts, mkFact('hash.crackable', h, dhVal, S, source));
+            _add(facts, mkFact('credential.candidate', h, { user: dr.user, hash: dr.hash, kind: 'delimited_dump', via: 'shape' }, S, source));
+          }
+          if ((dCh === '|' || dCh === '\t') && !hasKind(facts, 'loot.material')) {
+            _add(facts, mkFact('loot.material', h, { kind: 'sqlite_db', count: dumpRows.length, via: 'shape' }, S, source));
+          }
+          break;
+        }
+      }
+    }
+
+    // (6b) Debug / assertion digest-comparison leak shape (e.g. Rust assert_eq!, Go/C++/Python test panic)
+    if (!isCrack && (/assertion\s+failed/i.test(text) || (/\bleft\s*:/i.test(text) && /\bright\s*:/i.test(text)) || (/\bexpected\s*:/i.test(text) && /\bactual\s*:/i.test(text)))) {
+      var mAssert = /(?:left|expected)\s*[:=]\s*[`"']*([0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128})[`"']*[\s,;]+(?:right|actual)\s*[:=]\s*[`"']*([0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128})[`"']*/i.exec(text);
+      if (mAssert && mAssert[1].length === mAssert[2].length) {
+        var aLen = mAssert[1].length;
+        var aFmt = aLen === 32 ? 'raw-md5' : (aLen === 40 ? 'raw-sha1' : (aLen === 64 ? 'raw-sha256' : 'raw-sha512'));
+        var seenAssert = Object.create(null);
+        [mAssert[1], mAssert[2]].forEach(function (dg) {
+          var dgLow = dg.toLowerCase();
+          if (seenAssert[dgLow] || _EMPTY_SHAPE_DIGEST_RE.test(dgLow)) return;
+          seenAssert[dgLow] = 1;
+          var aVal = { hash: dgLow, format: aFmt, hash_type: aFmt, via: 'shape-assertion' };
+          _add(facts, mkFact('hash.candidate', h, aVal, S, source));
+          _add(facts, mkFact('hash.crackable', h, aVal, S, source));
+        });
+      }
+    }
+
+    // (6c) Headerless PowerShell Get-ChildItem / dir attribute rows
+    if (!hasKind(facts, 'loot.files') && /^[ \t]*(?:d|[arhs-])[arhs-]{4,5}[ \t]+(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})[ \t]+\d{1,2}:\d{2}/im.test(text)) {
+      var psRowRe = /^[ \t]*((?:d|[arhs-])[arhs-]{4,5})[ \t]+(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})[ \t]+\d{1,2}:\d{2}(?::\d{2})?(?:[ \t]*[AP]M)?[ \t]+([^\r\n]+)$/gim;
+      var psFiles = [], psSeen = Object.create(null), mPsRow;
+      while ((mPsRow = psRowRe.exec(text)) !== null) {
+        var psMode = mPsRow[1], psTail = mPsRow[2].trim();
+        var psName = psMode.charAt(0).toLowerCase() === 'd'
+          ? psTail.replace(/^<DIR>[ \t]+/i, '').trim()
+          : psTail.replace(/^(?:<DIR>|\d+)[ \t]+/i, '').trim();
+        if (!psName || psName === '.' || psName === '..' || psSeen[psName]) continue;
+        psSeen[psName] = 1;
+        psFiles.push(psName);
+        var psBase = psName.split(/[\\\/]/).pop();
+        if (/^(?:local|user|proof|root)\.txt$/i.test(psBase) && !hasKind(facts, 'objective.flag_located')) {
+          _add(facts, mkFact('objective.flag_located', h, {
+            file: psName,
+            slot: /^(?:proof|root)\.txt$/i.test(psBase) ? 'root' : 'user',
+            via: 'shape'
+          }, S, source));
+        }
+      }
+      if (psFiles.length) {
+        _add(facts, mkFact('loot.files', h, { files: psFiles.slice(0, 200), count: psFiles.length, tool: 'powershell', via: 'shape' }, S, source));
+      }
+    }
+
+    // (6d) Document metadata (exiftool / PDF metadata) Author & Creator username shape
+    if (!hasKind(facts, 'web.users') && /^[ \t]*(?:Author|Creator)[ \t]*:/im.test(text)) {
+      var hasExifBanner = /^[ \t]*ExifTool Version Number[ \t]*:[ \t]*\S/im.test(text);
+      var metaFieldMatches = !hasExifBanner ? (text.match(/^[ \t]*(?:File Name|File Size|File Type|MIME Type|PDF Version|Create Date|Modify Date|Producer|Creator Tool|Page Count|Linearized|Title|Subject)[ \t]*:[ \t]*\S/gim) || []) : [];
+      if (hasExifBanner || metaFieldMatches.length >= 3) {
+        var metaAuthorRe = /^[ \t]*(?:Author|Creator)[ \t]*:[ \t]*([^\r\n]+)$/gim;
+        var generatorNoiseRe = /\b(?:Writer|Calc|Impress|Draw|Math|LibreOffice|OpenOffice|Microsoft|Office|Word|Excel|PowerPoint|Outlook|Visio|Publisher|Adobe|Acrobat|InDesign|Illustrator|Photoshop|Distiller|FrameMaker|LiveCycle|Quartz|Mac\s*OS|macOS|Preview|Pages|Keynote|Numbers|Ghostscript|wkhtmltopdf|LaTeX|pdflatex|xelatex|lualatex|TeX|dvips|Mozilla|Firefox|Chrome|Chromium|Safari|Edge|Skia|ReportLab|PyPDF\d*|pypdf|fpdf\d*|TCPDF|DOMPDF|mPDF|iText|Apache\s*FOP|PDFBox|Cairo|Pango|ImageMagick|GraphicsMagick|GIMP|Inkscape|Canva|Figma|Scanner|Scan|Printer|Xerox|Canon|Epson|HP|Brother|Ricoh|Konica|Unknown|None|Null|N\/A|Untitled|Default|System|User|Admin|Administrator|root|guest|test)\b/i;
+        var metaUsers = [], metaSeen = Object.create(null), mAuth;
+        function addMetaUser(uCand) {
+          var uClean = String(uCand || '').trim();
+          if (!uClean || uClean.length < 2 || uClean.length > 32 || metaSeen[uClean]) return;
+          if (C._valid_username && !C._valid_username(uClean, false)) return;
+          metaSeen[uClean] = 1;
+          metaUsers.push(uClean);
+        }
+        while ((mAuth = metaAuthorRe.exec(text)) !== null) {
+          var rawAuthor = mAuth[1].trim().replace(/^['"]|['"]$/g, '').trim();
+          if (!rawAuthor || rawAuthor.length < 2 || rawAuthor.length > 48 || /^\d+$/.test(rawAuthor)) continue;
+          if (/[\\\/]|https?:/i.test(rawAuthor) || generatorNoiseRe.test(rawAuthor)) continue;
+          var emailM = /^([A-Za-z0-9._-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.exec(rawAuthor);
+          if (emailM) {
+            addMetaUser(emailM[1].toLowerCase());
+          } else if (/^[A-Za-z][A-Za-z0-9._-]{1,31}$/.test(rawAuthor)) {
+            addMetaUser(/^[A-Z][a-z]+$/.test(rawAuthor) ? rawAuthor.toLowerCase() : rawAuthor);
+          } else {
+            var twoWordM = /^([A-Z][a-z]{1,20})[ \t]+([A-Z][a-z]{1,24})$/.exec(rawAuthor);
+            if (twoWordM) {
+              addMetaUser((twoWordM[1].charAt(0) + twoWordM[2]).toLowerCase());
+              addMetaUser(twoWordM[1].toLowerCase());
+            }
+          }
+        }
+        if (metaUsers.length) {
+          _add(facts, mkFact('web.users', h, { users: metaUsers, count: metaUsers.length, tool: 'exiftool', via: 'shape' }, S, source));
+        }
+      }
     }
 
     // (7) Ping TTL heuristic: TTL 60..64 -> Linux os_hint, TTL 124..128 -> Windows os_hint (promote = false)
@@ -275,6 +443,59 @@
         if (hasWrite && !hasKind(facts, 'smb.writable_share')) _add(facts, mkFact('smb.writable_share', h, { via: 'shape' }, S, source));
       }
     }
+
+    // 5. Active Directory Domain & Domain Controller Property Block Family
+    // Key-value blocks containing >= 3 canonical AD domain/DC properties without requiring a visible command
+    if (!isHttpResp && !isKnownLinux && (!hasKind(facts, 'ad.domain_known') || !hasKind(facts, 'ad.dc_candidate'))) {
+      var adPropRe = /^[ \t]*(Forest|DomainControllers|DomainMode|DomainModeLevel|PdcRoleOwner|RidRoleOwner|InfrastructureRoleOwner|ParentDomain|HighestCommittedUsn|Partitions|InboundConnections|OutboundConnections)[ \t]*:[ \t]*([^\r\n]*)$/gim;
+      var seenAdKeys = Object.create(null), adKeyCount = 0, adProps = Object.create(null), mAdp;
+      while ((mAdp = adPropRe.exec(text)) !== null) {
+        var ak = mAdp[1].toLowerCase(), av = mAdp[2].trim();
+        if (!av && ak !== 'parentdomain' && ak !== 'inboundconnections' && ak !== 'outboundconnections') continue;
+        if (!seenAdKeys[ak]) { seenAdKeys[ak] = 1; adKeyCount++; }
+        if (!adProps[ak] && av) adProps[ak] = av;
+      }
+      if (adKeyCount >= 3 && (adProps.forest || adProps.domaincontrollers || adProps.pdcroleowner || adProps.partitions)) {
+        var domFqdn = '';
+        var forestClean = String(adProps.forest || '').replace(/^[{\s"']+|[}\s"']+$/g, '');
+        if (/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(forestClean)) domFqdn = forestClean.toLowerCase();
+        if (!domFqdn) {
+          var domFieldM = /^[ \t]*Domain[ \t]*:[ \t]*([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)[ \t]*$/im.exec(text);
+          if (domFieldM) domFqdn = domFieldM[1].toLowerCase();
+        }
+        if (!domFqdn && adProps.domaincontrollers) {
+          var nameDomM = /^[ \t]*Name[ \t]*:[ \t]*([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)[ \t]*$/im.exec(text);
+          if (nameDomM) domFqdn = nameDomM[1].toLowerCase();
+        }
+        var dcHost = '';
+        var dcSrc = adProps.domaincontrollers || adProps.pdcroleowner || adProps.ridroleowner || '';
+        var dcHostM = /([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+)/.exec(dcSrc);
+        if (dcHostM) {
+          dcHost = dcHostM[1];
+          if (!domFqdn && dcHost.indexOf('.') > 0) domFqdn = dcHost.slice(dcHost.indexOf('.') + 1).toLowerCase();
+        } else if (adProps.highestcommittedusn || adProps.partitions) {
+          var dcNameM = /^[ \t]*Name[ \t]*:[ \t]*([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+)[ \t]*$/im.exec(text);
+          if (dcNameM) dcHost = dcNameM[1];
+        }
+        var dcIpM = /^[ \t]*IPAddress[ \t]*:[ \t]*(\d{1,3}(?:\.\d{1,3}){3})[ \t]*$/im.exec(text);
+        var targetDomScope = domFqdn ? ('domain:' + domFqdn) : domScope;
+        if (domFqdn) {
+          if (!hasKind(facts, 'ad.domain_known')) {
+            _add(facts, mkFact('ad.domain_known', targetDomScope, { name: domFqdn, domain: domFqdn, via: 'shape' }, S, source));
+          }
+          if (!hasKind(facts, 'host.domain')) {
+            _add(facts, mkFact('host.domain', h, { domain: domFqdn, via: 'shape' }, S, source));
+          }
+        }
+        if (!hasKind(facts, 'ad.dc_candidate')) {
+          var dcVal = { via: 'shape' };
+          if (dcHost) dcVal.dc = dcHost;
+          if (dcIpM) dcVal.dc_ip = dcIpM[1];
+          if (domFqdn) dcVal.domain = domFqdn;
+          _add(facts, mkFact('ad.dc_candidate', h, dcVal, S, source));
+        }
+      }
+    }
   }
   C._parse_family_resemblance = _parse_family_resemblance;
 
@@ -287,13 +508,15 @@
   // Strictly conservative and anchored on specific version/product/CVE tokens, so unrelated output
   // mints nothing. A lead is a candidate to try, never proof of exploitation: the module's own
   // produces fact (a real shell) is what proves the box, exactly as the proof discipline requires.
+  var _SHELLSHOCK_EXPLICIT_RE = /\bShellshock\b|CVE-2014-6271|(?:^|[^A-Za-z0-9-])http-shellshock\b(?![\s\S]{0,160}?\bNOT\s+VULNERABLE\b)[\s\S]{0,160}?\bVULNERABLE\b|\(\)\s*\{\s*:;\s*\}\s*;/i;
+  var _SHELLSHOCK_CGI_SCRIPT_RE = /\/cgi-bin\/[A-Za-z0-9_.-]+\.(?:cgi|sh|pl|py)\b/i;
   var VULN_SIGS = [
     { fact: 'vuln.vsftpd_234', re: /\bvsftpd[\s_-]*2\.3\.4\b/i, cve: 'CVE-2011-2523' },
     { fact: 'vuln.proftpd_modcopy', re: /\bproftpd\s+1\.3\.5[a-z]?\b|\bmod_copy\b/i, cve: 'CVE-2015-3306' },
     { fact: 'vuln.samba_usermap', re: /\bsamba\s+(?:smbd\s+)?3\.0\.2[0-5][a-d]?\b|(?:^|[^A-Za-z0-9-])smb-vuln-cve2007-2447\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2007-2447' },
     { fact: 'vuln.smbghost', re: /\bSMBGhost\b|CVE-2020-0796/i, cve: 'CVE-2020-0796' },
     { fact: 'vuln.bluekeep', re: /\bBlueKeep\b|CVE-2019-0708|(?:^|[^A-Za-z0-9-])rdp-vuln-ms19-0708\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2019-0708' },
-    { fact: 'vuln.shellshock', re: /\bShellshock\b|CVE-2014-6271|\/cgi-bin\/|\bmod_cgi\b/i, cve: 'CVE-2014-6271' },
+    { fact: 'vuln.shellshock', re: /\bShellshock\b|CVE-2014-6271|http-shellshock|\/cgi-bin\/[A-Za-z0-9_.-]+\.(?:cgi|sh|pl|py)\b|\(\)\s*\{\s*:;\s*\}\s*;/i, cve: 'CVE-2014-6271' },
     { fact: 'vuln.heartbleed', re: /\bHeartbleed\b|CVE-2014-0160|(?:^|[^A-Za-z0-9-])ssl-heartbleed\b(?![\s\S]{0,120}?\bNOT\s+VULNERABLE\b)[\s\S]{0,120}?\bVULNERABLE\b/i, cve: 'CVE-2014-0160' },
     { fact: 'vuln.drupalgeddon2', re: /\bDrupalgeddon|CVE-2018-7600|\bDrupal\s*[78]\.\d/i, cve: 'CVE-2018-7600' },
     { fact: 'vuln.phpmyadmin_lfi', re: /\bphpMyAdmin\s*4\.8(?:\.[01])?(?![.\d])\b|CVE-2018-12613/i, cve: 'CVE-2018-12613' },
@@ -306,8 +529,8 @@
     { fact: 'vuln.splunk', re: /\bSplunk\b|CVE-2023-46214/i, cve: '' },
     { fact: 'vuln.text4shell', re: /\bText4Shell\b|commons[-_. ]?text|CVE-2022-42889/i, cve: 'CVE-2022-42889' },
     { fact: 'vuln.freeswitch', re: /\bFreeSWITCH\b|\bmod_event_socket\b/i, cve: '' },
-    { fact: 'vuln.jdwp', re: /JDWP-?Handshake|Java Debug Wire/i, cve: '' },
-    { fact: 'vuln.aerospike', re: /\bAerospike\s+(?:Server|Enterprise|Community|Database|\d)|3000\/tcp\s+open[^\r\n]{0,80}?aerospike|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
+    { fact: 'vuln.jdwp', re: /JDWP-?Handshake|Java Debug Wire|-Xrunjdwp:transport=dt_socket|-agentlib:jdwp=(?:transport=dt_socket|[^\s]*address=)|Found Runtime\.getRuntime\(\)/i, cve: '' },
+    { fact: 'vuln.aerospike', re: /\bAerospike\s+(?:Server|Enterprise|Community|Database|\d)|3000\/tcp\s+open[^\r\n]{0,80}?aerospike|"service(?:Name)?"\s*:\s*"aerospike"|CVE-2020-13151/i, cve: 'CVE-2020-13151' },
     { fact: 'vuln.aerospike_udf', re: /\bAerospike[^\r\n]{0,60}?\b5\.[01]\b|cve-2020-13151/i, cve: 'CVE-2020-13151' },
     { fact: 'vuln.pico_cms', re: /Pico CMS|Pico v[0-9.]+/i, cve: '' },
     { fact: 'vuln.screen_suid', re: /screen-4\.5\.0|GNU Screen 4\.5\.0|Screen version 4\.05\.00/i, cve: 'CVE-2017-5618' },
@@ -329,18 +552,40 @@
     { fact: 'vuln.node_serialize', re: /node-serialize|_\$\$ND_FUNC\$\$_/i, cve: 'CVE-2017-5941' },
     { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
   ];
-  var _VULN_SIGS_HINT_RE = /(?:CVE-\d{4}-|EDB-\d+|vsftpd|proftpd|mod_copy|samba|smbd|SMBGhost|BlueKeep|rdp-vuln|Shellshock|cgi-bin|mod_cgi|Heartbleed|Drupal|phpMyAdmin|MiniServ|Webmin|Usermin|OFBiz|Cacti|Zabbix|Splunk|Text4Shell|commons|FreeSWITCH|mod_event_socket|JDWP|Java Debug|Aerospike|Pico|screen-4\.5|Screen 4|Mouse|Solr|AChat|Nibbleblog|IIS|WebDAV|ScStoragePathFromUrl|ExplodingCan|PRTG|GitLab|October|HttpFileServer|HFS|rejetto|ColdFusion|CFIDE|Oracle TNS|TNSLSNR|1521\/tcp|H2 Database|h2-console|8082\/tcp|9092\/tcp|chkrootkit|10050\/tcp|MyFaces|ViewState|node-serialize|ND_FUNC|Gitea|cup of tea)/i;
+  var _VULN_SIGS_HINT_RE = /(?:CVE-\d{4}-|EDB-\d+|vsftpd|proftpd|mod_copy|samba|smbd|SMBGhost|BlueKeep|rdp-vuln|Shellshock|cgi-bin|Heartbleed|Drupal|phpMyAdmin|MiniServ|Webmin|Usermin|OFBiz|Cacti|Zabbix|Splunk|Text4Shell|commons|FreeSWITCH|mod_event_socket|JDWP|Java Debug|Xrunjdwp|agentlib:jdwp|getRuntime|Aerospike|aerospike|Pico|screen-4\.5|Screen 4|Mouse|Solr|AChat|Nibbleblog|IIS|WebDAV|ScStoragePathFromUrl|ExplodingCan|PRTG|GitLab|October|HttpFileServer|HFS|rejetto|ColdFusion|CFIDE|Oracle TNS|TNSLSNR|1521\/tcp|H2 Database|h2-console|8082\/tcp|9092\/tcp|chkrootkit|10050\/tcp|MyFaces|ViewState|node-serialize|ND_FUNC|Gitea|cup of tea)/i;
   function _parse_vulnmatch(text, ws, source, facts) {
     text = String(text || ''); if (!text.trim() || !_VULN_SIGS_HINT_RE.test(text)) return;
     var cleanText = /\b(?:closed|filtered|unfiltered|open\|filtered)\b/i.test(text)
       ? text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
       : text;
+    if (/^\s*\[\-\]\s*(?:this instance is patched|[^\r\n]*\bis not vulnerable\b|exploit failed|target is patched)\b/im.test(cleanText)
+        && !/\buid=\d+\(|NT AUTHORITY\\SYSTEM|^\s*\[\+\]\s*(?:shell|pwned|vulnerable|success|executed|command)\b/im.test(cleanText)) {
+      return;
+    }
+    var isNmapContext = /\b(?:Nmap scan report for|Starting Nmap|fingerprint-strings:|SF-Port\d+)\b/i.test(cleanText) || /\bnmap\b/i.test(source || '');
     var h = 'host:' + ws.target;
     for (var i = 0; i < VULN_SIGS.length; i++) {
       var s = VULN_SIGS[i];
-      if (s.re.test(cleanText) && !hasKind(facts, s.fact)) {
-        _add(facts, mkFact(s.fact, h, { cve: s.cve || null, via: 'vulnmatch', lead: true }, S, source));
+      if (!s.re.test(cleanText) || hasKind(facts, s.fact)) continue;
+      if (s.fact === 'vuln.shellshock' && !_SHELLSHOCK_EXPLICIT_RE.test(cleanText)) {
+        if (isNmapContext) continue;
+        var cgiLines = cleanText.split(/\r?\n/);
+        var hasPositiveCgi = false;
+        for (var cli = 0; cli < cgiLines.length; cli++) {
+          var cLn = cgiLines[cli];
+          if (_SHELLSHOCK_CGI_SCRIPT_RE.test(cLn) && /\b(?:200|301|302|500)\b/.test(cLn) && !/\b(?:403|404)\b/.test(cLn)) {
+            hasPositiveCgi = true;
+            break;
+          }
+        }
+        if (!hasPositiveCgi) continue;
       }
+      if (s.fact === 'vuln.jdwp'
+          && /(?:Failed to connect|Connection refused|Connection timed out|Errno \d+)/i.test(cleanText)
+          && !/(?:-Xrunjdwp:transport=dt_socket|-agentlib:jdwp=)/i.test(cleanText)) {
+        continue;
+      }
+      _add(facts, mkFact(s.fact, h, { cve: s.cve || null, via: 'vulnmatch', lead: true }, S, source));
     }
   }
   C._parse_vulnmatch = _parse_vulnmatch;

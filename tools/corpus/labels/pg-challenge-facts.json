@@ -1,0 +1,987 @@
+{
+  "version": 2,
+  "description": "Schema v2 FACTS, OUTCOME, and TIER-ATTRIBUTION ground-truth labels for Official OffSec PEN-200 Challenge Labs (curated by manual line-by-line review; stores zero verbatim corpus output per CORPUS-MINING.md Principle 5 & 7).",
+  "cases": [
+    {
+      "id": "f5ae1bacfa0c",
+      "file": "labs/oscp-a/hosts/ms02-142.md",
+      "command": "nxc smb <target>  <user>  <redacted>  <domain>",
+      "note": "Authenticated NetExec SMB check against a domain-joined member server must confirm SMB auth, credential validation, and host domain without promoting a non-DC member host to ad.dc_candidate.",
+      "expected_kinds": [
+        "smb.authenticated",
+        "credential.validated",
+        "host.domain"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ef3d47db167f",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "impacket-psexec -hashes <hash> <user>@<target>",
+      "note": "Impacket PsExec pass-the-hash attempt where ADMIN$ and C$ shares are not writable must classify as authorization-denied and never mint admin or foothold facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "foothold.windows"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "fcc30f32da55",
+      "file": "labs/oscp-a/hosts/ms01-141.md",
+      "command": "evil-winrm -i <target>  <user>  <redacted>",
+      "note": "Evil-WinRM session establishment banner immediately preceding an interactive PowerShell prompt turn must mint winrm.authenticated, credential.validated, and foothold.windows.",
+      "expected_kinds": [
+        "winrm.authenticated",
+        "credential.validated",
+        "foothold.windows"
+      ],
+      "forbidden_kinds": [
+        "blocker.logon_failure",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "78529f49dd3b",
+      "file": "labs/oscp-a/hosts/ms02-142.md",
+      "command": "impacket-secretsdump -sam SAM -system SYSTEM LOCAL",
+      "note": "Offline Impacket secretsdump against extracted Windows.old SAM and SYSTEM hives must mint loot.sam, hash.ntlm, credential.candidate, and actionable credential.available for non-empty local RID hashes.",
+      "expected_kinds": [
+        "loot.sam",
+        "hash.ntlm",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ca38113504ea",
+      "file": "labs/oscp-a/hosts/dc01-140.md",
+      "command": "impacket-psexec -hashes <hash> <user>@<target>",
+      "note": "Impacket PsExec pass-the-hash landing an interactive system32 command shell via writable ADMIN$ must mint foothold.windows and access.admin.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "blocker.access_denied",
+        "blocker.logon_failure"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7faafe702d9e",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "hashcat -m 1000 mary.hash /usr/share/wordlists/rockyou.txt -r /usr/share/hashcat/rules/best64.rule --force",
+      "note": "Hashcat NTLM dictionary-and-rules run finishing with Status Exhausted must mint blocker.cracking_exhausted and classify as completed-negative.",
+      "expected_kinds": [
+        "blocker.cracking_exhausted"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "58d199b97cbf",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "impacket-GetNPUsers -dc-ip <target> -outputfile hashes.asreproast -request <domain>/<user>",
+      "note": "Impacket GetNPUsers reporting that the queried principal lacks UF_DONT_REQUIRE_PREAUTH must classify as completed-negative and must not mint credential.candidate from an echoed interactive Password line.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "credential.candidate",
+        "credential.available",
+        "hash.asrep"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "cecaa329a9b6",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "python3 cve2020-13151.py --ahost <target> --cmd \"id\"",
+      "note": "Aerospike Lua UDF exploit execution returning POSIX uid/gid output must mint vuln.aerospike_udf, foothold.linux, and access.shell without false-positive access.root.",
+      "expected_kinds": [
+        "vuln.aerospike_udf",
+        "foothold.linux",
+        "access.shell"
+      ],
+      "forbidden_kinds": [
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "d54455eb5583",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "./41154-2.sh",
+      "note": "GNU Screen SUID exploit helper failing on target due to missing GLIBC_2.34 symbol must mint blocker.glibc_or_arch_mismatch and classify as environment-error.",
+      "expected_kinds": [
+        "blocker.glibc_or_arch_mismatch"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin"
+      ],
+      "outcome_expected": "environment-error"
+    },
+    {
+      "id": "bddee6a6eacd",
+      "file": "labs/oscp-a/hosts/crystal-144.md",
+      "command": "git show",
+      "note": "Git commit diff disclosing removed PHP database configuration username and cleartext password must bind both fields into credential.candidate, credential.plaintext, and credential.available.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "062d862f4cfa",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "snmpwalk -c public -v1 <target> <target>.<target>.3.1.2",
+      "note": "SNMP hrSWInstalledName walk disclosing installed remote mouse server and SSH client packages must mint snmp.reachable, snmp.community, snmp.info, and vuln.wifi_mouse.",
+      "expected_kinds": [
+        "snmp.reachable",
+        "snmp.community",
+        "snmp.info",
+        "vuln.wifi_mouse"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "e5786fa5b387",
+      "file": "labs/oscp-a/walkthrough.md",
+      "command": "(commandless winpeas output)",
+      "note": "WinPEAS stored PuTTY session output containing a single-quoted plink -pw password and user@host argument must promote the pair into credential.plaintext and credential.available alongside privesc.stored_credentials.",
+      "expected_kinds": [
+        "privesc.stored_credentials",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "72f7370e91ee",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "sudo responder -I tun0 -v",
+      "note": "Responder capturing an outbound SMB NTLMv2-SSP authentication hash from UNC path coercion must mint credential.netntlm and credential.candidate.",
+      "expected_kinds": [
+        "credential.netntlm",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "smb.authenticated"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "1bbad70a5f3a",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "hashcat -m 5600 web_svc.hash /usr/share/wordlists/rockyou.txt --force",
+      "note": "Hashcat NetNTLMv2 run reporting Status Cracked with a bare cracked-plaintext summary line and target hashfile argument must mint credential.plaintext, credential.available, and credential.candidate.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "blocker.cracking_exhausted"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "aec4bd5f4ea2",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "impacket-GetUserSPNs -request -dc-ip <target> <domain>/<user>:Diamond1",
+      "note": "Impacket GetUserSPNs Kerberoast dump returning an SPN table and $krb5tgs$ ticket must mint hash.tgs, credential.candidate, and ad.user_list.",
+      "expected_kinds": [
+        "hash.tgs",
+        "credential.candidate",
+        "ad.user_list"
+      ],
+      "forbidden_kinds": [
+        "blocker.kerberos_spn"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "3bbdcceb6286",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "mssqlclient SELECT @@version;",
+      "note": "Interactive Impacket mssqlclient query executed from a SQL prompt showing dbo@master privilege must mint db.session, mssql.authenticated, mssql.sysadmin, db.admin, and credential.validated.",
+      "expected_kinds": [
+        "db.session",
+        "mssql.authenticated",
+        "mssql.sysadmin",
+        "db.admin",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ba41630173c1",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "snmpwalk -c public -v2c <target> NET-SNMP-EXTEND-MIB::nsExtendObjects",
+      "note": "SNMP walk of NET-SNMP-EXTEND-MIB disclosing a custom password-reset binary path and target username output must mint snmp.reachable, snmp.community, snmp.info, and credential.candidate.",
+      "expected_kinds": [
+        "snmp.reachable",
+        "snmp.community",
+        "snmp.info",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "e8126a256a1f",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "python2 jdwp-shellifier.py -t <target>  <redacted> --cmd \"chmod u+s /bin/bash\"",
+      "note": "JDWP debugger handshake reading OpenJDK VM settings and registering a Runtime breakpoint over a forwarded tunnel must mint vuln.jdwp without prematurely claiming access.root before breakpoint trigger.",
+      "expected_kinds": [
+        "vuln.jdwp"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "foothold.linux",
+        "blocker.egress_blocked"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "cfd231777722",
+      "file": "labs/oscp-b/walkthrough.md",
+      "command": "sudo python3 CVE-2022-22963.py --url 'http://<target>:8080/functionRouter'",
+      "note": "PoC vulnerability scanner explicitly reporting target URL is not vulnerable must classify as completed-negative with zero foothold or RCE facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "8bfe64140269",
+      "file": "labs/oscp-b/hosts/gust-151.md",
+      "command": "python3 47799.py <target> whoami",
+      "note": "FreeSWITCH event socket command execution returning Authenticated api/response and domain\\user whoami output must mint foothold.windows and host.os_family.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7dd6b87abdfc",
+      "file": "labs/secura/hosts/secure-095.md",
+      "command": "nmap -v -sV -sC  <redacted> -oN <outfile> <target>",
+      "note": "Targeted Nmap version and script scan where -v precedes -sV -sC and a high non-standard TCP port labeled with a non-HTTP guess returns an HTTP/1.1 200 response and Server header inside fingerprint-strings. Floor: open ports, version-scan completion receipt, SMB/WinRM/HTTP reachability, and web server identification.",
+      "expected_kinds": [
+        "ports.open",
+        "scan.nmap.version",
+        "smb.reachable",
+        "winrm.reachable",
+        "http.reachable",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows",
+        "vuln.shellshock"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "20fa5eee7a4b",
+      "file": "labs/secura/hosts/era-096.md",
+      "command": "nmap -v -sV -sC <target>  <redacted> -oN <outfile>",
+      "note": "Targeted Nmap version and script scan against a Windows database and WinRM host whose fingerprint-strings echo Nmap HTTP probe paths. Must mint port and service facts without false-positiving Shellshock from Nmap probe request strings.",
+      "expected_kinds": [
+        "ports.open",
+        "scan.nmap.version",
+        "smb.reachable",
+        "winrm.reachable",
+        "service.mysql"
+      ],
+      "forbidden_kinds": [
+        "vuln.shellshock",
+        "foothold.windows",
+        "credential.available"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a7b75030ff9b",
+      "file": "labs/secura/walkthrough.md",
+      "command": ".\\<script>.ps1 -loot -path <appdata-dir>",
+      "note": "On-host PowerShell loot scan reading a Remote Desktop Connection Manager XML configuration file containing cleartext <userName>, <domain>, and <password> elements. Floor: Windows foothold from prompt plus recoverable plaintext credential facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "vuln.shellshock"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "1e027a2e14ff",
+      "file": "labs/secura/walkthrough.md",
+      "command": "systeminfo",
+      "note": "On-host systeminfo invocation from an interactive low-privilege WinRM prompt returning ERROR: Access denied. Ambient prompt foothold telemetry must not mask the command denial outcome.",
+      "expected_kinds": [
+        "foothold.windows"
+      ],
+      "forbidden_kinds": [
+        "host.kernel",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "8dce6da24b65",
+      "file": "labs/secura/walkthrough.md",
+      "command": "whoami /priv",
+      "note": "On-host whoami /priv listing only standard non-abusable privileges (SeShutdownPrivilege, SeChangeNotifyPrivilege, SeIncreaseWorkingSetPrivilege). Must classify as completed-negative without minting privesc.windows_privilege.",
+      "expected_kinds": [
+        "foothold.windows"
+      ],
+      "forbidden_kinds": [
+        "privesc.windows_privilege",
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "7776a99b092a",
+      "file": "labs/secura/walkthrough.md",
+      "command": "mysql select * from <table> where pass is not null;",
+      "note": "Interactive MariaDB ASCII table dump with columns (name, pass) containing two cleartext account rows. Floor: database reachability plus extracted plaintext credentials via SQL table or Tier-3 2D table header pairing.",
+      "expected_kinds": [
+        "db.reachable",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "web.tech",
+        "http.reachable"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ba607c282fd9",
+      "file": "labs/secura/walkthrough.md",
+      "command": "mysql show databases;",
+      "note": "Interactive MariaDB show databases output listing default schemas alongside an application schema and a phpmyadmin schema name. Must mint database catalog facts without false-positiving web.tech or http.reachable from a SQL schema row.",
+      "expected_kinds": [
+        "db.reachable",
+        "db.session",
+        "db.databases"
+      ],
+      "forbidden_kinds": [
+        "web.tech",
+        "http.reachable",
+        "credential.available"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "6f798d7862b2",
+      "file": "labs/secura/walkthrough.md",
+      "command": "Get-GPPermission -Name \"Default Domain Policy\" -All",
+      "note": "PowerShell Get-GPPermission output showing a non-administrative domain user trustee granted GpoEditDeleteModifySecurity on a domain-linked GPO. Floor: ad.gpo_writable to unlock GPO abuse.",
+      "expected_kinds": [
+        "foothold.windows",
+        "ad.gpo_writable"
+      ],
+      "forbidden_kinds": [
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "9ed4bd1a5590",
+      "file": "labs/secura/walkthrough.md",
+      "command": "use C$",
+      "note": "SMB administrative share access check returning STATUS_ACCESS_DENIED prior to privilege escalation. Must classify as authorization-denied and never mint admin share access.",
+      "expected_kinds": [
+        "blocker.access_denied"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.admin_share",
+        "smb.authenticated"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "7f86b9b91bfc",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "crackmapexec smb <target>  <user>  <redacted>  <domain> --shares",
+      "note": "SMB authentication probe against a domain controller returning STATUS_LOGON_FAILURE while disclosing SMB banner domain and host metadata. Must classify as rejected, emit blocker.logon_failure, and forbid authenticated facts.",
+      "expected_kinds": [
+        "smb.reachable",
+        "ad.domain_known",
+        "ad.dc_candidate",
+        "blocker.logon_failure"
+      ],
+      "forbidden_kinds": [
+        "smb.authenticated",
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "rejected"
+    },
+    {
+      "id": "04ffea851e09",
+      "file": "labs/oscp-c/hosts/ms01-153.md",
+      "command": "wget http://<target>:<port>/<path>",
+      "note": "Downloaded web-exposed tab-delimited account dump (<id> <username> <32-hex-digest> <description>). Floor: crackable hash and candidate hash facts so offline hash cracking unlocks.",
+      "expected_kinds": [
+        "hash.crackable",
+        "hash.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "421a8813ff13",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "ssh <user>@<target>",
+      "note": "Interactive SSH login landing directly on a Windows OpenSSH cmd.exe prompt followed by whoami, hostname, and dir output. Must mint ssh.authenticated and foothold.windows rather than skipping Windows execution detection under isSsh.",
+      "expected_kinds": [
+        "ssh.authenticated",
+        "foothold.windows",
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "cb243d6510e2",
+      "file": "labs/oscp-c/hosts/ms01-153.md",
+      "command": ".\\<custom-binary>.exe",
+      "note": "Custom Rust helper binary panic output (assertion failed: left == right) printing two 32-hex MD5 digests in left/right comparison fields. Floor: notable program plus crackable hash extraction despite preceding usage banner text.",
+      "expected_kinds": [
+        "host.notable_program",
+        "hash.crackable",
+        "hash.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "20509ccec5ec",
+      "file": "labs/oscp-c/hosts/frankfurt-156.md",
+      "command": "gobuster dir  <user> -w <wordlist> -t 40 -x php,txt,html",
+      "note": "Gobuster v3.8+ directory enumeration output where discovered paths are printed without a leading slash (e.g. index.html (Status: 200)). Floor: web.content_map.",
+      "expected_kinds": [
+        "web.content_map"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "b8a85e7a0a00",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "sudo -l",
+      "note": "On-host sudo -l from an interactive Linux shell returning Sorry, user may not run sudo. Must classify as completed-negative without ambient prompt foothold telemetry forcing outcome to success.",
+      "expected_kinds": [
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "privesc.sudo_rights",
+        "access.root",
+        "credential.available"
+      ],
+      "outcome_expected": "completed-negative"
+    },
+    {
+      "id": "f84198a9f755",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "su <other-user>",
+      "note": "Interactive su attempt where the operator echoed a failed password guess on the Password: prompt line followed by su: Authentication failure. Must classify as rejected, emit blocker.logon_failure, and never mint credential.candidate from a failed password prompt.",
+      "expected_kinds": [
+        "foothold.linux",
+        "blocker.logon_failure"
+      ],
+      "forbidden_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available",
+        "access.root"
+      ],
+      "outcome_expected": "rejected"
+    },
+    {
+      "id": "43bcf87783e9",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "grep \"CRON\" /var/log/syslog",
+      "note": "Syslog CRON entry showing root executing cd into a non-standard directory followed by tar with an unquoted asterisk wildcard. Floor: privesc.cron and privesc.cron_writable.",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.cron",
+        "privesc.cron_writable"
+      ],
+      "forbidden_kinds": [
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0ec9f5216cef",
+      "file": "labs/oscp-c/walkthrough.md",
+      "command": "icacls '<service-binary-path>'",
+      "note": "Windows icacls output on a Program Files service executable where BUILTIN\\Users:(R) appears on line 1 and inherited modify permission BUILTIN\\Users:(I)(M) appears on an indented continuation line. Floor: privesc.weak_service_permission.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.notable_program",
+        "privesc.weak_service_permission"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a989fa2eabd9",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "nmap -A <target-range>",
+      "note": "Multi-host perimeter service and OS detection scan across Linux and Windows targets exposing SSH, HTTP, SMB, and WinRM. Must emit host reachability, open port sets, version metadata, OS family, and per-service reachability without minting footholds or credentials.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "scan.nmap.version",
+        "ssh.reachable",
+        "http.reachable",
+        "smb.reachable",
+        "winrm.reachable",
+        "web.server",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "credential.available",
+        "foothold.windows",
+        "foothold.linux"
+      ],
+      "expected_values": [
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              80,
+              135,
+              139,
+              445,
+              5985
+            ]
+          }
+        },
+        {
+          "kind": "ports.open",
+          "value_contains": {
+            "ports": [
+              22,
+              80
+            ]
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "windows"
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "linux"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "9ca614fe1991",
+      "file": "labs/medtech/hosts/web02-121.md",
+      "command": "curl -i -X POST http://<target>/login.aspx --data-urlencode Username=<sqli-payload>",
+      "note": "OCR-spliced HTTP POST against an ASP.NET authentication form returning rendered username/password UI controls and an application-level invalid login banner. Must emit HTTP reachability, login form surface, and parameterized input surface rather than transport rejection.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.login_form",
+        "web.parameterized"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "63c2b97184a1",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "whoami /all",
+      "note": "Interactive Windows service-account token dump from a PowerShell prompt showing SeManageVolumePrivilege enabled without local Administrator or SYSTEM group membership.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "privesc.windows_privilege",
+        "privesc.semanagevolume"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "expected_values": [
+        {
+          "kind": "privesc.semanagevolume",
+          "value_contains": {
+            "privilege": "SeManageVolumePrivilege",
+            "state": "Enabled"
+          }
+        },
+        {
+          "kind": "host.os_family",
+          "value_contains": {
+            "family": "windows"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "127832cd8b04",
+      "file": "labs/medtech/hosts/web02-121.md",
+      "command": "winpeas.exe (Network Information section)",
+      "note": "WinPEAS network interface dump showing two distinct IPv4 adapters bridging a perimeter subnet and an internal directory subnet with an internal DNS resolver. Must emit local interface, routing, DNS, multihomed, and pivot candidate facts.",
+      "expected_kinds": [
+        "scan.local.interfaces",
+        "scan.local.routes",
+        "scan.local.dns",
+        "host.multihomed",
+        "pivot.candidate"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds"
+      ],
+      "expected_values": [
+        {
+          "kind": "host.multihomed",
+          "value_contains": {
+            "interfaces": 2
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "d9fcb7a1e471",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "Get-Domain",
+      "note": "PowerView Get-Domain output from an interactive PowerShell session listing Forest FQDN, DomainControllers, and domain Name. Must emit Windows foothold, domain identity, and domain controller candidate facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "ad.domain_known",
+        "ad.dc_candidate"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "0ab61a790a0e",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "Get-DomainController",
+      "note": "PowerView Get-DomainController key-value dump reporting Forest, Domain, DC FQDN, OSVersion, and internal IPAddress. Must emit Windows foothold, domain identity, and domain controller candidate facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "ad.domain_known",
+        "ad.dc_candidate"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "efabc9294136",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "Invoke-ShareFinder",
+      "note": "PowerView Invoke-ShareFinder output enumerating UNC network shares across domain hosts from a PowerShell session. Must emit Windows foothold and SMB share inventory facts.",
+      "expected_kinds": [
+        "foothold.windows",
+        "smb.shares"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "5da8b9d7fd67",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "crackmapexec smb <target-range>  <user>  <redacted> --shares",
+      "note": "Authenticated SMB share sweep across internal domain hosts showing READ,WRITE access to ADMIN$ and C$ on a member server. Must emit SMB authentication, validated credential, readable/writable share facts, admin share access, and local admin access without minting NTDS loot.",
+      "expected_kinds": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.validated",
+        "smb.shares",
+        "smb.readable_share",
+        "smb.writable_share",
+        "access.admin_share",
+        "access.admin",
+        "ad.domain_known"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds"
+      ],
+      "expected_values": [
+        {
+          "kind": "access.admin",
+          "value_contains": {
+            "service": "smb",
+            "outcome": "accepted"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "55d523094f36",
+      "file": "labs/medtech/hosts/files02-011.md",
+      "command": "impacket-secretsdump <domain>/<user>:<redacted>@<target>",
+      "note": "Remote secretsdump against a domain member server extracting local SAM NTLM hashes and cached domain logon (MSCachev2) entries. Must emit SAM loot, NTLM hash, MSCache hash, and available credential facts without falsely minting domain-controller NTDS or krbtgt facts.",
+      "expected_kinds": [
+        "loot.sam",
+        "hash.ntlm",
+        "hash.mscache",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "hash.krbtgt"
+      ],
+      "expected_values": [
+        {
+          "kind": "loot.sam",
+          "value_contains": {
+            "method": "sam-dump"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ac39f6236efd",
+      "file": "labs/medtech/hosts/files02-011.md",
+      "command": "mimikatz lsadump::sam",
+      "note": "On-host mimikatz lsadump::sam output dumping local RID 500/501 SAM NTLM hashes on a member server. Must emit local SAM loot and NTLM hash facts and MUST NOT mint domain-controller loot.ntds.",
+      "expected_kinds": [
+        "loot.sam",
+        "hash.ntlm",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "hash.krbtgt"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "191909d66bd2",
+      "file": "labs/medtech/hosts/files02-011.md",
+      "command": "mimikatz token::elevate",
+      "note": "On-host mimikatz token::elevate output impersonating an NT AUTHORITY\\SYSTEM token (S-1-5-18). Must emit access.system in Tier 1 and MUST NOT misinterpret local session token principals as a domain-wide ad.user_list.",
+      "expected_kinds": [
+        "access.system"
+      ],
+      "forbidden_kinds": [
+        "ad.user_list",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "7a63666ee584",
+      "file": "labs/medtech/hosts/files02-011.md",
+      "command": "nxc ldap <target-subnet>  <domain> -u users.txt  <redacted>",
+      "note": "NetExec LDAP and RDP password spray confirming valid domain credentials without executing remote commands (-x/-X absent). Must emit protocol authentication and validated credential facts without prematurely minting an interactive foothold.windows.",
+      "expected_kinds": [
+        "rdp.reachable",
+        "rdp.authenticated",
+        "credential.validated",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "loot.ntds"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "192a69ed95f7",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "hydra  <user>  <redacted> -s 22 ssh://<target>",
+      "note": "Hydra SSH dictionary attack recovering a valid plaintext login pair on port 22. Must emit plaintext, available, and validated credential facts without minting an interactive Linux foothold.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "e7d484907d54",
+      "file": "labs/medtech/hosts/vpn-122.md",
+      "command": "help",
+      "note": "Restricted Linux shell session displaying allowed commands followed by sudo -l permitting execution of /usr/sbin/openvpn as root. Must emit sudo rights, GTFOBins sudo binary, and privilege escalation lead facts.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.root"
+      ],
+      "expected_values": [
+        {
+          "kind": "privesc.sudo_binary",
+          "value_contains": {
+            "bin": "openvpn",
+            "gtfobins_id": "openvpn"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "98c4acffbee8",
+      "file": "labs/medtech/hosts/client02-083.md",
+      "command": "dir C:\\Users\\<user>\\Desktop\\",
+      "note": "Headerless PowerShell/Windows directory listing snippet containing a mode-timestamp-length attribute row for local.txt. Must be recognized by Tier-2 output shape to emit loot.files and objective.flag_located rather than completed-negative.",
+      "expected_kinds": [
+        "loot.files",
+        "objective.flag_located"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "objective.root_flag"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "cd806305af89",
+      "file": "labs/medtech/hosts/dev04-012.md",
+      "command": "winpeas.exe (Security Packages Credentials & File Permissions section)",
+      "note": "WinPEAS output capturing a local NetNTLMv2 challenge-response hash via Security Packages alongside a non-default executable granting WriteData/CreateFiles to an unprivileged domain user. Must emit crackable hash, custom binary privesc, and notable program facts.",
+      "expected_kinds": [
+        "hash.crackable",
+        "privesc.custom_binary",
+        "host.notable_program"
+      ],
+      "forbidden_kinds": [
+        "loot.ntds",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "8729de59a8de",
+      "file": "labs/medtech/walkthrough.md",
+      "command": "impacket-secretsdump <domain>/Administrator@<dc-ip> -just-dc",
+      "note": "DCSync replication dump via impacket-secretsdump -just-dc extracting domain user NTLM hashes, krbtgt secrets, and machine account hashes. Must emit NTDS loot, krbtgt hash, NTLM hash, and available credential facts.",
+      "expected_kinds": [
+        "loot.ntds",
+        "hash.krbtgt",
+        "hash.ntlm",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows"
+      ],
+      "expected_values": [
+        {
+          "kind": "loot.ntds",
+          "value_contains": {
+            "method": "credential-dump"
+          }
+        }
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    }
+  ]
+}

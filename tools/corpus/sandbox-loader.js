@@ -278,12 +278,30 @@ function inferTargetIp(text, fallbackIp) {
   return m ? m[1] : (fallbackIp || '10.10.10.10');
 }
 
+function splitFollowPrompt(rawPromptLine, explicitFollowPrompt) {
+  let promptLine = String(rawPromptLine || '');
+  let followPrompt = String(explicitFollowPrompt || '').trim();
+  if (promptLine.indexOf('\n') >= 0) {
+    const pLines = promptLine.split(/\r?\n/);
+    const lastPLine = pLines[pLines.length - 1].trim();
+    if (followPrompt && lastPLine === followPrompt) {
+      promptLine = pLines.slice(0, -1).join('\n');
+    } else if (!followPrompt && lastPLine && !/^[└╰]─\s*[#$%>]/.test(lastPLine)) {
+      followPrompt = lastPLine;
+      promptLine = pLines.slice(0, -1).join('\n');
+    }
+  }
+  return { promptLine: promptLine, followPrompt: followPrompt };
+}
+
 function probeBlockStateless(OBOL, opts) {
   opts = opts || {};
   const command = String(opts.command || '');
   const stdout = String(opts.stdout != null ? opts.stdout : (opts.output || ''));
   const stderr = String(opts.stderr || '');
-  const promptLine = String(opts.promptLine || '');
+  const splitPrompts = splitFollowPrompt(opts.promptLine, opts.followPrompt);
+  const promptLine = splitPrompts.promptLine;
+  const followPrompt = splitPrompts.followPrompt;
   const explicitTarget = opts.target
     || (/^host:/.test(String(opts.scope || '')) ? String(opts.scope).slice(5) : '');
   const targetIp = explicitTarget || inferTargetIp(stdout + ' ' + command, '10.10.10.10');
@@ -294,24 +312,29 @@ function probeBlockStateless(OBOL, opts) {
   // inference.js uses context.target / opts.entail to detect live stateful engagements
   // for out-of-order causal entailment, whereas Pass 1 probes single blocks statelessly.
   let parseContext = opts.context ? Object.assign({}, opts.context) : undefined;
-  if (promptLine) {
-    parseContext = Object.assign({ params: params }, parseContext || {}, { promptLine: promptLine });
+  if (promptLine || followPrompt) {
+    parseContext = Object.assign({ params: params }, parseContext || {});
+    if (promptLine) parseContext.promptLine = promptLine;
+    if (followPrompt) parseContext.followPrompt = followPrompt;
   } else if (parseContext && !parseContext.params) {
     parseContext.params = params;
   }
 
-  const parsed = OBOL.parsers.parseActionOutput({
-    actionId: opts.actionId || '',
-    command: command,
-    stdout: stdout,
-    stderr: stderr,
-    source: opts.source !== undefined ? opts.source : command,
-    scope: scope,
-    domain: opts.domain || '',
-    seedFacts: seedFacts,
-    entail: !!opts.entail,
-    context: parseContext
-  });
+  const isDryProbeSentinel = stdout.trim() === '[OBOL: completed with no output / nothing found]';
+  const parsed = isDryProbeSentinel
+    ? { facts: [], diagnostics: [] }
+    : OBOL.parsers.parseActionOutput({
+        actionId: opts.actionId || '',
+        command: command,
+        stdout: stdout,
+        stderr: stderr,
+        source: opts.source !== undefined ? opts.source : command,
+        scope: scope,
+        domain: opts.domain || '',
+        seedFacts: seedFacts,
+        entail: !!opts.entail,
+        context: parseContext
+      });
 
   const facts = (parsed && parsed.facts) || [];
   const diagnostics = (parsed && parsed.diagnostics) || [];
@@ -515,7 +538,10 @@ function createEngagementSession(OBOL, opts) {
     turnOpts = turnOpts || {};
     const cmd = String(turnOpts.command || '');
     const stdout = String(turnOpts.stdout != null ? turnOpts.stdout : (turnOpts.text || turnOpts.output || ''));
-    const promptLine = String(turnOpts.promptLine || '');
+    const splitPrompts = splitFollowPrompt(turnOpts.promptLine, turnOpts.followPrompt);
+    const promptLine = splitPrompts.promptLine;
+    const followPrompt = splitPrompts.followPrompt;
+    const suppliedContext = turnOpts.resolvedContext || turnOpts.context || undefined;
 
     let targetIp = turnOpts.target || '';
     if (!targetIp && multiTarget) {
@@ -536,15 +562,19 @@ function createEngagementSession(OBOL, opts) {
     const factsBefore = (eng.facts || []).length;
     let ingestResult = null;
     if (OBOL.ingest && typeof OBOL.ingest.run === 'function' && turnOpts.direct !== true) {
-      ingestResult = OBOL.ingest.run({
+      const runOpts = {
         actionId: turnOpts.actionId || '',
         command: cmd,
         text: stdout,
         promptLine: promptLine,
+        followPrompt: followPrompt,
         scope: 'host:' + targetIp,
         target: targetIp,
         forceTarget: turnOpts.forceTarget !== undefined ? turnOpts.forceTarget : targetIp
-      });
+      };
+      if (turnOpts.commandObj) runOpts.commandObj = turnOpts.commandObj;
+      if (suppliedContext) runOpts.context = suppliedContext;
+      ingestResult = OBOL.ingest.run(runOpts);
     } else {
       const fsBefore = factSetForTarget(targetIp);
       const probed = probeBlockStateless(OBOL, {
@@ -552,6 +582,8 @@ function createEngagementSession(OBOL, opts) {
         command: cmd,
         stdout: stdout,
         promptLine: promptLine,
+        followPrompt: followPrompt,
+        context: suppliedContext,
         target: targetIp,
         scope: 'host:' + targetIp,
         domain: eng.params.domain || '',

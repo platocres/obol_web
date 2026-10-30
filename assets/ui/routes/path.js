@@ -745,6 +745,7 @@
         }
         // Pre-flight Stage 2 hazard cards yield once the corresponding Stage 3 runtime blocker card is active
         if (k === 'exploit.hazard_py2' && facts.has('blocker.py2_syntax_or_module')) return;
+        if (k === 'exploit.hazard_py3_syntax' && (facts.has('blocker.py2_syntax_or_module') || facts.has('blocker.python_dep_or_pep668'))) return;
         if (k === 'exploit.hazard_burp_proxy' && facts.has('blocker.hardcoded_proxy')) return;
         if (k === 'exploit.hazard_c_compile' && facts.has('blocker.glibc_or_arch_mismatch')) return;
         var scopes = {};
@@ -752,7 +753,26 @@
         Object.keys(scopes).forEach(function (scope) {
         var d = Object.assign({ factKind: k, factScope: scope }, docs[k]);
         if (d.code) {
-          var tmpl = String(d.code)
+          var scopeTarget = /^host:/.test(scope) ? scope.slice(5) : '';
+          var scopeFacts = (scopeTarget && OBOL.store && OBOL.store.factSetForTarget)
+            ? OBOL.store.factSetForTarget(scopeTarget)
+            : facts;
+          var fillParams = Object.assign({}, params, scopeTarget ? { target: scopeTarget } : {});
+          var fillOpts = Object.assign({
+            params: fillParams,
+            profile: eng.profile,
+            workspace: (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {}
+          }, fillParams);
+          var resolvedEdbFile = (OBOL.command && OBOL.command.fillTemplate)
+            ? OBOL.command.fillTemplate('{{edb_file}}', scopeFacts, fillOpts)
+            : nsFill('{{edb_file}}', scopeFacts, fillParams);
+          if (resolvedEdbFile === '{{edb_file}}' || /^<edb_file>$/i.test(resolvedEdbFile)) resolvedEdbFile = '';
+          var rawCodeTmpl = String(d.code);
+          if (k === 'exploit.hazard_java_target' && resolvedEdbFile && /\.(?:py|sh|rb|pl)$/i.test(resolvedEdbFile)) {
+            rawCodeTmpl = "sed -i -E 's/-(source|target)[[:space:]]+(1\\.[567]|[567])/-\\1 8/g' {{edb_file}}";
+          }
+          var javaPlaceholder = (resolvedEdbFile && /\.java$/i.test(resolvedEdbFile)) ? '{{edb_file|Exploit.java}}' : 'Exploit.java';
+          var tmpl = rawCodeTmpl
             .replace(/<(?:dc-ip|target-ip|target)>/g, '{{target}}')
             .replace(/<(?:user|username|svc|target-user)>/g, '{{user}}')
             .replace(/<pass>/g, "'{{password}}'")
@@ -764,18 +784,10 @@
             .replace(/<lhost>/g, '{{lhost}}')
             .replace(/<exploit\.py>/g, '{{edb_file|exploit.py}}')
             .replace(/<exploit\.c>/g, '{{edb_file|exploit.c}}')
+            .replace(/<exploit\.java>/g, javaPlaceholder)
             .replace(/<script>/g, '{{edb_file|script.sh}}');
-          var scopeTarget = /^host:/.test(scope) ? scope.slice(5) : '';
-          var scopeFacts = (scopeTarget && OBOL.store && OBOL.store.factSetForTarget)
-            ? OBOL.store.factSetForTarget(scopeTarget)
-            : facts;
-          var fillParams = Object.assign({}, params, scopeTarget ? { target: scopeTarget } : {});
           if (OBOL.command && OBOL.command.fillTemplate) {
-            d.code = OBOL.command.fillTemplate(tmpl, scopeFacts, Object.assign({
-              params: fillParams,
-              profile: eng.profile,
-              workspace: (OBOL.workspace && OBOL.workspace.tokens) ? OBOL.workspace.tokens(eng) : {}
-            }, fillParams));
+            d.code = OBOL.command.fillTemplate(tmpl, scopeFacts, fillOpts);
           } else {
             d.code = nsFill(tmpl, scopeFacts, fillParams);
           }
@@ -1136,7 +1148,12 @@
         .replace(/<group>/g, '{{joined_group}}')
         .replace(/<host\.domain>/g, '{{dc_fqdn|{{domain}}}}')
         .replace(/<share>/g, '{{share}}')
-        .replace(/<hashfile>/g, '{{hashfile}}');
+        .replace(/<hashfile>/g, '{{hashfile}}')
+        .replace(/<lhost>/g, '{{lhost}}')
+        .replace(/<exploit\.py>/g, '{{edb_file|exploit.py}}')
+        .replace(/<exploit\.c>/g, '{{edb_file|exploit.c}}')
+        .replace(/<exploit\.java>/g, '{{edb_file|Exploit.java}}')
+        .replace(/<script>/g, '{{edb_file|script.sh}}');
       code = nsFill(tmpl, f, p);
     }
     return '<div class="ns-doctor"><div class="ns-doctor-h">' + OBOL.ic('shield') + ' ' + esc(d.title) + '</div>'

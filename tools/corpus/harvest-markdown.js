@@ -32,6 +32,7 @@ const {
   FACT_BEARING,
   extractWalkthroughTurns,
   discoverAlternates,
+  discoverCorpusEntries,
   detectTool,
   classifyAxis,
   resolveCorpusWalkthroughsDir
@@ -126,51 +127,26 @@ function runHarvest(opts) {
     ? path.resolve(opts.corpusDir)
     : (process.env.OBOL_CORPUS_DIR ? path.resolve(process.env.OBOL_CORPUS_DIR) : DEFAULT_CORPUS_DIR);
   const isDefaultCorpus = path.resolve(rawCorpusDir) === path.resolve(DEFAULT_CORPUS_DIR);
-  const { corpusRoot, walkthroughsDir } = resolveCorpusWalkthroughsDir(rawCorpusDir);
-
-  if (!fs.existsSync(walkthroughsDir)) {
-    const err = new Error('harvest-markdown: corpus walkthroughs directory not found at ' + walkthroughsDir);
-    err.code = 'CORPUS_NOT_FOUND';
-    throw err;
-  }
-
-  const OBOL = opts.OBOL || createSandbox();
-  const slugFilter = Array.isArray(opts.slugs) && opts.slugs.length
-    ? new Set(opts.slugs.map(s => String(s).trim().replace(/\.md$/i, '').toLowerCase()).filter(Boolean))
-    : null;
-
-  let files = fs.readdirSync(walkthroughsDir)
-    .filter(f => f.toLowerCase().endsWith('.md'))
-    .sort((a, b) => a.localeCompare(b));
-
-  if (slugFilter) {
-    files = files.filter(f => slugFilter.has(f.slice(0, -3).toLowerCase()));
-  }
-  if (typeof opts.limit === 'number' && opts.limit > 0) {
-    files = files.slice(0, opts.limit);
-  }
-
-  const walkEntries = files.map(f => ({
-    file: f,
-    slug: f.slice(0, -3),
-    fullPath: path.join(walkthroughsDir, f),
-    isAlternate: false
-  }));
-
-  if (opts.includeAlternates) {
-    for (const f of files) {
-      const alts = discoverAlternates(corpusRoot, f.slice(0, -3));
-      for (const alt of alts) {
-        walkEntries.push({
-          file: 'alternates/' + alt.file,
-          slug: alt.slug,
-          fullPath: alt.path,
-          isAlternate: true,
-          author: alt.author
-        });
-      }
+  let discovered;
+  try {
+    discovered = discoverCorpusEntries(rawCorpusDir, {
+      slugs: opts.slugs,
+      limit: opts.limit,
+      includeAlternates: !!opts.includeAlternates,
+      includeHosts: !!opts.includeHosts
+    });
+  } catch (e) {
+    if (e && e.code === 'CORPUS_NOT_FOUND') {
+      const err = new Error('harvest-markdown: ' + e.message);
+      err.code = 'CORPUS_NOT_FOUND';
+      throw err;
     }
+    throw e;
   }
+  const corpusRoot = discovered.corpusRoot;
+  const OBOL = opts.OBOL || createSandbox();
+  const baseCount = discovered.baseEntries.length;
+  const walkEntries = discovered.entries;
 
   const perTool = Object.create(null);
   function bump(t) {
@@ -221,7 +197,7 @@ function runHarvest(opts) {
   let alternatesAvailable = 0;
 
   for (const entry of walkEntries) {
-    if (!entry.isAlternate) {
+    if (!entry.isAlternate && !entry.isHostFile) {
       alternatesAvailable += discoverAlternates(corpusRoot, entry.slug).length;
     }
     const md = fs.readFileSync(entry.fullPath, 'utf8');
@@ -376,7 +352,7 @@ function runHarvest(opts) {
   const summaryReport = {
     generated_at: new Date().toISOString(),
     corpus_dir: corpusRoot,
-    walkthroughs: files.length,
+    walkthroughs: baseCount,
     walkthroughs_scanned_with_alternates: walkEntries.length,
     alternates_discovered: alternatesAvailable,
     ocr_spliced_turns: ocrSplicedTurns,
@@ -434,6 +410,7 @@ if (require.main === module) {
   const outPath = opt('out', '');
   const axesOutPath = opt('axes-out', '');
   const includeAlternates = flag('include-alternates');
+  const includeHosts = flag('include-hosts');
 
   let res;
   try {
@@ -443,7 +420,8 @@ if (require.main === module) {
       limit: limitRaw ? parseInt(limitRaw, 10) : undefined,
       out: outPath || undefined,
       axesOut: axesOutPath || undefined,
-      includeAlternates: includeAlternates
+      includeAlternates: includeAlternates,
+      includeHosts: includeHosts
     });
   } catch (e) {
     if (e && e.code === 'CORPUS_NOT_FOUND') {

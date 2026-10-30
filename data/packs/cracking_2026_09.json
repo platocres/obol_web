@@ -581,6 +581,16 @@
           "tool": "hashcat",
           "run": "hashcat -m 1800 {{hashfile}} {{wordlist}} --force",
           "note": "Hashcat mode 1800 (sha512crypt $6$) for Linux shadow and modular crypt hashes."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 0 {{hashfile}} {{wordlist}} --force",
+          "note": "Hashcat mode 0 (raw MD5) for unsalted 32-hex application and legacy CMS database password hashes."
+        },
+        {
+          "tool": "john",
+          "run": "john --format=raw-md5 --wordlist={{wordlist}} {{hashfile}} && john --show --format=raw-md5 {{hashfile}}",
+          "note": "CPU-friendly John raw-MD5 fallback (John requires explicit --format=raw-md5 on bare 32-hex digests)."
         }
       ]
     },

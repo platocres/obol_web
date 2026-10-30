@@ -87,8 +87,15 @@
     if (/\b(?:hashcat|john)\b/.test(cmd)) return { complete: /Status\.*:\s*(?:Exhausted|Cracked)|\d+ password hashes? cracked,\s*\d+ left|No password hashes left to crack|Session completed/i.test(body), negative: (/Status\.*:\s*Exhausted|\b0 password hashes? cracked,\s*\d+ left|No password hashes left to crack/i.test(body) && !/\b[1-9]\d* password hashes? cracked/i.test(body)) };
     if (/\bldapsearch\b/.test(cmd)) return { complete: /^result:\s*0\s+Success\s*$/im.test(body), negative: /^result:\s*0\s+Success\s*$/im.test(body) && /^#?\s*numEntries:\s*0\s*$/im.test(body) };
     if (/\b(?:impacket-[\w-]+|getnpusers|getuserspns|finddelegation|lookupsid|rpcdump)\b/.test(cmd)) {
-      var impNone = /\b(?:No entries found|Total of records returned\s+0|No SPNs found|No delegation found)\b/i.test(body);
+      var impNone = /doesn't have UF_DONT_REQUIRE_PREAUTH set|\b(?:No entries found|Total of records returned\s+0|No SPNs found|No delegation found)\b/i.test(body);
       return { complete: impNone || /Impacket v\d|\[\*\]\s*Received\s+\d+\s+endpoints\./i.test(body), negative: impNone };
+    }
+    if (/doesn't have UF_DONT_REQUIRE_PREAUTH set|\bNo entries found!|\bis not vulnerable\b|\bthis instance is patched\b|\bmay not run sudo\b|\bnot allowed to run sudo\b|\bis not in the sudoers file\b/i.test(body)) {
+      return { complete: true, negative: true };
+    }
+    if ((/PRIVILEGES INFORMATION/i.test(body) && /Privilege Name|[-=]{5,}|\bSe[A-Z][A-Za-z]+Privilege\b/i.test(body)) || (/\bwhoami\s+\/priv\b/i.test(cmd) && /\bSe[A-Z][A-Za-z]+Privilege\b/.test(body))) {
+      var hasWinPriv = /\b(?:SeImpersonatePrivilege|SeAssignPrimaryTokenPrivilege|SeBackupPrivilege|SeRestorePrivilege|SeDebugPrivilege|SeTakeOwnershipPrivilege|SeLoadDriverPrivilege|SeManageVolumePrivilege|SeCreateTokenPrivilege|SeTcbPrivilege|SeRelabelPrivilege)\b/i.test(body);
+      return { complete: true, negative: !hasWinPriv };
     }
     if (/(?:^|[\s;|&])(?:dig|host|nslookup)\b/.test(cmd)) {
       var dnsFail = /;\s*Transfer failed\.|;\s*communications error|status:\s*(?:REFUSED|NXDOMAIN|SERVFAIL)\b|Host\s+\S+\s+not found/i.test(body) && !/\bIN\s+(?:A|AAAA|SRV|SOA|NS|TXT|MX|CNAME|PTR)\s+\S/i.test(body);
@@ -125,25 +132,63 @@
     opts = opts || {};
     var text = String(opts.text || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, ''), command = String(opts.command || '');
     var facts = opts.facts || [], proof = facts.filter(factProof), diagnostics = opts.diagnostics || [];
+    var prevArr = (opts.previousFacts && Array.isArray(opts.previousFacts.facts))
+      ? opts.previousFacts.facts
+      : (Array.isArray(opts.previousFacts) ? opts.previousFacts : []);
+    var priorKinds = {};
+    prevArr.forEach(function (pf) {
+      if (supported(pf) && pf.kind) priorKinds[pf.kind] = true;
+    });
+    function isAmbientOrPreExistingAccess(f) {
+      if (!f) return true;
+      if (f.origin === 'prompt_telemetry' || (f.value && f.value.prompt_only)) return true;
+      if (/^(?:foothold\.|access\.)/.test(f.kind || '') && priorKinds[f.kind]) return true;
+      return false;
+    }
+    var nonAmbientProof = proof.filter(function (f) { return !isAmbientOrPreExistingAccess(f); });
     var kinds = unique(proof.map(function (f) { return f.kind; }));
-    var auth = proof.some(function (f) { return /^(?:(?:smb|ldap|winrm|rdp|ssh|mssql|ftp|wmi)\.authenticated|credential\.validated|ad\.anonymous_bind|smb\.(?:null_session|guest_session))$/.test(f.kind); });
+    var auth = nonAmbientProof.some(function (f) { return /^(?:(?:smb|ldap|winrm|rdp|ssh|mssql|ftp|wmi)\.authenticated|credential\.validated|ad\.anonymous_bind|smb\.(?:null_session|guest_session))$/.test(f.kind); });
     var textForDenial = text.replace(/^.*Set-WSManQuickConfig\s*:\s*Access is denied.*$/gim, '');
-    var denial = /STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed/i.test(textForDenial)
+    var denial = /STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable/i.test(textForDenial)
       || facts.some(function (f) { return f && (f.kind === 'credential.authorization' || f.kind === 'blocker.ldap_anonymous_disabled'); });
     var guestDisabled = /\\guest:\S*\s+STATUS_ACCOUNT_DISABLED/i.test(text) || (/\s-u\s+['"]?guest['"]?\b/i.test(command) && /STATUS_ACCOUNT_DISABLED/i.test(text));
-    var rejected = guestDisabled || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bauthentication (?:failed|failure)\b|\binvalid (?:password|credentials)\b|\bLogin incorrect\b|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)/i.test(text)
+    var hasHardTransportReject = guestDisabled
+      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|530\s+Login\s+incorrect/i.test(text)
       || facts.some(function (f) { return f && f.kind === 'credential.validation' && (f.state === 'refuted' || (f.value || {}).status === 'rejected'); });
     var isHttpResp = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
-    var environment = (!guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?(?:command not found|is not recognized as an internal or external command|No such file or directory|\busage:|unrecognized (?:option|argument)|invalid option|missing (?:required )?(?:option|argument)|SyntaxError:|ModuleNotFoundError:|ImportError:|externally-managed-environment|version ['`"]?GLIBC_2\.\d+|cannot execute binary file:\s*Exec format error|Traceback \(most recent call last\):|Connection (?:refused|reset)|could not connect|Name or service not known|Temporary failure in name resolution|Network is unreachable|\b(?:connection|request|operation|scan|socket|read)\s+timed?\s*out\b|(?<!nmblookup[^\n]{0,40})\btimed\s+out\b|KRB_AP_ERR_SKEW|clock skew too great|STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|BIO_do_handshake failed|freerdp_tls_handshake|ERRCONNECT_TLS_CONNECT_FAILED|Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management)/i.test(text))
-      || (!guestDisabled && !isHttpResp && /\b(?:SSLCertVerificationError|CERTIFICATE_VERIFY_FAILED|ProxyError)\b/.test(text))
-      || facts.some(function (f) { return /^blocker\.(?:clock_skew|name_resolution|no_tty|crlf|hash_format|hashcat_env|web_wildcard|tls_scheme|kerberos_spn|xp_cmdshell_disabled|password_change|ntlm_disabled|nxc_c_share_denied|nxc_spider_usage|account_restricted|winrm_closed|py2_syntax_or_module|python_dep_or_pep668|hardcoded_proxy|tls_cert_verify|glibc_or_arch_mismatch)$/.test(f.kind); });
+    var isHttp401or407 = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+40[17]\b/im.test(text) || /\bWWW-Authenticate:/i.test(text);
+    var isHttpAppContext = !isHttp401or407 && !hasHardTransportReject && (
+      /\b(?:curl|wget|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|whatweb)\b/i.test(command)
+      || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+(?:200|301|302|303|307|308)\b/im.test(text)
+      || /^\s*URL:\s*https?:\/\//im.test(text)
+      || /<(?:html|form|body|div|input)\b/i.test(text)
+      || /\[Input\s+(?:Username|Password|Email)\]/i.test(text)
+    );
+    var httpAppLoginFailure = isHttpAppContext && /\b(?:authentication (?:failed|failure)|invalid (?:password|credentials?|username)|login (?:incorrect|failed))\b/i.test(text);
+    var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\binvalid (?:password|credentials)\b|\bLogin incorrect\b/i.test(text));
     var truncated = /\[truncated(?:[,\]]| output)|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
     var parsedError = !!opts.parseError || diagnostics.length > 0;
     var done = completion(text, command), obs = observations(text);
     var mixedAuth = obs.some(function (o) { return o.authentication === 'accepted'; }) && obs.some(function (o) { return o.authentication === 'rejected'; });
     var operation = /\b(?:nxc|netexec|crackmapexec|cme)\b/i.test(command) && /(?:\s--(?:users|groups|local-groups|shares|rid-brute|pass-pol|loggedon-users|sessions|disks|computers|ntds|sam|lsa|dpapi|mkfile|put-file|get-file|spider|gmsa|laps|kerberoasting|asreproast|bloodhound)\b|\s-(?:M|[xX])\s)/i.test(command);
-    var resultProof = proof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi)\.(?:reachable|authenticated)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
-    var bloodyWritableProof = proof.some(function (f) { return f && (f.kind === 'ad.acl_lead' || f.kind === 'ad.gpo_writable'); });
+    var resultProof = nonAmbientProof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi)\.(?:reachable|authenticated)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
+    var substantiveProof = resultProof || nonAmbientProof.some(function (f) {
+      return /^(?:hash\.|credential\.(?:available|plaintext|ntlm_hash|ssh_key|certificate)|privesc\.|loot\.|vuln\.)/.test(f.kind || '');
+    });
+    if (httpAppLoginFailure) {
+      var hasNewWebSurface = resultProof || nonAmbientProof.some(function (f) {
+        return /^(?:web\.|http\.(?:headers|response)$)/.test(f.kind || '') || (f.kind === 'http.reachable' && !priorKinds['http.reachable']);
+      });
+      done = { complete: true, negative: !hasNewWebSurface };
+    } else if (/PRIVILEGES INFORMATION/i.test(text) && /Privilege Name|={5,}/i.test(text) && !nonAmbientProof.some(function (f) { return f.kind === 'privesc.windows_privilege'; })) {
+      done = { complete: true, negative: true };
+    }
+    var hardEnvironment = (!guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?(?:command not found|is not recognized as an internal or external command|No such file or directory|unrecognized (?:option|argument)|invalid option|missing (?:required )?(?:option|argument)|SyntaxError:|ModuleNotFoundError:|ImportError:|externally-managed-environment|version ['`"]?GLIBC_2\.\d+|cannot execute binary file:\s*Exec format error|Traceback \(most recent call last\):|Connection (?:refused|reset)|could not connect|Name or service not known|Temporary failure in name resolution|Network is unreachable|\b(?:connection|request|operation|scan|socket|read)\s+timed?\s*out\b|(?<!nmblookup[^\n]{0,40})\btimed\s+out\b|KRB_AP_ERR_SKEW|clock skew too great|STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|BIO_do_handshake failed|freerdp_tls_handshake|ERRCONNECT_TLS_CONNECT_FAILED|Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management)/i.test(text))
+      || (!guestDisabled && !isHttpResp && /\b(?:SSLCertVerificationError|CERTIFICATE_VERIFY_FAILED|ProxyError)\b/.test(text))
+      || facts.some(function (f) { return /^blocker\.(?:clock_skew|name_resolution|no_tty|crlf|hash_format|hashcat_env|web_wildcard|tls_scheme|kerberos_spn|xp_cmdshell_disabled|password_change|ntlm_disabled|nxc_c_share_denied|nxc_spider_usage|account_restricted|winrm_closed|py2_syntax_or_module|python_dep_or_pep668|hardcoded_proxy|tls_cert_verify|glibc_or_arch_mismatch)$/.test(f.kind); });
+    var usageSignal = !guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?\busage:/i.test(text);
+    var environment = hardEnvironment || (usageSignal && !substantiveProof);
+    var bloodyWritableProof = nonAmbientProof.some(function (f) { return f && (f.kind === 'ad.acl_lead' || f.kind === 'ad.gpo_writable'); });
     var context = snapshot(opts.context || {});
     var outcome = { version: 1, kind: 'unknown', status: 'unresolved', retryable: true, conclusive: false, retireCommand: false, retireMove: false,
       title: 'Output saved; outcome unresolved', summary: 'No supported outcome was recognized. The attempt remains available.',
@@ -160,7 +205,7 @@
     if (parsedError) set(proof.length ? 'partial' : 'parser-error', proof.length ? 'Some observations recognized; parsing incomplete' : 'Output saved; parser could not interpret it',
       proof.length ? 'Supported observations were retained, but part of the output could not be parsed.' : 'The parser reported an error. No successful or negative conclusion is assumed.',
       'The raw output and parser diagnostics are saved. Keep this attempt available for review or retry.', 'unresolved', 'review', false);
-    else if ((truncated && proof.length) || mixedAuth || (environment && (resultProof || auth))) set('partial', 'Partial or mixed result',
+    else if ((truncated && nonAmbientProof.length) || mixedAuth || (environment && (substantiveProof || auth))) set('partial', 'Partial or mixed result',
       'Keep each supported observation. The complete operation or some sub-results remain unresolved.',
       'An incomplete capture or mixed result does not exhaust this move. Review the saved output before continuing.', 'unresolved', 'review', false);
     else if (denial && !resultProof) set('authorization-denied', auth ? 'Authentication accepted; operation denied' : 'Operation denied; authentication unproven',
@@ -179,7 +224,7 @@
       'The supported output family explicitly reports a completed negative result for this operation.',
       'The negative result is limited to this query, endpoint, identity, and service. Other contexts remain available.', 'complete', 'continue', true);
     else if (proof.length) {
-      var conclusive = done.complete || resultProof || (auth && !operation) || /\b(?:id|whoami)\b/.test(command) && kinds.some(function (k) { return /^(?:access\.|foothold\.|host\.user)/.test(k); });
+      var conclusive = done.complete || substantiveProof || (auth && !operation) || /\b(?:id|whoami)\b/.test(command) && kinds.some(function (k) { return /^(?:access\.|foothold\.|host\.user)/.test(k); });
       if (operation && !resultProof && !done.complete) set('partial', 'Authentication observed; operation result unresolved',
         'The service authentication was recognized, but the requested enumeration or operation has no supported completion result.',
         'Authentication is retained. Keep this operation available until its own output establishes a result.', 'unresolved', 'review', false);

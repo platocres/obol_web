@@ -113,6 +113,7 @@
   // mints on its own.
   var _FTP_IIS_ROW_RE = /^\s*(?<date>\d{2}-\d{2}-\d{2})\s+\d{2}:\d{2}(?:AM|PM)\s+(?<size><DIR>|[\d,]+)\s+(?<name>\S.*?)\s*$/i;
   var _FTP_UNIX_ROW_RE = /^\s*(?<perm>[-dlbcps](?:[-rwxsStT]{9}))\s+\d+\s+\S+\s+\S+\s+(?<size>\d+)\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+(?<name>\S.*?)\s*$/;
+  var _FTP_WEBROOT_MARKER_RE = /^(?:iisstart\.(?:htm|html|png)|aspnet_client|web\.config|index\.(?:php|html?|aspx?|jsp)|default\.(?:aspx?|htm|html)|wp-config\.php|wwwroot|public_html|htdocs)$/i;
 
   function _parse_ftp_output(text, ws, command, source, facts) {
     var banners = [], loginSuccess = false;
@@ -123,19 +124,27 @@
     });
     var writeOk = reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
     var hasFtpSession = !!(banners.length || loginSuccess || writeOk || /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|20|26|27|29|30)[ -]|331[ -]|Connected to\b)/im.test(text));
-    var ftpFiles = [];
+    var ftpFiles = [], webrootMarkers = [];
     text.split(/\r?\n/).forEach(function (line) {
       if (!hasFtpSession) return;
       var im = _FTP_IIS_ROW_RE.exec(line);
       if (im) {
         var inm = im.groups.name.trim();
-        if (inm && inm !== '.' && inm !== '..') ftpFiles.push({ share: '', path: inm, size: im.groups.size === '<DIR>' ? '' : im.groups.size.replace(/,/g, '') });
+        if (inm && inm !== '.' && inm !== '..') {
+          ftpFiles.push({ share: '', path: inm, size: im.groups.size === '<DIR>' ? '' : im.groups.size.replace(/,/g, '') });
+          var ibase = inm.split(/[\\/]/).pop();
+          if (_FTP_WEBROOT_MARKER_RE.test(ibase)) webrootMarkers.push(ibase);
+        }
         return;
       }
       var um = _FTP_UNIX_ROW_RE.exec(line);
       if (um) {
         var unm = um.groups.name.trim().replace(/[ \t]+->[ \t]+[^\r\n]*$/, '');
-        if (unm && unm !== '.' && unm !== '..') ftpFiles.push({ share: '', path: unm, size: um.groups.size });
+        if (unm && unm !== '.' && unm !== '..') {
+          ftpFiles.push({ share: '', path: unm, size: um.groups.size });
+          var ubase = unm.split(/[\\/]/).pop();
+          if (_FTP_WEBROOT_MARKER_RE.test(ubase)) webrootMarkers.push(ubase);
+        }
       }
     });
     if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length) return;
@@ -148,6 +157,9 @@
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
     if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', 'ftp-listing', text, ws, source);
+    if (webrootMarkers.length) {
+      _add(facts, mkFact('config.review', h, { kind: 'ftp_webroot_exposed', files: C.uniqueSortedCI(webrootMarkers), via: 'ftp' }, S, source));
+    }
   }
   C._parse_ftp_output = _parse_ftp_output;
 
@@ -159,12 +171,32 @@
   var _SNMP_PROC_PW_RE = /(?:-p|--password|--pass|pwd|passwd)[=\s]+['"]?(?<pw>[^\s'"]{3,})/i;
   var _SNMP_PROC_USER_RE = /(?:-u|--user(?:name)?)[=\s]+['"]?(?<user>[^\s'"]{2,})/i;
   var _ONESIXTYONE_RE = /^\s*\d{1,3}(?:\.\d{1,3}){3}\s+\[(?<community>[A-Za-z0-9_.\-@!$%^&+=]{1,64})\]\s+(?<description>\S[^\r\n]*)/m;
+  var _SNMP_HRSW_INSTALLED_RE = /^\s*(?:(?:HOST-RESOURCES-MIB::)?hrSWInstalledName\.\d+|(?:iso|\.?1)\.3\.6\.1\.2\.1\.25\.6\.3\.1\.2\.\d+)\s*=\s*STRING:\s*"?(?<pkg>[^"\r\n]+?)"?\s*$/im;
+  var _SNMP_CRED_CLIENT_RE = /\b(PuTTY|WinSCP|FileZilla|KeePass(?:\s*2|\s*XC)?|TightVNC|RealVNC|UltraVNC|mRemoteNG|RDCMan|Remote Desktop Connection Manager|SuperPuTTY|HeidiSQL|DBeaver)\b/i;
+  var _SNMP_OS_BASELINE_RE = /^(?:Microsoft\s+(?:Visual\s+C\+\+|Windows|\.NET|Edge|Update|Silverlight|Office|OneDrive|SQL\s+Server\s+(?:\d+\s+)?(?:Native\s+Client|Setup|Browser|T-SQL|Transact-SQL|System\s+CLR))|Windows\s+(?:SDK|Software\s+Development\s+Kit|Driver\s+Package)|(?:Security\s+)?Update\s+for\s+(?:Microsoft|Windows)|Hotfix\s+for|KB\d{5,}|VMware\s+Tools|VirtualBox\s+Guest\s+Additions|QEMU\s+guest\s+agent|OpenSSH|Google\s+Chrome|Mozilla\s+(?:Firefox|Maintenance)|7-Zip|Notepad\+\+|Git\b|Python\s+\d|Node\.js|Go\s+Programming\s+Language|Java\s+\d|Java\s+Auto\s+Updater|Intel\(R\)|AMD\s+|NVIDIA\s+|Realtek\s+|PuTTY|WinSCP)\b|^linux-(?:image|headers|modules|libc)|^(?:lib[a-z0-9.+-]+|gcc|g\+\+|glibc|libc6|systemd|udev|bash|coreutils|apt|dpkg|rpm|yum|dnf|tzdata|ca-certificates|openssl|openssh-(?:client|server)|curl|wget|vim|nano|perl|python3?-[a-z0-9.+-]+)(?:[-_]\d|$)/i;
+  var _SNMP_MIB_ASSIGN_RE = /^\s*(?<oid>[A-Za-z0-9-]+::[A-Za-z0-9_."-]+|(?:iso|\.?1)(?:\.\d+){4,})\s*=\s*(?<type>[A-Za-z0-9-]+):\s*(?<rest>.*)$/;
+  var _SNMP_EXTEND_CMD_OID_RE = /^(?:(?:NET-SNMP-EXTEND-MIB::)?nsExtend(?:Command|Args)\b|(?:iso|\.?1)\.3\.6\.1\.4\.1\.8072\.1\.3\.2\.3\.1\.[23]\b|(?:UCD-SNMP-MIB::)?extCommand\b|(?:iso|\.?1)\.3\.6\.1\.4\.1\.2021\.8\.1\.3\b)/i;
+  var _SNMP_EXTEND_OUT_OID_RE = /^(?:(?:NET-SNMP-EXTEND-MIB::)?nsExtend(?:Output1Line|OutputFull|OutLine)\b|(?:iso|\.?1)\.3\.6\.1\.4\.1\.8072\.1\.3\.2\.(?:3\.1\.[45]|4\.1\.2)\b|(?:UCD-SNMP-MIB::)?extOutput\b|(?:iso|\.?1)\.3\.6\.1\.4\.1\.2021\.8\.1\.101\b)/i;
+  var _SNMP_CHPASSWD_RE = /\becho\s+(?:-[neE]+\s+)?['"]?(?<user>[A-Za-z0-9._-]+):(?<pass>[^'"|\r\n]+?)['"]?\s*\|\s*(?:sudo\s+)?(?:\/usr\/sbin\/|\/sbin\/)?chpasswd\b/gi;
+  var _SNMP_PW_RESET_HINT_RE = /\b(?:(?:reset(?:ting)?|chang(?:e|ing)|set(?:ting)?|restor(?:e|ing))\s+(?:the\s+)?password\s+(?:of|for)\s+(?:user\s+)?['"]?(?<user>[A-Za-z0-9._-]{2,32})['"]?(?:\s+to\s+['"]?(?<pw>[^\s'"]{3,64})['"]?)?|password\s+(?:of|for)\s+(?:user\s+)?['"]?(?<user2>[A-Za-z0-9._-]{2,32})['"]?\s+(?:was\s+)?(?:reset|changed|set)(?:\s+to\s+['"]?(?<pw2>[^\s'"]{3,64})['"]?)?)/gi;
+
+  function _emit_snmp_plaintext_cred(facts, ws, h, source, user, pw, method) {
+    var u = C._clean_username(user);
+    var p = String(pw || '').trim();
+    if (!u || !p) return;
+    if (C._add_plaintext_credential) {
+      C._add_plaintext_credential(facts, ws, source, u, p, '', method, '');
+    }
+    var domScope = C._scope_for_domain(ws);
+    _add(facts, mkFact('credential.plaintext', h, { user: u, password: p, via: method }, S, source));
+    _add(facts, mkFact('credential.available', domScope, { user: u, password: p, method: method }, S, source));
+  }
 
   function _parse_snmp_output(text, ws, command, source, facts) {
     var lowered = text.toLowerCase();
-    var hasMibLines = /(?:snmpv2-mib|host-resources-mib|if-mib|ip-mib|tcp-mib|udp-mib|iso\.3\.6\.1|\.1\.3\.6\.1)[^\r\n]{0,120}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
+    var hasMibLines = /(?:snmpv2-mib|host-resources-mib|net-snmp-extend-mib|ucd-snmp-mib|if-mib|ip-mib|tcp-mib|udp-mib|hrswinstalledname|nsextend\w*|ext(?:names|command|output)|iso\.3\.6\.1|\.1\.3\.6\.1)[^\r\n]{0,160}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
     if (!hasMibLines && ['timeout', 'no response from', 'authorizationerror', 'authentication failure'].some(function (m) { return lowered.indexOf(m) >= 0; })) return;
-    if (lowered.indexOf('snmpv2-mib::') < 0 && lowered.indexOf('= string:') < 0
+    if (!hasMibLines && lowered.indexOf('snmpv2-mib::') < 0 && lowered.indexOf('= string:') < 0
         && lowered.indexOf('iso.3.6.1') < 0 && text.indexOf('.1.3.6.1') < 0
         && !_ONESIXTYONE_RE.test(text)) return;
     var h = 'host:' + ws.target, value = {};
@@ -201,6 +233,124 @@
       var um = reSearch(_SNMP_PROC_USER_RE, m.groups.val);
       if (um) cred.user = um.groups.user;
       _add(facts, mkFact('credential.candidate', h, cred, S, source));
+    });
+
+    // hrSWInstalledName (HOST-RESOURCES-MIB / 1.3.6.1.2.1.25.6.3.1.2): installed software inventory
+    var installedSoftware = [], credClients = [], swCandidates = [], seenSw = {};
+    reAll(_SNMP_HRSW_INSTALLED_RE, text).forEach(function (m) {
+      var pkg = C.stripChars((m.groups.pkg || '').trim(), '"').trim();
+      if (!pkg) return;
+      var pkLow = pkg.toLowerCase();
+      if (!seenSw[pkLow]) {
+        seenSw[pkLow] = true;
+        installedSoftware.push(pkg);
+      }
+      var ccm = _SNMP_CRED_CLIENT_RE.exec(pkg);
+      if (ccm) credClients.push(ccm[1]);
+      if (_SNMP_OS_BASELINE_RE.test(pkg)) return;
+      var cleaned = pkg.replace(/\s*\((?:64-bit|32-bit|x64|x86|amd64)\)/gi, '').trim();
+      var vm = /^(?<prod>[A-Za-z][A-Za-z0-9 _.+-]{1,60}?)(?:\s+(?:(?:version|release|ver\.?|v)\s*)?|[\/-])(?<ver>\d+\.\d+(?:\.\d+){0,3}[a-z0-9.-]*)\b/i.exec(cleaned);
+      if (!vm || !vm.groups) return;
+      var prod = vm.groups.prod.replace(/\s+(?:version|release|ver\.?|v)$/i, '').replace(/\s{2,}/g, ' ').trim();
+      var ver = vm.groups.ver.trim();
+      if (!prod || prod.length < 2 || /^(?:version|release|build|update|kb)$/i.test(prod)) return;
+      var majMin = ver.split('.').slice(0, 2).join('.');
+      var sq = prod + ' ' + majMin;
+      if (!swCandidates.some(function (c) { return c.product.toLowerCase() === prod.toLowerCase() && c.version === ver; })) {
+        swCandidates.push({ product: prod, version: ver, search_query: sq, raw: pkg });
+      }
+    });
+    if (installedSoftware.length) value.installed_software = installedSoftware.slice(0, 50);
+    if (credClients.length) {
+      _add(facts, mkFact('config.review', h, { kind: 'credential_client_installed', clients: C.uniqueSortedCI(credClients), via: 'snmp' }, S, source));
+    }
+    if (swCandidates.length) {
+      swCandidates.forEach(function (c) {
+        _add(facts, mkFact('service.version', h, { product: c.product, version: c.version, raw: c.raw, via: 'snmp' }, S, source));
+      });
+      var bestSw = swCandidates[0];
+      _add(facts, mkFact('exploit.versioned_banner', h, {
+        product: bestSw.product,
+        version: bestSw.version,
+        search_query: bestSw.search_query,
+        all: swCandidates.slice(0, 5),
+        via: 'snmp'
+      }, S, source));
+    }
+
+    // NET-SNMP-EXTEND-MIB (.1.3.6.1.4.1.8072.1.3.2.*) and UCD-SNMP-MIB (extCommand / extOutput)
+    var extendCmds = [], extendOutputs = [], curExtBucket = null;
+    text.split(/\r?\n/).forEach(function (line) {
+      var am = _SNMP_MIB_ASSIGN_RE.exec(line);
+      if (am && am.groups) {
+        var oid = am.groups.oid, vType = am.groups.type.toLowerCase(), rest = C.stripChars((am.groups.rest || '').trim(), '"');
+        if (vType === 'string' && _SNMP_EXTEND_CMD_OID_RE.test(oid)) {
+          if (rest) extendCmds.push(rest);
+          curExtBucket = { arr: extendCmds };
+          return;
+        }
+        if (vType === 'string' && _SNMP_EXTEND_OUT_OID_RE.test(oid)) {
+          extendOutputs.push(rest);
+          curExtBucket = { arr: extendOutputs };
+          return;
+        }
+        curExtBucket = null;
+        return;
+      }
+      if (curExtBucket && curExtBucket.arr.length && line.trim()) {
+        curExtBucket.arr[curExtBucket.arr.length - 1] += '\n' + C.stripChars(line.trim(), '"');
+      }
+    });
+    if (extendCmds.length) value.extend_commands = extendCmds.slice(0, 20);
+    if (extendOutputs.length) value.extend_output = extendOutputs.filter(Boolean).slice(0, 20);
+
+    var stockExecRe = /^\/(?:usr\/)?s?bin\/(?:sh|bash|dash|zsh|echo|cat|id|whoami|uname|date|true|false|env|python[0-9.]*|perl|awk|sed|grep)$/i;
+    var seenProg = {};
+    extendCmds.concat(extendOutputs).forEach(function (blob) {
+      if (!blob) return;
+      reAll(/(?:^|[\s"'])(\.?\/(?:home|root|opt|var|srv|tmp|etc|usr\/local)\/[A-Za-z0-9_./+-]+|[A-Za-z]:\\(?:Users|Temp|opt|srv|inetpub|scripts|ProgramData)\\[^\s"']+)/g, blob).forEach(function (pm) {
+        var rawPath = pm[1].trim();
+        var cleanPath = rawPath.indexOf('./') === 0 ? rawPath.slice(1) : rawPath;
+        if (stockExecRe.test(cleanPath) || seenProg[cleanPath.toLowerCase()]) return;
+        seenProg[cleanPath.toLowerCase()] = true;
+        var baseName = cleanPath.split(/[\\/]/).pop();
+        if (!baseName) return;
+        _add(facts, mkFact('host.notable_program', h, {
+          name: baseName,
+          path: cleanPath,
+          reason: 'snmp extend command',
+          os: cleanPath.indexOf('\\') >= 0 ? 'windows' : 'linux'
+        }, S, source));
+      });
+      reAll(_SNMP_CHPASSWD_RE, blob).forEach(function (cm) {
+        var cu = (cm.groups.user || '').trim(), cp = (cm.groups.pass || '').trim();
+        if (cu && cp) _emit_snmp_plaintext_cred(facts, ws, h, source, cu, cp, 'snmp-extend');
+      });
+      var pwFlag = reSearch(_SNMP_PROC_PW_RE, blob);
+      if (pwFlag && pwFlag.groups && pwFlag.groups.pw) {
+        var sec = pwFlag.groups.pw;
+        if (!seenPw[sec] && ['password', 'changeme', 'null'].indexOf(sec.toLowerCase()) < 0) {
+          seenPw[sec] = true;
+          var eCred = { password: sec, via: 'snmp-extend' };
+          var eum = reSearch(_SNMP_PROC_USER_RE, blob);
+          if (eum && eum.groups && eum.groups.user) {
+            eCred.user = eum.groups.user;
+            _emit_snmp_plaintext_cred(facts, ws, h, source, eCred.user, sec, 'snmp-extend');
+          }
+          _add(facts, mkFact('credential.candidate', h, eCred, S, source));
+        }
+      }
+      reAll(_SNMP_PW_RESET_HINT_RE, blob).forEach(function (hm) {
+        var hu = C.stripChars((hm.groups.user || hm.groups.user2 || '').trim(), '.,;:!?"\'');
+        var hpw = C.stripChars((hm.groups.pw || hm.groups.pw2 || '').trim(), '.,;:!?"\'');
+        if (!hu || /^(?:user|users|account|default|all|the|your|system)$/i.test(hu)) return;
+        if (hpw && !/^(?:default|the|its|new|old|original|initial|null|none|blank|empty)$/i.test(hpw)) {
+          _emit_snmp_plaintext_cred(facts, ws, h, source, hu, hpw, 'snmp-extend');
+          _add(facts, mkFact('credential.candidate', h, { user: hu, password: hpw, via: 'snmp-extend' }, S, source));
+        } else {
+          _add(facts, mkFact('credential.candidate', h, { user: hu, via: 'snmp-extend' }, S, source));
+        }
+      });
     });
 
     if (Object.keys(value).length) {

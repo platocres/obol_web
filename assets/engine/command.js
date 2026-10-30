@@ -155,6 +155,217 @@
     return ctx;
   }
 
+  var WEB_PORT_PRIORITY = [80, 443, 81, 8000, 8080, 8443, 8083, 8888, 3000, 5000, 8008, 8081, 8082, 8880, 9000, 9090, 10000];
+  var NON_WEB_HTTP_PORTS = { 5985: 1, 5986: 1, 47001: 1 };
+
+  function _normalizeOrigin(scheme, host, port) {
+    var sc = String(scheme || '').toLowerCase().replace(/:\/\/$/, '');
+    var p = parseInt(port, 10);
+    if (!sc) sc = (p === 443 || p === 8443) ? 'https' : 'http';
+    if (!p || isNaN(p)) p = (sc === 'https') ? 443 : 80;
+    var h = String(host || '').trim().replace(/^\[|\]$/g, '');
+    if (!h) return '';
+    var stdPort = (sc === 'http' && p === 80) || (sc === 'https' && p === 443);
+    var hostOut = (h.indexOf(':') >= 0 && h.indexOf('.') < 0) ? ('[' + h + ']') : h;
+    return sc + '://' + hostOut + (stdPort ? '' : (':' + p));
+  }
+
+  function _parseUrlOrigin(u, fallbackHost) {
+    var m = String(u || '').trim().match(/^(https?):\/\/([^\/:\s'"]+)(?::(\d+))?/i);
+    if (!m) return null;
+    var sc = m[1].toLowerCase();
+    var h = m[2] || fallbackHost || '';
+    var p = m[3] ? parseInt(m[3], 10) : (sc === 'https' ? 443 : 80);
+    if (NON_WEB_HTTP_PORTS[p]) return null;
+    return { scheme: sc, host: h, port: p, origin: _normalizeOrigin(sc, h, p) };
+  }
+
+  function webOrigins(facts, opts) {
+    opts = opts || {};
+    var factArr = [];
+    if (facts && facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts)) {
+      factArr = facts._resolvedContext.allScopedFacts;
+    } else if (facts && Array.isArray(facts.facts)) {
+      factArr = facts.facts;
+    } else if (Array.isArray(facts)) {
+      factArr = facts;
+    }
+    var tgtIp = String(opts.target || (opts.params && opts.params.target) || (facts && facts.context && facts.context.target) || '').trim();
+    if (!tgtIp) {
+      for (var fi = 0; fi < factArr.length; fi++) {
+        var fsc = factArr[fi] && factArr[fi].scope;
+        if (fsc && fsc.indexOf('host:') === 0) { tgtIp = fsc.slice(5); break; }
+      }
+    }
+    var hostAddr = tgtIp || String(opts.defaultHost || '127.0.0.1').trim() || '127.0.0.1';
+    function vals(kind) {
+      if (facts && typeof facts.values === 'function') return facts.values(kind) || [];
+      return scopedValues(facts, kind, tgtIp);
+    }
+    var tlsPorts = { 443: true, 8443: true };
+    var discoveredPorts = {};
+    vals('tls.info').concat(vals('ssl.cert')).forEach(function (v) {
+      if (v && v.port) tlsPorts[parseInt(v.port, 10)] = true;
+    });
+    vals('ports.open').forEach(function (v) {
+      if (!v) return;
+      var entries = Array.isArray(v.ports) ? v.ports : (Array.isArray(v.entries) ? v.entries : [v]);
+      entries.forEach(function (e) {
+        if (!e || typeof e !== 'object') return;
+        var ep = parseInt(e.port, 10);
+        if (!ep || isNaN(ep) || NON_WEB_HTTP_PORTS[ep] || (e.proto && String(e.proto).toLowerCase() === 'udp')) return;
+        var svc = String(e.service || e.name || e.product || '').toLowerCase();
+        if (/ssl|https|tls/.test(svc) || e.tls || e.ssl) tlsPorts[ep] = true;
+        if ((WEB_PORT_PRIORITY.indexOf(ep) >= 0 || /https?|http-alt|http-proxy|werkzeug|gunicorn|uvicorn|jetty|tomcat|nginx|apache|iis|lighttpd|caddy/.test(svc))
+          && !/wsman|winrm|upnp|ssdp|msrpc/.test(svc)) {
+          discoveredPorts[ep] = true;
+        }
+      });
+    });
+    var openP = openPorts(facts, tgtIp);
+    for (var opi = 0; opi < openP.length; opi++) {
+      var opNum = parseInt(openP[opi], 10);
+      if (opNum && !NON_WEB_HTTP_PORTS[opNum] && WEB_PORT_PRIORITY.indexOf(opNum) >= 0) {
+        discoveredPorts[opNum] = true;
+      }
+    }
+    for (var wpi = 0; wpi < WEB_PORT_PRIORITY.length; wpi++) {
+      var candP = WEB_PORT_PRIORITY[wpi];
+      if (facts && typeof facts.has === 'function' && facts.has('port:' + candP)) {
+        discoveredPorts[candP] = true;
+      }
+    }
+    var webEvidence = vals('http.reachable').concat(vals('web.server')).concat(vals('http.response'))
+      .concat(vals('http.headers')).concat(vals('web.login_form')).concat(vals('web.tech')).concat(vals('web.parameterized'));
+    var extraOrigins = [];
+    webEvidence.forEach(function (v) {
+      if (!v || typeof v !== 'object') return;
+      if (v.scheme && String(v.scheme).toLowerCase() === 'https' && v.port) tlsPorts[parseInt(v.port, 10)] = true;
+      if (v.port) {
+        var vp = parseInt(v.port, 10);
+        if (vp && !NON_WEB_HTTP_PORTS[vp]) discoveredPorts[vp] = true;
+      }
+      var uStr = v.origin || v.base_url || v.url || '';
+      if (uStr) {
+        var parsed = _parseUrlOrigin(uStr, hostAddr);
+        if (parsed) {
+          if (parsed.scheme === 'https') tlsPorts[parsed.port] = true;
+          discoveredPorts[parsed.port] = true;
+          if (parsed.host && parsed.host.toLowerCase() !== hostAddr.toLowerCase() && parsed.host.indexOf('.') > 0) {
+            extraOrigins.push(parsed);
+          }
+        }
+      }
+    });
+    if (!Object.keys(discoveredPorts).length && ((facts && typeof facts.has === 'function' && facts.has('http.reachable')) || webEvidence.length > 0)) {
+      discoveredPorts[80] = true;
+    }
+    var portNums = Object.keys(discoveredPorts).map(function (k) { return parseInt(k, 10); }).filter(function (n) { return n > 0; });
+    portNums.sort(function (a, b) {
+      var ia = WEB_PORT_PRIORITY.indexOf(a), ib = WEB_PORT_PRIORITY.indexOf(b);
+      if (ia >= 0 && ib >= 0) return ia - ib;
+      if (ia >= 0) return -1;
+      if (ib >= 0) return 1;
+      return a - b;
+    });
+    var all = [], seenOrigin = {};
+    function pushOrigin(sc, h, p) {
+      var orig = _normalizeOrigin(sc, h, p);
+      if (!orig) return;
+      var key = orig.toLowerCase();
+      if (seenOrigin[key]) return;
+      seenOrigin[key] = true;
+      all.push({ origin: orig, scheme: sc, host: h, port: p, mapped: false });
+    }
+    portNums.forEach(function (p) {
+      var sc = tlsPorts[p] ? 'https' : 'http';
+      pushOrigin(sc, hostAddr, p);
+    });
+    extraOrigins.forEach(function (eo) {
+      pushOrigin(eo.scheme, eo.host, eo.port);
+    });
+    vals('web.vhost').forEach(function (v) {
+      if (!v || typeof v !== 'object') return;
+      var vh = String(v.vhost || v.hostname || v.domain || v.name || '').trim();
+      if (!vh || vh.indexOf('.') < 0) return;
+      var vp = parseInt(v.port, 10) || (portNums[0] || 80);
+      if (NON_WEB_HTTP_PORTS[vp]) return;
+      var vsc = v.scheme ? String(v.scheme).toLowerCase() : (tlsPorts[vp] ? 'https' : 'http');
+      pushOrigin(vsc, vh, vp);
+    });
+    function markByParsed(parsed) {
+      if (!parsed) return false;
+      var hit = false;
+      var normLow = parsed.origin.toLowerCase();
+      all.forEach(function (item) {
+        if (item.origin.toLowerCase() === normLow) { item.mapped = true; hit = true; }
+        else if (item.port === parsed.port && (!parsed.host || parsed.host.toLowerCase() === hostAddr.toLowerCase()) && item.host.toLowerCase() === hostAddr.toLowerCase()) {
+          item.mapped = true; hit = true;
+        }
+      });
+      return hit;
+    }
+    function markByPort(portNum) {
+      var p = parseInt(portNum, 10);
+      if (!p || isNaN(p)) return false;
+      var hit = false;
+      all.forEach(function (item) {
+        if (item.port === p && item.host.toLowerCase() === hostAddr.toLowerCase()) {
+          item.mapped = true; hit = true;
+        }
+      });
+      return hit;
+    }
+    factArr.forEach(function (f) {
+      if (!f || f.state === 'refuted' || f.kind !== 'web.content_map') return;
+      if (tgtIp && f.scope && f.scope.indexOf('host:') === 0 && f.scope.slice(5) !== tgtIp) return;
+      var v = f.value || {};
+      var matched = false;
+      if (v.origin || v.url || v.base_url) {
+        if (markByParsed(_parseUrlOrigin(v.origin || v.url || v.base_url, hostAddr))) matched = true;
+      }
+      if (v.port && markByPort(v.port)) matched = true;
+      if (!matched && f.source) {
+        var sm = String(f.source).match(/https?:\/\/[^\s/'"]+/i);
+        if (sm && markByParsed(_parseUrlOrigin(sm[0], hostAddr))) matched = true;
+      }
+      if (!matched && Array.isArray(v.paths)) {
+        for (var pi = 0; pi < v.paths.length; pi++) {
+          var pm = String(v.paths[pi] || '').match(/^(https?:\/\/[^\s/'"]+)/i);
+          if (pm && markByParsed(_parseUrlOrigin(pm[1], hostAddr))) { matched = true; break; }
+        }
+      }
+      if (!matched && all.length > 0) {
+        all[0].mapped = true;
+      }
+    });
+    var eng = opts.engagement
+      || (facts && facts._resolvedContext && facts._resolvedContext.engagement)
+      || (root.OBOL && root.OBOL.store && typeof root.OBOL.store.active === 'function' ? root.OBOL.store.active() : null);
+    var acts = Array.isArray(opts.activities) ? opts.activities : ((eng && Array.isArray(eng.activities)) ? eng.activities : []);
+    acts.forEach(function (act) {
+      if (!act || !act.outcome || !act.outcome.conclusive || !act.outcome.retireCommand) return;
+      var actTgt = act.target || (/^host:/.test(act.scope || '') ? act.scope.slice(5) : '');
+      if (tgtIp && actTgt && actTgt !== tgtIp) return;
+      var aid = act.action_id || act.actionId || '';
+      var cmdText = String(act.command || act.dispatch || '');
+      if (aid !== 'content-discovery' && !/\b(?:ffuf|gobuster|feroxbuster|dirsearch)\b/i.test(cmdText)) return;
+      var um = cmdText.match(/https?:\/\/[^\s/'"]+/i) || String(act.stdout || '').slice(0, 600).match(/https?:\/\/[^\s/'"]+/i);
+      if (um) markByParsed(_parseUrlOrigin(um[0], hostAddr));
+    });
+    var unmapped = all.filter(function (item) { return !item.mapped; });
+    var fallbackPort = portNums[0] || 80;
+    var fallbackScheme = tlsPorts[fallbackPort] ? 'https' : 'http';
+    var primary = unmapped[0] || all[0] || {
+      origin: _normalizeOrigin(fallbackScheme, hostAddr, fallbackPort),
+      scheme: fallbackScheme,
+      host: hostAddr,
+      port: fallbackPort,
+      mapped: false
+    };
+    return { all: all, unmapped: unmapped, primary: primary };
+  }
+
   var _baseCtxCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
 
   // Build the {{token}} context from facts + params (+ extra which wins).
@@ -192,8 +403,10 @@
       ? Object.getPrototypeOf(facts) : null;
     if (projObj === Object.prototype) projObj = null;
     var projMap = projObj ? _baseCtxCache.get(projObj) : null;
+    var cacheEng = (resolved && resolved.engagement) || opts.engagement || (root.OBOL && root.OBOL.store && typeof root.OBOL.store.active === 'function' ? root.OBOL.store.active() : null);
+    var actLen = Array.isArray(opts.activities) ? opts.activities.length : ((cacheEng && Array.isArray(cacheEng.activities)) ? cacheEng.activities.length : 0);
     var baseKey = projObj
-      ? [tgt, resolved.credentialId || '', (facts.facts && facts.facts.length) || 0, JSON.stringify(params), JSON.stringify(opts.profile || null), JSON.stringify(wsd), _arsenalRaw || ''].join('\x01')
+      ? [tgt, resolved.credentialId || '', (facts.facts && facts.facts.length) || 0, actLen, JSON.stringify(params), JSON.stringify(opts.profile || null), JSON.stringify(wsd), _arsenalRaw || ''].join('\x01')
       : '';
     var ctx;
     if (projMap && projMap[baseKey]) {
@@ -754,7 +967,7 @@
     });
 
     // Populate high-frequency service, web, keyfile, SPN, NFS, SNMP, module, and KeePass tokens
-    if (!ctx.web_port || !ctx.url) {
+    if (!ctx.web_origin || !ctx.http_port || !ctx.web_port || !ctx.url) {
       var httpResps = fvals('http.response').concat(fvals('web.server')).concat(fvals('http.reachable'));
       var foundUrl = '', foundWebPort = '';
       for (var hri = 0; hri < httpResps.length; hri++) {
@@ -762,21 +975,21 @@
         if (!foundUrl && (hv.url || hv.base_url)) foundUrl = String(hv.url || hv.base_url);
         if (!foundWebPort && hv.port) foundWebPort = String(hv.port);
       }
-      if (!foundWebPort) {
-        var openP = openPorts(facts);
-        var webPortOrder = [80, 443, 8080, 8443, 8000, 8888, 3000, 5000];
-        for (var wpi = 0; wpi < webPortOrder.length; wpi++) {
-          if (openP.indexOf(webPortOrder[wpi]) >= 0 || (facts && facts.has && facts.has('port:' + webPortOrder[wpi]))) {
-            foundWebPort = String(webPortOrder[wpi]);
-            break;
-          }
-        }
-      }
-      if (!ctx.web_port) ctx.web_port = foundWebPort || '80';
-      if (!ctx.http_port) ctx.http_port = ctx.web_port;
+      var wo = webOrigins(facts, {
+        target: tgt || ctx.target,
+        defaultHost: ctx.target || ctx.hostname || '127.0.0.1',
+        activities: opts.activities,
+        engagement: (resolved && resolved.engagement) || opts.engagement
+      });
+      var primaryWo = wo && wo.primary;
+      if (!ctx.web_origin && primaryWo && primaryWo.origin) ctx.web_origin = primaryWo.origin;
+      if (!ctx.http_port) ctx.http_port = (primaryWo && primaryWo.port) ? String(primaryWo.port) : (foundWebPort || ctx.web_port || '80');
+      if (!ctx.web_port) ctx.web_port = ctx.http_port || foundWebPort || '80';
       if (!ctx.url) {
         if (foundUrl) {
           ctx.url = foundUrl;
+        } else if (ctx.web_origin) {
+          ctx.url = ctx.web_origin;
         } else {
           var webHost = ctx.hostname || ctx.target || '127.0.0.1';
           var wp = ctx.web_port || '80';
@@ -1618,18 +1831,25 @@
         if ((previousContext.credentialId || null) !== currentContext.credentialId || (previousContext.service || '') !== currentContext.service || (previousContext.locus || 'remote') !== currentContext.locus) continue;
       }
       var ac = _normCmd(act.command);
+      var ad = _normCmd(act.dispatch);
+      var wantLocalAuth = /(?:^|\s)--local-auth\b/i.test(filledCmd || rawRun);
+      var gotLocalAuth = /(?:^|\s)--local-auth\b/i.test(ac || ad);
+      if (wantLocalAuth !== gotLocalAuth) continue;
       if (ac && (ac === rawRun || (filledCmd && ac === filledCmd) || (canonFilled && _canonCmd(ac) === canonFilled))) return true;
       if (Array.isArray(act.sequenceCommands)) {
         for (var scIdx = 0; scIdx < act.sequenceCommands.length; scIdx++) {
           var scNorm = _normCmd(act.sequenceCommands[scIdx]);
+          if (/(?:^|\s)--local-auth\b/i.test(scNorm) !== wantLocalAuth) continue;
           if (scNorm && (scNorm === rawRun || (filledCmd && scNorm === filledCmd) || (canonFilled && _canonCmd(scNorm) === canonFilled))) return true;
         }
       }
-      var ad = _normCmd(act.dispatch);
       if (filledCmd && ad && ad.indexOf(filledCmd) >= 0) return true;
       if (sameAction) {
         var actTool = String(act.tool || primaryBinary(ac) || '').toLowerCase().replace(/\.(py|exe)$/, '');
-        if (!currentContext && cmdTool && actTool === cmdTool && (!ac || sameToolCount === 1 || isFlagHuntSession)) return true;
+        var acOrigin = ((ac || ad).match(/https?:\/\/[^\s/'"]+/i) || [''])[0].toLowerCase();
+        var fillOrigin = (filledCmd.match(/https?:\/\/[^\s/'"]+/i) || [''])[0].toLowerCase();
+        var originMismatch = !!(acOrigin && fillOrigin && acOrigin !== fillOrigin);
+        if (!originMismatch && !currentContext && cmdTool && actTool === cmdTool && (!ac || sameToolCount === 1 || isFlagHuntSession)) return true;
       }
     }
     return false;
@@ -1739,27 +1959,52 @@
   var CMD_PORT_MAP = {
     'evil-winrm': [5985, 5986],
     'winrs': [5985, 5986],
-    'ssh': [22], 'sshpass': [22],
+    'ssh': [22, 2222], 'sshpass': [22, 2222],
     'smbclient': [445, 139], 'smbmap': [445, 139],
     'impacket-psexec': [445], 'impacket-wmiexec': [445, 135], 'impacket-smbexec': [445],
     'psexec': [445], 'wmiexec': [445, 135], 'smbexec': [445],
-    'xfreerdp': [3389], 'rdesktop': [3389],
-    'mysql': [3306], 'mssqlclient': [1433],
-    'ldapsearch': [389, 636], 'windapsearch': [389, 636],
-    'ftp': [21], 'snmpwalk': [161]
+    'xfreerdp': [3389], 'xfreerdp3': [3389], 'rdesktop': [3389],
+    'mysql': [3306], 'mssqlclient': [1433], 'impacket-mssqlclient': [1433],
+    'ldapsearch': [389, 636, 3268, 3269], 'windapsearch': [389, 636, 3268, 3269],
+    'ftp': [21], 'snmpwalk': [161], 'onesixtyone': [161]
+  };
+  var NXC_PROTO_PORTS = {
+    'smb': [445, 139],
+    'winrm': [5985, 5986],
+    'ldap': [389, 636, 3268, 3269],
+    'ldaps': [636, 3269, 389, 3268],
+    'ssh': [22, 2222],
+    'rdp': [3389],
+    'mssql': [1433],
+    'ftp': [21],
+    'vnc': [5900, 5901],
+    'wmi': [135, 445]
   };
 
   function commandPortFeasible(cmd, facts) {
     if (!cmd || !facts) return { feasible: true };
-    var tool = String(cmd.tool || '').toLowerCase();
-    var portsNeeded = CMD_PORT_MAP[tool];
+    var isObj = typeof cmd === 'object';
+    var runStr = isObj ? String(cmd.run || '') : String(cmd || '');
+    if (isObj && cmd.locus === 'onhost' && !cmd.requires_port && !/\{\{target\}\}/.test(runStr)) {
+      return { feasible: true };
+    }
+    var tool = String((isObj && cmd.tool) || primaryBinary(runStr) || '').toLowerCase().replace(/\.(?:py|exe)$/, '');
+    var portsNeeded = null;
+    if (/^(?:nxc|netexec|crackmapexec|cme)$/.test(tool) || /\b(?:nxc|netexec|crackmapexec|cme)\s+(?:smb|winrm|ldap|ldaps|ssh|rdp|mssql|ftp|vnc|wmi)\b/i.test(runStr)) {
+      var pm = runStr.match(/\b(?:nxc|netexec|crackmapexec|cme)\s+(smb|winrm|ldap|ldaps|ssh|rdp|mssql|ftp|vnc|wmi)\b/i);
+      if (pm) portsNeeded = NXC_PROTO_PORTS[pm[1].toLowerCase()];
+    }
+    if (!portsNeeded) portsNeeded = CMD_PORT_MAP[tool];
     if (!portsNeeded || !portsNeeded.length) return { feasible: true };
+    if (portsNeeded.indexOf(161) >= 0 && facts.has && facts.has('snmp.reachable')) {
+      return { feasible: true, port: 161 };
+    }
 
     var portsKnown = openPorts(facts);
     if (!portsKnown || !portsKnown.length) return { feasible: true }; // No scan data yet, don't rule out
 
     for (var i = 0; i < portsNeeded.length; i++) {
-      if (portsKnown.indexOf(portsNeeded[i]) >= 0 || facts.has('port:' + portsNeeded[i])) {
+      if (portsKnown.indexOf(portsNeeded[i]) >= 0 || (facts.has && facts.has('port:' + portsNeeded[i]))) {
         return { feasible: true, port: portsNeeded[i] };
       }
     }
@@ -1862,6 +2107,7 @@
   OBOL.command = {
     shellQuote: shellQuote,
     openPorts: openPorts,
+    webOrigins: webOrigins,
     scopedValues: scopedValues,
     buildContext: buildContext,
     commandContext: buildContext,

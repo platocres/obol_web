@@ -257,6 +257,30 @@
       if (otherSources.length) {
         var hasAuthSurface = ownHostFacts.some(function (f) { return f && f.state === 'supported' && AUTH_SURFACE_RE.test(f.kind); });
         var hasSshSurface = ownHostFacts.some(function (f) { return f && f.state === 'supported' && /^(?:port:(?:22|2222)|ssh\.reachable)$/.test(f.kind); });
+        var destHasAdSurface = !!(domain && domain.indexOf('.') > 0 && lower(domain) !== 'workgroup') || ownHostFacts.some(function (f) {
+          if (!f || f.state !== 'supported') return false;
+          if (/^(?:kerberos\.reachable|ldap\.reachable|ad\.dc_candidate|ad\.domain_controller|port:(?:88|389|636|3268|3269))$/.test(f.kind)) return true;
+          if (f.kind === 'ad.domain_known' && f.value && String(f.value.name || '').indexOf('.') > 0) return true;
+          if (f.kind === 'host.domain' && f.value && String(f.value.domain || f.value.name || '').indexOf('.') > 0 && lower(f.value.domain || f.value.name) !== 'workgroup') return true;
+          return false;
+        });
+        var destIsLinux = ownHostFacts.some(function (f) {
+          if (!f || f.state !== 'supported') return false;
+          if (/^(?:foothold\.linux|os\.linux)$/.test(f.kind)) return true;
+          if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint') && f.value && /^(?:linux|unix|ubuntu|debian|centos|freebsd)$/i.test(String(f.value.family || f.value.os || ''))) return true;
+          return false;
+        }) && !ownHostFacts.some(function (f) {
+          return f && f.state === 'supported' && /^(?:foothold\.windows|os\.windows|winrm\.reachable|port:5985)$/.test(f.kind);
+        });
+        var destIsWorkgroupWin = !destHasAdSurface && !destIsLinux && ownHostFacts.some(function (f) {
+          if (!f || f.state !== 'supported') return false;
+          if (f.kind === 'host.domain' && f.value) {
+            var hd = clean(f.value.domain || f.value.name);
+            if (hd && (lower(hd) === 'workgroup' || hd.indexOf('.') < 0)) return true;
+          }
+          if (f.kind === 'smb.signing' && f.value && f.value.workgroup === true) return true;
+          return false;
+        });
         var hasNativeCred = baseScoped.some(function (f) {
           if (!f || f.state !== 'supported' || !/^credential\.(?:available|plaintext|ntlm_hash)$/.test(f.kind)) return false;
           var fv = f.value || {};
@@ -285,6 +309,13 @@
             if (isLapsBoundElsewhere(sv, srcHost, aliases) || isSshPassphraseOnly(sv)) continue;
             var mat = material(sv, srcFact.scope);
             if (!mat.password && !mat.nthash) continue;
+            var srcHasAdFact = all.some(function (af) {
+              return af && af.state === 'supported' && af.scope === ('host:' + srcHost) && /^(?:ad\.domain_known|ad\.dc_candidate|kerberos\.reachable|ldap\.reachable)$/.test(af.kind);
+            });
+            var srcIsAdDomainCred = (!!mat.domain && mat.domain.indexOf('.') > 0 && lower(mat.domain) !== 'workgroup')
+              || /^domain:/i.test(srcFact.scope || '')
+              || (srcHasAdFact && mat.accountType !== 'local');
+            var specCrossDomain = !!(srcIsAdDomainCred && ((destIsLinux && !destHasAdSurface) || destIsWorkgroupWin));
             var rKey = [lower(mat.user), mat.password, lower(mat.nthash), ''].join('|');
             if (!seenReuse[rKey]) {
               seenReuse[rKey] = 1;
@@ -303,7 +334,8 @@
                   originHost: srcHost,
                   accountType: mat.accountType,
                   credentialId: mat.id,
-                  reuseHypothesis: true
+                  reuseHypothesis: true,
+                  speculativeCrossDomainReuse: specCrossDomain
                 }
               }));
             }
@@ -326,7 +358,8 @@
                   method: mat.method,
                   originHost: srcHost,
                   reuseFrom: srcHost,
-                  unvalidatedOnTarget: true
+                  unvalidatedOnTarget: true,
+                  speculativeCrossDomainReuse: specCrossDomain
                 }
               }));
             }
@@ -430,10 +463,17 @@
             || (f.state === 'refuted' && f.kind === 'credential.validation'));
         });
         var reuseAliases = targetAliases(eng, target);
+        var targetActs = (eng && Array.isArray(eng.activities)) ? eng.activities.filter(function (act) {
+          if (!act || !act.outcome || !act.outcome.conclusive) return false;
+          var okind = act.outcome.kind;
+          if (okind !== 'rejected' && okind !== 'authorization-denied') return false;
+          var actTgt = act.target || (/^host:/.test(act.scope || '') ? act.scope.slice(5) : '');
+          return !target || actTgt === target;
+        }) : [];
         var scoredReuse = reuseFacts.map(function (rf, idx) {
           var mat = material(rf.value || {}, rf.scope);
           var regMatch = registry.find(function (x) { return x.id === mat.id; }) || mat;
-          var rejectedHere = blockers.filter(function (bf) {
+          var blockerRej = blockers.filter(function (bf) {
             var bv = bf.value || {};
             var bvUser = lower(bv.user || bv.principal || '').replace(/^.*\\/, '');
             var bvDom = lower(bv.domain || '');
@@ -455,11 +495,22 @@
             if (svcHint && bv.service && lower(bv.service) !== svcHint) return false;
             return true;
           }).length;
+          var actRej = targetActs.filter(function (act) {
+            var pc = act.context || (act.outcome && act.outcome.context) || {};
+            if (pc.credentialId && pc.credentialId !== regMatch.id) return false;
+            if (!pc.credentialId && pc.credentialFingerprint && pc.credentialFingerprint !== regMatch.credentialFingerprint) return false;
+            if (!pc.credentialId && !pc.credentialFingerprint) return false;
+            if (svcHint && pc.service && lower(pc.service) !== svcHint) return false;
+            return true;
+          }).length;
+          var rejectedHere = Math.max(blockerRej, actRej);
+          var specCross = !!(rf.value && rf.value.speculativeCrossDomainReuse) ? 1 : 0;
           var domCompat = (!regMatch.domain || !domain || lower(regMatch.domain) === lower(domain)) ? 1 : 0;
           var isAdminName = /^(?:administrator|admin|root)$/i.test(regMatch.user) ? 1 : 0;
-          return { cred: regMatch, rejected: rejectedHere, domCompat: domCompat, admin: isAdminName, idx: idx };
+          return { cred: regMatch, rejected: rejectedHere, specCross: specCross, domCompat: domCompat, admin: isAdminName, idx: idx };
         });
         scoredReuse.sort(function (a, b) {
+          if (a.specCross !== b.specCross) return a.specCross - b.specCross;
           if (a.rejected !== b.rejected) return a.rejected - b.rejected;
           if (b.domCompat !== a.domCompat) return b.domCompat - a.domCompat;
           if (b.admin !== a.admin) return b.admin - a.admin;
@@ -512,7 +563,11 @@
       }
       return true;
     });
-    if (c && (c.password || c.nthash) && !scoped.some(function (f) { return f.state === 'supported' && f.kind === 'credential.available'; }) && O.facts) scoped.push(O.facts.makeFact({kind:'credential.available',scope:'host:' + target,state:'supported',value:{user:c.user,domain:c.domain,password:c.password,nthash:c.nthash,credentialId:c.id,targetBinding:c.targetBinding,accountType:c.accountType,selectedMaterial:true}}));
+    var isSpecCrossReuse = !!(c && (c.speculativeCrossDomainReuse || scoped.some(function (rf) {
+      return rf && rf.state === 'supported' && rf.kind === 'credential.reuse_candidate' && rf.value
+        && rf.value.speculativeCrossDomainReuse && (rf.value.credentialId === c.id || lower(rf.value.user) === lower(c.user));
+    })));
+    if (c && (c.password || c.nthash) && !scoped.some(function (f) { return f.state === 'supported' && f.kind === 'credential.available'; }) && O.facts) scoped.push(O.facts.makeFact({kind:'credential.available',scope:'host:' + target,state:'supported',value:{user:c.user,domain:c.domain,password:c.password,nthash:c.nthash,credentialId:c.id,targetBinding:c.targetBinding,accountType:c.accountType,selectedMaterial:true,speculativeCrossDomainReuse:isSpecCrossReuse}}));
     projection = frame.projections[projectionKey] = O.facts ? new O.facts.FactSet(scoped) : {facts:scoped};
     }
     ['username','user','password','nthash','credentialId','authRealm','auth_realm'].forEach(function (k) { delete p[k]; });
@@ -550,21 +605,25 @@
       ((action && action.commands) || []).forEach(function (cmd, index) {
         var commandFacts = result.facts.forAction(action, cmd);
         var isElig = (!action.eligible || action.eligible(commandFacts))
-          && (!O.pack || !O.pack.commandIsEligible || O.pack.commandIsEligible(cmd, commandFacts, action));
+          && (!O.pack || !O.pack.commandIsEligible || O.pack.commandIsEligible(cmd, commandFacts, action))
+          && (!O.command || !O.command.commandPortFeasible || O.command.commandPortFeasible(cmd, commandFacts).feasible !== false);
         if (isElig) applicable.push({ cmd: cmd, index: index });
       });
       return applicable;
     };
-    result.facts.commandCompleted = function (action, cmd, index) {
+    function _checkCompleted(action, cmd, index, cleanOnly) {
       if (!eng || !O.command || !O.command.commandTriedInEpoch || !O.command.fillCommand) return false;
-      var attempts = frame.attempts.__all;
-      if (!attempts) attempts = frame.attempts.__all = (eng.activities || []).filter(function (activity) {
+      var cacheKey = cleanOnly ? '__clean' : '__all';
+      var attempts = frame.attempts[cacheKey];
+      if (!attempts) attempts = frame.attempts[cacheKey] = (eng.activities || []).filter(function (activity) {
         var o = activity && activity.outcome;
         if (activity && o && !o.retireCommand && o.kind === 'success' && /(?:^|\s)--host\b/i.test(activity.command || '') && O.outcomes && O.outcomes.completion) {
           var comp = O.outcomes.completion(activity.stdout || '', activity.command);
           if (comp && comp.complete) { o.conclusive = true; o.retireCommand = true; }
         }
-        return activity && o && o.conclusive && o.retireCommand && o.kind !== 'rejected' && o.kind !== 'authorization-denied';
+        if (!activity || !o || !o.conclusive || !o.retireCommand) return false;
+        if (cleanOnly && (o.kind === 'rejected' || o.kind === 'authorization-denied')) return false;
+        return true;
       });
       if (!attempts.length) return false;
       var commandFacts = result.facts.forAction(action, cmd);
@@ -572,6 +631,12 @@
       if (filled.blocked) return false;
       var epoch = O.pack && O.pack.accessEpoch ? O.pack.accessEpoch(result.facts) : '';
       return O.command.commandTriedInEpoch(action, cmd, filled.filled, attempts, epoch, target, commandFacts._resolvedContext);
+    }
+    result.facts.commandCompleted = function (action, cmd, index) {
+      return _checkCompleted(action, cmd, index, false);
+    };
+    result.facts.commandCompletedClean = function (action, cmd, index) {
+      return _checkCompleted(action, cmd, index, true);
     };
     return result;
   }

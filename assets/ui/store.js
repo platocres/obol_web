@@ -1223,6 +1223,30 @@
         if (otherSources.length) {
           var hasAuthSurface = hostFacts.some(function (f) { return f && f.state === 'supported' && STORE_AUTH_SURFACE_RE.test(f.kind); });
           var hasSshSurface = hostFacts.some(function (f) { return f && f.state === 'supported' && /^(?:port:(?:22|2222)|ssh\.reachable)$/.test(f.kind); });
+          var destHasAdSurface = Object.keys(targetDomains).some(function (dk) { return dk.indexOf('.') > 0 && dk !== 'workgroup' && dk !== 'domain'; }) || hostFacts.some(function (f) {
+            if (!f || f.state !== 'supported') return false;
+            if (/^(?:kerberos\.reachable|ldap\.reachable|ad\.dc_candidate|ad\.domain_controller|port:(?:88|389|636|3268|3269))$/.test(f.kind)) return true;
+            if (f.kind === 'ad.domain_known' && f.value && String(f.value.name || '').indexOf('.') > 0) return true;
+            if (f.kind === 'host.domain' && f.value && String(f.value.domain || f.value.name || '').indexOf('.') > 0 && String(f.value.domain || f.value.name || '').toLowerCase() !== 'workgroup') return true;
+            return false;
+          });
+          var destIsLinux = hostFacts.some(function (f) {
+            if (!f || f.state !== 'supported') return false;
+            if (/^(?:foothold\.linux|os\.linux)$/.test(f.kind)) return true;
+            if ((f.kind === 'host.os_family' || f.kind === 'host.os_hint') && f.value && /^(?:linux|unix|ubuntu|debian|centos|freebsd)$/i.test(String(f.value.family || f.value.os || ''))) return true;
+            return false;
+          }) && !hostFacts.some(function (f) {
+            return f && f.state === 'supported' && /^(?:foothold\.windows|os\.windows|winrm\.reachable|port:5985)$/.test(f.kind);
+          });
+          var destIsWorkgroupWin = !destHasAdSurface && !destIsLinux && hostFacts.some(function (f) {
+            if (!f || f.state !== 'supported') return false;
+            if (f.kind === 'host.domain' && f.value) {
+              var hd = String(f.value.domain || f.value.name || '').trim();
+              if (hd && (hd.toLowerCase() === 'workgroup' || hd.indexOf('.') < 0)) return true;
+            }
+            if (f.kind === 'smb.signing' && f.value && f.value.workgroup === true) return true;
+            return false;
+          });
           var hasNativeCred = mapped.some(function (f) {
             if (!f || f.state !== 'supported' || !/^credential\.(?:available|plaintext|ntlm_hash)$/.test(f.kind)) return false;
             var fv = f.value || {};
@@ -1254,6 +1278,13 @@
               if (isStoreLapsBoundElsewhere(sv, srcHost, aliases) || isStoreSshPassphraseOnly(sv)) continue;
               var mat = extractCredMaterial(sv, srcFact.scope);
               if (!mat.password && !mat.nthash) continue;
+              var srcHasAdFact = arr.some(function (af) {
+                return af && af.state === 'supported' && af.scope === ('host:' + srcHost) && /^(?:ad\.domain_known|ad\.dc_candidate|kerberos\.reachable|ldap\.reachable)$/.test(af.kind);
+              });
+              var srcIsAdDomainCred = (!!mat.domain && mat.domain.indexOf('.') > 0 && String(mat.domain).toLowerCase() !== 'workgroup')
+                || /^domain:/i.test(srcFact.scope || '')
+                || (srcHasAdFact && mat.accountType !== 'local');
+              var specCrossDomain = !!(srcIsAdDomainCred && ((destIsLinux && !destHasAdSurface) || destIsWorkgroupWin));
               var rKey = [String(mat.user || '').toLowerCase(), mat.password, String(mat.nthash || '').toLowerCase(), ''].join('|');
               if (!seenReuse[rKey]) {
                 seenReuse[rKey] = 1;
@@ -1272,7 +1303,8 @@
                     originHost: srcHost,
                     accountType: mat.accountType,
                     credentialId: mat.id,
-                    reuseHypothesis: true
+                    reuseHypothesis: true,
+                    speculativeCrossDomainReuse: specCrossDomain
                   }
                 }));
               }
@@ -1295,7 +1327,8 @@
                     method: mat.method,
                     originHost: srcHost,
                     reuseFrom: srcHost,
-                    unvalidatedOnTarget: true
+                    unvalidatedOnTarget: true,
+                    speculativeCrossDomainReuse: specCrossDomain
                   }
                 }));
               }

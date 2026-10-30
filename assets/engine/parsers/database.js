@@ -40,8 +40,31 @@
     return names;
   }
 
+  var _EMPTY_DB_DIGEST_RE = /^(?:0x)?(?:d41d8cd98f00b204e9800998ecf8427e|31d6cfe0d16ae931b73c59d7e0c089c0|aad3b435b51404eeaad3b435b51404ee|da39a3ee5e6b4b0d3255bfef95601890afd80709|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855)$/i;
+
+  function _detect_db_hash_format(hsh) {
+    var s = String(hsh || '');
+    if (/^\$2[abxy]\$/i.test(s)) return 'bcrypt';
+    if (/^\$(?:P|H)\$/i.test(s)) return 'phpass';
+    if (/^\$1\$|^\$apr1\$/i.test(s)) return 'md5crypt';
+    if (/^\$5\$/i.test(s)) return 'sha256crypt';
+    if (/^\$6\$/i.test(s)) return 'sha512crypt';
+    if (/^\$y\$/i.test(s)) return 'yescrypt';
+    if (/^pbkdf2_sha/i.test(s)) return 'pbkdf2';
+    if (/^\*[0-9A-Fa-f]{40}$/.test(s)) return 'mysql-sha1';
+    var hex = s.replace(/^0x/i, '');
+    if (/^[0-9a-fA-F]{32}$/.test(hex)) return 'raw-md5';
+    if (/^[0-9a-fA-F]{40}$/.test(hex)) return 'raw-sha1';
+    if (/^[0-9a-fA-F]{64}$/.test(hex)) return 'raw-sha256';
+    if (/^[0-9a-fA-F]{128}$/.test(hex)) return 'raw-sha512';
+    return 'modular';
+  }
+
   function _parse_database_output(text, ws, command, source, facts) {
-    if (!text.trim()) return;
+    text = String(text || '');
+    var ctx = (ws && ws.context) || {};
+    var promptCtx = [ctx.promptLine || '', ctx.followPrompt || ''].filter(Boolean).join('\n').trim();
+    if (!text.trim() && !promptCtx) return;
     var h = 'host:' + ws.target, low = (command || '').toLowerCase();
     var denied = reSearch(_DB_ACCESS_DENIED_RE, text);
 
@@ -90,6 +113,7 @@
       reAll(_DB_HASH_ROW_RE, text).concat(reAll(_DB_HASH_REV_ROW_RE, text)).forEach(function (m) {
         var hsh = m.groups.hash, usr = m.groups.user;
         if (!usr || /^(?:null|true|false|\d+)$/i.test(usr)) return;
+        if (_EMPTY_DB_DIGEST_RE.test(hsh)) return;
         if (/^[0-9a-fA-F]{32,128}$/.test(hsh) && /(?:uuid|guid|session|token|_id|commit|checksum|sha1|sha256|md5|serial|ssl_|binlog)/i.test(usr)) return;
         if (seen[hsh.toLowerCase()] || hsh.toLowerCase() === 'password' || hsh.toLowerCase() === 'email') return;
         seen[hsh.toLowerCase()] = true;
@@ -100,7 +124,10 @@
       _add(facts, mkFact('loot.material', h, { kind: 'db_hashes', entries: hashes.slice(0, 5000), count: hashes.length, via: 'database', tool: _db_tool(low) }, S, source));
       _add(facts, mkFact('db.hashes', h, { entries: hashes.slice(0, 5000), count: hashes.length, tool: _db_tool(low) }, S, source));
       hashes.slice(0, 5000).forEach(function (entry) {
-        _add(facts, mkFact('credential.candidate', h, { kind: 'database_hash', user: entry.user, hash: entry.hash, via: 'database' }, S, source));
+        var fmt = _detect_db_hash_format(entry.hash);
+        _add(facts, mkFact('credential.candidate', h, { kind: 'database_hash', user: entry.user, hash: entry.hash, format: fmt, via: 'database' }, S, source));
+        _add(facts, mkFact('hash.candidate', h, { user: entry.user, hash: entry.hash, format: fmt, via: 'database' }, S, source));
+        _add(facts, mkFact('hash.crackable', h, { user: entry.user, hash: entry.hash, format: fmt, via: 'database' }, S, source));
       });
     }
 
@@ -158,32 +185,33 @@
     // (loot the tables, or MSSQL xp_cmdshell). Conservative: a recognizable engine-specific success
     // banner/prompt AND no access-denied line, so a failed login or an unrelated paste mints nothing.
     if (!denied) {
-      var tlow = text.toLowerCase(), svc = null;
-      if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(text)) &&
-          (/\bmysql\s*>/.test(text) || /mariadb\s*\[/i.test(text) || tlow.indexOf('information_schema') >= 0 ||
-           /\bversion\(\)/i.test(text) || /server version:\s*\S/i.test(text) ||
+      var sessionText = promptCtx ? (text + '\n' + promptCtx) : text;
+      var tlow = sessionText.toLowerCase(), svc = null;
+      if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(sessionText)) &&
+          (/\bmysql\s*>/.test(sessionText) || /mariadb\s*\[/i.test(sessionText) || tlow.indexOf('information_schema') >= 0 ||
+           /\bversion\(\)/i.test(sessionText) || /server version:\s*\S/i.test(sessionText) ||
            /^\s*\d+\.\d+\.\d+(?!\.\d)(?:-[A-Za-z0-9._-]+)?\s*$/im.test(text))) svc = 'mysql';
-      else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)>/.test(text)) &&
-               (/\bSQL\s*[>(]/.test(text) || /microsoft sql server/i.test(text) || /^\s*1>\s/m.test(text))) svc = 'mssql';
+      else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)>/.test(sessionText)) &&
+               (/\bSQL\s*[>(]/.test(sessionText) || /microsoft sql server/i.test(sessionText) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
       // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
-      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b/i.test(text)) &&
-               (/list of databases/i.test(text) || /^\s*\w+=[#>]/m.test(text) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+/i.test(text))) svc = 'postgresql';
-      else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database/i.test(text)) &&
-               (/connected to:/i.test(text) || /^\s*SQL>/m.test(text) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
+      else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b/i.test(sessionText)) &&
+               (/list of databases/i.test(sessionText) || /^\s*\w+=[#>]/m.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
+      else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database/i.test(sessionText)) &&
+               (/connected to:/i.test(sessionText) || /^\s*SQL>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
       else if ((low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
-               (/\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b/i.test(text) || /test>|\bmongosh\b/i.test(text))) {
+               (/\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b/i.test(text) || /test>|\bmongosh\b/i.test(sessionText))) {
         svc = 'mongodb';
         _add(facts, mkFact('mongo.unauth', h, { port: 27017, tool: 'mongosh' }, S, source));
       }
-      else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(text) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
+      else if ((low.indexOf('sqlite') >= 0 || /SQLite format 3|CREATE TABLE/i.test(text)) && (/\bsqlite\s*>/i.test(sessionText) || /CREATE TABLE/i.test(text) || low.indexOf('.schema') >= 0 || low.indexOf('.tables') >= 0 || low.indexOf('select') >= 0)) svc = 'sqlite';
       else if (isRedisHit && tlow.indexOf('noauth') < 0) svc = 'redis';
       if (svc) {
         _add(facts, mkFact('db.session', h, { service: svc, tool: _db_tool(low), detail: 'authenticated database session established' }, S, source));
         if (svc === 'mssql') {
           _add(facts, mkFact('mssql.authenticated', h, { service: 'mssql', tool: _db_tool(low) }, S, source));
           _add(facts, mkFact('credential.validated', h, { service: 'mssql', tool: _db_tool(low), outcome: 'accepted' }, S, source));
-          if (/\bSQL\s*\([^)]*\bdbo@master\)|(?:^|[\s/\\])sa(?::|@|\s+dbo@)/i.test(text + '\n' + (command || '')) || /\(Pwn3d!\)|\bsysadmin\b|\bCONTROL\s+SERVER\b/i.test(text)) {
+          if (/\bSQL\s*\([^)]*\bdbo@master\)|(?:^|[\s/\\])sa(?::|@|\s+dbo@)/i.test(sessionText + '\n' + (command || '')) || /\(Pwn3d!\)|\bsysadmin\b|\bCONTROL\s+SERVER\b/i.test(text)) {
             _add(facts, mkFact('mssql.sysadmin', h, { service: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
             _add(facts, mkFact('db.admin', h, { engine: 'mssql', role: 'sysadmin', tool: _db_tool(low) }, S, source));
           }

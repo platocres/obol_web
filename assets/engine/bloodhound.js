@@ -112,6 +112,18 @@
     return s.indexOf('S-1-5-21-') === 0 && !!BROAD_PRINCIPAL_RID[s.substring(s.lastIndexOf('-') + 1)];
   }
 
+  var BUILTIN_PRIV_RID_RE = /-(?:512|516|518|519|520|521|544)$/;
+  var BUILTIN_PRIV_SID_RE = /^S-1-5-(?:9|18|32-544|32-548)$/i;
+  var BUILTIN_PRIV_NAME_RE = /^(?:DOMAIN ADMINS|ENTERPRISE ADMINS|SCHEMA ADMINS|ADMINISTRATORS|ACCOUNT OPERATORS|GROUP POLICY CREATOR OWNERS|ENTERPRISE DOMAIN CONTROLLERS|DOMAIN CONTROLLERS|READ-ONLY DOMAIN CONTROLLERS|SYSTEM|NT AUTHORITY\\SYSTEM)$/i;
+
+  function isBuiltinPrivilegedSid(sid, name) {
+    var s = String(sid == null ? '' : sid).trim();
+    if (s && (BUILTIN_PRIV_RID_RE.test(s) || BUILTIN_PRIV_SID_RE.test(s))) return true;
+    var n = String(name == null ? '' : name).trim().split('@')[0].trim();
+    if (n && BUILTIN_PRIV_NAME_RE.test(n)) return true;
+    return false;
+  }
+
   // The domain portion of a machine SID - S-1-5-21-a-b-c for S-1-5-21-a-b-c-<rid>. Empty for a
   // well-known/built-in SID. Used to tell a foreign-domain principal (across a trust) from a local one.
   function domainOfSid(sid) {
@@ -356,11 +368,14 @@
         var u = data[i];
         var usid = sidOf(u);
         var un = String(prop(u, 'name') || '');
-        summary.users += 1;
-        if (prop(u, 'hasspn', 'hasSPN')) summary.kerberoastable.push(un);
-        if (prop(u, 'dontreqpreauth', 'dontReqPreAuth')) summary.asrep_roastable.push(un);
-        if (prop(u, 'highvalue', 'highValue', 'system_tags')) summary.high_value.push(un);
+        var usam = String(prop(u, 'samaccountname') || '');
         var enabled = prop(u, 'enabled');
+        var isKrbtgt = /-502$/.test(usid) || /^krbtgt(?:@|$)/i.test(un) || /^krbtgt$/i.test(usam);
+        var isCompAcct = /\$(?:@|$)/.test(un) || /\$$/.test(usam) || String(prop(u, 'objecttype', 'type') || '').toLowerCase() === 'computer';
+        summary.users += 1;
+        if (prop(u, 'hasspn', 'hasSPN') && enabled !== false && !isKrbtgt && !isCompAcct) summary.kerberoastable.push(un);
+        if (prop(u, 'dontreqpreauth', 'dontReqPreAuth') && enabled !== false && !isKrbtgt && !isCompAcct) summary.asrep_roastable.push(un);
+        if (prop(u, 'highvalue', 'highValue', 'system_tags')) summary.high_value.push(un);
         if (enabled !== false) {
           if (prop(u, 'passwordnotreqd', 'passwordNotReqd')) summary.password_not_required.push(un);
           if (prop(u, 'pwdneverexpires', 'pwdNeverExpires')) summary.pwd_never_expires.push(un);
@@ -390,13 +405,21 @@
       for (i = 0; i < data.length; i++) {
         var comp = data[i];
         var cn = String(prop(comp, 'name') || '');
+        var csid = sidOf(comp);
+        var cPgSid = String(prop(comp, 'primarygroupsid') || '');
+        var cDn = String(prop(comp, 'distinguishedname') || '');
+        var cIsDc = prop(comp, 'isdc', 'isDC') === true || /-(?:516|521)$/.test(cPgSid) || /\bOU=Domain Controllers\b/i.test(cDn);
+        if (cIsDc && graph) {
+          if (!graph.dc_computers) graph.dc_computers = {};
+          if (csid) graph.dc_computers[csid] = 1;
+          if (cn) graph.dc_computers[cn.toUpperCase()] = 1;
+        }
         summary.computers.push(cn);
-        if (prop(comp, 'unconstraineddelegation', 'unconstrainedDelegation')) summary.unconstrained_delegation.push(cn);
+        if (prop(comp, 'unconstraineddelegation', 'unconstrainedDelegation') && !cIsDc) summary.unconstrained_delegation.push(cn);
         if (prop(comp, 'haslaps', 'hasLaps') === true) {
           if (!summary.laps_computers) summary.laps_computers = [];
           summary.laps_computers.push(cn);
         }
-        var csid = sidOf(comp);
         if (graph && csid) {
           var cDel = prop(comp, 'allowedtodelegate') || comp.AllowedToDelegate || comp.allowedtodelegate || [];
           if (isObj(cDel) && Array.isArray(cDel.Results)) cDel = cDel.Results;
@@ -629,12 +652,46 @@
       }
       return res;
     }
+    // Filter Domain Controllers discovered via group membership or Domain Controllers OU from unconstrained_delegation
+    if (!g.dc_computers) g.dc_computers = {};
+    (g.members || []).forEach(function (e) {
+      var mSid = e[0], grpSid = e[1];
+      var grpBase = String(names[grpSid] || '').split('@')[0].trim().toUpperCase();
+      if (/-(?:516|521)$/.test(grpSid) || /^S-1-5-9$/i.test(grpSid)
+          || grpBase === 'DOMAIN CONTROLLERS' || grpBase === 'READ-ONLY DOMAIN CONTROLLERS' || grpBase === 'ENTERPRISE DOMAIN CONTROLLERS') {
+        g.dc_computers[mSid] = 1;
+        if (names[mSid]) g.dc_computers[String(names[mSid]).toUpperCase()] = 1;
+      }
+    });
+    Object.keys(g.contains || {}).forEach(function (ouSid) {
+      if (types[ouSid] === 'ous' && String(names[ouSid] || '').split('@')[0].trim().toUpperCase() === 'DOMAIN CONTROLLERS') {
+        (g.contains[ouSid] || []).forEach(function (chSid) {
+          if (types[chSid] === 'computers') {
+            g.dc_computers[chSid] = 1;
+            if (names[chSid]) g.dc_computers[String(names[chSid]).toUpperCase()] = 1;
+          }
+        });
+      }
+    });
+    if (Array.isArray(summary.unconstrained_delegation) && summary.unconstrained_delegation.length) {
+      summary.unconstrained_delegation = summary.unconstrained_delegation.filter(function (cn) {
+        var cu = String(cn || '').toUpperCase();
+        return !g.dc_computers[cu];
+      });
+    }
+
     var gpoAbuseList = [];
     var gpoControls = {};
+    var gpoWritableMeta = { gpos: [], gpo_ids: [], principals: [] };
     (g.control || []).forEach(function (e) {
       var src = e[0], right = e[1], dst = e[2];
-      if (types[dst] === 'gpos' && ABUSABLE_ACE[right] && !isBroadPrincipal(src)) {
+      if (types[dst] === 'gpos' && ABUSABLE_ACE[right] && !isBroadPrincipal(src) && !isBuiltinPrivilegedSid(src, names[src])) {
         (gpoControls[dst] = gpoControls[dst] || []).push({ actor: src, right: right });
+        var gName = resolveSid(dst, names);
+        var aName = resolveSid(src, names);
+        if (gName && gpoWritableMeta.gpos.indexOf(gName) < 0) gpoWritableMeta.gpos.push(gName);
+        if (dst && gpoWritableMeta.gpo_ids.indexOf(dst) < 0) gpoWritableMeta.gpo_ids.push(dst);
+        if (aName && gpoWritableMeta.principals.indexOf(aName) < 0) gpoWritableMeta.principals.push(aName);
       }
     });
     Object.keys(g.gpo_links).forEach(function (gpoSid) {
@@ -663,28 +720,33 @@
     });
     g._gpoIndexed = true;
     summary.gpo_abuse = gpoAbuseList;
+    summary._gpo_writable_meta = gpoWritableMeta;
 
     // 5. Summarize RBCD, SID History, gMSA, LAPS from control edges + properties
     var rbcdList = [];
     var sidHistList = [];
     var gmsaList = (summary.gmsa_accounts || []).slice();
     var lapsList = (summary.laps_computers || []).slice();
+    var nonPrivAclEdges = [];
     (g.control || []).forEach(function (e) {
       var src = e[0], right = e[1], dst = e[2];
-      if ((right === 'AllowedToAct' || right === 'AddAllowedToAct') && !isBroadPrincipal(src)) {
+      var srcBuiltin = isBuiltinPrivilegedSid(src, names[src]);
+      if (ABUSABLE_ACE[right] && !srcBuiltin) nonPrivAclEdges.push(e);
+      if ((right === 'AllowedToAct' || right === 'AddAllowedToAct') && !isBroadPrincipal(src) && !srcBuiltin) {
         var rLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names) + ' (' + right + ')';
         if (rbcdList.indexOf(rLine) < 0) rbcdList.push(rLine);
       } else if (right === 'HasSIDHistory') {
         var sLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names);
         if (sidHistList.indexOf(sLine) < 0) sidHistList.push(sLine);
-      } else if (right === 'ReadGMSAPassword' && !isBroadPrincipal(src)) {
+      } else if (right === 'ReadGMSAPassword' && !isBroadPrincipal(src) && !srcBuiltin) {
         var gLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names);
         if (gmsaList.indexOf(gLine) < 0) gmsaList.push(gLine);
-      } else if ((right === 'ReadLAPSPassword' || right === 'SyncLAPSPassword') && !isBroadPrincipal(src)) {
+      } else if ((right === 'ReadLAPSPassword' || right === 'SyncLAPSPassword') && !isBroadPrincipal(src) && !srcBuiltin) {
         var lLine = resolveSid(src, names) + ' -> ' + resolveSid(dst, names);
         if (lapsList.indexOf(lLine) < 0) lapsList.push(lLine);
       }
     });
+    g.acl_edges = nonPrivAclEdges;
     summary.rbcd_targets = rbcdList;
     summary.sid_history = sidHistList;
     summary.gmsa_accounts = gmsaList;
@@ -712,6 +774,7 @@
       var dcsync = [];
       Object.keys(byPrincipal).forEach(function (k) {
         var item = byPrincipal[k], psid = item.psid, rights = item.rights;
+        if (isBuiltinPrivilegedSid(psid, names[psid]) || (g.dc_computers && g.dc_computers[psid])) return;
         var hasRepl = rights.GetChanges && (rights.GetChangesAll || rights.DCSync);
         var canGrant = false;
         for (var rr in rights) { if (DCSYNC_OWNING[rr]) { canGrant = true; break; } }
@@ -810,8 +873,44 @@
   };
   function edgeRank(e) { return EDGE_RANK[e] !== undefined ? EDGE_RANK[e] : 50; }
 
+  // Collect transitive MemberOf groups for a set of starting principal SIDs without expanding
+  // through terminal admin goal groups. Allows owned non-admin users who belong to built-in
+  // operator groups (such as Account Operators) to traverse those groups' outbound ACLs while
+  // keeping unowned built-in privileged principals out of reachability paths.
+  function memberGroupClosure(graph, startSids) {
+    var allowed = {};
+    if (!graph || !startSids || !startSids.length) return allowed;
+    var stop = {};
+    if (graph.da_sid) stop[graph.da_sid] = 1;
+    if (graph.ea_sid) stop[graph.ea_sid] = 1;
+    if (graph.domain_sid) stop[graph.domain_sid] = 1;
+    (graph.da_sids || []).forEach(function (s) { if (s) stop[s] = 1; });
+    (graph.ea_sids || []).forEach(function (s) { if (s) stop[s] = 1; });
+    (graph.admin_sids || []).forEach(function (s) { if (s) stop[s] = 1; });
+    (graph.domain_sids || []).forEach(function (s) { if (s) stop[s] = 1; });
+    var memAdj = {};
+    (graph.members || []).forEach(function (e) {
+      (memAdj[e[0]] = memAdj[e[0]] || []).push(e[1]);
+    });
+    var q = [], seen = {};
+    startSids.forEach(function (s) {
+      if (s && !seen[s] && !stop[s]) { seen[s] = 1; q.push(s); }
+    });
+    for (var qi = 0; qi < q.length; qi++) {
+      var cur = q[qi];
+      (memAdj[cur] || []).forEach(function (grp) {
+        if (!grp || stop[grp]) return;
+        allowed[grp] = 1;
+        if (!seen[grp]) { seen[grp] = 1; q.push(grp); }
+      });
+    }
+    return allowed;
+  }
+
   // Build deduplicated adjacency from graph.members and graph.control
-  function buildDeduplicatedGraph(graph) {
+  function buildDeduplicatedGraph(graph, allowedPrivSids) {
+    var names = graph.names || {};
+    var dcComputers = graph.dc_computers || {};
     var domSet = {};
     if (graph.domain_sid) domSet[graph.domain_sid] = 1;
     (graph.domain_sids || []).forEach(function (ds) { if (ds) domSet[ds] = 1; });
@@ -825,6 +924,9 @@
     });
     function validControl(src, right, dst) {
       if (!ABUSABLE_ACE[right]) return false;
+      if ((isBuiltinPrivilegedSid(src, names[src]) || dcComputers[src]) && !(allowedPrivSids && allowedPrivSids[src])) {
+        return false;
+      }
       if (domSet[dst]) {
         if (DCSYNC_OWNING[right] || right === 'WriteOwner' || DCSYNC_RIGHTS[right] || right === 'GPOAbuse' || right === 'HasSIDHistory') return true;
         if (right === 'GetChanges') {
@@ -892,8 +994,13 @@
     var maxDepth = opts.maxDepth || 8;
     var graph = (summary && summary._graph) || summary || {};
     var names = graph.names || {};
+    var dcComputers = graph.dc_computers || {};
     var owned = resolveOwnedSids(graph, ownedPrincipals);
-    var dg = buildDeduplicatedGraph(graph);
+    var nonPrivOwned = owned.filter(function (s) {
+      return !isBuiltinPrivilegedSid(s, names[s]) && !dcComputers[s];
+    });
+    var allowedPriv = memberGroupClosure(graph, nonPrivOwned);
+    var dg = buildDeduplicatedGraph(graph, allowedPriv);
     var goals = dg.goals, adj = dg.adj, hasEdge = dg.hasEdge, distToGoal = dg.dist;
     if (!owned.length || !Object.keys(goals).length) return { paths: [], first: null };
 
@@ -990,7 +1097,9 @@
     var names = graph.names || {}, types = graph.types || {};
     var start = resolvePrincipalSid(graph, principal);
     if (!start) return { principal: principal, controls: [], groups: [], count: 0, inbound: [] };
-    var dg = buildDeduplicatedGraph(graph);
+    var startAllow = memberGroupClosure(graph, [start]);
+    startAllow[start] = 1;
+    var dg = buildDeduplicatedGraph(graph, startAllow);
     var adj = dg.adj;
     var seen = {}; seen[start] = 1;
     var q = [{ sid: start, hops: 0 }], ctrl = {}, groups = {};
@@ -1708,6 +1817,28 @@
     }
     if (summary.gpo_abuse && summary.gpo_abuse.length) {
       mk('ad.gpo_abuse', { tool: 'bloodhound', paths: summary.gpo_abuse.slice(), count: summary.gpo_abuse.length });
+      var gMeta = summary._gpo_writable_meta || {};
+      var gpos = Array.isArray(gMeta.gpos) ? gMeta.gpos.slice() : [];
+      var gpoIds = Array.isArray(gMeta.gpo_ids) ? gMeta.gpo_ids.slice() : [];
+      var gPrincipals = Array.isArray(gMeta.principals) ? gMeta.principals.slice() : [];
+      summary.gpo_abuse.forEach(function (line) {
+        var m = String(line || '').match(/^(.+?)\s+-\[[^\]]+\]->\s+(.+?)\s+->\s+/);
+        if (m) {
+          var actor = m[1].trim(), gpoName = m[2].trim();
+          if (actor && gPrincipals.indexOf(actor) < 0) gPrincipals.push(actor);
+          if (gpoName && gpos.indexOf(gpoName) < 0) gpos.push(gpoName);
+        }
+      });
+      mk('ad.gpo_writable', {
+        tool: 'bloodhound',
+        gpo: gpos[0] || '',
+        gpo_id: gpoIds[0] || '',
+        gpos: gpos,
+        gpo_ids: gpoIds,
+        principals: gPrincipals,
+        paths: summary.gpo_abuse.slice(),
+        count: summary.gpo_abuse.length
+      });
     }
     if (summary.sid_history && summary.sid_history.length) {
       mk('ad.sid_history', { tool: 'bloodhound', entries: summary.sid_history.slice(), count: summary.sid_history.length });
@@ -1725,45 +1856,101 @@
     var chains = paths || [];
     var first = null;
     if (chains && !Array.isArray(chains)) { first = chains.first || null; chains = chains.paths || []; }
-    if (chains && chains.length) {
-      var daMap = {};
-      (summary.domain_admins || []).forEach(function (d) { daMap[label(d).toUpperCase()] = 1; });
-      var shortest = chains.filter(function (c) {
-        var s = (c && c[0] && c[0].from) ? label(c[0].from).toUpperCase() : '';
-        return !daMap[s] && !!firstAbusable(c);
-      })[0] || chains.filter(function (c) { return !!firstAbusable(c); })[0] || chains[0];
-      first = firstAbusable(shortest) || first;
-      var goal = (shortest && shortest.length && shortest[shortest.length - 1]) ? shortest[shortest.length - 1].to : '';
-      var value = {
-        tool: 'bloodhound', evidence: 'reachability',
-        path: shortest, paths: chains, goal: goal
-      };
-      if (first) value.first_action = first;
-      mk('ad.attack_paths', value);
-      var shortestHops = Array.isArray(shortest) ? shortest : [];
-      var nonMemberHops = shortestHops.filter(function (h) { return h && !/^memberof$/i.test(String(h.edge || '')); });
-      if (first && (first.edge === 'GetChanges' || first.edge === 'GetChangesAll') && nonMemberHops.length <= 1) {
-        mk('ad.control_paths', value);
-        mk('ad.domain_control', { tool: 'bloodhound', right: 'DCSync', principal: first.from || '' });
+    var validChains = (Array.isArray(chains) ? chains : []).filter(function (c) {
+      return Array.isArray(c) && c.length > 0 && isObj(c[0]) && typeof c[0].edge === 'string';
+    });
+    if (validChains.length) {
+      var gRef = summary._graph || null;
+      var daShortMap = {}, eaShortMap = {}, eaSids = {}, daSidsByDom = {};
+      (summary.domain_admins || []).forEach(function (d) { daShortMap[label(d).toUpperCase()] = 1; });
+      (summary.enterprise_admins || []).forEach(function (e) { eaShortMap[label(e).toUpperCase()] = 1; });
+      if (gRef) {
+        var revMem = {};
+        (gRef.members || []).forEach(function (e) { (revMem[e[1]] = revMem[e[1]] || []).push(e[0]); });
+        (gRef.ea_sids || []).forEach(function (es) {
+          if (!es) return;
+          var eq = [es]; eaSids[es] = 1;
+          for (var eqi = 0; eqi < eq.length; eqi++) {
+            (revMem[eq[eqi]] || []).forEach(function (ms) {
+              if (!eaSids[ms]) { eaSids[ms] = 1; eq.push(ms); }
+            });
+          }
+        });
+        (gRef.da_sids || []).forEach(function (ds) {
+          if (!ds) return;
+          var dDom = domainFromName((gRef.names || {})[ds]) ||
+            ((gRef.nodes && gRef.nodes[ds] && gRef.nodes[ds].domain) ? String(gRef.nodes[ds].domain).toUpperCase() : '') ||
+            String(summary.domain || '').toUpperCase() || '*';
+          var dq = [ds], dSeen = {}; dSeen[ds] = 1;
+          for (var dqi = 0; dqi < dq.length; dqi++) {
+            (revMem[dq[dqi]] || []).forEach(function (ms) {
+              (daSidsByDom[ms] = daSidsByDom[ms] || {})[dDom] = 1;
+              if (!dSeen[ms]) { dSeen[ms] = 1; dq.push(ms); }
+            });
+          }
+        });
       }
-      var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
-      var tgtShort = String(tgt || '').split('@')[0].trim();
-      mk('ad.acl_lead', { tool: 'bloodhound', target: tgtShort || tgt, targets: tgtShort ? [tgtShort] : [], edge: first ? first.edge : '', first_action: first });
-      if ((first && first.edge === 'ReadGMSAPassword') || shortestHops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
-        mk('ad.gmsa', { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt });
-      }
-      if ((first && (first.edge === 'ReadLAPSPassword' || first.edge === 'SyncLAPSPassword')) || shortestHops.some(function (h) { return h.edge === 'ReadLAPSPassword' || h.edge === 'SyncLAPSPassword'; })) {
-        mk('ad.laps', { tool: 'bloodhound', edge: first ? first.edge : 'ReadLAPSPassword', target: tgt });
-      }
-      if ((first && (first.edge === 'AllowedToAct' || first.edge === 'AddAllowedToAct')) || shortestHops.some(function (h) { return h.edge === 'AllowedToAct' || h.edge === 'AddAllowedToAct'; })) {
-        mk('ad.rbcd', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
-        mk('ad.delegation', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
-      }
-      if ((first && first.edge === 'AllowedToDelegate') || shortestHops.some(function (h) { return h.edge === 'AllowedToDelegate'; })) {
-        mk('ad.delegation', { tool: 'bloodhound', edge: 'AllowedToDelegate', target: tgt });
-      }
-      if ((first && first.edge === 'WriteSPN') || shortestHops.some(function (h) { return h.edge === 'WriteSPN'; })) {
-        mk('ad.targeted_kerberoast', { tool: 'bloodhound', edge: 'WriteSPN', target: tgt });
+      var actionable = validChains.filter(function (c) {
+        if (!firstAbusable(c)) return false;
+        var h0 = c[0], hEnd = c[c.length - 1];
+        if (isBuiltinPrivilegedSid(h0.from_sid, h0.from)) return false;
+        if (gRef && gRef.dc_computers && (gRef.dc_computers[h0.from_sid] || gRef.dc_computers[String(h0.from || '').toUpperCase()])) {
+          return false;
+        }
+        var origShort = h0.from ? label(h0.from).toUpperCase() : '';
+        if (h0.from_sid && gRef && gRef.ea_sids && gRef.ea_sids.length) {
+          if (eaSids[h0.from_sid]) return false;
+        } else if (eaShortMap[origShort]) {
+          return false;
+        }
+        var goalDom = domainFromName(hEnd.to) ||
+          (gRef && gRef.nodes && hEnd.to_sid && gRef.nodes[hEnd.to_sid] ? String(gRef.nodes[hEnd.to_sid].domain || '').toUpperCase() : '') ||
+          (gRef && gRef.types && hEnd.to_sid && gRef.types[hEnd.to_sid] === 'domains' ? String(hEnd.to || '').toUpperCase() : '') ||
+          String(summary.domain || '').toUpperCase();
+        if (h0.from_sid && gRef && gRef.da_sids && gRef.da_sids.length) {
+          var doms = daSidsByDom[h0.from_sid];
+          if (doms && (doms['*'] || (goalDom && doms[goalDom]))) return false;
+        } else if (daShortMap[origShort]) {
+          var origDom = domainFromName(h0.from);
+          if (!origDom || !goalDom || origDom === goalDom) return false;
+        }
+        return true;
+      });
+      if (actionable.length) {
+        var shortest = actionable[0];
+        first = firstAbusable(shortest) || first;
+        var goal = (shortest && shortest.length && shortest[shortest.length - 1]) ? shortest[shortest.length - 1].to : '';
+        var value = {
+          tool: 'bloodhound', evidence: 'reachability',
+          path: shortest, paths: actionable, goal: goal
+        };
+        if (first) value.first_action = first;
+        mk('ad.attack_paths', value);
+        var shortestHops = Array.isArray(shortest) ? shortest : [];
+        var nonMemberHops = shortestHops.filter(function (h) { return h && !/^memberof$/i.test(String(h.edge || '')); });
+        if (first && (first.edge === 'GetChanges' || first.edge === 'GetChangesAll') && nonMemberHops.length <= 1) {
+          mk('ad.control_paths', value);
+          mk('ad.domain_control', { tool: 'bloodhound', right: 'DCSync', principal: first.from || '' });
+        }
+        var tgt = first ? (first.target || first.to) : (shortest[0] ? (shortest[0].to || '') : '');
+        var tgtShort = String(tgt || '').split('@')[0].trim();
+        mk('ad.acl_lead', { tool: 'bloodhound', target: tgtShort || tgt, targets: tgtShort ? [tgtShort] : [], edge: first ? first.edge : '', first_action: first });
+        if ((first && first.edge === 'ReadGMSAPassword') || shortestHops.some(function (h) { return h.edge === 'ReadGMSAPassword'; })) {
+          mk('ad.gmsa', { tool: 'bloodhound', edge: 'ReadGMSAPassword', target: tgt });
+        }
+        if ((first && (first.edge === 'ReadLAPSPassword' || first.edge === 'SyncLAPSPassword')) || shortestHops.some(function (h) { return h.edge === 'ReadLAPSPassword' || h.edge === 'SyncLAPSPassword'; })) {
+          mk('ad.laps', { tool: 'bloodhound', edge: first ? first.edge : 'ReadLAPSPassword', target: tgt });
+        }
+        if ((first && (first.edge === 'AllowedToAct' || first.edge === 'AddAllowedToAct')) || shortestHops.some(function (h) { return h.edge === 'AllowedToAct' || h.edge === 'AddAllowedToAct'; })) {
+          mk('ad.rbcd', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
+          mk('ad.delegation', { tool: 'bloodhound', edge: first ? first.edge : 'AllowedToAct', target: tgt });
+        }
+        if ((first && first.edge === 'AllowedToDelegate') || shortestHops.some(function (h) { return h.edge === 'AllowedToDelegate'; })) {
+          mk('ad.delegation', { tool: 'bloodhound', edge: 'AllowedToDelegate', target: tgt });
+        }
+        if ((first && first.edge === 'WriteSPN') || shortestHops.some(function (h) { return h.edge === 'WriteSPN'; })) {
+          mk('ad.targeted_kerberoast', { tool: 'bloodhound', edge: 'WriteSPN', target: tgt });
+        }
       }
     }
     return out;
@@ -1958,6 +2145,7 @@
     resolveSid: resolveSid,
     resolvePrincipalSid: resolvePrincipalSid,
     isBroadPrincipal: isBroadPrincipal,
+    isBuiltinPrivilegedSid: isBuiltinPrivilegedSid,
     domainOfSid: domainOfSid,
     firstAbusable: firstAbusable
   };

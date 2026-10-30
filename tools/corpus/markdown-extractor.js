@@ -111,6 +111,7 @@ const PROMPTS = [
   { kind: 'powershell', hostHint: 'windows', re: /^\s*(?:\*?Evil-WinRM\*?\s*)?PS\s+[A-Za-z]:\\[^\r\n>]*>\s?(.*)$/ },
   { kind: 'powershell', hostHint: 'windows', re: /^\s*(?:\*?Evil-WinRM\*?\s*)?PS\s*>\s?(.*)$/ },
   { kind: 'cmd', hostHint: 'windows', re: /^\s*[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]*\\)*[^\\/:*?"<>|\r\n]*>\s?(.*)$/ },
+  { kind: 'cmd', hostHint: 'windows', isWinOpenSsh: true, re: /^\s*(?:([A-Za-z0-9_.-]+)\\)?([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)\s+([A-Za-z]:\\[^*?<>|\r\n]*)>\s?(.*)$/ },
   { kind: 'unix', isBracketUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?\[([\w.-]+)@([\w.-]+)(?:[:\s][^\]]*)?\]\s*[#$%]\s?(.*)$/ },
   { kind: 'unix', isAtUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?([\w.-]+)@([\w.-]+)(?::[^\s#$%]*)?\s*[#$%](?:\s+(.*)|\s*)$/ },
   { kind: 'unix', re: /^\s*(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*[#$]\s?(.*)$/ },
@@ -152,6 +153,7 @@ function matchPromptLine(rawLine, opts) {
       const cand = (m[1] || '').trim();
       if (!opts || !opts.legacyBareHash) {
         if (HASH_PROSE_COMMENT_RE.test(cand)) continue;
+        if (!(opts && opts.afterPrompt) && /^[A-Z]/.test(cand) && !isCommandLikeLine(cand)) continue;
       }
     }
     if (p.isZshOneLine) {
@@ -164,6 +166,7 @@ function matchPromptLine(rawLine, opts) {
         user: m[1] || '',
         host: m[2] || '',
         hostHint: m[2] || '',
+        isZshOneLine: true,
         promptLine: rawLine
       };
     }
@@ -177,6 +180,24 @@ function matchPromptLine(rawLine, opts) {
         user: '',
         host: '',
         hostHint: '',
+        isZshBotOnly: true,
+        promptLine: rawLine
+      };
+    }
+    if (p.isWinOpenSsh) {
+      const dom = m[1] || '';
+      const usr = m[2] || '';
+      const hst = m[3] || '';
+      const raw = (m[5] || '').trim();
+      return {
+        tool: '',
+        rawCommand: raw,
+        command: raw,
+        kind: 'cmd',
+        user: dom ? (dom + '\\' + usr) : usr,
+        host: hst,
+        hostHint: 'windows',
+        isWinOpenSsh: true,
         promptLine: rawLine
       };
     }
@@ -206,6 +227,129 @@ function matchPromptLine(rawLine, opts) {
     };
   }
   return null;
+}
+
+const CAPTION_CLI_EXTRA_BINS = new Set([
+  'python', 'python2', 'python3', 'perl', 'ruby', 'php', 'node', 'java', 'gcc', 'g++',
+  'make', 'go', 'cargo', 'dotnet', 'mono', 'wine', 'bash', 'sh', 'zsh', 'gpupdate',
+  'runas', 'icacls', 'sc', 'reg', 'schtasks', 'wmic', 'tasklist', 'quser', 'qwinsta',
+  'klist', 'certreq', 'wevtutil', 'zip2john', 'rar2john', '7z2john', 'keepass2john',
+  'pfx2john', 'ssh2john', 'iwr', 'irm', 'iex'
+]);
+
+const SESSION_LAUNCHER_RE = /^(?:evil-winrm|impacket-(?:mssqlclient|psexec|wmiexec|smbexec)|(?:mssqlclient|psexec|wmiexec|smbexec)(?:\.py)?|ssh|ftp|lftp|mysql|mariadb|psql)$/i;
+
+function getSessionLauncherTool(cmd) {
+  let s = String(cmd || '').trim();
+  if (!s) return '';
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const next = s
+      .replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=(?:'[^']*'|"[^"]*"|\S+)\s+)+/, '')
+      .replace(/^(?:sudo(?:\s+-(?:u\s+\S+|E|H|n))?(?!\s+(?:-[A-Za-z]*l\b|--list\b))|proxychains4?(?:\s+-q|\s+-f\s+\S+)*|time|rlwrap(?:\s+-\S+)*|sshpass\s+-[pPf]\s+\S+|python[23]?(?:\.\d+)?)\s+/i, '');
+    if (next !== s) {
+      s = next.trim();
+      changed = true;
+    }
+  }
+  const head = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '').split(/[\\/]/).pop();
+  return SESSION_LAUNCHER_RE.test(head) ? head.toLowerCase() : '';
+}
+
+function isInteractiveTargetOrReplPrompt(p) {
+  if (!p) return false;
+  if (p.kind === 'powershell' || p.kind === 'cmd' || p.kind === 'ftp' || p.kind === 'repl' || p.kind === 'meterpreter') {
+    return true;
+  }
+  if (p.kind === 'unix') {
+    if (p.host) return !ATTACKER_HOST.test(p.host);
+    return !p.isZshBotOnly && !p.isZshOneLine;
+  }
+  return false;
+}
+
+function stripPromptPrefix(rawLine, rawCmd) {
+  const clean = stripAnsi(rawLine).trim();
+  const cmd = String(rawCmd || '').trim();
+  if (!cmd) return clean;
+  const idx = clean.lastIndexOf(cmd);
+  return (idx > 0 ? clean.slice(0, idx) : clean).trim();
+}
+
+function isCaptionFollowCliLine(line) {
+  if (isCommandLikeLine(line)) return true;
+  const trimmed = String(line || '').trim();
+  if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('//') || trimmed.startsWith('/*')) return false;
+  let s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
+  if (!s) return false;
+  const first = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
+  if (!first) return false;
+  const base = first.split(/[\\/]/).pop().toLowerCase();
+  const stem = base.replace(/\.(?:py|exe|sh|ps1|pl|rb|bin)$/i, '');
+  return CAPTION_CLI_EXTRA_BINS.has(base) || CAPTION_CLI_EXTRA_BINS.has(stem);
+}
+
+function isPlainEnglishCaptionLine(line) {
+  const t = String(line || '').trim();
+  if (!t || t.length > 80) return false;
+  if (!/^[A-Z][A-Za-z0-9 '",._():\/-]*$/.test(t)) return false;
+  if (!/[a-z]/.test(t)) return false;
+  if (isCaptionFollowCliLine(t)) return false;
+  if (/(?:^|\s)--?[A-Za-z0-9]/.test(t)) return false;
+  if (/\b(?:\d{1,3}\.){3}\d{1,3}\b/.test(t)) return false;
+  if (/[A-Za-z]+:\/\//.test(t)) return false;
+  if (/[A-Za-z]:\\|(?:^|\s)(?:\.\.?\/|~\/|\/(?:etc|var|usr|opt|tmp|home|root|bin|sbin|dev|proc|sys|mnt|srv)\b)/i.test(t)) return false;
+  if (/[|;&><=$`]/.test(t)) return false;
+  if (/[*]{2,}|={2,}|-{3,}/.test(t)) return false;
+  return true;
+}
+
+const PATH_PRINTING_VERBS_RE = /^(?:pwd|which|whereis|find|locate|realpath|readlink)$/i;
+
+function isWrappedPathContinuation(cmdStr, curRawLine, nextRawLine, opts) {
+  const curClean = stripAnsi(curRawLine);
+  if (!cmdStr || /[ \t]$/.test(curClean)) return false;
+  const nextClean = stripAnsi(nextRawLine);
+  if (!nextClean || /^[ \t]/.test(nextClean)) return false;
+  if (ZSH_TOP_PROMPT_RE.test(nextClean) || ZSH_BOT_PROMPT_RE.test(nextClean) || matchPromptLine(nextRawLine, opts)) {
+    return false;
+  }
+  const toks = String(cmdStr).trim().split(/\s+/).filter(Boolean);
+  if (toks.length < 2) return false;
+  const firstVerb = toks[0].replace(/^["']|["']$/g, '').split(/[\\/]/).pop();
+  if (PATH_PRINTING_VERBS_RE.test(firstVerb)) return false;
+  const lastTok = toks[toks.length - 1].replace(/^['"]/, '');
+  if (!/[A-Za-z0-9_.-]$/.test(lastTok)) return false;
+  if (/(?:^|>)\/dev\/(?:null|zero|stdout|stderr|fd\/\d+)$/i.test(lastTok)) return false;
+
+  if (/(?:^[A-Za-z]:\\|^\.\.?\\|^\\\\|\\)/.test(lastTok)) {
+    return /^\\[A-Za-z0-9_.-]+(?:\\[A-Za-z0-9_.-]+)*(?:\s+.*)?$/.test(nextClean);
+  }
+  if (/(?:^\/|^\.\.?\/|^~\/|^https?:\/\/)/.test(lastTok)) {
+    if (/^\/[^\s:]+:\d+:|^\/(?:bin|usr|sbin|lib)\/\S+:\s/i.test(nextClean)) return false;
+    return /^\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*(?:\s+.*)?$/.test(nextClean);
+  }
+  return false;
+}
+
+function joinWrappedPromptLines(rawLines, opts) {
+  const outLines = [];
+  const lineOffsets = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    let ln = rawLines[i];
+    const startOffset = i;
+    const isZshBot = i > 0 && ZSH_TOP_PROMPT_RE.test(rawLines[i - 1]) && ZSH_BOT_PROMPT_RE.test(ln);
+    let p = isZshBot ? { rawCommand: (ln.match(ZSH_BOT_PROMPT_RE)[2] || '').trim() } : matchPromptLine(ln, opts);
+    while (p && p.rawCommand && i + 1 < rawLines.length && isWrappedPathContinuation(p.rawCommand, ln, rawLines[i + 1], opts)) {
+      ln = ln + rawLines[i + 1];
+      i++;
+      p = isZshBot ? { rawCommand: (ln.match(ZSH_BOT_PROMPT_RE)[2] || '').trim() } : matchPromptLine(ln, opts);
+    }
+    outLines.push(ln);
+    lineOffsets.push(startOffset);
+  }
+  return { lines: outLines, lineOffsets: lineOffsets };
 }
 
 function hasShellPrompt(text) {
@@ -261,8 +405,16 @@ function classifyFenceBlock(lang, text) {
   if (TERMINAL_CONTENT_SIG_RE.test(body)) return { include: true, reason: 'bare-content-sig', lang: normLang };
 
   const nonEmptyLines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const firstActive = nonEmptyLines.find(l => !l.startsWith('#') && !l.startsWith('//'));
+  const activeLines = nonEmptyLines.filter(l => !l.startsWith('#') && !l.startsWith('//'));
+  const firstActive = activeLines[0];
   if (firstActive && isCommandLikeLine(firstActive)) {
+    return { include: true, reason: 'bare-tool-command', lang: normLang };
+  }
+  const hadHashCaption = nonEmptyLines.some(l => /^#\s+/.test(l) && isPlainEnglishCaptionLine(l.replace(/^#+\s*/, '')));
+  if (firstActive && hadHashCaption && isCaptionFollowCliLine(firstActive)) {
+    return { include: true, reason: 'bare-tool-command', lang: normLang };
+  }
+  if (firstActive && isPlainEnglishCaptionLine(firstActive) && activeLines[1] && isCaptionFollowCliLine(activeLines[1])) {
     return { include: true, reason: 'bare-tool-command', lang: normLang };
   }
   if (STATIC_SOURCE_LOOK_RE.test(body)) {
@@ -482,13 +634,17 @@ function segmentBlock(blockOrText, opts) {
   const lang = isObj ? String(blockOrText.lang || '').toLowerCase() : String(opts.lang || '').toLowerCase();
   const includeUnprompted = opts.includeUnprompted !== false;
 
-  const lines = text.split('\n');
+  const wrapped = joinWrappedPromptLines(text.split('\n'), opts);
+  const lines = wrapped.lines;
+  const lineOffsets = wrapped.lineOffsets;
   const rawUnits = [];
   let cur = null;
   let sawPrompt = false;
+  let checkedUnpromptedLead = false;
 
   for (let i = 0; i < lines.length; i++) {
     const ln = lines[i];
+    const origOffset = lineOffsets[i] != null ? lineOffsets[i] : i;
 
     // Check 2-line Kali / Parrot zsh prompt (┌──(user㉿host)-[cwd] followed by └─$ cmd)
     const topM = ln.match(ZSH_TOP_PROMPT_RE);
@@ -500,6 +656,7 @@ function segmentBlock(blockOrText, opts) {
         const rawCmd = (botM[2] || '').trim();
         cur = {
           promptLine: ln + '\n' + lines[i + 1],
+          followPrompt: '',
           tool: '',
           rawCommand: rawCmd,
           command: rawCmd,
@@ -507,7 +664,7 @@ function segmentBlock(blockOrText, opts) {
           user: topM[1] || '',
           host: topM[2] || '',
           hostHint: topM[2] || '',
-          lineStart: baseLine + i,
+          lineStart: baseLine + origOffset,
           heading: heading,
           outLines: []
         };
@@ -516,9 +673,18 @@ function segmentBlock(blockOrText, opts) {
       }
     }
 
-    const p = matchPromptLine(ln, opts);
+    const p = matchPromptLine(ln, sawPrompt ? Object.assign({}, opts, { afterPrompt: true }) : opts);
     if (p) {
       sawPrompt = true;
+      const curLauncher = cur ? getSessionLauncherTool(cur.command) : '';
+      if (curLauncher && isInteractiveTargetOrReplPrompt(p)) {
+        const fp = stripPromptPrefix(ln, p.rawCommand);
+        if (fp && !cur.followPrompt) cur.followPrompt = fp;
+        if (p.isWinOpenSsh && cur.promptLine && curLauncher === 'ssh') {
+          cur.outLines.push(ln);
+          continue;
+        }
+      }
       if (cur) rawUnits.push(cur);
       // Skip trailing empty prompt at the very end of a block if rawCommand === ''
       if (!p.rawCommand && i === lines.length - 1) {
@@ -527,6 +693,7 @@ function segmentBlock(blockOrText, opts) {
       }
       cur = {
         promptLine: p.promptLine,
+        followPrompt: '',
         tool: p.tool,
         rawCommand: p.rawCommand,
         command: p.command,
@@ -534,12 +701,44 @@ function segmentBlock(blockOrText, opts) {
         user: p.user || '',
         host: p.host || '',
         hostHint: p.hostHint || p.host || '',
-        lineStart: baseLine + i,
+        lineStart: baseLine + origOffset,
         heading: heading,
         outLines: []
       };
     } else if (cur) {
       cur.outLines.push(ln);
+    } else if (!sawPrompt && !checkedUnpromptedLead) {
+      const trimmed = ln.trim();
+      if (!trimmed || (trimmed.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(trimmed)) || isPlainEnglishCaptionLine(trimmed)) {
+        continue;
+      }
+      checkedUnpromptedLead = true;
+      if (includeUnprompted && getSessionLauncherTool(trimmed)) {
+        let hasLaterTargetPrompt = false;
+        for (let j = i + 1; j < lines.length; j++) {
+          const pj = matchPromptLine(lines[j], opts);
+          if (pj && isInteractiveTargetOrReplPrompt(pj)) {
+            hasLaterTargetPrompt = true;
+            break;
+          }
+        }
+        if (hasLaterTargetPrompt) {
+          cur = {
+            promptLine: '',
+            followPrompt: '',
+            tool: '',
+            rawCommand: trimmed,
+            command: trimmed,
+            kind: 'unprompted',
+            user: '',
+            host: '',
+            hostHint: '',
+            lineStart: baseLine + origOffset,
+            heading: heading,
+            outLines: []
+          };
+        }
+      }
     }
   }
   if (cur) rawUnits.push(cur);
@@ -547,17 +746,36 @@ function segmentBlock(blockOrText, opts) {
   if (!sawPrompt && includeUnprompted) {
     // Handle unprompted CommonMark blocks (command-first or raw stdout paste)
     let firstIdx = -1;
+    let sawHashCaption = false;
     for (let i = 0; i < lines.length; i++) {
       const t = lines[i].trim();
-      if (!t || (t.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(t))) continue;
+      if (!t) continue;
+      if (t.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(t)) {
+        if (isPlainEnglishCaptionLine(t.replace(/^#+\s*/, ''))) sawHashCaption = true;
+        continue;
+      }
       firstIdx = i;
       break;
     }
 
     if (firstIdx >= 0) {
-      const firstLine = lines[firstIdx].trim();
+      let firstLine = lines[firstIdx].trim();
+      let captionSkipped = false;
+      if (isPlainEnglishCaptionLine(firstLine)) {
+        for (let j = firstIdx + 1; j < lines.length; j++) {
+          const tj = lines[j].trim();
+          if (!tj || (tj.startsWith('#') && !EXPLOIT_DB_HEADER_RE.test(tj))) continue;
+          if (isCaptionFollowCliLine(tj)) {
+            firstIdx = j;
+            firstLine = tj;
+            captionSkipped = true;
+          }
+          break;
+        }
+      }
+      const firstOffset = lineOffsets[firstIdx] != null ? lineOffsets[firstIdx] : firstIdx;
       const shellTagged = /^(?:bash|sh|shell|zsh|console|terminal|powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang);
-      if (isCommandLikeLine(firstLine) || (shellTagged && !TERMINAL_CONTENT_SIG_RE.test(firstLine) && !EXPLOIT_DB_HEADER_RE.test(text))) {
+      if (isCommandLikeLine(firstLine) || ((captionSkipped || sawHashCaption) && isCaptionFollowCliLine(firstLine)) || (shellTagged && !TERMINAL_CONTENT_SIG_RE.test(firstLine) && !EXPLOIT_DB_HEADER_RE.test(text))) {
         // Check if block is multiple standalone command lines (e.g. a 2-line command snippet with no stdout)
         const restLines = lines.slice(firstIdx + 1);
         const nonCommentRest = restLines.filter(l => l.trim() && !l.trim().startsWith('#'));
@@ -568,8 +786,10 @@ function segmentBlock(blockOrText, opts) {
           for (let i = firstIdx; i < lines.length; i++) {
             const t = lines[i].trim();
             if (!t || t.startsWith('#')) continue;
+            const iOff = lineOffsets[i] != null ? lineOffsets[i] : i;
             rawUnits.push({
               promptLine: '',
+              followPrompt: '',
               tool: '',
               rawCommand: t,
               command: t,
@@ -577,7 +797,7 @@ function segmentBlock(blockOrText, opts) {
               user: '',
               host: '',
               hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
-              lineStart: baseLine + i,
+              lineStart: baseLine + iOff,
               heading: heading,
               outLines: []
             });
@@ -585,6 +805,7 @@ function segmentBlock(blockOrText, opts) {
         } else {
           rawUnits.push({
             promptLine: '',
+            followPrompt: '',
             tool: '',
             rawCommand: firstLine,
             command: firstLine,
@@ -592,7 +813,7 @@ function segmentBlock(blockOrText, opts) {
             user: '',
             host: '',
             hostHint: /^(?:powershell|ps1|pwsh|cmd|dos|bat|batch)$/.test(lang) ? 'windows' : '',
-            lineStart: baseLine + firstIdx,
+            lineStart: baseLine + firstOffset,
             heading: heading,
             outLines: restLines
           });
@@ -601,6 +822,7 @@ function segmentBlock(blockOrText, opts) {
         const inferredCmd = inferContentCommandHint(text);
         rawUnits.push({
           promptLine: '',
+          followPrompt: '',
           tool: inferredCmd.split(/\s+/)[0] || '',
           rawCommand: '',
           command: inferredCmd,
@@ -620,10 +842,15 @@ function segmentBlock(blockOrText, opts) {
     .filter(u => u.rawCommand || u.command || u.outLines.some(l => l.trim()))
     .map(u => {
       const stdout = u.outLines.join('\n');
+      const followPrompt = u.followPrompt || '';
+      const promptLine = followPrompt
+        ? ((u.promptLine || '') + '\n' + followPrompt)
+        : (u.promptLine || '');
       return {
         source: 'markdown',
         fidelity: 'text',
-        promptLine: u.promptLine || '',
+        promptLine: promptLine,
+        followPrompt: followPrompt,
         tool: u.tool || '',
         rawCommand: u.rawCommand != null ? u.rawCommand : u.command,
         command: u.command || '',
@@ -775,20 +1002,38 @@ function discoverAlternates(corpusDir, slug) {
     let entries = [];
     try { entries = fs.readdirSync(dir); } catch (_e) { continue; }
     for (const file of entries) {
+      const fullCandidate = path.resolve(dir, file);
+      let stat = null;
+      try { stat = fs.statSync(fullCandidate); } catch (_e) { continue; }
+      if (stat.isDirectory()) {
+        const sepIdx = file.indexOf('--');
+        if (sepIdx <= 0) continue;
+        const dirSlug = file.slice(0, sepIdx).toLowerCase();
+        if (dirSlug !== cleanSlug) continue;
+        const walkPath = path.join(fullCandidate, 'walkthrough.md');
+        if (!fs.existsSync(walkPath) || seen.has(walkPath)) continue;
+        seen.add(walkPath);
+        out.push({
+          slug: file.slice(0, sepIdx),
+          author: file.slice(sepIdx + 2),
+          file: file + '.md',
+          path: walkPath
+        });
+        continue;
+      }
       if (!file.toLowerCase().endsWith('.md')) continue;
       const stem = file.slice(0, -3);
       const sepIdx = stem.indexOf('--');
       if (sepIdx <= 0) continue;
       const fileSlug = stem.slice(0, sepIdx).toLowerCase();
       if (fileSlug !== cleanSlug) continue;
-      const fullPath = path.resolve(dir, file);
-      if (seen.has(fullPath)) continue;
-      seen.add(fullPath);
+      if (seen.has(fullCandidate)) continue;
+      seen.add(fullCandidate);
       out.push({
         slug: stem.slice(0, sepIdx),
         author: stem.slice(sepIdx + 2),
         file: file,
-        path: fullPath
+        path: fullCandidate
       });
     }
   }
@@ -890,12 +1135,135 @@ function blockId(file, command, out) {
 function resolveCorpusWalkthroughsDir(corpusDir) {
   const resolved = path.resolve(corpusDir);
   if (fs.existsSync(path.join(resolved, 'walkthroughs')) && fs.statSync(path.join(resolved, 'walkthroughs')).isDirectory()) {
-    return { corpusRoot: resolved, walkthroughsDir: path.join(resolved, 'walkthroughs') };
+    return { corpusRoot: resolved, walkthroughsDir: path.join(resolved, 'walkthroughs'), layout: 'walkthroughs' };
+  }
+  if (fs.existsSync(path.join(resolved, 'labs')) && fs.statSync(path.join(resolved, 'labs')).isDirectory()) {
+    return { corpusRoot: resolved, walkthroughsDir: path.join(resolved, 'labs'), layout: 'labs' };
   }
   if (path.basename(resolved).toLowerCase() === 'walkthroughs') {
-    return { corpusRoot: path.dirname(resolved), walkthroughsDir: resolved };
+    return { corpusRoot: path.dirname(resolved), walkthroughsDir: resolved, layout: 'walkthroughs' };
   }
-  return { corpusRoot: resolved, walkthroughsDir: resolved };
+  if (path.basename(resolved).toLowerCase() === 'labs') {
+    return { corpusRoot: path.dirname(resolved), walkthroughsDir: resolved, layout: 'labs' };
+  }
+  return { corpusRoot: resolved, walkthroughsDir: resolved, layout: 'flat' };
+}
+
+function discoverCorpusEntries(corpusDir, opts) {
+  opts = opts || {};
+  const { corpusRoot, walkthroughsDir, layout } = resolveCorpusWalkthroughsDir(corpusDir);
+  if (!fs.existsSync(walkthroughsDir)) {
+    const err = new Error('corpus walkthroughs directory not found at ' + walkthroughsDir);
+    err.code = 'CORPUS_NOT_FOUND';
+    throw err;
+  }
+
+  let slugFilter = null;
+  if (Array.isArray(opts.slugs) && opts.slugs.length) {
+    slugFilter = new Set(opts.slugs.map(s => String(s).trim().replace(/\.md$/i, '').toLowerCase()).filter(Boolean));
+  } else if (typeof opts.slugs === 'string' && opts.slugs.trim()) {
+    slugFilter = new Set(opts.slugs.split(',').map(s => s.trim().replace(/\.md$/i, '').toLowerCase()).filter(Boolean));
+  }
+
+  let baseEntries = [];
+  if (layout === 'labs') {
+    const labDirs = fs.readdirSync(walkthroughsDir).sort((a, b) => a.localeCompare(b));
+    for (const d of labDirs) {
+      const labPath = path.join(walkthroughsDir, d);
+      let st = null;
+      try { st = fs.statSync(labPath); } catch (_e) { continue; }
+      if (!st.isDirectory()) continue;
+      const walkMd = path.join(labPath, 'walkthrough.md');
+      if (!fs.existsSync(walkMd)) continue;
+      if (slugFilter && !slugFilter.has(d.toLowerCase())) continue;
+      baseEntries.push({
+        file: 'labs/' + d + '/walkthrough.md',
+        slug: d,
+        labSlug: d,
+        fullPath: walkMd,
+        mdPath: walkMd,
+        corpusRoot: corpusRoot,
+        isAlternate: false,
+        isHostFile: false
+      });
+    }
+  } else {
+    const files = fs.readdirSync(walkthroughsDir)
+      .filter(f => f.toLowerCase().endsWith('.md'))
+      .sort((a, b) => a.localeCompare(b));
+    for (const f of files) {
+      const slug = f.slice(0, -3);
+      if (slugFilter && !slugFilter.has(slug.toLowerCase())) continue;
+      const fullPath = path.join(walkthroughsDir, f);
+      baseEntries.push({
+        file: f,
+        slug: slug,
+        labSlug: slug,
+        fullPath: fullPath,
+        mdPath: fullPath,
+        corpusRoot: corpusRoot,
+        isAlternate: false,
+        isHostFile: false
+      });
+    }
+  }
+
+  if (typeof opts.limit === 'number' && opts.limit > 0) {
+    baseEntries = baseEntries.slice(0, opts.limit);
+  }
+
+  const out = baseEntries.slice();
+
+  if (opts.includeHosts && layout === 'labs') {
+    for (const base of baseEntries) {
+      const hostsDir = path.join(walkthroughsDir, base.slug, 'hosts');
+      if (!fs.existsSync(hostsDir)) continue;
+      const hostFiles = fs.readdirSync(hostsDir)
+        .filter(f => f.toLowerCase().endsWith('.md'))
+        .sort((a, b) => a.localeCompare(b));
+      for (const hf of hostFiles) {
+        const hostStem = hf.slice(0, -3);
+        const fullPath = path.join(hostsDir, hf);
+        out.push({
+          file: 'labs/' + base.slug + '/hosts/' + hf,
+          slug: base.slug + '--' + hostStem,
+          labSlug: base.slug,
+          fullPath: fullPath,
+          mdPath: fullPath,
+          corpusRoot: corpusRoot,
+          isAlternate: false,
+          isHostFile: true
+        });
+      }
+    }
+  }
+
+  if (opts.includeAlternates) {
+    for (const base of baseEntries) {
+      const alts = discoverAlternates(corpusRoot, base.slug);
+      for (const alt of alts) {
+        out.push({
+          file: 'alternates/' + alt.file,
+          slug: path.basename(alt.file, '.md'),
+          labSlug: base.slug,
+          fullPath: alt.path,
+          mdPath: alt.path,
+          corpusRoot: corpusRoot,
+          isAlternate: true,
+          isHostFile: false,
+          author: alt.author
+        });
+      }
+    }
+  }
+
+  return {
+    corpusRoot: corpusRoot,
+    walkthroughsDir: walkthroughsDir,
+    layout: layout,
+    baseEntries: baseEntries,
+    entries: out
+  };
 }
 
 module.exports = {
@@ -907,12 +1275,15 @@ module.exports = {
   classifyFenceBlock: classifyFenceBlock,
   hasShellPrompt: hasShellPrompt,
   isCommandLikeLine: isCommandLikeLine,
+  isPlainEnglishCaptionLine: isPlainEnglishCaptionLine,
+  joinWrappedPromptLines: joinWrappedPromptLines,
   matchPromptLine: matchPromptLine,
   extractBlocks: extractBlocks,
   segmentBlock: segmentBlock,
   loadOcrSidecar: loadOcrSidecar,
   extractWalkthroughTurns: extractWalkthroughTurns,
   discoverAlternates: discoverAlternates,
+  discoverCorpusEntries: discoverCorpusEntries,
   detectTool: detectTool,
   classifyAxis: classifyAxis,
   outputHead: outputHead,

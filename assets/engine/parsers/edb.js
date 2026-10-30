@@ -317,8 +317,67 @@
   var _LEGACY_POC_META_RE = /(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*|--|REM\b)[ \t]*(?:CVE[ \t]*[:=-]?[ \t]*CVE-\d{4}-\d{4,7}|[^\r\n]*\bCVE-\d{4}-\d{4,7}\b)/i;
   var _LEGACY_POC_AUTHOR_SW_RE = /(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*)[ \t]*Author[ \t]*:[\s\S]{0,240}?(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*)[ \t]*(?:Software|Vendor|Affected|Vulnerable|Vulnerability|Advisory|Tested\s+on)[ \t]*:/i;
   var _LEGACY_POC_EXPLOIT_IND_RE = /\b(?:urllib2|requests|httplib|http\.client|cookielib|socket|argparse|optparse|sys\.argv|pwntools|shellcode|payload|exploit)\b/i;
-  var _EDB_INSPECT_CMD_RE = /\b(?:head|cat|bat|batcat|less|more|nl|sed|awk|grep|egrep|rg|searchsploit\s+(?:-[a-zA-Z]*x|--examine))\b[^\r\n]*?\b(\d{4,6})\.(py|sh|c|cpp|cc|rb|php|pl|txt|md|ps1|js)\b/i;
-  var _SCRIPT_BODY_HINT_RE = /(?:^#!\/|^\s*(?:import|from)\s+[A-Za-z0-9_.]+|^\s*#include\s*[<"]|\bargparse\.ArgumentParser\b|\bsys\.argv\[|\brequests\.(?:get|post|put|Session)\b|\burllib2?\b|\bcurl\s+-|\bint\s+main\s*\(|\bfunction\s+[A-Za-z_])/m;
+  var _EDB_INSPECT_CMD_RE = /\b(?:head|cat|bat|batcat|less|more|nl|sed|awk|grep|egrep|rg|searchsploit\s+(?:-[a-zA-Z]*x|--examine))\b[^\r\n]*?\b(\d{4,6})\.(py|sh|c|cpp|cc|rb|php|pl|txt|md|ps1|js|java)\b/i;
+  var _SCRIPT_BODY_HINT_RE = /(?:^#!\/|^\s*(?:import|from)\s+[A-Za-z0-9_.]+|^\s*#include\s*[<"]|\bargparse\.ArgumentParser\b|\bsys\.argv\[|\brequests\.(?:get|post|put|Session)\b|\burllib2?\b|\bcurl\s+-|\bjavac\s+|\bint\s+main\s*\(|\bfunction\s+[A-Za-z_])/m;
+
+  function _detectPythonStringSyntaxHazard(text, command) {
+    var s = String(text || '').replace(/\r\n/g, '\n');
+    var cmdStr = String(command || '');
+    var headM = /\bhead\b[^\r\n]*?(?:-n\s*|-)(\d+)\b/i.exec(cmdStr);
+    var headLimit = headM ? parseInt(headM[1], 10) : (/\bhead\b/i.test(cmdStr) ? 10 : 0);
+    var lineCount = s.replace(/\n$/, '').split('\n').length;
+    var maybeTruncated = !!(headLimit > 0 && lineCount >= headLimit);
+    var i = 0, n = s.length, line = 1;
+    var quote = null, openLine = 1;
+    while (i < n) {
+      var ch = s[i];
+      if (!quote) {
+        if (ch === '\n') { line++; i++; continue; }
+        if (ch === '#') {
+          while (i < n && s[i] !== '\n') i++;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          var q3 = ch + ch + ch;
+          if (s.slice(i, i + 3) === q3) {
+            quote = q3; openLine = line; i += 3;
+          } else {
+            quote = ch; openLine = line; i += 1;
+          }
+          continue;
+        }
+        i++;
+      } else if (quote.length === 3) {
+        if (ch === '\n') { line++; i++; continue; }
+        if (ch === '\\') {
+          if (i + 1 < n && s[i + 1] === '\n') line++;
+          i += 2;
+          continue;
+        }
+        if (s.slice(i, i + 3) === quote) {
+          quote = null; i += 3; continue;
+        }
+        i++;
+      } else {
+        if (ch === '\\') {
+          if (i + 1 < n && s[i + 1] === '\n') { line++; i += 2; continue; }
+          i += 2;
+          continue;
+        }
+        if (ch === '\n') {
+          return { issue: 'unterminated_string_newline', line: openLine, quote: quote };
+        }
+        if (ch === quote) {
+          quote = null; i++; continue;
+        }
+        i++;
+      }
+    }
+    if (quote && !maybeTruncated) {
+      return { issue: quote.length === 3 ? 'unterminated_triple_quote' : 'unterminated_string_eof', line: openLine, quote: quote };
+    }
+    return null;
+  }
 
   function _looks_like_edb_script(text, command) {
     var t = String(text || '');
@@ -532,6 +591,42 @@
         target_os: envInfo.os,
         target_arch: envInfo.arch,
         compile_cmd: recCmd
+      }, S, source));
+    }
+
+    // Hazard 4: Brittle client-side version-string gate / early exit
+    var verGateM = /\b(?:this instance is patched|target is (?:patched|not vulnerable)|is not vulnerable|not a vulnerable version|version[^\r\n"']{0,40}not (?:vulnerable|supported))\b/i.exec(activeCode);
+    if (verGateM && /\b(?:version|ver|banner|release|split|replace|startswith|compare)\b/i.test(activeCode)) {
+      hazards.push('version_gate');
+      _add(facts, mkFact('exploit.hazard_version_gate', h, {
+        edb_file: edbFile,
+        indicator: verGateM[0],
+        note: 'script contains a client-side version comparison gate that may exit early on multi-part or backported versions'
+      }, S, source));
+    }
+
+    // Hazard 5: Unterminated multi-line string literal in Python 3 PoC
+    if (isPythonish) {
+      var py3StrHaz = _detectPythonStringSyntaxHazard(t, cmd);
+      if (py3StrHaz) {
+        hazards.push('py3_syntax');
+        _add(facts, mkFact('exploit.hazard_py3_syntax', h, {
+          edb_file: edbFile,
+          issue: py3StrHaz.issue,
+          line: py3StrHaz.line,
+          check_cmd: 'python3 -m py_compile ' + edbFile
+        }, S, source));
+      }
+    }
+
+    // Hazard 6: Retired javac -source / -target 1.[567] flags rejected by modern JDKs
+    var javacM = /\bjavac\b[^\r\n]*?(?:-(?:source|target)\s+(?:1\.[567]|[567])\b)/i.exec(activeCode);
+    if (javacM) {
+      hazards.push('java_target');
+      _add(facts, mkFact('exploit.hazard_java_target', h, {
+        edb_file: edbFile,
+        javac_cmd: javacM[0].trim(),
+        fix_cmd: "sed -i -E 's/-(source|target)[[:space:]]+(1\\.[567]|[567])/-\\1 8/g' " + edbFile
       }, S, source));
     }
 

@@ -93,7 +93,7 @@
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
   // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
   // newline and skip the next port row when iterated globally (reAll). A port row is always one line.
-  C._NMAP_OPEN_RE = /^(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>[^\r\n]*?))?[ \t]*$/im;
+  C._NMAP_OPEN_RE = /^[ \t]*(?<port>\d+)\/(?:tcp|udp)[ \t]+open(?![|\w])(?:[ \t]+(?<service>\S+))?(?:[ \t]+(?<version>[^\r\n]*?))?[ \t]*$/im;
   C._NMAP_DISCOVERED_RE = /Discovered open port (?<port>\d+)\/(?<proto>tcp|udp) on (?<host>\S+)/i;
   // The leading "| "/"|_" pipe is nmap's TEXT formatter; the -oX XML carries the same smb-os-discovery
   // lines WITHOUT it (just indentation) inside the <script output="..."> attribute, so the pipe is optional.
@@ -101,20 +101,20 @@
   C._NMAP_FQDN_RE = /^\s*\|?_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?|message_signing:\s*(?<mode>disabled|required|supported)/i;
-  C._NMAP_HTTP_TITLE_RE = /^\|\s*_?http-title:\s*(?<title>.+)$/im;
-  C._NMAP_HTTP_SERVER_RE = /^\|\s*_?http-server-header:\s*(?<header>.+)$/im;
+  C._NMAP_HTTP_TITLE_RE = /^[ \t]*\|\s*_?http-title:\s*(?<title>.+)$/im;
+  C._NMAP_HTTP_SERVER_RE = /^[ \t]*\|\s*_?http-server-header:\s*(?<header>.+)$/im;
   // "Microsoft-HTTPAPI/2.0" is the Windows HTTP Server API behind WinRM (5985/47001), WSUS and SSDP/UPnP,
   // NOT a browsable web app. A server header that is ONLY this must never mint web.server, or it unlocks the
   // whole web-exploit lane (exposed-files, CMS, Log4Shell...) on a plain AD box and buries the real next move.
   C._isNonWebServerHeader = function (hdr) { return /^microsoft-httpapi\b/i.test(String(hdr || '').trim()); };
-  C._NMAP_HTTP_GENERATOR_RE = /^\|\s*_?http-generator:\s*(?<generator>.+)$/im;
-  C._NMAP_HTTP_REDIRECT_RE = /^\|\s*_?http-title:\s*Did not follow redirect to (?<location>\S+)/im;
+  C._NMAP_HTTP_GENERATOR_RE = /^[ \t]*\|\s*_?http-generator:\s*(?<generator>.+)$/im;
+  C._NMAP_HTTP_REDIRECT_RE = /^[ \t]*\|\s*_?http-title:\s*Did not follow redirect to (?<location>\S+)/im;
   C._NMAP_FTP_ANON_RE = /ftp-anon:\s*Anonymous FTP login allowed|Anonymous FTP login allowed/i;
-  C._NMAP_SSH_HOSTKEY_RE = /^\|_?\s+(?<bits>\d{3,5})\s+(?<fingerprint>[0-9a-f:]{16,})\s+\((?<kind>[^)]+)\)/im;
-  C._NMAP_SNMP_FIELD_RE = /^\|_?\s*(?<key>enterprise|name|description|location|contact):\s*(?<value>.+)$/im;
+  C._NMAP_SSH_HOSTKEY_RE = /^[ \t]*\|_?\s+(?<bits>\d{3,5})\s+(?<fingerprint>[0-9a-f:]{16,})\s+\((?<kind>[^)]+)\)/im;
+  C._NMAP_SNMP_FIELD_RE = /^[ \t]*\|_?\s*(?<key>enterprise|name|description|location|contact):\s*(?<value>.+)$/im;
   C._NXC_SIGNING_RE = /\(signing:(?<enabled>True|False)\)/i;
   C._NXC_SMBV1_RE = /\(SMBv1:(?<enabled>True|False)\)/i;
-  C._WEB_GOBUSTER_RE = /^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?(?<path>\/\S*)\s+\(?Status:\s*(?<code>\d{3})\)?/im;
+  C._WEB_GOBUSTER_RE = /^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?(?=\/\S*\s+\(?Status:|[A-Za-z0-9_.~%-][^\s()]*\s+\(Status:)(?<path>\/\S*|[A-Za-z0-9_.~%-][^\s()]*)\s+\(?Status:\s*(?<code>\d{3})\)?(?:\s+\[Size:\s*\d+\])?(?:\s+\[[^\]]*\])*\s*$/im;
   // feroxbuster result rows: newer builds print a method column ("200  GET  6l  77w  3351c  http://..."),
   // older/default output omits it ("301  9l  28w  313c  http://..."), so the method is optional. Using
   // [A-Za-z]+ (not \w+) for the method keeps it from swallowing the leading line-count ("9l") when absent.
@@ -249,9 +249,9 @@
   C._AIE_VALUE_RE = /AlwaysInstallElevated\s+REG_DWORD\s+0x(?<val>[0-9a-fA-F]+)/i;
   C._HKLM_HEADER_RE = /^\s*(?:HKEY_LOCAL_MACHINE|HKLM)\b/i;
   C._HKCU_HEADER_RE = /^\s*(?:HKEY_CURRENT_USER|HKCU)\b/i;
-  C._WEAK_SVC_ACCESS_RE = /\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|CHANGE_CONFIG|WRITE_DAC|WRITE_OWNER|AllAccess)\b/i;
-  C._WEAK_SERVICE_PERM_RE = /Service\s+"?([^"\r\n]+)"?\s+has\s+weak\s+permissions|\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|CHANGE_CONFIG|WRITE_DAC|WRITE_OWNER)\b|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
-  C._LOWPRIV_WRITE_ACE_RE = /(?:BUILTIN\\Users|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|Everyone|INTERACTIVE|\bUsers)\s*:\s*\([^)]*[FMW][^)]*\)|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
+  C._WEAK_SVC_ACCESS_RE = /(?<!(?:NT AUTHORITY\\SYSTEM|LocalSystem|\bSYSTEM|BUILTIN\\Administrators|\bAdministrators|(?:NT SERVICE\\)?TrustedInstaller|CREATOR OWNER|ALL (?:RESTRICTED )?APPLICATION PACKAGES|S-1-5-18|S-1-5-32-544|\b(?:Domain|Enterprise) Admins|\\Administrator)[ \t]*(?:[:(\[][^\r\n\]\):;,\\]*|[ \t]+))\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|CHANGE_CONFIG|WRITE_DAC|WRITE_OWNER|AllAccess)\b/i;
+  C._WEAK_SERVICE_PERM_RE = /Service\s+"?([^"\r\n]+)"?\s+has\s+weak\s+permissions|(?<!(?:NT AUTHORITY\\SYSTEM|LocalSystem|\bSYSTEM|BUILTIN\\Administrators|\bAdministrators|(?:NT SERVICE\\)?TrustedInstaller|CREATOR OWNER|ALL (?:RESTRICTED )?APPLICATION PACKAGES|S-1-5-18|S-1-5-32-544|\b(?:Domain|Enterprise) Admins|\\Administrator)[ \t]*(?:[:(\[][^\r\n\]\):;,\\]*|[ \t]+))\b(?:SERVICE_CHANGE_CONFIG|SERVICE_ALL_ACCESS|SERVICE_CHANGE|CHANGE_CONFIG|WRITE_DAC|WRITE_OWNER)\b|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
+  C._LOWPRIV_WRITE_ACE_RE = /(?:BUILTIN\\Users|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|Everyone|INTERACTIVE|\bUsers)\s*:\s*(?:\([A-Za-z,]+\))*\((?:[^)]*\b)?(?:F|M|W|WD|AD|GW|GA|Full|Modify|Write)\b[^)]*\)|\bAllAccess\b.*\b(?:Everyone|Users|Authenticated Users|INTERACTIVE)\b/i;
   C._ANSI_RE = /\x1b(?:\[[0-9;?]*[a-zA-Z]|\][^\x07\x1b]*(?:\x07|\x1b\\)|[()][AB012])/g;
   C._ID_LINE_RE = /\b(?:e?uid)=\d+\(/i;
   C._CVE_RE = /CVE-\d{4}-\d{3,7}/i;
@@ -745,6 +745,7 @@
     var s = String(url || '').trim().replace(/^\/+(?=https?:\/\/)/i, '');
     var m = /^https?:\/\/[^/\s]+(\/\S*)?/i.exec(s);
     if (m) return m[1] || '/';
+    if (s && s.charAt(0) !== '/') return '/' + s;
     return s;
   }
   C._url_path = _url_path;

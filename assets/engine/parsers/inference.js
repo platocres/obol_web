@@ -186,120 +186,155 @@
   }
 
   // ---- Axis 2A: Shell Prompt Telemetry Extractor ----------------------------------------------
+  var _PROMPT_BANNER_SKIP_RE = /^(?:listening on \[|connect to \[[^\]]+\] from |Connection received on |Ncat:\s|Trying \d+\.|Connected to |Escape character is |Microsoft Windows \[Version |\(c\) Microsoft Corporation)/i;
+
   function _extract_prompt_telemetry(rawText, ws) {
-    var combined = String(rawText || '');
+    var rawStr = String(rawText || '');
     var ctxPrompt = (ws && ws.context && ws.context.promptLine) ? String(ws.context.promptLine) : '';
-    if (ctxPrompt && combined.indexOf(ctxPrompt) !== 0) {
-      combined = ctxPrompt + '\n' + combined;
-    }
-    var lines = combined.split(/\r?\n/);
+    var followPrompt = (ws && ws.context && ws.context.followPrompt) ? String(ws.context.followPrompt) : '';
     var lhost = (ws && ws.context && ws.context.params && ws.context.params.lhost) || '';
-    var out = {
-      locus: '',
-      user: '',
-      host: '',
-      cwd: '',
-      osFamily: '',
-      subshell: '',
-      isPrivileged: false,
-      hasCommand: false,
-      promptLine: ''
-    };
-    var nonEmptyChecked = 0;
-    var limit = Math.min(lines.length, 25);
-    for (var i = 0; i < limit && nonEmptyChecked < 5; i++) {
-      var l = lines[i].replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').trim();
-      if (!l) continue;
-      nonEmptyChecked++;
-      var hasTrailingOutput = (i < lines.length - 1);
 
-      // Two-line Kali/Parrot top or bottom box-drawing prompt (always attacker remote locus)
-      if (/^[┌╭]──/.test(l) || /^[└╰]─\s*[#$%>]/.test(l)) {
-        out.locus = 'remote';
-        out.promptLine = l;
-        var kaliTopM = /[┌╭]──\s*\(([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)\)-\[([^\]]+)\]/.exec(l);
-        if (kaliTopM) {
-          out.user = kaliTopM[1];
-          out.host = kaliTopM[2];
-          out.cwd = kaliTopM[3];
-        }
-        break;
-      }
+    function _scanPromptLines(linesArr, hasExternalTrailing, fromCtx) {
+      var out = {
+        locus: '',
+        user: '',
+        host: '',
+        cwd: '',
+        osFamily: '',
+        subshell: '',
+        isPrivileged: false,
+        hasCommand: false,
+        promptLine: '',
+        fromContextPrompt: !!fromCtx,
+        origin: fromCtx ? 'prompt_telemetry' : 'stdout_telemetry'
+      };
+      var nonEmptyChecked = 0;
+      var limit = Math.min(linesArr.length, 40);
+      for (var i = 0; i < limit && nonEmptyChecked < 10; i++) {
+        var l = String(linesArr[i] || '').replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').trim();
+        if (!l) continue;
+        if (!fromCtx && _PROMPT_BANNER_SKIP_RE.test(l)) continue;
+        nonEmptyChecked++;
+        var hasTrailingOutput = (i < linesArr.length - 1) || !!hasExternalTrailing;
 
-      // Subshell prompts (smbclient, mysql, psql, mssqlclient, ftp, redis, meterpreter)
-      if (/^smb:\s*\\[^>]*>/i.test(l)) { out.subshell = 'smb'; out.promptLine = l; break; }
-      if (/^(?:mysql|MariaDB\s*\[[^\]]*\])\s*>/i.test(l)) { out.subshell = 'mysql'; out.promptLine = l; break; }
-      if (/^SQL\s*\(([^)]*)\)\s*>/i.test(l)) {
-        var sqM = /^SQL\s*\(([^)]*)\)\s*>/i.exec(l);
-        out.subshell = 'mssql'; out.user = sqM ? sqM[1].trim().split(/\s+/)[0] : ''; out.promptLine = l; break;
-      }
-      if (/^[a-zA-Z_][a-zA-Z0-9_]*=[#>-]\s+/.test(l) && !/[{"'\[]/.test(l)) { out.subshell = 'psql'; out.promptLine = l; break; }
-      if (/^ftp>\s*/i.test(l)) { out.subshell = 'ftp'; out.promptLine = l; break; }
-      if (/^meterpreter\s*>/i.test(l)) { out.subshell = 'meterpreter'; out.locus = 'local'; out.hasCommand = true; out.promptLine = l; break; }
-      if (/^\d{1,3}(?:\.\d{1,3}){3}:6379>\s*/.test(l)) { out.subshell = 'redis'; out.promptLine = l; break; }
-
-      // Windows PowerShell / Evil-WinRM / cmd.exe prompt
-      var winPs = /^(?:\*?Evil-WinRM\*?\s+)?PS\s+([A-Za-z]:\\[^>\r\n]*)>\s*(.*)$/i.exec(l);
-      var winCmd = !winPs && /^([A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*)>\s*(.*)$/.exec(l);
-      if (winPs || winCmd) {
-        var cwdWin = (winPs ? winPs[1] : winCmd[1]).trim();
-        var cmdAfterWin = (winPs ? winPs[2] : winCmd[2]).trim();
-        out.cwd = cwdWin;
-        out.osFamily = 'windows';
-        out.locus = 'local';
-        out.hasCommand = !!cmdAfterWin || hasTrailingOutput;
-        out.promptLine = l;
-        var uMatch = /^C:\\Users\\([^\\>\r\n]+)/i.exec(cwdWin);
-        if (uMatch && !/^(?:Public|Default|All Users)$/i.test(uMatch[1])) {
-          out.user = uMatch[1];
-          if (/^administrator$/i.test(uMatch[1])) out.isPrivileged = true;
-        } else if (/^C:\\Windows\\system32/i.test(cwdWin)) {
-          out.isPrivileged = true;
-        }
-        break;
-      }
-
-      // Unix / Kali / Bash prompt:
-      // Requires either `[user@host cwd]$` brackets, OR `user@host:cwd$` colon, OR `user@host$` with no space before sigil.
-      // Rejects `admin@corp.local # comment` (space between UPN and `#` without brackets or `:`).
-      var nixBracketM = /^(?:\([^)]+\)\s*)?\[([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)(?:[:\s]+([^\]]*))?\]\s*([#$%])\s*(.*)$/.exec(l);
-      var nixColonM = !nixBracketM && /^(?:\([^)]+\)\s*)?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_-]+)(?::([^\r\n$#%>\]]*))([#$%])\s*(.*)$/.exec(l);
-      var nixTightM = !nixBracketM && !nixColonM && /^(?:\([^)]+\)\s*)?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_-]+)([#$%])\s+(\S.*)$/.exec(l);
-      var nixM = nixBracketM || nixColonM || nixTightM;
-      if (nixM) {
-        var u = nixM[1], h = nixM[2];
-        var cwdNix = nixTightM ? '' : String(nixM[3] || '').trim();
-        var sigil = nixTightM ? nixM[3] : nixM[4];
-        var cmdAfterNix = String(nixTightM ? nixM[4] : (nixM[5] || '')).trim();
-        out.user = u;
-        out.host = h;
-        out.cwd = cwdNix;
-        out.hasCommand = !!cmdAfterNix || hasTrailingOutput;
-        out.promptLine = l;
-        var hasTunStamp = /\[(?:tun|tap|vpn|wg)\d*:/i.test(l) || (lhost && l.indexOf(lhost) >= 0);
-        if (_ATTACKER_HOSTS.test(h) || _ATTACKER_HOSTS.test(u) || hasTunStamp || _REMOTE_OFFENSIVE_TOOLS.test(_strip_cmd_wrappers(cmdAfterNix))) {
+        // Two-line Kali/Parrot top or bottom box-drawing prompt (always attacker remote locus)
+        if (/^[┌╭]──/.test(l) || /^[└╰]─\s*[#$%>]/.test(l)) {
           out.locus = 'remote';
-        } else {
+          out.promptLine = l;
+          var kaliTopM = /[┌╭]──\s*\(([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)\)-\[([^\]]+)\]/.exec(l);
+          if (kaliTopM) {
+            out.user = kaliTopM[1];
+            out.host = kaliTopM[2];
+            out.cwd = kaliTopM[3];
+          }
+          break;
+        }
+
+        // Subshell prompts (smbclient, mysql, psql, mssqlclient, ftp, redis, meterpreter)
+        if (/^smb:\s*\\[^>]*>/i.test(l)) { out.subshell = 'smb'; out.promptLine = l; break; }
+        if (/^(?:mysql|MariaDB\s*\[[^\]]*\])\s*>/i.test(l)) { out.subshell = 'mysql'; out.promptLine = l; break; }
+        if (/^SQL\s*\(([^)]*)\)\s*>/i.test(l)) {
+          var sqM = /^SQL\s*\(([^)]*)\)\s*>/i.exec(l);
+          out.subshell = 'mssql'; out.user = sqM ? sqM[1].trim().split(/\s+/)[0] : ''; out.promptLine = l; break;
+        }
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*=[#>-]\s+/.test(l) && !/[{"'\[]/.test(l)) { out.subshell = 'psql'; out.promptLine = l; break; }
+        if (/^ftp>\s*/i.test(l)) { out.subshell = 'ftp'; out.promptLine = l; break; }
+        if (/^meterpreter\s*>/i.test(l)) { out.subshell = 'meterpreter'; out.locus = 'local'; out.hasCommand = true; out.promptLine = l; break; }
+        if (/^\d{1,3}(?:\.\d{1,3}){3}:6379>\s*/.test(l)) { out.subshell = 'redis'; out.promptLine = l; break; }
+
+        // Windows OpenSSH prompt: `[domain\]user@HOST C:\path> [cmd]`
+        var winSshM = /^(?:([A-Za-z0-9_.-]+)\\)?([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)\s+([A-Za-z]:\\[^>\r\n]*)>\s*(.*)$/.exec(l);
+        if (winSshM) {
+          out.user = winSshM[2];
+          out.host = winSshM[3];
+          out.cwd = winSshM[4].trim();
+          out.osFamily = 'windows';
+          out.locus = 'local';
+          out.hasCommand = !!String(winSshM[5] || '').trim() || hasTrailingOutput;
+          out.promptLine = l;
+          if (/^administrator$/i.test(out.user) || /^C:\\Users\\Administrator(?:\\|$)/i.test(out.cwd)) {
+            out.isPrivileged = true;
+          }
+          break;
+        }
+
+        // Windows PowerShell / Evil-WinRM / cmd.exe prompt
+        var winPs = /^(?:\*?Evil-WinRM\*?\s+)?PS\s+([A-Za-z]:\\[^>\r\n]*)>\s*(.*)$/i.exec(l);
+        var winCmd = !winPs && /^([A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)*[^\\/:*?"<>|\r\n]*)>\s*(.*)$/.exec(l);
+        if (winPs || winCmd) {
+          var cwdWin = (winPs ? winPs[1] : winCmd[1]).trim();
+          var cmdAfterWin = (winPs ? winPs[2] : winCmd[2]).trim();
+          out.cwd = cwdWin;
+          out.osFamily = 'windows';
+          out.locus = 'local';
+          out.hasCommand = !!cmdAfterWin || hasTrailingOutput;
+          out.promptLine = l;
+          var uMatch = /^C:\\Users\\([^\\>\r\n]+)/i.exec(cwdWin);
+          if (uMatch && !/^(?:Public|Default|All Users)$/i.test(uMatch[1])) {
+            out.user = uMatch[1];
+            if (/^administrator$/i.test(uMatch[1])) out.isPrivileged = true;
+          }
+          break;
+        }
+
+        // Unix / Kali / Bash prompt:
+        // Requires either `[user@host cwd]$` brackets, OR `user@host:cwd$` colon, OR `user@host$` with no space before sigil.
+        // Rejects `admin@corp.local # comment` (space between UPN and `#` without brackets or `:`).
+        var nixBracketM = /^(?:\([^)]+\)\s*)?\[([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)(?:[:\s]+([^\]]*))?\]\s*([#$%])\s*(.*)$/.exec(l);
+        var nixColonM = !nixBracketM && /^(?:\([^)]+\)\s*)?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_-]+)(?::([^\r\n$#%>\]]*))([#$%])\s*(.*)$/.exec(l);
+        var nixTightM = !nixBracketM && !nixColonM && /^(?:\([^)]+\)\s*)?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_-]+)([#$%])\s+(\S.*)$/.exec(l);
+        var nixM = nixBracketM || nixColonM || nixTightM;
+        if (nixM) {
+          var u = nixM[1], h = nixM[2];
+          var cwdNix = nixTightM ? '' : String(nixM[3] || '').trim();
+          var sigil = nixTightM ? nixM[3] : nixM[4];
+          var cmdAfterNix = String(nixTightM ? nixM[4] : (nixM[5] || '')).trim();
+          out.user = u;
+          out.host = h;
+          out.cwd = cwdNix;
+          out.hasCommand = !!cmdAfterNix || hasTrailingOutput;
+          out.promptLine = l;
+          var hasTunStamp = /\[(?:tun|tap|vpn|wg)\d*:/i.test(l) || (lhost && l.indexOf(lhost) >= 0);
+          if (_ATTACKER_HOSTS.test(h) || _ATTACKER_HOSTS.test(u) || hasTunStamp || _REMOTE_OFFENSIVE_TOOLS.test(_strip_cmd_wrappers(cmdAfterNix))) {
+            out.locus = 'remote';
+          } else {
+            out.locus = 'local';
+            out.osFamily = 'linux';
+            if (sigil === '#' || u === 'root') out.isPrivileged = true;
+          }
+          break;
+        }
+
+        // Bare sh-5.1$ / bash-5.0# prompt (almost always a reverse shell on a Linux target)
+        var shM = /^(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*([#$])\s*(.*)$/.exec(l);
+        if (shM) {
           out.locus = 'local';
           out.osFamily = 'linux';
-          if (sigil === '#' || u === 'root') out.isPrivileged = true;
+          out.isPrivileged = shM[1] === '#';
+          out.user = out.isPrivileged ? 'root' : '';
+          out.hasCommand = !!(shM[2] && shM[2].trim()) || hasTrailingOutput;
+          out.promptLine = l;
+          break;
         }
-        break;
       }
-
-      // Bare sh-5.1$ / bash-5.0# prompt (almost always a reverse shell on a Linux target)
-      var shM = /^(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*([#$])\s+(.*)$/.exec(l);
-      if (shM) {
-        out.locus = 'local';
-        out.osFamily = 'linux';
-        out.isPrivileged = shM[1] === '#';
-        out.user = out.isPrivileged ? 'root' : '';
-        out.hasCommand = !!(shM[2] && shM[2].trim()) || hasTrailingOutput;
-        out.promptLine = l;
-        break;
-      }
+      return out;
     }
-    return out;
+
+    var stdoutRes = _scanPromptLines(rawStr.split(/\r?\n/), false, false);
+    if (stdoutRes.promptLine) return stdoutRes;
+
+    if (followPrompt) {
+      var followRes = _scanPromptLines(followPrompt.split(/\r?\n/), true, false);
+      if (followRes.promptLine) return followRes;
+    }
+
+    if (ctxPrompt) {
+      var ctxRes = _scanPromptLines(ctxPrompt.split(/\r?\n/), Boolean(rawStr.trim()), true);
+      if (ctxRes.promptLine) return ctxRes;
+    }
+
+    stdoutRes.origin = '';
+    return stdoutRes;
   }
   C._extract_prompt_telemetry = _extract_prompt_telemetry;
 
@@ -418,7 +453,9 @@
 
   // ---- Axis 3A: Dynamic 2D Table Header Mapper ------------------------------------------------
   var _COL_PATTERNS = [
-    { role: 'user', re: /^(?:user(?:[ _]*name)?|login(?:[ _]*name)?|samaccountname|userprincipalname|account(?:[ _]*name)?|principal|member|owner|trustee|grantee|uid|cn)$/i },
+    { role: 'user', re: /^(?:user(?:[ _]*name)?|login(?:[ _]*name)?|samaccountname|userprincipalname|account(?:[ _]*name)?|principal|member(?:[ _]*name)?|owner|trustee|grantee|uid|cn)$/i },
+    { role: 'identity_fallback', re: /^(?:name|email|e-mail|mail|handle|nick)$/i },
+    { role: 'computer', re: /^(?:dnshostname|computer(?:[ _]*name)?|workstation|machine(?:[ _]*name)?)$/i },
     { role: 'secret', re: /^(?:pass(?:word|wd)?(?:[ _]*hash)?|secret(?:[ _]*key)?|(?:nt(?:lm)?[ _]*)?hash|nthash|ntlm|cleartext|credential|token|api[ _]*key|admpwd|cpassword)$/i },
     { role: 'share', re: /^(?:share(?:[ _]*name)?|disk|folder|volume|export|mount(?:[ _]*point)?)$/i },
     { role: 'perm', re: /^(?:perm(?:ission)?s?|access(?:[ _]*rights?)?|rights?|priv(?:ilege)?s?|mode|acl)$/i },
@@ -432,7 +469,8 @@
     { role: 'right', re: /^(?:right|acl[ _]*right|ace|extended[ _]*right|permission[ _]*right|relation(?:ship)?)$/i }
   ];
 
-  var _TABLE_HDR_HINT_RE = /\b(?:user(?:[ _]*name)?|login(?:[ _]*name)?|samaccountname|userprincipalname|account(?:[ _]*name)?|principal|member|owner|trustee|grantee|uid|cn|pass(?:word|wd)?|secret|nthash|ntlm|hash|cleartext|credential|token|api[ _]*key|admpwd|cpassword|share(?:[ _]*name)?|disk|folder|volume|export|mount|perm(?:ission)?s?|access|rights?|priv(?:ilege)?s?|mode|acl|port|lport|state|status|result|code|proto(?:col)?|service|banner|version|product|daemon|application|path|file(?:name)?|location|uri|url|endpoint|target|binary|command|task(?:torun)?|imagepath|spn|domain|realm|workgroup|ace|relation(?:ship)?)\b/i;
+  var _TABLE_HDR_HINT_RE = /\b(?:user(?:[ _]*name)?|login(?:[ _]*name)?|samaccountname|userprincipalname|account(?:[ _]*name)?|principal|member(?:[ _]*name)?|owner|trustee|grantee|uid|cn|name|email|e-mail|mail|handle|nick|dnshostname|computer(?:[ _]*name)?|workstation|machine(?:[ _]*name)?|pass(?:word|wd)?|secret|nthash|ntlm|hash|cleartext|credential|token|api[ _]*key|admpwd|cpassword|share(?:[ _]*name)?|disk|folder|volume|export|mount|perm(?:ission)?s?|access|rights?|priv(?:ilege)?s?|mode|acl|port|lport|state|status|result|code|proto(?:col)?|service|banner|version|product|daemon|application|path|file(?:name)?|location|uri|url|endpoint|target|binary|command|task(?:torun)?|imagepath|spn|domain|realm|workgroup|ace|relation(?:ship)?)\b/i;
+  var _SINGLE_AD_COL_RE = /^(?:cn|samaccountname|userprincipalname|member|membername|dnshostname)$/i;
 
   function _normalizeTableLine(line) {
     var s = String(line || '');
@@ -453,6 +491,9 @@
   }
 
   function _splitRowCells(line, mode) {
+    if (mode === 'single') {
+      return [line.trim()];
+    }
     if (mode === 'pipe') {
       var trimmed = line.trim().replace(/^\||\|$/g, '');
       return trimmed.split('|').map(function (c) { return c.trim(); });
@@ -466,26 +507,30 @@
     return line.trim().split(/[ \t]{2,}/).map(function (c) { return c.trim(); });
   }
 
-  function _parse_dynamic_tables(lines) {
+  function _parse_dynamic_tables(lines, opts) {
     var tables = [];
     if (!Array.isArray(lines) || lines.length < 2) return tables;
+    var adTableCtx = !!(opts && opts.adTableCtx);
     var limit = Math.min(lines.length, 100000);
 
     for (var i = 0; i < limit - 1; i++) {
       var rawHdr = lines[i];
       if (!rawHdr || rawHdr.length > 512 || !_TABLE_HDR_HINT_RE.test(rawHdr)) continue;
       var l = _normalizeTableLine(rawHdr).trim();
-      if (!l || /^[\-+|=:*#\s]{3,}$/.test(l)) continue;
+      if (!l || /^[\-+|=:*#\s]{2,}$/.test(l)) continue;
 
+      var nextLine = (i + 1 < limit) ? _normalizeTableLine(lines[i + 1]).trim() : '';
       var mode = '';
       if (l.indexOf('|') >= 0 && l.split('|').length >= 3) mode = 'pipe';
       else if (l.indexOf('\t') >= 0 && l.split(/\t+/).length >= 2) mode = 'tab';
       else if (l.indexOf(',') >= 0 && l.split(',').length >= 2 && !/[ \t]{2,}/.test(l)) mode = 'csv';
       else if (/[ \t]{2,}/.test(l)) mode = 'space';
+      else if (adTableCtx && _SINGLE_AD_COL_RE.test(l) && /^[\-=]{2,}$/.test(nextLine)) mode = 'single';
       else continue;
 
       var hdrCells = _splitRowCells(l, mode);
-      if (hdrCells.length < 2 || hdrCells.length > 14) continue;
+      var isSingleAdCol = (hdrCells.length === 1 && adTableCtx && _SINGLE_AD_COL_RE.test(hdrCells[0]));
+      if ((!isSingleAdCol && hdrCells.length < 2) || hdrCells.length > 14) continue;
 
       var colRoles = [], matchedRoles = 0;
       for (var c = 0; c < hdrCells.length; c++) {
@@ -493,8 +538,18 @@
         colRoles.push(r);
         if (r) matchedRoles++;
       }
-      var nextLine = (i + 1 < limit) ? _normalizeTableLine(lines[i + 1]).trim() : '';
-      var hasSepLine = /^[\-+|=:\s]{4,}$/.test(nextLine) && /[-=]/.test(nextLine);
+      var hasIdentityPeerCol = colRoles.indexOf('secret') >= 0 || colRoles.indexOf('spn') >= 0 || colRoles.indexOf('right') >= 0;
+      for (var fc = 0; fc < colRoles.length; fc++) {
+        if (colRoles[fc] === 'identity_fallback') {
+          if (hasIdentityPeerCol) {
+            colRoles[fc] = 'user';
+          } else {
+            colRoles[fc] = '';
+            matchedRoles--;
+          }
+        }
+      }
+      var hasSepLine = (isSingleAdCol ? /^[\-+|=:\s]{2,}$/.test(nextLine) : /^[\-+|=:\s]{4,}$/.test(nextLine)) && /[-=]/.test(nextLine);
       if (matchedRoles < 2 && !(matchedRoles === 1 && hasSepLine)) continue;
 
       var startRow = hasSepLine ? i + 2 : i + 1;
@@ -505,14 +560,18 @@
           if (rows.length > 0) break;
           continue;
         }
-        if (/^[\-+|=:\s]{4,}$/.test(rl) && /[-=]/.test(rl)) continue;
+        if ((isSingleAdCol ? /^[\-+|=:\s]{2,}$/.test(rl) : /^[\-+|=:\s]{4,}$/.test(rl)) && /[-=]/.test(rl)) continue;
         if (/^(?:\[\*\]|\[\-\]|\[\!\]|\d+\s+rows?\s+in\s+set|\(\d+\s+rows?\))/i.test(rl)) break;
+        if (isSingleAdCol && !/^(?:CN=|[A-Za-z0-9_.$-]+(?:@[A-Za-z0-9_.-]+)?|[A-Za-z0-9_.-]+\\[A-Za-z0-9_.$-]+)$/i.test(rl)) {
+          if (rows.length > 0) break;
+          continue;
+        }
 
         var cells = _splitRowCells(rl, mode);
         if (cells.length === 1 && mode === 'space') {
           cells = rl.split(/\s+/);
         }
-        if (cells.length < 2) {
+        if (cells.length < (isSingleAdCol ? 1 : 2)) {
           if (rows.length > 0) break;
           continue;
         }
@@ -537,12 +596,34 @@
   }
   C._parse_dynamic_tables = _parse_dynamic_tables;
 
-  // ---- Axis 3B: Key-Value Paragraph / Block Grouper -------------------------------------------
+  // ---- Interactive CLI Password Prompt Echo Guard ---------------------------------------------
+  var _INTERACTIVE_PW_TOOL_RE = /\b(?:su|sudo|ssh|scp|sftp|impacket-[\w.-]+|GetNPUsers|GetUserSPNs|secretsdump|psexec|wmiexec|smbexec|atexec|dcomexec|mssqlclient|evil-winrm|smbclient|rpcclient|ldapsearch|mysql|psql|ftp|telnet|kinit|runas)\b/i;
+  var _INTERACTIVE_AUTH_FAIL_RE = /(?:\[\-\]|Authentication failure|Login incorrect|Sorry, try again|Permission denied|UF_DONT_REQUIRE_PREAUTH|Cannot authenticate|Logon failure|STATUS_LOGON_FAILURE|Access denied|^su:\s)/i;
+
+  function _isInteractivePasswordPromptEcho(linesArr, idx, fullText, command) {
+    var ln = String((linesArr && linesArr[idx]) || '');
+    if (!ln) return false;
+    if (/^\s*\[sudo\]\s*password\s+for\s+[^:\r\n]+:\s*\S*\s*$/i.test(ln)) return true;
+    if (!/^\s*(?:Enter\s+)?Password(?:\s+for\s+[^\r\n:]+)?\s*:\s*\S+\s*$/i.test(ln)) return false;
+    var nextWindow = [linesArr[idx + 1] || '', linesArr[idx + 2] || ''].join('\n');
+    if (_INTERACTIVE_AUTH_FAIL_RE.test(nextWindow)) return true;
+    var prevWindow = [linesArr[idx - 1] || '', linesArr[idx - 2] || ''].join('\n');
+    var hasSiblingIdentityKv = /^\s*(?:Login|User(?:name)?|Account|sAMAccountName)\s*[:=]\s*\S/im.test(prevWindow + '\n' + (linesArr[idx + 1] || ''));
+    if (!hasSiblingIdentityKv && (_INTERACTIVE_PW_TOOL_RE.test(command || '') || /Impacket v\d+\.\d+/i.test(fullText || ''))) {
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Axis 3B: Key-Value Paragraph / Block Grouper (including XML leaf elements) -------------
   var _KV_LINE_RE = /^\s*(?:(?:\[[*+\-!]\]|[-*•>])\s+)?["']?([A-Za-z][A-Za-z0-9_.\-\/ ()]{1,42}?)["']?\s*(?:: base64:|:|=)\s*(\S[^\r\n]*)$/;
+  var _XML_LEAF_GLOBAL_RE = /<([A-Za-z][A-Za-z0-9_.:-]{1,39})(?:\s+([^>\r\n]*))?>([^<\r\n]{1,256})<\/\1>|(<\/(?:[A-Za-z0-9_.-]+:)?(?:logonCredentials|credentials|server|account|user|connection|entry|item|record|host|profile)>)/gi;
+  var _HTML_LAYOUT_TAG_RE = /^(?:td|th|tr|div|span|p|a|li|ul|ol|h[1-6]|b|i|u|strong|em|code|pre|title|option|label|button|script|style)$/i;
+  var _XML_CLOSE_BLOCK_RE = /^\s*<\/(?:[A-Za-z0-9_.-]+:)?(?:logonCredentials|credentials|server|account|user|connection|entry|item|record|host|profile)>\s*$/i;
   var _BLOCK_START_KEY_RE = /^(?:dn|distinguishedname|cn|samaccountname|name|username|user|account|login|principal|member|uid|upn|userprincipalname|spn|serviceprincipalname|objectsid|sid|template[ _]?name|ca[ _]?name|taskname|service[ _]?name|service|target|object|trustee|host|ip|id)$/i;
   var _SECTION_DIVIDER_RE = /^\s*(?:\[(?:Record|Entry|Object|User|Account|Template|Service|Task|Rule|ACE|Share)\b[^\r\n\]]{0,120}\]|[-=*]{3,}(?:\s+[^-=*\s][^\r\n]{0,120}?\s+[-=*]{3,})?)\s*$/i;
 
-  function _group_kv_blocks(lines) {
+  function _group_kv_blocks(lines, fullText, command) {
     var blocks = [], cur = null;
     if (!Array.isArray(lines)) return blocks;
     var limit = Math.min(lines.length, 100000);
@@ -551,32 +632,67 @@
       var raw = lines[i];
       if (!raw || raw.length > 2048) continue;
       var t = raw.trim();
-      if (!t || /^[-=*]{3,}$/.test(t) || /^[{}[\],]+$/.test(t) || (t.length <= 240 && _SECTION_DIVIDER_RE.test(t))) {
+      if (!t || /^[-=*]{3,}$/.test(t) || /^[{}[\],]+$/.test(t) || _XML_CLOSE_BLOCK_RE.test(t) || (t.length <= 240 && _SECTION_DIVIDER_RE.test(t))) {
         if (cur && cur._count >= 2) blocks.push(cur);
         cur = null;
         continue;
       }
-      if (raw.indexOf(':') < 0 && raw.indexOf('=') < 0) continue;
-      var m = _KV_LINE_RE.exec(raw);
-      if (!m) continue;
-      var k = m[1].trim(), v = m[2].trim().replace(/,\s*$/, '').replace(/^(["'])(.*)\1$/, '$2').trim();
-      var kLow = k.toLowerCase().replace(/[\s\-()\/]+/g, '_').replace(/^_+|_+$/g, '');
-      if (/^(?:http|https|ftp|ldap|smb|ssh|mailto|file)$/i.test(kLow)) continue;
+      if (_isInteractivePasswordPromptEcho(lines, i, fullText, command)) continue;
 
-      if (cur && ((_BLOCK_START_KEY_RE.test(k) && cur[kLow] !== undefined && cur._count >= 2) || cur._count >= 120)) {
-        blocks.push(cur);
-        cur = null;
+      var pairs = [];
+      if (t.indexOf('<') >= 0 && t.indexOf('</') > 1) {
+        _XML_LEAF_GLOBAL_RE.lastIndex = 0;
+        var xm;
+        while ((xm = _XML_LEAF_GLOBAL_RE.exec(raw)) !== null) {
+          if (xm[4]) {
+            pairs.push({ closeBlock: true });
+            continue;
+          }
+          var xTag = xm[1].replace(/^.*:/, '');
+          if (_HTML_LAYOUT_TAG_RE.test(xTag)) continue;
+          var xAttrs = xm[2] || '';
+          var xVal = xm[3].trim();
+          if (!xVal) continue;
+          if (/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(xAttrs) || /\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(xAttrs)) continue;
+          if (/^(?:pass(?:word|wd)?|pwd|secret)$/i.test(xTag) && /^AQAAANCMnd8BFdER/.test(xVal)) continue;
+          pairs.push({ k: xTag, v: xVal });
+        }
       }
-      if (!cur) cur = { _count: 0, _lines: [] };
-      if (cur[kLow] === undefined) {
-        cur[kLow] = v;
-      } else if (Array.isArray(cur[kLow])) {
-        cur[kLow].push(v);
-      } else {
-        cur[kLow] = [cur[kLow], v];
+      if (!pairs.length) {
+        if (raw.indexOf(':') < 0 && raw.indexOf('=') < 0) continue;
+        var m = _KV_LINE_RE.exec(raw);
+        if (!m) continue;
+        pairs.push({
+          k: m[1].trim(),
+          v: m[2].trim().replace(/,\s*$/, '').replace(/^(["'])(.*)\1$/, '$2').trim()
+        });
       }
-      cur._count++;
-      cur._lines.push(t);
+
+      for (var pi = 0; pi < pairs.length; pi++) {
+        if (pairs[pi].closeBlock) {
+          if (cur && cur._count >= 2) blocks.push(cur);
+          cur = null;
+          continue;
+        }
+        var k = pairs[pi].k, v = pairs[pi].v;
+        var kLow = k.toLowerCase().replace(/[\s\-()\/.]+/g, '_').replace(/^_+|_+$/g, '');
+        if (/^(?:http|https|ftp|ldap|smb|ssh|mailto|file)$/i.test(kLow)) continue;
+
+        if (cur && ((_BLOCK_START_KEY_RE.test(k) && cur[kLow] !== undefined && cur._count >= 2) || cur._count >= 120)) {
+          blocks.push(cur);
+          cur = null;
+        }
+        if (!cur) cur = { _count: 0, _lines: [] };
+        if (cur[kLow] === undefined) {
+          cur[kLow] = v;
+        } else if (Array.isArray(cur[kLow])) {
+          cur[kLow].push(v);
+        } else {
+          cur[kLow] = [cur[kLow], v];
+        }
+        cur._count++;
+        if (cur._lines[cur._lines.length - 1] !== t) cur._lines.push(t);
+      }
     }
     if (cur && cur._count >= 2) blocks.push(cur);
     return blocks;
@@ -813,9 +929,26 @@
     var sLines = s.split(/\r?\n/);
     var sLineCap = Math.min(sLines.length, 100000);
     var kvHintRe = /(?:pass|pwd|secret|key|token|admpwd|cleartext)/i;
+    var hasXmlNonPlainEnc = /<encryptionMethod>\s*(?!None\b|ClearText\b|Plain(?:text)?\b|False\b|0\b)[A-Za-z0-9_.-]+/i.test(s);
+    var xmlSecTagRe = /<(?:[A-Za-z0-9_.-]+:)?(pass(?:word|wd)?|pwd|secret|cpassword|apikey|api_key)(?:\s+([^>\r\n]*))?>([^<\r\n]{3,128})<\/(?:[A-Za-z0-9_.-]+:)?\1>/gi;
     for (var sli = 0; sli < sLineCap; sli++) {
       var sLn = sLines[sli];
       if (!sLn || sLn.length > 2048 || !kvHintRe.test(sLn)) continue;
+      if (_isInteractivePasswordPromptEcho(sLines, sli, s, cmdSem && cmdSem.raw)) continue;
+      if (!hasXmlNonPlainEnc && sLn.indexOf('<') >= 0 && sLn.indexOf('</') > 1) {
+        xmlSecTagRe.lastIndex = 0;
+        var xsm, matchedXmlSec = false;
+        while ((xsm = xmlSecTagRe.exec(sLn)) !== null) {
+          matchedXmlSec = true;
+          if (!/\bstoreAsClearText\s*=\s*["']?false["']?/i.test(xsm[2] || '') && !/\bencrypted\s*=\s*["']?(?:true|1)["']?/i.test(xsm[2] || '')) {
+            var xSecVal = xsm[3].trim();
+            if (!/^AQAAANCMnd8BFdER/.test(xSecVal) && !isPlaceholderSecret(xSecVal, echoSet)) {
+              pushUniq(kvSecrets, xSecVal);
+            }
+          }
+        }
+        if (matchedXmlSec) continue;
+      }
       _ATOM_KV_SECRET_RE.lastIndex = 0;
       var checkedNeg = false, isNeg = false;
       while ((m = _ATOM_KV_SECRET_RE.exec(sLn)) !== null) {
@@ -1043,7 +1176,8 @@
     if (C._strip_tmux_split) text = C._strip_tmux_split(text);
     if (C._unwrap_kerberos_hashes) text = C._unwrap_kerberos_hashes(text);
     if (text.length > 10485760) text = text.slice(0, 10485760);
-    if (!text.trim()) return;
+    var hasCtxPromptTelemetry = !!(ws && ws.context && (ws.context.followPrompt || ws.context.promptLine));
+    if (!text.trim() && !hasCtxPromptTelemetry) return;
     if (_isHelpOrUsageOutput(text, command)) {
       for (var hi = facts.length - 1; hi >= 0; hi--) {
         if (facts[hi] && /^(?:credential\.|hash\.|ad\.)/.test(facts[hi].kind || '')) facts.splice(hi, 1);
@@ -1098,29 +1232,63 @@
     var isSshCmd = !!(C._is_ssh_command && C._is_ssh_command(command));
 
     // 2. Shell Prompt Telemetry Inference (Local Target Shell vs Subshells)
+    function _tagPromptFact(fact, fromCtx) {
+      if (!fact) return fact;
+      fact.origin = fromCtx ? 'prompt_telemetry' : 'stdout_telemetry';
+      if (fromCtx && fact.value && typeof fact.value === 'object') fact.value.prompt_only = true;
+      return fact;
+    }
     if (promptMeta.locus === 'local' && promptMeta.hasCommand && !isRemoteScanner && !isWebClient && !isSshCmd) {
-      if (promptMeta.osFamily === 'linux' && !hasKind(facts, 'foothold.linux') && !globalIdx.hasFoothold) {
-        var fVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
-        if (promptMeta.user) fVal.identity = promptMeta.user;
-        _add(facts, mkFact('foothold.linux', h, fVal, S, source));
-        if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'linux', promptMeta.promptLine, 'high', 'prompt', true);
-        if (promptMeta.isPrivileged && !hasKind(facts, 'access.root')) {
-          _add(facts, mkFact('access.root', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source));
+      if (promptMeta.osFamily === 'linux') {
+        if (!hasKind(facts, 'foothold.linux') && !globalIdx.hasFoothold) {
+          var fVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
+          if (promptMeta.user) fVal.identity = promptMeta.user;
+          _add(facts, _tagPromptFact(mkFact('foothold.linux', h, fVal, S, source), promptMeta.fromContextPrompt));
+          if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'linux', promptMeta.promptLine, 'high', 'prompt', true);
         }
-      } else if (promptMeta.osFamily === 'windows' && !hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
-        var wVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
-        if (promptMeta.user) wVal.identity = promptMeta.user;
-        _add(facts, mkFact('foothold.windows', h, wVal, S, source));
-        if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'windows', promptMeta.promptLine, 'high', 'prompt', true);
+        if (promptMeta.isPrivileged) {
+          if (!hasKind(facts, 'access.root')) {
+            _add(facts, _tagPromptFact(mkFact('access.root', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
+          }
+          if (!hasKind(facts, 'access.admin')) {
+            _add(facts, _tagPromptFact(mkFact('access.admin', h, { identity: 'root', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
+          }
+        }
+      } else if (promptMeta.osFamily === 'windows') {
+        if (!hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
+          var wVal = { method: cmdSem.tool || 'shell', via: 'prompt-telemetry' };
+          if (promptMeta.user) wVal.identity = promptMeta.user;
+          _add(facts, _tagPromptFact(mkFact('foothold.windows', h, wVal, S, source), promptMeta.fromContextPrompt));
+          if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'windows', promptMeta.promptLine, 'high', 'prompt', true);
+        }
+        if (promptMeta.isPrivileged && !hasKind(facts, 'access.admin')) {
+          _add(facts, _tagPromptFact(mkFact('access.admin', h, { identity: promptMeta.user || 'Administrator', method: cmdSem.tool || 'shell', via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
+        }
+      }
+    }
+
+    // Machine-account `%USERNAME%` (`<HOSTNAME>$`) in local Windows shell -> NT AUTHORITY\SYSTEM
+    if (!isRemoteScanner && !isWebClient && !hasKind(facts, 'access.system') && /\becho\s+%username%/i.test((command || '') + '\n' + text)) {
+      var mMachEnv = /^[ \t]*([A-Za-z][A-Za-z0-9_-]{1,14}\$)[ \t]*$/m.exec(text);
+      if (mMachEnv) {
+        var sysFact = mkFact('access.system', h, { identity: mMachEnv[1], method: 'machine-account-env', via: 'context-inference' }, S, source);
+        sysFact.origin = 'stdout_telemetry';
+        _add(facts, sysFact);
+        if (!hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
+          var fwFact = mkFact('foothold.windows', h, { identity: mMachEnv[1], method: 'machine-account-env', via: 'context-inference' }, S, source);
+          fwFact.origin = 'stdout_telemetry';
+          _add(facts, fwFact);
+        }
       }
     }
 
     // Subshell prompt reachability & auth inference
     if (promptMeta.subshell === 'smb' && !hasKind(facts, 'smb.shares')) {
-      _add(facts, mkFact('smb.reachable', h, { via: 'prompt-telemetry' }, S, source));
+      _add(facts, _tagPromptFact(mkFact('smb.reachable', h, { via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
     } else if ((promptMeta.subshell === 'mysql' || promptMeta.subshell === 'psql' || promptMeta.subshell === 'mssql') && !hasKind(facts, 'db.reachable')) {
-      _add(facts, mkFact('db.reachable', h, { engine: promptMeta.subshell, via: 'prompt-telemetry' }, S, source));
+      _add(facts, _tagPromptFact(mkFact('db.reachable', h, { engine: promptMeta.subshell, via: 'prompt-telemetry' }, S, source), promptMeta.fromContextPrompt));
     }
+    if (!text.trim()) return;
 
     var hasEngagementCtx = !!(opts && (opts.entail || (opts.context && (opts.context.target || opts.context.attentionFrame || opts.context.selectionSource))));
     var hasTier1CredOrHash = facts.some(function (f) {
@@ -1156,8 +1324,9 @@
     if (hasSubstantiveTier1Fact && !hasEngagementCtx && !delta && !hasUnmetContract && !hasUnhandledMultiSectionCredOrTable) return;
 
     // 3. 2D Structural Geometry: Dynamic Tables (always parsed on fullLines so wrapper-delta never strips table headers) & Key-Value Blocks
-    var tables = _parse_dynamic_tables(fullLines);
-    var kvBlocks = _group_kv_blocks(lines);
+    var isAdTableCtx = expects('ad.user_list') || expects('ad.computer_list') || /\bget-(?:net|ad|domain)(?:user|groupmember|computer|member)\b/i.test(command || '');
+    var tables = _parse_dynamic_tables(fullLines, { adTableCtx: isAdTableCtx });
+    var kvBlocks = _group_kv_blocks(lines, analysisText, command);
     var outliers = _find_statistical_outliers(lines);
 
     // 3A. Dynamic Table Inference (Survives column reordering & format changes)
@@ -1165,6 +1334,7 @@
       var tbl = tables[ti];
       var roles = tbl.roles;
       var hasUserCol = roles.indexOf('user') >= 0;
+      var hasComputerCol = roles.indexOf('computer') >= 0;
       var hasSecretCol = roles.indexOf('secret') >= 0;
       var hasShareCol = roles.indexOf('share') >= 0;
       var hasPermCol = roles.indexOf('perm') >= 0;
@@ -1265,12 +1435,12 @@
         }
       }
 
-      // (v) User + SPN / Right / Domain table (Directory enumeration with reordered columns)
-      if (hasUserCol && !hasSecretCol && (hasSpnCol || hasRightCol || expects('ad.user_list') || globalIdx.isDc)) {
+      // (v) User + SPN / Right / Domain table (Directory enumeration with reordered or 1-col underlined columns)
+      if (hasUserCol && !hasSecretCol && (hasSpnCol || hasRightCol || isAdTableCtx || globalIdx.isDc)) {
         var tblUsers = [], tblUsersSeen = Object.create(null);
         for (var r5 = 0; r5 < tbl.rows.length; r5++) {
           var row5 = tbl.rows[r5];
-          var u5 = String(row5.user || '').trim().replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
+          var u5 = String(row5.user || '').trim().replace(/^CN=/i, '').replace(/,.*$/, '').replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
           if (u5 && !isBoilerplateUser(u5) && C._valid_username && C._valid_username(u5, false) && !tblUsersSeen[u5]) {
             tblUsersSeen[u5] = 1;
             tblUsers.push(u5);
@@ -1281,8 +1451,23 @@
             _add(facts, mkFact('ad.acl_lead', domScope, { right: rightVerbM[1], principal: u5 || row5.user, via: 'context-table' }, S, source));
           }
         }
-        if (tblUsers.length && !hasKind(facts, 'ad.user_list') && (hasSpnCol || expects('ad.user_list') || globalIdx.isDc || atoms.sids.length > 0 || atoms.dns.length > 0)) {
+        if (tblUsers.length && !hasKind(facts, 'ad.user_list') && (hasSpnCol || isAdTableCtx || globalIdx.isDc || atoms.sids.length > 0 || atoms.dns.length > 0)) {
           _add(facts, mkFact('ad.user_list', domScope, { users: tblUsers, count: tblUsers.length, via: 'context-table' }, S, source));
+        }
+      }
+
+      // (vi) Directory Computer table (`dnshostname` / `ComputerName`)
+      if (hasComputerCol && !hasKind(facts, 'ad.computer_list') && (isAdTableCtx || globalIdx.isDc || atoms.sids.length > 0 || atoms.dns.length > 0)) {
+        var tblComps = [], tblCompsSeen = Object.create(null);
+        for (var r6 = 0; r6 < tbl.rows.length; r6++) {
+          var c6 = String(tbl.rows[r6].computer || '').trim().replace(/^CN=/i, '').replace(/,.*$/, '');
+          if (c6 && /^[A-Za-z0-9_.$-]{2,64}$/.test(c6) && !tblCompsSeen[c6.toLowerCase()]) {
+            tblCompsSeen[c6.toLowerCase()] = 1;
+            tblComps.push(c6);
+          }
+        }
+        if (tblComps.length) {
+          _add(facts, mkFact('ad.computer_list', domScope, { computers: tblComps, count: tblComps.length, via: 'context-table' }, S, source));
         }
       }
     }
@@ -1292,13 +1477,14 @@
     for (var bi = 0; bi < kvBlocks.length; bi++) {
       var blk = kvBlocks[bi];
       var blkText = (blk._lines || []).join('\n');
+      var isXmlEncryptedBlk = !!(blk.encryptionmethod && !/^(?:none|cleartext|plain|plaintext|false|0)$/i.test(String(Array.isArray(blk.encryptionmethod) ? blk.encryptionmethod[0] : blk.encryptionmethod).trim()));
       var hasExplicitIdField = !!(blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || blk.uid);
       var hasIdentityPeer = !!(blk.password || blk.pass || blk.passwd || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || blk.serviceprincipalname || blk.spn || blk.objectsid || blk.sid);
       var blkUser = blk.samaccountname || blk.username || blk.user || blk.login || blk.account || blk.userprincipalname || blk.upn || (hasIdentityPeer ? (blk.cn || blk.name) : '') || '';
       if (Array.isArray(blkUser)) blkUser = blkUser[0];
       blkUser = String(blkUser || '').trim().replace(/^CN=/i, '').replace(/,.*$/, '').replace(/^.*[\\\/]/, '').replace(/@.*$/, '');
 
-      var blkSec = blk.password || blk.pass || blk.passwd || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || '';
+      var blkSec = isXmlEncryptedBlk ? '' : (blk.password || blk.pass || blk.passwd || blk.secret || blk.nthash || blk.ntlm || blk.hash || blk.cleartext || blk['ms_mcs_admpwd'] || blk['mslaps_password'] || blk.cpassword || '');
       if (Array.isArray(blkSec)) blkSec = blkSec[0];
       blkSec = String(blkSec || '').trim().replace(/^['"]|['"]$/g, '');
 
@@ -1308,6 +1494,10 @@
         var kvCred = { user: blkUser, via: 'context-kv-block' };
         if (isHashKv) kvCred.hash = blkSec;
         else kvCred.password = blkSec;
+        if (blk.domain) {
+          var blkDom = String(Array.isArray(blk.domain) ? blk.domain[0] : blk.domain).trim();
+          if (blkDom && !isPlaceholderSecret(blkDom, null)) kvCred.domain = blkDom;
+        }
         _emit_credential_facts(facts, h, kvCred, source);
       }
 
@@ -1649,7 +1839,9 @@
       }
 
       // Directory User List Co-Occurrence (Domain\User or UPN + SID / SPN / DN / ad.user_list contract)
-      if (!hasKind(facts, 'ad.user_list') && !/\b(?:rpcdump|rpcinfo)\b/i.test(command || '') && !/Protocol:\s*\[MS-/i.test(analysisText) && (atoms.sids.length > 0 || atoms.spns.length > 0 || atoms.dns.length > 0 || expects('ad.user_list'))) {
+      var isLocalTokenInspect = /\b(?:whoami|klist|token::(?:list|elevate|whoami)|sekurlsa::|lsadump::(?:sam|secrets|cache))\b/i.test((command || '') + '\n' + analysisText)
+        || /(?:PRIVILEGES INFORMATION|TOKEN INFORMATION|USER INFORMATION|->\s*Impersonated\s*!)/i.test(analysisText);
+      if (!hasKind(facts, 'ad.user_list') && !isLocalTokenInspect && !/\b(?:rpcdump|rpcinfo)\b/i.test(command || '') && !/Protocol:\s*\[MS-/i.test(analysisText) && (atoms.sids.length > 0 || atoms.spns.length > 0 || atoms.dns.length > 0 || expects('ad.user_list'))) {
         var coUsers = [], coUsersSeen = Object.create(null);
         var inUserLow = (cmdSem.inputUser || '').toLowerCase();
         for (var dui = 0; dui < atoms.domUsers.length; dui++) {
@@ -1660,7 +1852,8 @@
           var upName = atoms.upns[upi].split('@')[0];
           if (upName && upName.toLowerCase() !== inUserLow && !isBoilerplateUser(upName) && !coUsersSeen[upName]) { coUsersSeen[upName] = 1; coUsers.push(upName); }
         }
-        if (coUsers.length) {
+        var minCoUsers = (expects('ad.user_list') || atoms.dns.length > 0 || atoms.spns.length > 0) ? 1 : 2;
+        if (coUsers.length >= minCoUsers) {
           _add(facts, mkFact('ad.user_list', domScope, { users: coUsers, count: coUsers.length, via: 'context-cooccurrence' }, S, source));
         }
       }
@@ -1889,6 +2082,22 @@
       else if (/^db\./.test(k)) {
         ensureFact('host.up', h, { target: ws.target });
         ensureFact('db.reachable', h, {});
+      }
+      else if (k === 'access.root') {
+        ensureFact('host.up', h, { target: ws.target });
+        ensureFact('foothold.linux', h, { method: 'entailed-by-root' });
+        ensureFact('access.admin', h, { identity: 'root', method: 'entailed-by-root' });
+        if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+          C._add_os_observation(facts, ws, source, 'linux', 'Entailed by Linux root access', 'high', 'entailment', true);
+        }
+      }
+      else if (k === 'access.system') {
+        ensureFact('host.up', h, { target: ws.target });
+        ensureFact('foothold.windows', h, { method: 'entailed-by-system' });
+        ensureFact('access.admin', h, { identity: 'SYSTEM', method: 'entailed-by-system' });
+        if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+          C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows SYSTEM access', 'high', 'entailment', true);
+        }
       }
       else if (/^privesc\.(?:sudo|sudo_rights|sudo_binary|script_sink|suid|suid_candidate|capabilities|capability|cron|cron_writable|cron_wildcard|writable_etc|passwd_writable|PATH|ld_preload|docker|docker_group|lxd|lxd_group|group_lxd|container_group)$/.test(k) && !isWebOrRemoteCmd) {
         ensureFact('host.up', h, { target: ws.target });
