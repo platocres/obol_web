@@ -34,7 +34,7 @@
     // Library folds Stuck? in as a sub-lens, so it carries Stuck?'s data+engine+route plus the ATT&CK
     // catalog/map (for the ATT&CK lens) and the library engine itself.
     library: ['data/stuck-catalog.js?v=0e28d317', 'assets/engine/stuck.js?v=9f3ec324', 'assets/ui/routes/stuck.js?v=1a559f6b',
-      'data/attack-catalog.js?v=f2aa133a', 'data/attack-move-map.js?v=754b3e0f',
+      'data/attack-catalog.js?v=f2aa133a', 'data/attack-move-map.js?v=3e72e0fb',
       'data/tool-glossary.js?v=cf257324', 'data/tool-recipes.js?v=cafd6372', 'data/tool-stations.js?v=3f1621c8',
       'assets/engine/toolbuilder.js?v=8e642c14', 'data/toolset.js?v=12c2716e', 'assets/engine/toolkit.js?v=cb14c479', 'assets/ui/bind.js?v=70d1fd1b',
       'assets/engine/library.js?v=cc552212', 'assets/ui/routes/library.js?v=bfb32361'],
@@ -51,7 +51,7 @@
     playbooks: ['data/playbooks-bundle.js?v=e845bbbe', 'assets/engine/playbooks.js?v=1361f6a3', 'assets/ui/routes/playbooks.js?v=73267e8c'],
     cruise: ['assets/engine/arsenal.js?v=fb2f1de3', 'data/playbooks-bundle.js?v=e845bbbe', 'assets/engine/playbooks.js?v=1361f6a3', 'assets/engine/cruise.js?v=cda9b13f', 'assets/engine/pivotkit.js?v=e59dbec6', 'assets/ui/pivotstation.js?v=697a8be7', 'assets/ui/routes/cruise.js?v=2858725e'],
     map: ['assets/engine/engmap.js?v=16d7647e', 'assets/ui/routes/map.js?v=1155be86'],
-    findings: ['data/reportmeta.js?v=37f7e557', 'data/attack-catalog.js?v=f2aa133a', 'data/attack-move-map.js?v=754b3e0f', 'data/d3fend-map.js?v=ae2b6f53', 'data/frameworks-tables.js?v=428bffd8', 'data/kev-catalog.js?v=f91dccda', 'assets/engine/frameworks.js?v=341ed948', 'assets/ui/routes/findings.js?v=f313c036'],
+    findings: ['data/reportmeta.js?v=37f7e557', 'data/attack-catalog.js?v=f2aa133a', 'data/attack-move-map.js?v=3e72e0fb', 'data/d3fend-map.js?v=ae2b6f53', 'data/frameworks-tables.js?v=428bffd8', 'data/kev-catalog.js?v=f91dccda', 'assets/engine/frameworks.js?v=341ed948', 'assets/ui/routes/findings.js?v=f313c036'],
     history: ['assets/ui/routes/history.js?v=cd540200'],
     help: ['data/help-content.js?v=48a12a15', 'assets/ui/routes/help.js?v=7528d7ed'],
     start: ['data/resources.js?v=662af84a', 'assets/ui/routes/start.js?v=58acd6ad'],

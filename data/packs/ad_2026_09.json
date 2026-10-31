@@ -1775,6 +1775,7 @@
     },
     {
       "id": "adcs-esc",
+      "sequence": true,
       "title": "ADCS Misconfiguration Abuse (ESC1-11)",
       "hypothesis": "When Active Directory Certificate Services exposes vulnerable templates or endpoints, a certificate becomes a credential for any identity. certipy find -vulnerable names the ESC number; the abuse depends on which: ESC1 (enrollee-supplied SAN), ESC8 (relay NTLM auth to the CA web endpoint, pair it with coercion), ESC9/10 (no-security-extension + weak mapping), ESC11 (relay to the CA RPC endpoint). Authenticate with the issued cert to recover a TGT and NT hash.",
       "tool": "certipy",
@@ -3116,7 +3117,6 @@
       "requires_any": [
         "ad.computer_added",
         "ad.delegation",
-        "ad.delegation_constrained",
         "ad.rbcd",
         "ad.gmsa",
         "ad.control_paths"

@@ -460,15 +460,13 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
     `qa/tools/corpus/labels/0xdf-screenshots-ocr.json` (plus `neofetch`/`hostnamectl` OS and kernel support in
     `assets/engine/parsers/host.js`), verified by `qa/tests/engine/stage3-screenshot-harvest-smoke.js`.
 - **Derived so far**: the current move and pack content was built from the flow/technique
-  pass. `qa/tools/verify-all-20-mined.js` asserts specific mined moves landed in the packs.
-  All four axes (output, facts, failures, flow) plus the Stage 3 screenshot/OCR tier are now
-  complete on the 0xdf OffSec snapshot: actionable enumeration coverage is at 97.5% (1796 minted /
-  46 blind of 1842 units across 194 walkthroughs), the `facts`-axis ground-truth matrix holds 102
-  labeled blocks (259 expected facts) at 100.0% recall and 0 forbidden hits, and 27 reactive blocker
-  doctors cover all operational and authentication failure modes.
-- **Status**: DONE (2026-10-23). Acquisition and all four axes (output, facts, failures, flow) plus
-  Stage 3 vision/OCR calibration and extraction are complete and locked by regression suites. See
-  Section 9 and Section 10 in [CORPUS-MINING.md](CORPUS-MINING.md).
+  pass. `qa/tools/verify-all-20-mined.js` asserts specific mined moves and cue-to-gate invariants landed in the packs.
+  All four axes (output, facts, failures, flow), the Stage 3 screenshot/OCR tier, and the `v13.0`
+  Dual-Pass stateful trajectory replay (`OX-1` `96.1%`, `OX-2` `95.3%`, `OX-3` `92.9%`, `OX-4` `96.1%` Pass-2 reachability, `0` parser errors) are complete on the 0xdf OffSec snapshot: `tools/corpus/labels/0xdf-facts.json` and `tools/corpus/reports/0xdf-facts-matrix.json` now lock **470 / 470** Schema v2 labeled blocks (**1,383 / 1,383** expected facts at **100.0%** recall, **0** forbidden hits, **361 / 361** graded outcome assertions, **259 / 259** tier attributions), locked corpus-free by `tests/engine/0xdf-trajectories-smoke.js` (`204` assertions) and 50 reactive blocker doctors.
+- **Status**: DONE (2026-10-31). Acquisition, all four axes (output, facts, failures, flow), Stage 3
+  vision/OCR calibration, and `v13.0` Pass-2 stateful trajectory replay + Tier-2/Tier-3 generalization
+  across all 194 walkthroughs (`OX-1`..`OX-4`) are complete and locked by corpus-free regression suites.
+  See Section 9 and Section 10 in [CORPUS-MINING.md](CORPUS-MINING.md).
 
 ### OffSec Proving Grounds Practice Collection (Snapshot 2026-10-29)
 
@@ -490,13 +488,13 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
   - **Tier C (screenshot-reliant fallback, queued for OCR)**: **11** boxes (`0` Tier D stubs)
   - **OCR Staging**: All **57** unbacked screenshot captures across **11** boxes (`no_step_adjacent_code`) are resolved locally (`0` unresolved paths) under `assets/<slug>/capture-*.png` with SHA-256 digests and surrounding prose/heading context in `ocr-worklist.json`. Inventory: `corpus-manifest.json` and `INDEX.md`.
 - **Axes mined**:
-  - **output**: NOT YET
-  - **facts**: NOT YET
-  - **failures**: NOT YET
-  - **flow**: NOT YET
-  - **vision / screenshot variance**: COMPLETE (`57 / 57` captures across `11` boxes visually transcribed into chronological Pass-2 `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-practice-screenshots-ocr.json`, schema-validated `57/57` + pixel-audited across 21 raw PNGs)
-- **Derived so far**: `tools/corpus/labels/pg-practice-screenshots-ocr.json` (`57` OCR records).
-- **Status**: STAGED (OCR pre-flight complete; ready for Dual-Pass `v13.0` mining).
+  - **output**: DONE (2026-10-31; Pass-1 structural output & tool-equivalence sweep complete across all `120` canonical PG Practice machines + `44` cross-operator alternates across `PG-1`..`PG-6`, `0` parser errors)
+  - **facts**: DONE (2026-10-31; `387 / 387` Schema v2 labeled blocks in `tools/corpus/labels/pg-practice-facts.json`, `1,799 / 1,799` expected facts at `100.0%` recall, `0` forbidden hits, `204 / 204` tier attributions)
+  - **failures**: DONE (2026-10-31; `345 / 345` graded outcome assertions matched, pre-flight/runtime Exploit-DB script-repair doctors and negative/dry-probe retirement locked)
+  - **flow**: DONE (2026-10-31; Pass-2 stateful trajectory replay reachability: `PG-1` `93.3%`, `PG-2` `94.2%`, `PG-3` `94.5%`, `PG-4` `89.1%`, `PG-5` `93.9%`, `PG-6` `97.7%`, `PG-ALT44` `87.7%`, locked corpus-free by `tests/engine/pg-practice-trajectories-smoke.js`)
+  - **vision / screenshot variance**: DONE (2026-10-30; `129 / 129` staged PNG captures across all `17` image-bearing boxes visually transcribed into chronological Pass-2 `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-practice-screenshots-ocr.json`, schema-validated `129/129` + stratified independent pixel audit)
+- **Derived so far**: `tools/corpus/labels/pg-practice-screenshots-ocr.json` (`129` OCR records), `tools/corpus/labels/pg-practice-facts.json` (`387` Schema v2 records), 2-step OS-baseline subtraction + custom sink triage (`host.js`, `websource.js`, `inference.js`), 3-stage `searchsploit` AST auto-adapter & repair doctor (`edb.js`, `blockers.js`), and corpus-free regression suite `tests/engine/pg-practice-trajectories-smoke.js`.
+- **Status**: DONE (2026-10-31). All 120 canonical PG Practice machines and 44 pure-text alternates (`PG-1`..`PG-6`) mined across all axes and verified via independent 7-check Wave-C QA audits.
 
 ### OffSec PEN-200 Challenge Labs Collection (Snapshot 2026-10-29)
 
@@ -516,13 +514,13 @@ Axis status values: `DONE (date)`, `PARTIAL (date, note)`, or `NOT YET`.
   - **Tier B (fenced-code primary with 100% locally resolved supplementary screenshots)**: **3** labs (`zeus`, `poseidon`, `laser`; `0` Tier C, `0` Tier D)
   - **OCR Staging**: `0` unbacked screenshots in winning `walkthrough.md` files; **3** unbacked screenshots in supplementary per-host files (`medtech/hosts/web02-121.md` [1], `skylark/hosts/singapore06-225.md` [2]) staged locally (`0` unresolved paths) in `ocr-worklist.json`.
 - **Axes mined**:
-  - **output**: NOT YET
-  - **facts**: NOT YET
-  - **failures**: NOT YET
-  - **flow**: NOT YET
-  - **vision / screenshot variance**: COMPLETE (`24 / 24` staged captures visually inspected across `medtech`, `skylark`, `zeus`, `poseidon`, and `laser`; `18` unique-signal captures transcribed into chronological `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-challenge-screenshots-ocr.json`, schema-validated `18/18`)
-- **Derived so far**: `tools/corpus/labels/pg-challenge-screenshots-ocr.json` (`18` OCR records).
-- **Status**: STAGED (2026-10-29).
+  - **output**: DONE (2026-10-30; Pass-1 multi-host output & SharpHound v5 collection sweep complete across all `10` Challenge Labs / `77` canonical target hosts across `CL-1` and `CL-2`, `0` parser errors)
+  - **facts**: DONE (2026-10-30; `123 / 123` Schema v2 labeled blocks in `tools/corpus/labels/pg-challenge-facts.json`, `390 / 390` expected facts at `100.0%` recall, `0` forbidden hits, `50 / 50` tier attributions)
+  - **failures**: DONE (2026-10-30; `120 / 120` graded outcome assertions matched, dry-probe retirement and Kerberos/AD/tunnel blocker doctors verified)
+  - **flow**: DONE (2026-10-30; Pass-2 multi-target stateful trajectory replay with cross-host unvalidated reuse projection `credential.reuse_candidate`, `tunnel.reachable_via_pivot`, LAPS `host:`-only isolation, and gMSA `domain:` scoping locked corpus-free by `tests/engine/challenge-labs-multi-target-smoke.js` and `tests/engine/challenge-labs-trajectories-smoke.js`)
+  - **vision / screenshot variance**: DONE (2026-10-30; `24 / 24` staged captures visually inspected; `18` unique-signal captures transcribed into chronological `ocr-sidecars/*.json` and Principle-5-redacted `tools/corpus/labels/pg-challenge-screenshots-ocr.json`, schema-validated `18/18` + `100%` independent OCR verification)
+- **Derived so far**: `tools/corpus/labels/pg-challenge-screenshots-ocr.json` (`18` OCR records), `tools/corpus/labels/pg-challenge-facts.json` (`123` Schema v2 records), multi-target `store.js`/`context.js`/`command.js` reuse & pivot projection, SharpHound v5 multi-domain SID/edge parity, and corpus-free regression suites `tests/engine/challenge-labs-multi-target-smoke.js` + `tests/engine/challenge-labs-trajectories-smoke.js`.
+- **Status**: DONE (2026-10-30). All 10 official PEN-200 Challenge Labs (`77 / 77` canonical hosts + `84` SharpHound v5 JSONs) mined across all axes and verified via independent 7-check Wave-C QA audits.
 
 ---
 
@@ -702,3 +700,4 @@ Where mined value has landed, so "what came from the corpus" is always traceable
   ranker-sweep 0/4000, replay goldens, 18 OSCP targets, e2e, multi-target, 90 engine suites); common.js and
   index.js are shipped engine changes so qa assets were re-stamped last. prod sync is by hand, not done
   here. Remaining 7 feroxbuster blinds are all banner-only or 0xdf-snipped blocks with no result rows.
+- `v13.0` DUAL-PASS CORPUS CAMPAIGN COMPLETED (2026-10-31, branch `corpus/oscp-dual-pass-v13`): mined all **391 canonical OSCP-aligned target machines** (`10` PEN-200 Challenge Labs / `77` canonical hosts + `68` alternates + `84` SharpHound v5 JSONs; `120` OffSec PG Practice machines + `44` pure-text cross-operator alternates + `129` OCR PNG sidecars; `194` `0xdf` OffSec walkthroughs) across 12 cohorts (`CL-1`, `CL-2`, `PG-1`..`PG-6`, `OX-1`..`OX-4`). Shipped generalizations: multi-target `credential.reuse_candidate` & `tunnel.reachable_via_pivot` projection without cross-host Chimera fabrication (`store.js`, `context.js`, `command.js`); 3-stage closed-loop Exploit-DB `searchsploit` AST auto-adapter and Python 2-to-3 / Burp-proxy / PEP-668 / static-compile repair doctor (`parsers/edb.js`, `parsers/blockers.js`, 50 reactive `FIELD_DOCTORS`); 2-step OS-baseline subtraction + universal sink triage for custom binaries and disclosed web source (`parsers/host.js`, `parsers/websource.js`, `parsers/inference.js`); CSR hypergraph + 20x ranker memoization (`pack.js`); and canonical `access.admin` co-minting (`0` pack gates on `access.root`). Final convergence scoreboard: **980 / 980** Schema v2 blocks (**3,572 / 3,572** expected facts at **100.00%** recall, **0** forbidden hits, **826 / 826** [**100.0%**] graded outcomes, **513 / 513** [**100.0%**] tier attributions), **370** moves across **19** packs (**1,263 / 1,263** [**100.0%**] authored Field Notes commands, **42** by-port flag-path entries with **0** gaps, **0** `move-lint` / `gate-audit` / `post-parse-audit` / `gap-report` failures), **111 / 111** engine test suites passing, **0 / 4,000** `ranker-sweep` violations (**0.00%**), **15 / 15** live headless Chrome CDP Cockpit checks passing (**0** console errors), and **0** `verify-no-overfit.js` violations across **77** files (**74,600+** scanned lines).
