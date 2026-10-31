@@ -221,6 +221,17 @@ screenshots/               1080p UI screenshots referenced in README.md
 
 ---
 
+## Authorized Use & Legal Disclaimer
+
+OBOL is built strictly for **authorized security assessments, penetration testing engagements, and educational lab or exam environments** (such as OSCP, Hack The Box, and Proving Grounds):
+
+- **Authorized Targets Only:** You must own the target environment or hold explicit, verifiable written authorization from the system owner for every IP address, hostname, domain, credential, or artifact you enter into or test alongside OBOL.
+- **Zero-Execution Companion - Sole Operator Responsibility:** OBOL runs locally in your browser, generates zero network traffic, and executes zero commands. Every command, payload, or HTTP request you copy and run in an external terminal, browser, or tool is executed solely at your own election, risk, and legal responsibility in compliance with all applicable laws (including the U.S. Computer Fraud and Abuse Act, `18 U.S.C. § 1030`, and applicable local equivalents).
+- **Provided "AS IS" - No Warranty or Liability:** Pursuant to Sections 15 and 16 of the GNU Affero General Public License v3.0 (`AGPL-3.0`), OBOL is provided `"AS IS"` without warranty of any kind. The authors and copyright holders assume zero liability for target disruption, service instability, account lockouts, data loss, exam or engagement outcomes, or unlawful misuse.
+- **Independent Project - Third-Party Trademarks:** OBOL is an independent open-source project and is not affiliated with, endorsed by, or sponsored by OffSec, PortSwigger, SpecterOps, Hack The Box, or any other third-party vendor. Referenced tool and platform names (including Nmap, NetExec, Impacket, BloodHound, SharpHound, Hashcat, Chisel, Ligolo-ng, GTFOBins, and Burp Suite) are trademarks or projects of their respective owners and are named solely for interoperability and instructional reference.
+
+---
+
 ## License
 
 OBOL is released under the **GNU Affero General Public License v3.0** ([LICENSE](LICENSE)). See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution terms.

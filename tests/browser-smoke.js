@@ -38,6 +38,11 @@ function serve() {
   await page.waitForFunction(() => document.documentElement.getAttribute('data-obol-boot') === 'ready', { timeout: 8000 }).catch(() => {});
 
   ok(await page.getAttribute('html', 'data-obol-boot') === 'ready', 'boot committed (data-obol-boot=ready)');
+  ok(await page.evaluate(() => { var d = document.getElementById('aup-dialog'); return !!(d && d.open); }), 'first-launch Authorized Use dialog opens automatically');
+  await page.keyboard.press('Escape');
+  ok(await page.evaluate(() => { var d = document.getElementById('aup-dialog'); return !!(d && d.open); }), 'Escape does not bypass first-launch Authorized Use dialog');
+  await page.click('#aup-agree-btn');
+  ok(await page.evaluate(() => { var d = document.getElementById('aup-dialog'); return !!(d && !d.open && (localStorage.getItem('obol.aup-accepted') || '').indexOf('v1:') === 0); }), 'clicking I Understand & Agree unlocks OBOL and persists v1 acceptance');
   ok(await page.locator('nav.mainnav a').count() >= 5, 'nav rendered');
   // First-run routing: a brand-new visitor (no synced Loadout + only the untouched seed engagement)
   // lands on Start Here, the onramp front door, not on the empty engagement.
@@ -752,6 +757,7 @@ function serve() {
   const mob = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true });
   await mob.goto(`http://localhost:${PORT}/index.html#/home`, { waitUntil: 'networkidle' });
   await mob.waitForFunction(() => document.documentElement.getAttribute('data-obol-boot') === 'ready', { timeout: 8000 }).catch(() => {});
+  if (await mob.locator('#aup-dialog[open] #aup-agree-btn').count()) await mob.click('#aup-agree-btn');
   await mob.waitForTimeout(300);
   const hOverflow = await mob.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   ok(hOverflow <= 1, 'no horizontal page scroll at 390px (overflow ' + hOverflow + 'px)');
@@ -960,6 +966,7 @@ function serve() {
   // the by-port view: a port is open → the moves it unlocks (signal recognition)
   await page.goto(`http://localhost:${PORT}/index.html#/study`, { waitUntil: 'networkidle' });
   await page.reload({ waitUntil: 'networkidle' });
+  if (await page.locator('#aup-dialog[open] #aup-agree-btn').count()) await page.click('#aup-agree-btn');
   await page.waitForSelector('.study-map', { timeout: 6000 }).catch(() => {});
   await page.locator('[data-ports]').click();
   await page.waitForTimeout(200);

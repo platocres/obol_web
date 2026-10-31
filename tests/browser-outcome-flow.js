@@ -31,6 +31,7 @@ const server = http.createServer((req, res) => {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto('http://127.0.0.1:' + server.address().port + '/index.html');
     await page.waitForFunction(() => window.OBOL && OBOL.store && document.documentElement.dataset.obolBoot === 'ready');
+    if (await page.locator('#aup-dialog[open] #aup-agree-btn').count()) await page.locator('#aup-agree-btn').click();
     async function fresh(name) {
       await page.evaluate(async ({ name, A, B }) => {
         await OBOL.store.createEngagement(name);

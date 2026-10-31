@@ -294,6 +294,13 @@ See [`assets/engine/context.js`](assets/engine/context.js) and [`assets/engine/o
       3. *State 3 (Verdict)*: Evaluates the pasted HTTP response via `OBOL.ingest.run`, settles on confirmed foothold/bypass, or auto-rotates to the next untried bypass pill when blocked/filtered.
 - **Built Files**: `assets/engine/parsers/websource.js`, `assets/engine/parsers/web.js`, `assets/engine/parsers/index.js`, `data/parser-signatures.js`, `data/packs/web_2026_09.json`, `assets/engine/command.js`, `assets/ui/burp-copilot.js`, `assets/ui/routes/path.js`, `assets/ui/routes/workbench.js`, `assets/ui/routes/history.js`, `assets/ui/store.js`, `assets/ui/lazy.js`, `index.html`, `assets/css/obol.css`
 
+### 6.7 First-Launch Authorized Use & Assumption of Risk Clickwrap Gate + README Disclaimer
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - Display a non-bypassable first-launch native `<dialog id="aup-dialog">` (`closedby="none"`, `Escape`-guarded) detailing authorized-targets-only representation, zero-execution sole operator responsibility (`18 U.S.C. § 1030` / CFAA), `"AS IS"` no-warranty/no-liability terms (`AGPL-3.0` Sections 15-16), and non-affiliation / third-party trademark attribution, unlocked via a single `[I Understand & Agree]` button (`localStorage['obol.aup-accepted'] = 'v1:<ISO>'`) with permanent read-only review access in `#/help` (`Authorized Use & Legal Notice`).
+  - Add a matching `## Authorized Use & Legal Disclaimer` section near the bottom of `README.md` right above `## License`.
+- **Built Files**: `index.html`, `assets/ui/boot.js`, `assets/ui/routes/help.js`, `assets/css/obol.css`, `README.md`, `tests/browser-smoke.js`, `tests/browser-audit-smoke.js`, `tests/browser-outcome-flow.js`, `tests/browser-performance-smoke.js`
+
 ### Pillar 6 QA Verification Summary (2026-10-31)
 - `tests/engine/pillar6-oneclick-and-burp-copilot-smoke.js`: **PASS (`40/40` assertions)** covering `6.1`-`6.6` end-to-end.
 - Trajectory & Multi-Target Regressions: `challenge-labs-trajectories-smoke.js` (`69/69`), `challenge-labs-multi-target-smoke.js` (`66/66`), `exploitdb-adapter-doctor-smoke.js` (`54/54`), `0xdf-trajectories-smoke.js` (`31/31` tests, `204` assertions), `verify-oscp-practice-exams.js` (`18/18` targets), `verify-replay-goldens.js` (`100%`), `verify-multi-target.js` (`100%`).

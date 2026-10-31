@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OBOL: Offensive Box Operations Ledger</title>
   <meta name="description" content="Evidence-driven OSCP operator companion. A browser-local, static-site edition of the OBOL engine: proof-gated operator cockpit, conservative parsers, BloodHound analysis, checklist, and OSCP reporting. No backend, no execution.">
-  <link rel="stylesheet" href="assets/css/obol.css?v=9e27e57f">
+  <link rel="stylesheet" href="assets/css/obol.css?v=e403eb6a">
   <script>
     /* Pre-paint skin: set before first paint so there is no flash. Tiny + synchronous. */
     (function () {
@@ -137,6 +137,22 @@
     </div>
   </div>
 
+  <dialog id="aup-dialog" class="aup-dialog" closedby="none" aria-labelledby="aup-title">
+    <div class="aup-kicker">Authorized Use &amp; Legal Notice</div>
+    <h2 id="aup-title" class="aup-title">Authorized Security Testing &amp; Assumption of Risk</h2>
+    <p class="aup-lead">OBOL is a zero-execution methodology and note-keeping companion for authorized penetration testing, security assessments, and educational lab environments. Before continuing, confirm that you understand and agree to the following terms:</p>
+    <ul class="aup-list">
+      <li><strong>Authorized Targets Only:</strong> You represent and warrant that you own the target environment or hold explicit, verifiable written authorization from the system owner for every IP address, hostname, domain, credential, or artifact you enter into or test alongside OBOL.</li>
+      <li><strong>Zero-Execution Companion - Sole Operator Responsibility:</strong> OBOL runs locally in your browser, generates zero network traffic, and executes zero commands. Every command, payload, or request you copy and run in an external terminal, browser, or tool is executed solely at your own election, risk, and legal responsibility in compliance with all applicable laws (including <code>18 U.S.C. &sect; 1030</code> / CFAA and local equivalents).</li>
+      <li><strong>Provided &quot;AS IS&quot; - No Warranty or Liability:</strong> Pursuant to the GNU Affero General Public License v3.0 (<code>AGPL-3.0</code>, Sections 15-16), OBOL is provided <code>&quot;AS IS&quot;</code> without warranty of any kind. The authors and copyright holders assume zero liability for target disruption, service instability, account lockouts, data loss, exam or engagement outcomes, or unlawful misuse.</li>
+      <li><strong>Independent Project - Third-Party Trademarks:</strong> OBOL is an independent open-source project and is not affiliated with, endorsed by, or sponsored by OffSec, PortSwigger, SpecterOps, Hack The Box, or any other third-party vendor. Referenced tool and platform names (including Nmap, NetExec, Impacket, BloodHound, SharpHound, Hashcat, Chisel, Ligolo-ng, GTFOBins, and Burp Suite) are trademarks or projects of their respective owners and are named solely for interoperability and instructional reference.</li>
+    </ul>
+    <form method="dialog" class="aup-actions">
+      <p id="aup-esc-hint" class="aup-esc-hint">Click &quot;I Understand &amp; Agree&quot; to continue into OBOL.</p>
+      <button type="submit" id="aup-agree-btn" class="btn-primary aup-btn" value="agree" aria-describedby="aup-esc-hint" autofocus>I Understand &amp; Agree</button>
+    </form>
+  </dialog>
+
   <!-- Critical path only. Everything else is route-lazy (assets/ui/lazy.js). -->
   <script defer src="assets/engine/facts.js?v=89563a24"></script>
   <script defer src="assets/engine/phases.js?v=a907b023"></script>
@@ -178,14 +194,14 @@
   <script defer src="assets/engine/outcomes.js?v=50c73541"></script>
   <script defer src="assets/ui/ingest.js?v=e483bbe5"></script>
   <script defer src="assets/ui/router.js?v=15b04eaa"></script>
-  <script defer src="assets/ui/lazy.js?v=995d24b3"></script>
+  <script defer src="assets/ui/lazy.js?v=4cab566f"></script>
   <script defer src="assets/ui/palette.js?v=5d1537c0"></script>
   <script defer src="assets/ui/routes/home.js?v=ddefbbe0"></script>
   <script defer src="assets/ui/routes/targets.js?v=ac091e0b"></script>
   <script defer src="assets/ui/routes/evidence.js?v=2cad4328"></script>
   <script defer src="assets/ui/burp-copilot.js?v=f379d430"></script>
   <script defer src="assets/ui/routes/path.js?v=d78ae4b3"></script>
-  <script defer src="assets/ui/boot.js?v=861a1b77"></script>
+  <script defer src="assets/ui/boot.js?v=725c1ab5"></script>
 
   <!-- Presentation-only, loaded after the critical path so the boot budget is untouched:
        motion background, coin bursts on genuine proof, and the appearance settings. -->

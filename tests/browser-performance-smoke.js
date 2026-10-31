@@ -38,6 +38,7 @@ function check(value, message) { if (!PROFILE) assert.ok(value, message); checks
     await page.addInitScript(() => {
       localStorage.setItem('obol.motion', 'off');
       localStorage.setItem('obol.coins', 'off');
+      localStorage.setItem('obol.aup-accepted', 'v1:2026-10-31T00:00:00.000Z');
       window.__rafRuns = 0;
       const raf = window.requestAnimationFrame;
       window.requestAnimationFrame = fn => raf.call(window, ts => { window.__rafRuns++; fn(ts); });

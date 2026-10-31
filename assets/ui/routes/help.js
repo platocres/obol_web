@@ -169,11 +169,19 @@
     var body = tab === 'start'
       ? (renderStart(H) + '<div class="help-cross-search" style="display:none">' + renderManual(H) + renderIndex(H, '') + renderGlossary(H) + '</div>')
       : tab === 'manual' ? renderManual(H) : tab === 'glossary' ? renderGlossary(H) : renderIndex(H, focus);
-    return head + body + '</section>';
+    var legalFooter = '<div class="help-legal-bar">'
+      + '<span>For authorized security assessments and educational lab environments only.</span>'
+      + '<button type="button" class="help-go" data-open-aup>Authorized Use &amp; Legal Notice &rsaquo;</button>'
+      + '</div>';
+    return head + body + legalFooter + '</section>';
   }
 
   function mounted(ctx) {
     var mount = (ctx && ctx.mount) || document;
+    U.on(mount, 'click', '[data-open-aup]', function () {
+      if (OBOL.router.current().name !== 'help') return;
+      if (OBOL.aup && typeof OBOL.aup.open === 'function') OBOL.aup.open();
+    });
     // Go There (any element carrying data-goto, including the triage cards): optionally set UI state
     // (e.g. a Findings sub-view), then navigate.
     U.on(mount, 'click', '[data-goto]', function (e, b) {

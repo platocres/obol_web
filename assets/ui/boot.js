@@ -273,6 +273,101 @@
     return !touched;
   }
 
+  var AUP_KEY = 'obol.aup-accepted';
+  var AUP_VERSION = 'v1';
+  var _aupAcceptedMem = false;
+  var _aupBound = false;
+
+  function isAupAccepted() {
+    if (_aupAcceptedMem) return true;
+    try {
+      var v = localStorage.getItem(AUP_KEY) || '';
+      return v.indexOf(AUP_VERSION + ':') === 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function recordAupAccepted() {
+    _aupAcceptedMem = true;
+    try {
+      localStorage.setItem(AUP_KEY, AUP_VERSION + ':' + new Date().toISOString());
+    } catch (e) {}
+  }
+
+  function syncAupDialogMode(dlg, accepted) {
+    if (!dlg) return;
+    dlg.setAttribute('closedby', accepted ? 'any' : 'none');
+    var hint = dlg.querySelector('#aup-esc-hint');
+    if (hint) hint.classList.remove('is-visible');
+    var btn = dlg.querySelector('#aup-agree-btn');
+    if (btn) btn.textContent = accepted ? 'Close' : 'I Understand & Agree';
+  }
+
+  function openAupDialog() {
+    var dlg = document.getElementById('aup-dialog');
+    if (!dlg || typeof dlg.showModal !== 'function') return;
+    bindAupDialog(dlg);
+    syncAupDialogMode(dlg, isAupAccepted());
+    if (!dlg.open) {
+      try { dlg.showModal(); } catch (e) {}
+    }
+  }
+
+  function bindAupDialog(dlg) {
+    if (!dlg || _aupBound) return;
+    _aupBound = true;
+    function showRequiredHint() {
+      var hint = dlg.querySelector('#aup-esc-hint');
+      if (hint) hint.classList.add('is-visible');
+      var btn = dlg.querySelector('#aup-agree-btn');
+      if (btn && btn.focus) btn.focus();
+    }
+    dlg.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !isAupAccepted()) showRequiredHint();
+    });
+    dlg.addEventListener('submit', function (e) {
+      var sub = e.submitter || dlg.querySelector('#aup-agree-btn');
+      if (sub && sub.value === 'agree' && !isAupAccepted()) recordAupAccepted();
+    });
+    dlg.addEventListener('cancel', function (e) {
+      if (!isAupAccepted()) {
+        e.preventDefault();
+        showRequiredHint();
+      }
+    });
+    dlg.addEventListener('close', function () {
+      var rv = dlg.returnValue;
+      dlg.returnValue = '';
+      if (rv === 'agree' && !isAupAccepted()) {
+        recordAupAccepted();
+      }
+      if (!isAupAccepted()) {
+        setTimeout(function () {
+          if (!isAupAccepted() && !dlg.open && typeof dlg.showModal === 'function') {
+            syncAupDialogMode(dlg, false);
+            try { dlg.showModal(); } catch (e) {}
+            var hint = dlg.querySelector('#aup-esc-hint');
+            if (hint) hint.classList.add('is-visible');
+          }
+        }, 0);
+      } else {
+        syncAupDialogMode(dlg, true);
+      }
+    });
+    if (!('closedBy' in root.HTMLDialogElement.prototype)) {
+      var outside = function (ev) {
+        var r = dlg.getBoundingClientRect();
+        return ev.clientX < r.left || ev.clientX > r.right || ev.clientY < r.top || ev.clientY > r.bottom;
+      };
+      var pressedOutside = false;
+      dlg.addEventListener('pointerdown', function (ev) { pressedOutside = outside(ev); });
+      dlg.addEventListener('pointerup', function (ev) {
+        if (isAupAccepted() && pressedOutside && outside(ev)) dlg.close();
+      });
+    }
+  }
+
   function boot() {
     var view = document.getElementById('view');
     OBOL.router.mount(view);
@@ -289,6 +384,11 @@
       if (activeEng && (activeEng.activities || []).some(function (a) { return a && /\benum4linux(?:-ng)?\b/i.test(a.command || a.dispatch || ''); }) && OBOL.ingest && OBOL.ingest.ensureParsers) {
         OBOL.ingest.ensureParsers().then(function () { renderSidebar(); if (OBOL.router && OBOL.router.render) OBOL.router.render(); });
       }
+      var aupDlg = document.getElementById('aup-dialog');
+      if (aupDlg) {
+        bindAupDialog(aupDlg);
+        if (!isAupAccepted()) openAupDialog();
+      }
       document.documentElement.classList.remove('obol-booting');
       document.documentElement.setAttribute('data-obol-boot', 'ready');
     }).catch(function (err) {
@@ -300,5 +400,6 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
+  OBOL.aup = { isAccepted: isAupAccepted, open: openAupDialog };
   OBOL.app = { renderSidebar: renderSidebar };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

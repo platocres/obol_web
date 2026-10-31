@@ -53,7 +53,7 @@
     map: ['assets/engine/engmap.js?v=16d7647e', 'assets/ui/routes/map.js?v=1155be86'],
     findings: ['data/reportmeta.js?v=37f7e557', 'data/attack-catalog.js?v=f2aa133a', 'data/attack-move-map.js?v=3e72e0fb', 'data/d3fend-map.js?v=ae2b6f53', 'data/frameworks-tables.js?v=428bffd8', 'data/kev-catalog.js?v=f91dccda', 'assets/engine/frameworks.js?v=341ed948', 'assets/ui/routes/findings.js?v=f313c036'],
     history: ['assets/ui/routes/history.js?v=2f2bc740'],
-    help: ['data/help-content.js?v=48a12a15', 'assets/ui/routes/help.js?v=7528d7ed'],
+    help: ['data/help-content.js?v=48a12a15', 'assets/ui/routes/help.js?v=cee30a27'],
     start: ['data/resources.js?v=662af84a', 'assets/ui/routes/start.js?v=58acd6ad'],
   };
 

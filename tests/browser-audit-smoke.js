@@ -45,6 +45,7 @@ const server = http.createServer((req, res) => {
     });
     await page.goto(origin + '/index.html');
     await page.waitForFunction(() => window.OBOL && OBOL.store && OBOL.store.active() && document.documentElement.dataset.obolBoot === 'ready');
+    if (await page.locator('#aup-dialog[open] #aup-agree-btn').count()) await page.locator('#aup-agree-btn').click();
     const migration = await page.evaluate(async () => {
       const r = indexedDB.open('obol-db');
       const db = await new Promise(resolve => { r.onsuccess = () => resolve(r.result); });
