@@ -476,9 +476,10 @@
         "mdb-sql"
       ],
       "os": [
+        "windows",
         "linux"
       ],
-      "phase": "access",
+      "phase": "creds",
       "requires_any": [
         "loot.files",
         "smb.readable_share"

@@ -211,10 +211,34 @@
     var writeOk = !isMailCmd && !isSmtpOnlyTranscript && reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
     var hasFtpAnchorLine = !isMailCmd && !isSmtpOnlyTranscript && String(text || '').split(/\r?\n/).some(function (ln) {
       if (/^\s*220[ -]/i.test(ln)) return !_MAIL_220_BANNER_RE.test(ln);
-      return /^\s*(?:ftp>|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(ln);
+      return /^\s*(?:ftp>|local:\s*\S.*?\s+remote:\s*\S|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(ln);
     });
     var hasFtpSession = !isMailCmd && !isSmtpOnlyTranscript && !!(banners.length || loginSuccess || writeOk || isExplicitFtpCmd || hasFtpListingShape || hasFtpAnchorLine);
-    var ftpFiles = [], webrootMarkers = [];
+    var ftpFiles = [], ftpDownloaded = [], seenDl = {}, webrootMarkers = [];
+    var hasDownloadComplete = !isMailCmd && !isSmtpOnlyTranscript && /(?:^|\n)\s*226[\s-]|\bTransfer complete\b|\b\d+\s+bytes\s+received\s+in\b/i.test(text);
+    if (hasDownloadComplete) {
+      var addDlFile = function (rawName) {
+        var fn = C.stripChars(String(rawName || '').trim(), '"\'');
+        if (!fn || fn === '.' || fn === '..' || /^-(?:a|l|la|al)$/i.test(fn)) return;
+        var key = fn.toLowerCase();
+        if (seenDl[key]) return;
+        seenDl[key] = true;
+        ftpDownloaded.push({ share: '', path: fn, size: '' });
+      };
+      reAll(/^\s*local:\s*(?<local>\S.*?)\s+remote:\s*(?<remote>\S.*?)\s*$/gim, text).forEach(function (m) {
+        addDlFile(m.groups.remote || m.groups.local);
+      });
+      reAll(/(?:^\s*ftp>\s*(?:m?get|recv)|\bRETR)\s+["']?(?<file>[^\s"'\r\n]+)["']?/gim, cmdStr + '\n' + text).forEach(function (m) {
+        addDlFile(m.groups.file);
+      });
+      reAll(/^\s*1(?:25|50)[ -][^\r\n]*?\bfor\s+["']?(?<file>[^\s"'()\r\n]+)["']?(?:\s*\(\d+\s*bytes\))?/gim, text).forEach(function (m) {
+        if (!/^(?:\/bin\/ls|directory|file\s+list)$/i.test(m.groups.file)) addDlFile(m.groups.file);
+      });
+      if (!ftpDownloaded.length) {
+        var cmdGetM = /\b(?:l?ftp|ncftpget)\b[^\r\n]*?\bget\s+["']?([^\s"';&|]+)["']?/i.exec(cmdStr);
+        if (cmdGetM) addDlFile(cmdGetM[1]);
+      }
+    }
     var seenFtpAnchor = isExplicitFtpCmd || hasFtpListingShape;
     var seenFtpPrompt = /^\s*ftp>/im.test(cmdStr);
     text.split(/\r?\n/).forEach(function (line) {
@@ -249,7 +273,7 @@
         }
       }
     });
-    if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length) return;
+    if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length && !ftpDownloaded.length) return;
     var ftpOsText = String(text || '')
       .replace(/^\s*Remote system type is [^\r\n]*$/gim, '')
       .replace(/^\s*215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
@@ -264,6 +288,20 @@
     if (loginSuccess && streamCreds.length) _emit_ftp_stream_creds(facts, ws, h, source, streamCreds);
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
     if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', (hasFtpUri && !banners.length) ? 'ftp-list' : 'ftp-listing', text, ws, source);
+    if (ftpDownloaded.length) {
+      if (C._emit_file_loot) {
+        C._emit_file_loot(facts, h, ftpDownloaded, 'ftp', 'ftp-download', text, ws, source);
+      } else {
+        var dlPaths = ftpDownloaded.map(function (e) { return e.path; });
+        _add(facts, mkFact('loot.files', h, { count: dlPaths.length, files: dlPaths, entries: ftpDownloaded, via: 'ftp-download', tool: 'ftp' }, S, source));
+      }
+      ftpDownloaded.forEach(function (e) {
+        var base = String(e.path || '').split(/[\\/]/).pop() || '';
+        if (/\.(?:zip|7z|rar|tar|gz|tgz|bz2|xz|pfx|p12|kdbx|psafe3|bak|ezip|jks|keystore)$/i.test(base)) {
+          _add(facts, mkFact('loot.material', h, { kind: 'archive_loot', file: base, path: e.path, via: 'ftp-download' }, S, source));
+        }
+      });
+    }
     if (webrootMarkers.length) {
       _add(facts, mkFact('config.review', h, { kind: 'ftp_webroot_exposed', files: C.uniqueSortedCI(webrootMarkers), via: 'ftp' }, S, source));
     }
@@ -301,10 +339,10 @@
 
   function _parse_snmp_output(text, ws, command, source, facts) {
     var lowered = text.toLowerCase();
-    var hasMibLines = /(?:snmpv2-mib|host-resources-mib|net-snmp-extend-mib|ucd-snmp-mib|if-mib|ip-mib|tcp-mib|udp-mib|hrswinstalledname|nsextend\w*|ext(?:names|command|output)|iso\.3\.6\.1|\.1\.3\.6\.1)[^\r\n]{0,160}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
+    var hasMibLines = /(?:snmpv2-mib|host-resources-mib|net-snmp-extend-mib|ucd-snmp-mib|if-mib|ip-mib|tcp-mib|udp-mib|hrswinstalledname|nsextend\w*|ext(?:names|command|output)|(?:iso|\.?1)\.3\.6\.1)[^\r\n]{0,160}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
     if (!hasMibLines && ['timeout', 'no response from', 'authorizationerror', 'authentication failure'].some(function (m) { return lowered.indexOf(m) >= 0; })) return;
     if (!hasMibLines && lowered.indexOf('snmpv2-mib::') < 0 && lowered.indexOf('= string:') < 0
-        && lowered.indexOf('iso.3.6.1') < 0 && text.indexOf('.1.3.6.1') < 0
+        && lowered.indexOf('iso.3.6.1') < 0 && !/(?:^|\D)1\.3\.6\.1\./.test(text)
         && !_ONESIXTYONE_RE.test(text)) return;
     var h = 'host:' + ws.target, value = {};
     [['description', C._SNMP_SYSDESCR_RE], ['name', C._SNMP_SYSNAME_RE], ['location', C._SNMP_SYSLOCATION_RE], ['contact', C._SNMP_SYSCONTACT_RE]].forEach(function (pair) {
@@ -322,6 +360,16 @@
     if (community) _add(facts, mkFact('snmp.community', h, { community: community }, S, source));
     _add(facts, mkFact('snmp.reachable', h, { tool: 'snmp' }, S, source));
 
+    var snmpListenPorts = {};
+    reAll(/(?:TCP-MIB::tcpConnState|(?:iso|\.?1)\.3\.6\.1\.2\.1\.6\.13\.1\.1)\.(\d{1,3}(?:\.\d{1,3}){3})\.(\d{1,5})\.[^\r\n]*=\s*(?:INTEGER:\s*)?(?:listen\s*\(\s*2\s*\)|2\b)/gi, text).forEach(function (tm) {
+      var lp = parseInt(tm[2], 10);
+      if (lp >= 1 && lp <= 65535) snmpListenPorts[lp] = 1;
+    });
+    var snmpListenList = Object.keys(snmpListenPorts).map(Number).sort(function (a, b) { return a - b; });
+    if (snmpListenList.length) {
+      _add(facts, mkFact('scan.local.listeners', h, { ports: snmpListenList.slice(0, 48), via: 'snmp' }, S, source));
+    }
+
     // the LanMan users table hands you a spray list; a running-process command line may carry a secret
     var users = [];
     reAll(_SNMP_USER_RE, text).forEach(function (m) {
@@ -331,15 +379,39 @@
     if (users.length) _add(facts, mkFact('ad.user_list', h, { users: users, count: users.length, method: 'snmp' }, S, source));
     var seenPw = {};
     reAll(_SNMP_RUNPARAM_RE, text).forEach(function (m) {
-      var pw = reSearch(_SNMP_PROC_PW_RE, m.groups.val);
-      if (!pw) return;
-      var secret = pw.groups.pw;
-      if (seenPw[secret] || ['password', 'changeme', 'null'].indexOf(secret.toLowerCase()) >= 0) return;
-      seenPw[secret] = true;
-      var cred = { password: secret, via: 'snmp-process' };
-      var um = reSearch(_SNMP_PROC_USER_RE, m.groups.val);
-      if (um) cred.user = um.groups.user;
-      _add(facts, mkFact('credential.candidate', h, cred, S, source));
+      var paramVal = C.stripChars((m.groups.val || '').trim(), '"').trim();
+      var pw = reSearch(_SNMP_PROC_PW_RE, paramVal);
+      if (pw) {
+        var secret = pw.groups.pw;
+        if (!seenPw[secret] && ['password', 'changeme', 'null'].indexOf(secret.toLowerCase()) < 0) {
+          seenPw[secret] = true;
+          var cred = { password: secret, via: 'snmp-process' };
+          var um = reSearch(_SNMP_PROC_USER_RE, paramVal);
+          if (um) cred.user = um.groups.user;
+          _add(facts, mkFact('credential.candidate', h, cred, S, source));
+        }
+      }
+      reAll(/(?:^|[\s"'\/\\])([A-Za-z0-9_.-]+\.(?:sh|py|pl|rb|ps1|bat|cmd))\s+["']?([A-Za-z0-9._-]{2,32})["']?\s+["']?([^\s"']{8,64})["']?(?=\s|["']|$)/gi, paramVal).forEach(function (sm) {
+        var posUser = C._clean_username(sm[2]);
+        var posPw = (sm[3] || '').trim();
+        if (!posUser || !posPw || posUser.charAt(0) === '-' || posPw.charAt(0) === '-') return;
+        if (/^\d+$/.test(posUser) || /^(?:start|stop|restart|status|run|backup|restore|check|sync|test|init|install|update|true|false)$/i.test(posUser)) return;
+        if (/[\/\\]/.test(posPw) || /^https?:/i.test(posPw) || /\.(?:txt|log|conf|cfg|ini|json|xml|ya?ml|sql|db|zip|tar|gz|bak|sh|py|pl|rb)$/i.test(posPw)) return;
+        if (!C._valid_username(posUser, false) || !C._valid_password(posPw)) return;
+        var pKey = posUser.toLowerCase() + '|' + posPw;
+        if (seenPw[pKey] || seenPw[posPw]) return;
+        seenPw[pKey] = true;
+        seenPw[posPw] = true;
+        _add(facts, mkFact('credential.candidate', h, { user: posUser, password: posPw, via: 'snmp-process' }, S, source));
+      });
+      reAll(/(?:^|[\s"'\/\\])([A-Za-z0-9_.-]+\.(?:sh|py|pl|rb|ps1|bat|cmd))\s+["']?([^\s"']{8,64})["']?\s*$/gi, paramVal).forEach(function (sm1) {
+        var singlePw = (sm1[2] || '').trim();
+        if (!singlePw || singlePw.charAt(0) === '-' || seenPw[singlePw]) return;
+        if (/[\/\\]/.test(singlePw) || /^https?:/i.test(singlePw) || /\.(?:txt|log|conf|cfg|ini|json|xml|ya?ml|sql|db|zip|tar|gz|bak|sh|py|pl|rb)$/i.test(singlePw)) return;
+        if (!/[A-Za-z]/.test(singlePw) || !/[\d!@#$%^&*+=-]/.test(singlePw) || !C._valid_password(singlePw)) return;
+        seenPw[singlePw] = true;
+        _add(facts, mkFact('credential.candidate', h, { password: singlePw, via: 'snmp-process' }, S, source));
+      });
     });
 
     // hrSWInstalledName (HOST-RESOURCES-MIB / 1.3.6.1.2.1.25.6.3.1.2): installed software inventory
@@ -471,18 +543,24 @@
   // SQLite dump (`sqlite3 <db> .dump`) -> credential.candidate. The TERMINAL path's mirror of the
   // native ingest_sqlite reader: obol types `curl ... && sqlite3 db .dump`, and the captured
   // INSERT/CREATE-TABLE stream is parsed here so a leaked app store still yields logins.
-  var _SQLD_CREATE_RE = /CREATE TABLE\s+["`\[]?(?<t>\w+)["`\]]?\s*\((?<cols>[^\r\n]{1,4000})\)/gi;
-  var _SQLD_INSERT_RE = /INSERT INTO\s+["`\[]?(?<t>\w+)["`\]]?\s*(?:\([^)\r\n]{0,1000}\))?\s*VALUES\s*\((?<vals>[^\r\n]{1,4000})\)\s*;/gi;
+  var _SQLD_CREATE_RE = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:["`\[]?\w+["`\]]?\.)?["`\[]?(?<t>\w+)["`\]]?\s*\((?<cols>[\s\S]{1,8000}?)\)\s*(?:ENGINE\s*=|DEFAULT\s+CHARSET|WITHOUT\s+ROWID|;)/gi;
+  var _SQLD_INSERT_RE = /INSERT\s+INTO\s+(?:["`\[]?\w+["`\]]?\.)?["`\[]?(?<t>\w+)["`\]]?\s*(?:\((?<icols>[^)\r\n]{1,1000})\))?\s*VALUES\s*(?<vblob>[\s\S]{1,16000}?)\s*;/gi;
+  var _SQLD_CONSTRAINT_COL_RE = /^(?:(?:PRIMARY|UNIQUE|FOREIGN|FULLTEXT|SPATIAL)\s+)?(?:KEY|INDEX|CONSTRAINT|CHECK)\b/i;
   var _SQLD_USER_COL = /^(?:user(?:name)?|uname|login|email|account|name|admin)$/i;
   var _SQLD_SECRET_COL = /^(?:pass(?:word|wd)?|pwd|secret|hash|passhash|pw)$/i;
-  var _SQLD_HASH_RE = /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{56}|[0-9a-f]{64}|[0-9a-f]{128}|\$(?:2[aby]|1|5|6|y)\$[^\s]+)$/i;
+  var _SQLD_HASH_RE = /^(?:[0-9a-f]{32}|[0-9a-f]{40}|[0-9a-f]{56}|[0-9a-f]{64}|[0-9a-f]{128}|\*[0-9a-f]{40}|\$(?:2[abxy]|1|5|6|y|apr1|P|H|pbkdf2[^$]*|argon2[id]*)\$[^\s]+|pbkdf2[:_][^\s]+|sha(?:1|256|512)[:$][^\s]+)$/i;
 
   function _sqld_split(blob) {
-    // Split one SQL VALUES(...) tuple into its top-level tokens, honoring `'…''…'` quoting.
-    var out = [], cur = '', inStr = false, i = 0, n = blob.length;
+    // Split one SQL VALUES(...) tuple or CREATE TABLE column list into top-level tokens, honoring quoting and parens.
+    var out = [], cur = '', inStr = false, depth = 0, i = 0, n = blob.length;
     while (i < n) {
       var c = blob[i];
       if (inStr) {
+        if (c === '\\' && i + 1 < n && (blob[i + 1] === "'" || blob[i + 1] === '\\') && !/^\s*[,)]/.test(blob.slice(i + 2))) {
+          cur += blob[i + 1];
+          i += 2;
+          continue;
+        }
         if (c === "'") {
           if (i + 1 < n && blob[i + 1] === "'") { cur += "'"; i += 2; continue; }
           inStr = false;
@@ -491,7 +569,9 @@
         continue;
       }
       if (c === "'") inStr = true;
-      else if (c === ',') { out.push(cur.trim()); cur = ''; }
+      else if (c === '(') { depth += 1; cur += c; }
+      else if (c === ')' && depth > 0) { depth -= 1; cur += c; }
+      else if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; }
       else cur += c;
       i += 1;
     }
@@ -500,40 +580,109 @@
   }
   C._sqld_split = _sqld_split;
 
+  function _sqld_extract_tuples(vblob) {
+    var tuples = [], inStr = false, depth = 0, start = -1, i = 0, n = (vblob || '').length;
+    while (i < n) {
+      var c = vblob[i];
+      if (inStr) {
+        if (c === '\\' && i + 1 < n && (vblob[i + 1] === "'" || vblob[i + 1] === '\\') && !/^\s*[,)]/.test(vblob.slice(i + 2))) {
+          i += 2;
+          continue;
+        }
+        if (c === "'") {
+          if (i + 1 < n && vblob[i + 1] === "'") { i += 2; continue; }
+          inStr = false;
+        }
+        i += 1;
+        continue;
+      }
+      if (c === "'") {
+        inStr = true;
+      } else if (c === '(') {
+        if (depth === 0) start = i + 1;
+        depth += 1;
+      } else if (c === ')') {
+        if (depth > 0) {
+          depth -= 1;
+          if (depth === 0 && start >= 0) {
+            tuples.push(vblob.slice(start, i));
+            start = -1;
+          }
+        }
+      }
+      i += 1;
+    }
+    return tuples;
+  }
+
   function _strip_col_quotes(s) { return C.stripChars(s, '"`[]'); }
 
   function _parse_sqlite_dump(text, ws, source, facts) {
+    var h = 'host:' + ws.target;
     var colsByTable = {};
     reAll(_SQLD_CREATE_RE, text).forEach(function (m) {
-      var names = _sqld_split(m.groups.cols).filter(function (seg) { return seg.trim(); }).map(function (seg) {
-        var first = (_strip_col_quotes(seg.trim()).trim().split(/\s+/)[0] || '');
-        return _strip_col_quotes(first);
+      var names = [];
+      _sqld_split(m.groups.cols).forEach(function (seg) {
+        var trimmed = seg.trim();
+        if (!trimmed || _SQLD_CONSTRAINT_COL_RE.test(trimmed)) return;
+        var first = (_strip_col_quotes(trimmed).trim().split(/[\s(]+/)[0] || '');
+        var cleanCol = _strip_col_quotes(first);
+        if (cleanCol) names.push(cleanCol);
       });
-      colsByTable[m.groups.t.toLowerCase()] = names;
+      if (names.length) colsByTable[m.groups.t.toLowerCase()] = names;
     });
     var seen = {};
     reAll(_SQLD_INSERT_RE, text).forEach(function (m) {
       var table = m.groups.t.toLowerCase();
-      var cols = colsByTable[table];
-      var vals = _sqld_split(m.groups.vals);
-      if (!cols || cols.length !== vals.length) return;
-      var row = {};
-      for (var i = 0; i < cols.length; i++) row[cols[i]] = vals[i];
+      var cols = null;
+      if (m.groups.icols && m.groups.icols.trim()) {
+        cols = _sqld_split(m.groups.icols).map(function (c) { return _strip_col_quotes(c.trim()); }).filter(Boolean);
+      } else {
+        cols = colsByTable[table];
+      }
+      if (!cols || !cols.length) return;
       var userCols = cols.filter(function (c) { return _SQLD_USER_COL.test(c); });
       var secretCols = cols.filter(function (c) { return _SQLD_SECRET_COL.test(c); });
-      secretCols.forEach(function (sc) {
-        var secret = (row[sc] || '').trim();
-        if (!secret || secret.toUpperCase() === 'NULL' || secret.length > 4096) return;
-        var user = '';
-        for (var j = 0; j < userCols.length; j++) { var v = (row[userCols[j]] || '').trim(); if (v) { user = v; break; } }
-        var cred = { via: 'exposed-sqlite', table: table };
-        if (user) cred.user = user.slice(0, 128);
-        if (_SQLD_HASH_RE.test(secret)) cred.hash = secret;
-        else cred.password = secret;
-        var fp = (cred.user || '') + '|' + (cred.hash || cred.password);
-        if (seen[fp]) return;
-        seen[fp] = true;
-        _add(facts, mkFact('credential.candidate', 'host:' + ws.target, cred, S, source));
+      if (!secretCols.length) return;
+      var tuples = _sqld_extract_tuples(m.groups.vblob);
+      tuples.forEach(function (tupleStr) {
+        var vals = _sqld_split(tupleStr);
+        if (cols.length !== vals.length) return;
+        var row = {};
+        for (var i = 0; i < cols.length; i++) row[cols[i]] = vals[i];
+        secretCols.forEach(function (sc) {
+          var secret = (row[sc] || '').trim();
+          if (!secret || secret.toUpperCase() === 'NULL' || secret.length > 4096) return;
+          var user = '';
+          for (var j = 0; j < userCols.length; j++) {
+            var v = (row[userCols[j]] || '').trim();
+            if (v && v.toUpperCase() !== 'NULL') { user = v; break; }
+          }
+          var cred = { via: 'exposed-sqlite', table: table };
+          if (user) cred.user = user.slice(0, 128);
+          var isHash = _SQLD_HASH_RE.test(secret);
+          if (isHash) cred.hash = secret;
+          else cred.password = secret;
+          var fp = (cred.user || '') + '|' + (cred.hash || cred.password);
+          if (seen[fp]) return;
+          seen[fp] = true;
+          _add(facts, mkFact('credential.candidate', h, cred, S, source));
+          if (isHash) {
+            var hVal = { hash: secret, kind: 'sql-dump', table: table };
+            if (cred.user) hVal.user = cred.user;
+            _add(facts, mkFact('hash.crackable', h, hVal, S, source));
+          } else if (C._valid_password && C._valid_password(secret)) {
+            var cleanU = user ? C._clean_username(user) : '';
+            if (cleanU && C._valid_username && C._valid_username(cleanU, false) && C._add_plaintext_credential) {
+              C._add_plaintext_credential(facts, ws, source, cleanU, secret, '', 'sql-dump', '');
+            } else {
+              var pVal = { password: secret, table: table, method: 'sql-dump' };
+              if (user) pVal.user = user.slice(0, 128);
+              _add(facts, mkFact('credential.plaintext', h, pVal, S, source));
+              _add(facts, mkFact('credential.available', h, pVal, S, source));
+            }
+          }
+        });
       });
     });
   }
@@ -1019,6 +1168,86 @@
   C._parse_ident_output = _parse_ident_output;
   C._parse_ident_user_enum = _parse_ident_output;
 
+  var _X509_PUBLIC_CA_DENY_RE = /\.(?:letsencrypt\.org|digicert\.com|sectigo\.com|comodoca\.com|godaddy\.com|globalsign\.com|cloudflare\.com|amazonaws\.com|cloudfront\.net|aka(?:mai|maiedge)\.net|windows\.net|office\.com|microsoft\.com|entrust\.net|verisign\.com)$/i;
+
+  function _parse_x509_cert(text, a1, a2, a3, a4) {
+    var unpacked = _unpack_service_args(text, a1, a2, a3, a4, 'openssl-x509');
+    var ws = unpacked.ws, command = unpacked.command, source = unpacked.source, facts = unpacked.facts;
+    var t = String(text || '');
+    if (!t) return facts;
+    var cmd = String(command || '');
+    var isX509Ctx = /\bopenssl\b[^\r\n]*\b(?:x509|s_client)\b/i.test(cmd)
+      || /\bCertificate:\s*\r?\n\s*Data:/i.test(t)
+      || /\bX509v3 Subject Alternative Name:\s*\r?\n/i.test(t)
+      || (/^\s*Subject:\s*[^\r\n]*\bCN\s*=/im.test(t) && /^\s*Issuer:\s*[^\r\n]*\b(?:CN|DC|O)\s*=/im.test(t));
+    if (!isX509Ctx) return facts;
+
+    var h = 'host:' + ((ws && ws.target) || 'unknown');
+    var fqdns = {}, bareDoms = {};
+    function addCertName(raw) {
+      var cand = String(raw || '').trim().replace(/^\*\./, '').replace(/\.$/, '').toLowerCase();
+      if (!cand || cand.indexOf('.') < 0) return;
+      if ((C._IPV4_RE && C._IPV4_RE.test(cand)) || /^\d+(?:\.\d+)+$/.test(cand)) return;
+      if (/^(?:localhost|ocsp\.|crl\.)/i.test(cand) || _X509_PUBLIC_CA_DENY_RE.test(cand)) return;
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(cand)) return;
+      if (!/\.[a-z][a-z0-9-]{1,}$/.test(cand)) return;
+      fqdns[cand] = true;
+    }
+
+    reAll(/^\s*subject[=:]\s*[^\r\n]*?\bCN\s*=\s*([A-Za-z0-9*.-]+\.[A-Za-z]{2,})\b/gim, t).forEach(function (m) {
+      addCertName(m[1]);
+    });
+    reAll(/\bDNS\s*:\s*([A-Za-z0-9*.-]+\.[A-Za-z]{2,})\b/gi, t).forEach(function (m) {
+      addCertName(m[1]);
+    });
+
+    var names = C.uniqueSortedCI(Object.keys(fqdns));
+    if (!names.length) return facts;
+
+    var allKnown = [].concat(facts || [], (ws && ws.facts) || [], (ws && ws.seedFacts) || []);
+    var hasLinuxOs = allKnown.some(function (f) {
+      return f && f.scope === h && (f.kind === 'host.os_family' || f.kind === 'host.os_hint' || f.kind === 'os.guess') && f.value && f.value.family === 'linux';
+    });
+    var isLdapsOrAdPort = /(?::|\s)(?:636|3269|389|3268|5986|88|3389)\b|\bldaps?\b/i.test(cmd + ' ' + (source || ''))
+      || allKnown.some(function (f) {
+        return f && f.scope === h && (f.kind === 'port:636' || f.kind === 'port:3269' || f.kind === 'port:389' || f.kind === 'port:88' || f.kind === 'ldap.reachable' || f.kind === 'kerberos.reachable' || f.kind === 'ad.dc_candidate');
+      });
+    var hasAdCertMarkers = /\bDC\s*=\s*[A-Za-z0-9-]+|ldap:\/\/\/|1\.3\.6\.1\.4\.1\.311|\bCN\s*=\s*[A-Za-z0-9._-]+-CA\b/i.test(t);
+
+    names.forEach(function (fqdn) {
+      var parts = fqdn.split('.').filter(Boolean);
+      var fVal = { fqdn: fqdn, via: 'x509' };
+      var dom = '';
+      if (parts.length > 2) {
+        fVal.hostname = parts[0];
+        dom = parts.slice(1).join('.');
+        fVal.domain = dom;
+      } else {
+        fVal.hostname = parts[0];
+        dom = fqdn;
+        fVal.domain = fqdn;
+      }
+      _add(facts, mkFact('host.fqdn', h, fVal, S, source));
+      if (dom) bareDoms[dom] = { hostLabel: parts.length > 2 ? parts[0] : '' };
+    });
+
+    Object.keys(bareDoms).sort().forEach(function (dom) {
+      _add(facts, mkFact('host.domain', h, { domain: dom }, S, source));
+      var hostLbl = bareDoms[dom].hostLabel;
+      var hasBothHostAndZone = !!(hostLbl && fqdns[dom]);
+      if (!hasLinuxOs && (isLdapsOrAdPort || hasAdCertMarkers || hasBothHostAndZone || /^dc\d*[-a-z0-9]*$/i.test(hostLbl) || /\.(?:local|corp|internal|lan)$/i.test(dom))) {
+        _add(facts, mkFact('ad.domain_known', 'domain:' + dom, { name: dom, via: 'x509' }, S, source));
+        if (C._base_dn_from_domain) {
+          _add(facts, mkFact('ad.base_dn', 'domain:' + dom, { base_dn: C._base_dn_from_domain(dom) }, S, source));
+        }
+      }
+    });
+    return facts;
+  }
+  C._parse_x509_cert = _parse_x509_cert;
+  C._parse_openssl_x509 = _parse_x509_cert;
+  C._parse_tls_cert = _parse_x509_cert;
+
   OBOL.parsers = OBOL.parsers || {};
   OBOL.parsers.services = Object.assign(OBOL.parsers.services || {}, {
     _parse_http_metadata: _parse_http_metadata,
@@ -1030,7 +1259,8 @@
     _parse_imap_output: _parse_imap_output,
     _parse_pop3_output: _parse_pop3_output,
     _parse_ident_output: _parse_ident_output,
-    _parse_ident_user_enum: _parse_ident_output
+    _parse_ident_user_enum: _parse_ident_output,
+    _parse_x509_cert: _parse_x509_cert
   });
   if (typeof module !== 'undefined' && module.exports) { module.exports = OBOL.parsers.services; }
 

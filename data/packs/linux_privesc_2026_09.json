@@ -77,6 +77,7 @@
     },
     {
       "id": "sudo-abuse",
+      "transition": "privesc_act",
       "title": "Sudo / GTFOBins Abuse",
       "hypothesis": "Entries returned by sudo -l on ordinary binaries frequently mean immediate root: any tool with a sudo entry on GTFOBins (vim, find, awk, tar, less, python...) has a published shell-escape technique. A NOPASSWD entry just hands it to you.",
       "tool": "sudo",
@@ -90,6 +91,7 @@
         "foothold.linux"
       ],
       "requires_any": [
+        "privesc.sudo",
         "privesc.sudo_rights",
         "privesc.sudo_binary",
         "privesc.script_sink"
@@ -135,6 +137,7 @@
     },
     {
       "id": "writable-passwd",
+      "transition": "privesc_act",
       "title": "Writable /etc/passwd",
       "hypothesis": "When /etc/passwd is writable by everyone (it turns up in labs more often than expected), you can add a root-equivalent account using a hash you produce on your own machine. There is no exploit involved, the file itself defines the trust boundary, and here it is wide open.",
       "tool": "openssl",
@@ -149,6 +152,7 @@
       ],
       "requires_any": [
         "privesc.passwd_writable",
+        "privesc.writable_passwd",
         "privesc.writable_etc"
       ],
       "deprioritize_when": [
@@ -768,6 +772,7 @@
     },
     {
       "id": "linux-path-hijack",
+      "transition": "privesc_act",
       "title": "PATH Hijack of a SUID/cron Binary",
       "phase": "escalate",
       "hypothesis": "A root SUID binary or root cron job that calls another program by its bare name, not an absolute path, resolves that name through PATH. Put a directory you control at the front of PATH, drop a program with the same name, and your code runs with the caller's privileges. The whole technique is spotting the relative call with strings or ltrace, then three commands to a root shell.",
@@ -838,6 +843,7 @@
     },
     {
       "id": "linux-ld-preload",
+      "transition": "privesc_act",
       "title": "sudo LD_PRELOAD Library Injection",
       "phase": "escalate",
       "hypothesis": "When sudo preserves LD_PRELOAD (env_keep += LD_PRELOAD in the policy), any command you may run with sudo loads a shared library you point it at, as root. Write a tiny .so whose constructor sets the uid to 0 and execs a shell, then run the permitted sudo command with LD_PRELOAD set to it. The tell is in sudo -l; the specific allowed command does not matter.",
@@ -850,6 +856,7 @@
         "linux"
       ],
       "requires_any": [
+        "privesc.sudo",
         "privesc.sudo_rights"
       ],
       "produces": [
@@ -1117,6 +1124,7 @@
     },
     {
       "id": "python-library-hijack",
+      "transition": "privesc_act",
       "title": "Python Library / Import Path Hijack",
       "phase": "escalate",
       "os": [
@@ -1131,6 +1139,7 @@
       "requires_any": [
         "privesc.cron_writable",
         "privesc.cron",
+        "privesc.sudo",
         "privesc.sudo_rights",
         "privesc.library_or_script_hijack"
       ],
@@ -1377,6 +1386,7 @@
     },
     {
       "id": "baron-samedit",
+      "transition": "privesc_act",
       "title": "Sudo Baron Samedit Heap Overflow (CVE-2021-3156)",
       "hypothesis": "Baron Samedit is a heap overflow in sudo itself, present on sudo below 1.9.5p2, that any local user can trigger regardless of their sudo rights, because it is reached through sudoedit before any permission check. A public exploit auto-detects the memory offsets and spawns a root shell. It is a post-foothold escalation that works even when sudo -l shows you nothing. Confirm the version, then run the exploit.",
       "tool": "sudoedit",
@@ -1393,6 +1403,7 @@
       "requires_any": [
         "vuln.baron_samedit",
         "privesc.kernel_exploit",
+        "privesc.sudo",
         "privesc.sudo_rights"
       ],
       "deprioritize_when": [

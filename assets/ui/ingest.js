@@ -244,6 +244,7 @@
   function _isCaptionFollowCliLine(line) {
     var trimmed = _stripAnsi(line).trim();
     if (!trimmed || trimmed.indexOf('#') === 0 || trimmed.indexOf('//') === 0 || trimmed.indexOf('/*') === 0) return false;
+    if (/^(?:Nmap\s+(?:scan\s+report\s+for|done:)|Starting\s+(?:Nmap|gobuster|feroxbuster|masscan|enum4linux|rustscan|nikto|sqlmap|dirb|wpscan))\b/i.test(trimmed)) return false;
     var s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
     if (!s) return false;
     var first = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');

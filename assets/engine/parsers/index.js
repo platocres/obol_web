@@ -157,35 +157,34 @@
     var _nmapOpenRe = C._NMAP_OPEN_RE || C._NMAP_PORT_RE;
     var looksLikeNmapContent = /<nmaprun\b|Nmap scan report for\b|Starting Nmap\b|Discovered open port \d+\/(?:tcp|udp) on \d|^[ \t]*Open \d{1,3}(?:\.\d{1,3}){3}:\d+/im.test(bigProbeSample)
       || ((bigProbeSample.indexOf('/tcp') >= 0 || bigProbeSample.indexOf('/udp') >= 0) && _nmapOpenRe && _nmapOpenRe.test(bigProbeSample)
-        && (/Service Info:|Host script results:|^[ \t]*\|[_ ][a-z0-9-]+:|^[ \t]*\|[_ ]|MAC Address:|OS details:|^[ \t]*PORT[ \t]+STATE[ \t]+SERVICE\b/im.test(bigProbeSample)
-          || (C.reAll && C.reAll(_nmapOpenRe, bigProbeSample).length >= 2)));
+        && /Service Info:|Host script results:|^[ \t]*\|[_ ][a-z0-9-]+:|^[ \t]*\|[_ ]|MAC Address:|OS details:/im.test(bigProbeSample));
     if (/\b(?:nmap|masscan|rustscan)\b/.test(lc) || looksLikeNmapContent) {
       if (has('_parse_nmap')) guarded._parse_nmap(text, ws, source, facts, actionId, command);
     }
 
     var isNxc = /\b(?:nxc|netexec|crackmapexec|cme)\b/.test(lc)
-      || /^(?:SMB|LDAP|WINRM|MSSQL|FTP|SSH|RDP|WMI|VNC|NFS)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+/im.test(bigProbeSample)
-      || /^(?:GPP_PASS(?:WORD)?|GPP_AUTOLOGIN|LSASSY|NANODUMP|HANDLEKATZ|PROCDUMP|MASKY|SPIDER_PLUS|WDIGEST|COERCE_PLUS|PETITPOTAM|DFSCOERCE|SHADOWCOERCE|PRINTERBUG|BACKUP_OPERATOR|REG-WINLOGON|REG-QUERY|VEEAM|MREMOTENG|WINSCP|PUTTY|KEEPASS_DISCOVER|KEEPASS_TRIGGER|INSTALL_ELEVATED|PRE2K|NTLMV1|ENUM_AV|SPOOLER|WEBDAV|RUNASPPL|MS17-010|ZEROLOGON|SMBGHOST|NOPAC|PRINTNIGHTMARE|ENUM_CVE|RDCMAN|IIS|FIREFOX|POWERSHELL_HISTORY|MET_INJECT|SLINKY|SCUFFY|DACLREAD|GROUP-MEM|ADCS|USER-DESC|GET-DESC-USERS|ENUM_TRUSTS|LDAP-CHECKER|MAQ|MSSQL_PRIV|MSSQL_COERCE|WIFI)\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+/im.test(bigProbeSample);
+      || /^(?:SMB|LDAP|WINRM|MSSQL|FTP|SSH|RDP|WMI|VNC|NFS)\s+\S+\s+\d+\s+\S+/im.test(bigProbeSample)
+      || /^(?:GPP_PASS(?:WORD)?|GPP_AUTOLOGIN|LSASSY|NANODUMP|HANDLEKATZ|PROCDUMP|MASKY|SPIDER_PLUS|WDIGEST|COERCE_PLUS|PETITPOTAM|DFSCOERCE|SHADOWCOERCE|PRINTERBUG|BACKUP_OPERATOR|REG-WINLOGON|REG-QUERY|VEEAM|MREMOTENG|WINSCP|PUTTY|KEEPASS_DISCOVER|KEEPASS_TRIGGER|INSTALL_ELEVATED|PRE2K|NTLMV1|ENUM_AV|SPOOLER|WEBDAV|RUNASPPL|MS17-010|ZEROLOGON|SMBGHOST|NOPAC|PRINTNIGHTMARE|ENUM_CVE|RDCMAN|IIS|FIREFOX|POWERSHELL_HISTORY|MET_INJECT|SLINKY|SCUFFY|DACLREAD|GROUP-MEM|ADCS|USER-DESC|GET-DESC-USERS|ENUM_TRUSTS|LDAP-CHECKER|MAQ|MSSQL_PRIV|MSSQL_COERCE|WIFI)\s+\S+\s+\d+\s+\S+/im.test(bigProbeSample);
     if (isNxc) {
       guarded._parse_nxc_common(text, ws, source, facts);
       // Data-driven capability catalog (nxc-catalog.js): fills the switches the hand-written parsers below
       // don't cover (--users on smb, --lsa cleartext, -M gpp_password/lsassy/...). Facts dedupe, so running it
       // alongside the existing parsers is safe. See docs + tests/engine/nxc-switch-parsers.js.
       if (has('_parse_nxc_capability')) guarded._parse_nxc_capability(text, command, ws, source, facts);
-      if ((C._is_ldap_command(command) || /^LDAP\s+\d+\.\d+\.\d+\.\d+/im.test(text)) && (actionId === 'ad-anon-ldap-enum' || lc.indexOf('--users') >= 0 || lc.indexOf('--active-users') >= 0 || /-description-/i.test(text))) {
+      if ((C._is_ldap_command(command) || /^LDAP\s+\S+\s+\d+\s+\S+/im.test(text)) && (actionId === 'ad-anon-ldap-enum' || lc.indexOf('--users') >= 0 || lc.indexOf('--active-users') >= 0 || /-description-/i.test(text))) {
         guarded._parse_user_list(text, ws, source, facts, { prove_anonymous_ldap: C._looks_anonymous_ldap_command(command, actObj), domain_hint: domainHint });
         if ((lc.indexOf('--users') >= 0 || lc.indexOf('--active-users') >= 0 || /-description-/i.test(text)) && has('_parse_ldap_descriptions')) guarded._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
       }
-      if (C._is_smb_command(command) || /^SMB\s+\d+\.\d+\.\d+\.\d+/im.test(text)) {
+      if (C._is_smb_command(command) || /^SMB\s+\S+\s+\d+\s+\S+/im.test(text)) {
         guarded._parse_nxc_smb_session(text, ws, command, source, facts);
-        guarded._parse_smb_shares(text, ws, source, facts);
+        guarded._parse_smb_shares(text, ws, source, facts, command);
         if (actionId === 'ad-user-enum' || lc.indexOf('--rid-brute') >= 0 || lc.indexOf('--users') >= 0 || /\(SidTypeUser\)/i.test(text)) guarded._parse_rid_user_list(text, ws, source, facts, { domain_hint: domainHint, command: command });
       }
       if (lc.indexOf('--asreproast') >= 0 || text.indexOf('$krb5asrep$') >= 0) guarded._parse_asrep_hashes(text, ws, source, facts);
-      guarded._parse_nxc_auth_validation(text, ws, source, facts);
+      guarded._parse_nxc_auth_validation(text, ws, source, facts, command);
       guarded._parse_auth_failures(text, ws, source, facts);
       if (lc.indexOf('--kerberoast') >= 0 || lc.indexOf('--kerberoasting') >= 0 || text.indexOf('$krb5tgs$') >= 0) guarded._parse_tgs_hashes(text, ws, source, facts);
-      if (lc.indexOf('--bloodhound') >= 0 || /Compromised|\b\d{8,14}_bloodhound\.zip\b/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts);
+      if (lc.indexOf('--bloodhound') >= 0 || /Compromised|\b\d{8,14}_bloodhound\.zip\b/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts, command);
     }
 
     if (lc.indexOf('ldapsearch') >= 0 || /^dn:\s*(?:CN|DC|OU|uid)=/im.test(text) || /^namingContexts:/im.test(text) || /^\s*distinguishedName\s*:\s*CN=/im.test(text)) {
@@ -198,11 +197,11 @@
     var isSmbEnum = lc.indexOf('smbclient') >= 0 || lc.indexOf('smbmap') >= 0 || lc.indexOf('rpcclient') >= 0 || lc.indexOf('enum4linux') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('samrdump') >= 0
       || /^\s*#?\s*shares\s*$/i.test(command || '')
       || (_bareSmbAnchors && (/^\s*#?\s*shares\s*$/im.test(bigProbeSample) || bigProbeSample.trim().split(/\r?\n/).length <= 32))
-      || /^\s*Sharename\s+Type\s+Comment/im.test(bigProbeSample) || /^\s*Disk\s+Permissions\s+Comment/im.test(bigProbeSample) || /user:\[[^\]]+\]\s+rid:\[/i.test(bigProbeSample) || /\(SidTypeUser\)/i.test(bigProbeSample) || /\bindex:\s*0x[0-9a-f]+\s+RID:\s*0x/i.test(bigProbeSample);
+      || /^\s*Sharename\s+Type\s+Comment/im.test(bigProbeSample) || /^\s*Disk\s+Permissions\s+Comment/im.test(bigProbeSample) || /user:\[[^\]]+\]\s+rid:\[/i.test(bigProbeSample) || /\(SidTypeUser\)/i.test(bigProbeSample) || /\bindex:\s*0x[0-9a-f]+\s+RID:\s*0x/i.test(bigProbeSample) || /\[\+\]\s*Found\s+(?:account|user)\s*\[0*[0-9a-fA-Fx]+\]/i.test(bigProbeSample);
     if (isSmbEnum) {
-      guarded._parse_smb_shares(text, ws, source, facts);
+      guarded._parse_smb_shares(text, ws, source, facts, command);
       guarded._parse_gpp_artifacts(text, ws, source, facts);
-      if (actionId === 'ad-user-enum' || lc.indexOf('enumdomusers') >= 0 || lc.indexOf('enum4linux') >= 0 || lc.indexOf('rpcclient') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('samrdump') >= 0 || /user:\[[^\]]+\]\s+rid:\[|\(SidTypeUser\)|\bindex:\s*0x[0-9a-f]+\s+RID:\s*0x/i.test(bigProbeSample)) {
+      if (actionId === 'ad-user-enum' || lc.indexOf('enumdomusers') >= 0 || lc.indexOf('enum4linux') >= 0 || lc.indexOf('rpcclient') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('samrdump') >= 0 || /user:\[[^\]]+\]\s+rid:\[|\(SidTypeUser\)|\bindex:\s*0x[0-9a-f]+\s+RID:\s*0x|\[\+\]\s*Found\s+(?:account|user)\s*\[0*[0-9a-fA-Fx]+\]/i.test(bigProbeSample)) {
         guarded._parse_rid_user_list(text, ws, source, facts, { domain_hint: domainHint, command: command });
         if (/description\s*:\s*\[/i.test(bigProbeSample) && has('_parse_ldap_descriptions')) guarded._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
       }
@@ -233,11 +232,11 @@
     }
 
     if (!isNxc && (lc.indexOf('gpp-decrypt') >= 0 || actionId === 'gpp-passwords' || actionId === 'gpp-decrypt' || /gpp-decrypt|ciphertext/i.test(bigProbeSample)) && has('_parse_gpp_decrypted')) {
-      guarded._parse_gpp_decrypted(text, ws, source, facts);
+      guarded._parse_gpp_decrypted(text, ws, source, facts, command);
     }
     if (lc.indexOf('wpscan') >= 0 || actionId === 'wordpress' || /WordPress version\s+\d|\[\+\]\s*User\(s\)\s+Identified/i.test(bigProbeSample)) guarded._parse_wpscan(text, ws, source, facts);
     if ((actionId === 'trust-enum' || lc.indexOf('domain_trusts') >= 0 || lc.indexOf('domaintrust') >= 0 || lc.indexOf('lookupsid') >= 0 || lc.indexOf('nltest') >= 0 || /Domain Trusts|SourceName\s*:\s*\S+[\s\S]{1,160}?TargetName\s*:\s*\S+|TrustDirection\s*:/i.test(bigProbeSample)) && has('_parse_domain_trusts')) guarded._parse_domain_trusts(text, ws, source, facts);
-    if ((actionId === 'zerologon-check' || lc.indexOf('zerologon') >= 0 || /CVE-2020-1472|Success!\s+DC can be fully compromised by a Zerologon attack/i.test(bigProbeSample)) && has('_parse_zerologon_scan')) guarded._parse_zerologon_scan(text, ws, source, facts);
+    if ((actionId === 'zerologon-check' || lc.indexOf('zerologon') >= 0 || lc.indexOf('cve-2020-1472') >= 0 || /CVE-2020-1472|Target vulnerable,\s*changing account password to empty string|Success!\s+DC (?:can be fully compromised by a Zerologon attack|machine account should be restored)/i.test(bigProbeSample)) && has('_parse_zerologon_scan')) guarded._parse_zerologon_scan(text, ws, source, facts, command);
     var looksLikePowerViewContent = /samaccountname\s*:\s*\S+[\s\S]{1,300}?(?:serviceprincipalname|useraccountcontrol|admincount|description)\s*:|Forest\s*:\s*\S+[\s\S]{1,240}?DomainControllers\s*:/i.test(bigProbeSample)
       || (/samaccountname|userprincipalname|dnshostname|membername/i.test(bigProbeSample) && /^[^\r\n]*\b(?:samaccountname|userprincipalname|dnshostname|membername)\b[^\r\n]*\r?\n[ \t]*-+(?:[ \t]+-+)*[ \t]*$/im.test(bigProbeSample))
       || /^[ \t]*Name[ \t]+Type[ \t]+Remark[ \t]+ComputerName[ \t]*$/im.test(bigProbeSample)
@@ -276,12 +275,13 @@
 
     var _IS_PAYLOAD_BUILDER_CMD_RE = /^\s*(?:sudo\s+)?msfvenom\b/i;
     var isPayloadBuilderCmd = _IS_PAYLOAD_BUILDER_CMD_RE.test(command || '');
+    var isOutboundSimpleHttp = !!(C._is_outbound_simplehttp_callback && C._is_outbound_simplehttp_callback(text, command, ws));
 
     // Structured cleartext credential blocks (Domain: ... Username: ... Password: ...) and process leaks.
     if (!isPayloadBuilderCmd && !isPublicRefHttp && has('_looks_like_generic_dumped_credentials') && guarded._looks_like_generic_dumped_credentials(bigProbeSample, command, ws)) guarded._parse_generic_dumped_credentials(text, ws, command, source, facts);
     if (has('_looks_like_tshark_http') && guarded._looks_like_tshark_http(bigProbeSample, command) && has('_parse_tshark_http_creds')) guarded._parse_tshark_http_creds(text, ws, command, source, facts);
 
-    if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0 || /\b\d{8,14}_(?:bloodhound|computers|users|groups|domains)\.zip\b|Done in \d+M \d+S/i.test(text)) guarded._parse_bloodhound_collection(text, ws, source, facts);
+    if (lc.indexOf('bloodhound-python') >= 0 || lc.indexOf('sharphound') >= 0 || lc.indexOf('rusthound') >= 0 || /\brusthound(?:-ce)?\b|\b\d{8,14}_(?:bloodhound|computers|users|groups|domains)\.zip\b|Done in \d+M \d+S/i.test(bigProbeSample)) guarded._parse_bloodhound_collection(text, ws, source, facts, command);
     if (lc.indexOf('bloodhound') >= 0 || /Compromised-Owned-Principal|Shortest Paths to Domain Admins|-\[\s*MemberOf\s*\]->/i.test(text)) guarded._parse_bloodhound_analysis(text, ws, source, facts);
 
     if ((' ' + lc + ' ').indexOf(' winrm ') >= 0 || lc.indexOf('evil-winrm') >= 0 || /\*Evil-WinRM\*\s+PS\s+[A-Za-z]:\\/i.test([text, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n'))) guarded._parse_evil_winrm(text, ws, command, source, facts);
@@ -317,7 +317,8 @@
       || /<(?:pre|body|html|p|div)\b[\s\S]{0,400}?\b(?:nt authority\\(?:system|network service|local service)|iis apppool\\[a-z0-9_.-]+)\b/i.test(headTailSample));
     var hasWebLfiBody = !!((C._LFI_PASSWD_RE && C._LFI_PASSWD_RE.test(headTailSample) && C._LFI_PASSWD_SECOND_RE && C._LFI_PASSWD_SECOND_RE.test(headTailSample))
       || (C._LFI_WIN_INI_RE && C._LFI_WIN_INI_RE.test(headTailSample))
-      || /^root:\$(?:1|2[abxy]|5|6|y)\$[^\r\n:]+:/m.test(headTailSample));
+      || /^root:\$(?:1|2[abxy]|5|6|y)\$[^\r\n:]+:/m.test(headTailSample)
+      || /(?:^|\r?\n)\s*(?:\[Administrator\][\s\S]{0,240}?\r?\n\s*Password|AdministratorPassword)\s*=\s*[0-9a-fA-F]{32}\b/i.test(headTailSample));
     var isRemoteWebExploitScriptTurn = !isPayloadBuilderCmd && !isSsh && !isFtpOnlyUriCmd
       && (/\b(?:python3?|ruby|perl|php)\b/i.test(lc) || /\.(?:py|rb|pl|sh)\b/i.test(lc))
       && (/\bhttps?:\/\/[^\s'"]+/i.test(command) || /(?:^|\s)(?:--?(?:rhost|host|target|url)|-[HhUuTt])\s+\S+/.test(command || ''));
@@ -327,7 +328,9 @@
     var callerPromptRaw = String((ws && ws.context && ws.context.promptLine) || '').split(/\r?\n/)[0].trim();
     var callerUnixPromptM = callerPromptRaw
       ? (/^(?:\([^)]+\)\s*)?\[?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)(?:[:\s][^\]]*)?\]?\s*[#$%]/.exec(callerPromptRaw)
-        || /^((?:sh|bash|zsh|dash|ksh)-[\d.]+)\s*[#$]/.exec(callerPromptRaw))
+        || /^((?:sh|bash|zsh|dash|ksh)-[\d.]+)\s*[#$]/.exec(callerPromptRaw)
+        || /^(?!(?:HTTP|TLS|SSL|SSH|CVE|PHP|GCC|GDB)-)([A-Za-z0-9_.-]{2,32}-[3-6]\.\d+(?:\.\d+)?)\s*[#$]/.exec(callerPromptRaw)
+        || /^(\/(?:[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?)?)[ \t]+[#$](?=[ \t]|$)/.exec(callerPromptRaw))
       : null;
     var hasVerifiedLocalTargetPrompt = !!(callerUnixPromptM
       && !/\[(?:tun|tap|vpn|wg)\d*:/i.test(callerPromptRaw)
@@ -349,7 +352,7 @@
     if (!isSsh && !isWebExploitCmd && (/\b(telnet|rlogin|rsh|rexec|psql|sqlplus|odat)\b/.test(lc) || (C._LINUX_ID_RE && C._LINUX_ID_RE.test(text) && !/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) && !/\b(?:curl|wget|sqlmap|ffuf|gobuster|feroxbuster|nikto)\b/.test(lc)))) guarded._parse_ssh_exec(text, ws, command, source, facts);
     if (!isSsh && C._LINUX_SHELL_ACTION_IDS && C._LINUX_SHELL_ACTION_IDS.has(actionId)) guarded._parse_ssh_exec(text, ws, command, source, facts);
 
-    if (isNxc && ((' ' + lc + ' ').indexOf(' rdp ') >= 0 || /^RDP\s+\d+\.\d+\.\d+\.\d+/im.test(text))) guarded._parse_nxc_rdp(text, ws, command, source, facts);
+    if (isNxc && ((' ' + lc + ' ').indexOf(' rdp ') >= 0 || /^RDP\s+\S+\s+\d+\s+\S+/im.test(text))) guarded._parse_nxc_rdp(text, ws, command, source, facts);
 
     var looksLikeCracked = C._is_cracking_command(command) || text.indexOf('$keepass$*') >= 0
       || (C._JOHN_LOADED_RE && C._JOHN_LOADED_RE.test(text))
@@ -397,8 +400,9 @@
     if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || lc.indexOf('pty.spawn') >= 0 || (execTextSample.indexOf('pty.spawn') >= 0 && /\bpty\.spawn\s*\(/i.test(execTextSample)) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(execTextSample) || /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\s*$/im.test(execTextSample)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
     if (has('_looks_like_meterpreter') && guarded._looks_like_meterpreter(execTextSample, command) && has('_parse_meterpreter')) guarded._parse_meterpreter(text, ws, command, source, facts);
     var whoamiEscSample = (command || '') + '\n' + execTextSample;
-    if (has('_parse_posix_whoami_escalation') && (/\b(?:whoami|doas|sudo|su|pkexec)\b/i.test(whoamiEscSample) || /(?:\/(?:usr\/)?s?bin\/|(?:^|\s|['"(])\.?\/)(?:ba|da|z|k|a)?sh\b[^\r\n]*?-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i.test(whoamiEscSample))) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
-    if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
+    if (has('_parse_posix_whoami_escalation') && (/\b(?:whoami|doas|sudo|su|pkexec)\b/i.test(whoamiEscSample) || /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i.test(whoamiEscSample))) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
+    if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|reg(?:\.py|\.exe)?\s+[^\r\n]*\bbackup\b|Saved\s+HKLM\\(?:SAM|SYSTEM|SECURITY)\s+to\b|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && has('_parse_host_auxiliary')) guarded._parse_host_auxiliary(text, ws, command, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) {
       guarded._parse_privesc_output(actionId, text, ws, command, source, facts);
@@ -408,7 +412,7 @@
       var isRemoteScanner = hasFtpOwnerListing || isHttpRespBody
         || /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc)
         || (!looksLinEnumPaste && /\b(?:curl|wget)\b/i.test(lc));
-      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b/i.test(lc) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
+      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b|\b(?:magick|convert)\s+-version\b|\bsudo\s+(?:--version|-v)\b/i.test(lc) || /Version:\s+ImageMagick\s+\d/i.test(bigProbeSample) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
       if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b/i.test(lc))) {
@@ -457,8 +461,14 @@
     if ((lc.indexOf('certipy auth') >= 0 || lc.indexOf('certipy shadow') >= 0 || lc.indexOf('shadow auto') >= 0 || actionId === 'cert-authenticate' || /Got hash for\s+['"]?[^\s'"]+['"]?\s*:\s*(?:[a-f0-9]{32}:)?[a-f0-9]{32}|Saved credential cache to/i.test(bigProbeSample)) && has('_parse_certipy_auth')) {
       guarded._parse_certipy_auth(text, ws, command, source, facts);
     }
-    if (has('_is_ad_abuse_command') && (C._is_ad_abuse_command(command) || (C._AD_ABUSE_ACTION_IDS && C._AD_ABUSE_ACTION_IDS.has(actionId)) || /DACL modified successfully|OwnerSid modified successfully|Password changed successfully!|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|DeviceKey\s*:|KeyCredential\s+added|\bnet\s+rpc\s+password\b/i.test(bigProbeSample) || (/\bnet(?:\.exe)?\s+user\b[^\r\n]+\/domain\b/i.test(bigProbeSample) && /The command completed successfully\./i.test(bigProbeSample)))) {
+    var isGmsaContent = /\bgmsadumper\b/i.test(lc) || /^[A-Za-z0-9._-]+\$:::[0-9a-fA-F]{32}\s*$|Users or groups who can read password for\s+[A-Za-z0-9._-]+\$:/im.test(bigProbeSample);
+    var isTicketConvContent = /\b(?:ticketconverter|kirbi2ccache)\b/i.test(lc) || /\bconverting\s+kirbi\s+to\s+ccache\b|\bSaving\s+ccache\s+file\b/i.test(bigProbeSample);
+    var isAdControlContent = /\b(?:passthecert|aclpwn|dnstool)\b/i.test(lc) || /Delegation rights modified successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member to CN=|\[\+\]\s*Dacl modification successful|\[\+\]\s*LDAP operation completed successfully/i.test(bigProbeSample);
+    if (isGmsaContent || isTicketConvContent || isAdControlContent || (has('_is_ad_abuse_command') && (C._is_ad_abuse_command(command) || (C._AD_ABUSE_ACTION_IDS && C._AD_ABUSE_ACTION_IDS.has(actionId)) || /DACL modified successfully|OwnerSid modified successfully|Password changed successfully!|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|DeviceKey\s*:|KeyCredential\s+added|\bnet\s+rpc\s+password\b/i.test(bigProbeSample) || (/\bnet(?:\.exe)?\s+user\b[^\r\n]+\/domain\b/i.test(bigProbeSample) && /The command completed successfully\./i.test(bigProbeSample))))) {
       if (has('_parse_ad_abuse_output')) guarded._parse_ad_abuse_output(actionId, text, ws, command, source, facts);
+      if (isGmsaContent && has('_parse_gmsa_material')) guarded._parse_gmsa_material(text, ws, command, source, facts);
+      if (isTicketConvContent && has('_parse_kerberos_ticket_material')) guarded._parse_kerberos_ticket_material(text, ws, command, source, facts);
+      if (isAdControlContent && has('_parse_ad_control_paths')) guarded._parse_ad_control_paths(text, ws, command, source, facts);
     }
     // Content-sniff fallback: a bloodyAD `get writable` dump is often ATTACHED as a file with no command
     // set, so the ad-abuse gate above never fires. Recognize it from the output itself (the ad-abuse path
@@ -479,19 +489,20 @@
     // (no path lines -> no fact), so this stays additive.
     else if (C._is_web_content_command(command) || /\[Status:\s*\d{3},\s*Size:\s*\d+/i.test(bigProbeSample) || /\bGobuster\s+v?\d/i.test(bigProbeSample) || ((bigProbeSample.indexOf('http://') >= 0 || bigProbeSample.indexOf('https://') >= 0) && /^\s*\d{3}\s+(?:(?:GET|POST|HEAD)\s+)?\d+l\s+\d+w\s+\d+c\s+https?:\/\//im.test(bigProbeSample)) || (/\(Status:\s*\d{3}\)/i.test(bigProbeSample) && (/^\s*(?:Found:\s*)?(?:https?:\/\/[^/\s]+)?\/\S+\s+\(Status:\s*\d{3}\)\s*(?:\[[^\]]*\]\s*)*$/im.test(bigProbeSample) || /^\s*(?:Found:\s*)?[A-Za-z0-9_.~%-][^\s()]*\s+\(Status:\s*\d{3}\)\s+\[Size:\s*\d+\](?:\s*\[[^\]]*\])*\s*$/im.test(bigProbeSample)))) guarded._parse_web_content(text, ws, source, facts, command);
     if ((lc.indexOf('arjun') >= 0 || /Parameters found(?:\s+for\s+\S+)?\s*:\s*[a-zA-Z0-9_,\s-]+|\[\+\]\s+Heuristic scanner found\s+\d+\s+parameters/i.test(bigProbeSample)) && has('_parse_arjun')) guarded._parse_arjun(text, ws, command, source, facts);
-    if (lc.indexOf('sqlmap') >= 0 || /sqlmap identified the following injection point|---\nParameter:\s*\S+\s*\((?:GET|POST|URI|Cookie|Header)\)/i.test(bigProbeSample)) guarded._parse_sqlmap(text, ws, source, facts, command);
-    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || /\bgit\s+(?:show|log|diff)\b/i.test(lc) || /^diff --git\s+a\//m.test(bigProbeSample) || (/^commit\s+[0-9a-f]{7,40}\b/m.test(bigProbeSample) && /^@@\s+-\d+/m.test(bigProbeSample)) || C._GIT_HEAD_RE.test(bigProbeSample)) guarded._parse_git_source(text, ws, command, source, facts);
+    if (lc.indexOf('sqlmap') >= 0 || /sqlmap identified the following injection point|---\nParameter:\s*\S+\s*\((?:GET|POST|URI|Cookie|Header)\)|Database:\s+\S+[\s\S]{0,160}?Table:\s+\S+[\s\S]{0,120}?\[\d+\s+entr(?:y|ies)\]/i.test(bigProbeSample)) guarded._parse_sqlmap(text, ws, source, facts, command);
+    if (lc.indexOf('git-dumper') >= 0 || lc.indexOf('/.git/') >= 0 || /\bgit\s+(?:show|log|diff)\b/i.test(lc) || /^diff --git\s+a\//m.test(bigProbeSample) || (/^commit\s+[0-9a-f]{7,40}\b/m.test(bigProbeSample) && /^@@\s+-\d+/m.test(bigProbeSample)) || C._GIT_HEAD_RE.test(bigProbeSample) || /Testing\s+https?:\/\/[^\s]+\/\.git\/HEAD\s+\[200\]/i.test(bigProbeSample)) guarded._parse_git_source(text, ws, command, source, facts);
     if ((lc.indexOf('nikto') >= 0 || /^- Nikto v\d+\.\d+/im.test(bigProbeSample)) && has('_parse_nikto')) guarded._parse_nikto(text, ws, source, facts, command);
     var isSqlClientSession = !!(C._is_sql_client_output && C._is_sql_client_output(bigProbeSample, ws, command));
     var isOutboundHttpReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(bigProbeSample));
     var isNonHttpAccountOrOutbound = !!(C._is_unix_account_dump && C._is_unix_account_dump(bigProbeSample)) || isOutboundHttpReqOnly;
     if (isWebExploitCmd && !isPayloadBuilderCmd && !isOutboundHttpReqOnly) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(bigProbeSample))) guarded._parse_http_metadata(text, ws, source, facts);
+    if (!isPayloadBuilderCmd && /\bICMP\s+echo\s+request\b/i.test(bigProbeSample) && has('_parse_web_cmdi')) guarded._parse_web_cmdi(actionId || 'operator-ingest', text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(bigProbeSample))) guarded._parse_http_metadata(text, ws, source, facts);
     // Product fingerprints (Jenkins, NVMS-1000) run content-first on any web-ish
     // paste (nmap http-* scripts, curl -I, whatweb, a pasted page/headers). The
     // parser self-gates on a definitive signature, so an unrelated paste mints
     // nothing; a hit lights the precise exploit move instead of a bare port gate.
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && has('_parse_web_fingerprint')) guarded._parse_web_fingerprint(text, ws, source, facts, command);
     // LAPS read (nxc -M laps / --laps, ldapsearch/Get-ADComputer ms-MCS-AdmPwd):
     // content-gated on a LAPS signature, and self-gated to require a real
     // Password:/attribute value so the "No result found" failure mints nothing.
@@ -501,16 +512,17 @@
     if (has('_parse_nsclient_ini') && (lc.indexOf('nsclient') >= 0 || /nsclient|\[\/settings\//i.test(bigProbeSample))) guarded._parse_nsclient_ini(text, ws, command, source, facts);
     // KeePass database/dump in hand (.kdbx, $keepass$ hash, master-key dump).
     if (has('_parse_keepass_dump') && (/keepass|\.kdbx/i.test(lc) || /\$keepass\$|\.kdbx/i.test(bigProbeSample))) guarded._parse_keepass_dump(text, ws, command, source, facts);
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(bigProbeSample) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+/im.test(bigProbeSample))) guarded._parse_web_surface(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler', 'httpie'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(bigProbeSample) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+|Set-Cookie:\s*laravel_session=|actuator\/sessions|"sessions"\s*:\s*\[|"(?:[0-9a-fA-F]{24,64}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"\s*:\s*"[A-Za-z0-9_.@-]{2,64}"|"__(?:schema|type)"\s*:|Cannot query field\b|<bind-dn>\s*CN=/im.test(bigProbeSample))) guarded._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(bigProbeSample)) guarded._parse_snmp_output(text, ws, command, source, facts);
+    var isBinaryLocatorOrDirCmd = /^\s*(?:sudo\s+)?(?:where(?:\.exe)?|which|whereis|type\s+-a|command\s+-v|get-command|gcm|dir|ls|gci|get-childitem|find)\b/i.test(command || '');
     var dbSessionCheckText = [bigProbeSample, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
     var looksLikeDbQueryOrHashRow = /\b(?:pg_database|pg_tables|pg_shadow|pg_authid)\b|^\s*\\(?:l|list|dt)\+?(?:\s|;|$)|^\s*List of (?:databases|relations)\s*$/im.test(dbSessionCheckText)
       || (bigProbeSample.indexOf('|') >= 0
         && !/\baad3b435b51404eeaad3b435b51404ee:[0-9a-fA-F]{32}\b/i.test(bigProbeSample)
         && /(?:^[^\r\n]*\|[^\r\n]*(?:\$(?:2[abxy]|1|5|6|y|P|H|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)|(?:\$(?:2[abxy]|1|5|6|y|P|H|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)[^\r\n]*\|)/m.test(bigProbeSample));
-    if (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || looksLikeDbQueryOrHashRow) guarded._parse_database_output(text, ws, command, source, facts);
+    if (!isBinaryLocatorOrDirCmd && (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || looksLikeDbQueryOrHashRow)) guarded._parse_database_output(text, ws, command, source, facts);
     if ((lc.indexOf('sqlite3') >= 0 || ((bigProbeSample.indexOf('|') >= 0 || /CREATE TABLE\s+/i.test(bigProbeSample)) && /CREATE TABLE\s+|^\s*\d+\|[^|\r\n]+\|[^|\r\n]+/im.test(bigProbeSample))) && has('_parse_sqlite_dump')) guarded._parse_sqlite_dump(text, ws, source, facts);
-    if (has('_has_notable_programs') && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
+    if (has('_has_notable_programs') && !/(?:^|\s)(?:--help|-h|--version|-V)(?:\s|$)/.test(lc) && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap|dnstool|gmsadumper|getnthash|pywhisker|targetedkerberoast|git[-_]dumper|rusthound)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
     if ((' ' + lc + ' ').indexOf('ftp ') >= 0 || lc.indexOf('lftp') >= 0 || hasFtpUri || hasFtpOwnerListing || /^\s*(?:200 PORT command successful|2(?:27|29) Entering (?:Passive|Extended Passive) Mode|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting))/im.test(bigProbeSample)) guarded._parse_ftp_output(text, ws, command, source, facts);
     if (C._SSH_BANNER_RE.test(bigProbeSample)) guarded._parse_ssh_banner(text, ws, source, facts);
     if (((' ' + lc + ' ').indexOf(' 21') >= 0 || lc.indexOf('ftp') >= 0 || C._FTP_BANNER_RE.test(bigProbeSample)) && C._FTP_BANNER_RE.test(bigProbeSample)) guarded._parse_ftp_output(text, ws, command, source, facts);
@@ -552,7 +564,7 @@
         catch (idErr2) { diagnostics.push({ parser: '_parse_ident_user_enum', message: (idErr2 && idErr2.message) || String(idErr2) }); }
       }
     }
-    if (!isPayloadBuilderCmd && has('_parse_archive_listing') && (/\b(?:unzip|7z[ar]?|tar|jar|unar)\b/i.test(lc) || /^\s*(?:Archive:\s+\S+|(?:inflating|extracting):\s+\S+)/im.test(bigProbeSample))) {
+    if (!isPayloadBuilderCmd && has('_parse_archive_listing') && (/\b(?:unzip|7z[ar]?|tar|jar|unar)\b/i.test(lc) || /^\s*(?:Archive:\s+\S+|(?:inflating|extracting):\s+\S+|Encrypted\s*=\s*\+)|\bneed PK compat\b|\bskipping:[^\r\n]*need password\b/im.test(bigProbeSample))) {
       guarded._parse_archive_listing(text, ws, command, source, facts);
     }
     if (!isPayloadBuilderCmd && has('_parse_gcore_output') && (/\b(?:gcore|gdb)\b/i.test(lc) || /^\s*Saved corefile\s+\S+/im.test(bigProbeSample))) {
@@ -588,7 +600,7 @@
 
     // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
     // action-id, each parser is content-gated so an unrelated paste mints nothing.
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && (actionId === 'check-web-headers' || (/\bcurl\b/.test(lc) && !isFtpOnlyUriCmd && /\s-(?:I|-head|[a-zA-Z]*i)\b/.test(' ' + command))) && has('_parse_http_headers')) guarded._parse_http_headers(text, ws, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && (actionId === 'check-web-headers' || (/\bcurl\b/.test(lc) && !isFtpOnlyUriCmd && /\s-(?:I|-head|[a-zA-Z]*i)\b/.test(' ' + command))) && has('_parse_http_headers')) guarded._parse_http_headers(text, ws, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && (actionId === 'check-http-methods' || /^\s*(allow|public):/im.test(bigProbeSample)) && has('_parse_http_methods')) guarded._parse_http_methods(text, ws, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && (actionId === 'check-cors' || /access-control-allow-origin:/i.test(bigProbeSample)) && has('_parse_http_cors')) guarded._parse_http_cors(text, ws, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && actionId === 'check-web-body' && has('_parse_http_body')) guarded._parse_http_body(text, ws, source, facts);
@@ -642,27 +654,33 @@
     if (!isPayloadBuilderCmd && has('_parse_shape')) guarded._parse_shape(text, ws, source, facts);
 
     // Stage 0 Exploit-DB versioned non-stock banner recognizer (yields whenever any vuln.* matched).
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && has('_parse_versioned_banner_for_edb')) guarded._parse_versioned_banner_for_edb(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && has('_parse_versioned_banner_for_edb')) guarded._parse_versioned_banner_for_edb(text, ws, command, source, facts);
 
     // Wittgensteinian Contextual Inference (Tier 3) & Causal Entailment Gate Synchronizer:
     // combines atomic primitives, 2D table/KV geometry, Operator Attention Frame, and global entities
     // when Tier 1 & Tier 2 did not match, and backfills entailed prerequisite gates on out-of-order jumps.
     if (has('_parse_inference')) guarded._parse_inference(text, ws, command, source, facts, actionId, opts);
-    if (isPublicRefHttp) {
+    if (isPublicRefHttp || isOutboundSimpleHttp) {
       var pubTargetScope = 'host:' + ws.target;
       for (var pri = facts.length - 1; pri >= 0; pri--) {
         var prf = facts[pri];
-        if (prf && prf.scope === pubTargetScope && (prf.kind === 'http.reachable' || /^web\./.test(prf.kind || '') || /^credential\./.test(prf.kind || '') || /^hash\./.test(prf.kind || ''))) {
+        if (!prf || prf.scope !== pubTargetScope) continue;
+        if (isPublicRefHttp && (prf.kind === 'http.reachable' || /^web\./.test(prf.kind || '') || /^credential\./.test(prf.kind || '') || /^hash\./.test(prf.kind || ''))) {
+          facts.splice(pri, 1);
+        } else if (isOutboundSimpleHttp && (prf.kind === 'http.reachable' || /^web\./.test(prf.kind || '') || prf.kind === 'exploit.versioned_banner' || prf.kind === 'service.version' || /^port:\d+$/.test(prf.kind || ''))) {
           facts.splice(pri, 1);
         }
       }
     }
     if (has('_apply_causal_entailment')) guarded._apply_causal_entailment(facts, ws, command, text, source, opts);
-    if (isPublicRefHttp) {
+    if (isPublicRefHttp || isOutboundSimpleHttp) {
       var pubTargetScope2 = 'host:' + ws.target;
       for (var prj = facts.length - 1; prj >= 0; prj--) {
         var prf2 = facts[prj];
-        if (prf2 && prf2.scope === pubTargetScope2 && (prf2.kind === 'http.reachable' || /^web\./.test(prf2.kind || '') || /^credential\./.test(prf2.kind || '') || /^hash\./.test(prf2.kind || ''))) {
+        if (!prf2 || prf2.scope !== pubTargetScope2) continue;
+        if (isPublicRefHttp && (prf2.kind === 'http.reachable' || /^web\./.test(prf2.kind || '') || /^credential\./.test(prf2.kind || '') || /^hash\./.test(prf2.kind || ''))) {
+          facts.splice(prj, 1);
+        } else if (isOutboundSimpleHttp && (prf2.kind === 'http.reachable' || /^web\./.test(prf2.kind || '') || prf2.kind === 'exploit.versioned_banner' || prf2.kind === 'service.version' || /^port:\d+$/.test(prf2.kind || ''))) {
           facts.splice(prj, 1);
         }
       }
@@ -691,7 +709,7 @@
   OBOL.parsers.parseActionOutput = parseActionOutput;
   OBOL.parsers.parse_action_output = parseActionOutput; // python-name alias
 
-  var _PROMPT_PREFIX_RE = /^\s*(?:\([^)]+\)\s*)?(?:\[?(?:[a-zA-Z0-9_.-]+\\)?[a-zA-Z0-9_.$-]+@[a-zA-Z0-9_.-]+[:\s][^\r\n$#%>\]]*\]?[$#%>]|(?:PS\s+)?[A-Za-z]:\\[^\r\n>]*>|(?:sh|bash|zsh|dash)-[\d.]+[$#]|[$#>])\s+/;
+  var _PROMPT_PREFIX_RE = /^\s*(?:\([^)]+\)\s*)?(?:\[?(?:[a-zA-Z0-9_.-]+\\)?[a-zA-Z0-9_.$-]+@[a-zA-Z0-9_.-]+[:\s][^\r\n$#%>\]]*\]?[$#%>]|(?:PS\s+)?[A-Za-z]:\\[^\r\n>]*>|(?:(?:sh|bash|zsh|dash|ksh)-[\d.]+|(?!(?:HTTP|TLS|SSL|SSH|CVE|PHP|GCC|GDB)-)[A-Za-z0-9_.-]{2,32}-[3-6]\.\d+(?:\.\d+)?)\s*[$#]|\/(?:[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?)?[ \t]+[$#]|[$#>])\s+/;
   var _KNOWN_CMD_LINE_RE = /^\s*(?:sudo\s+|proxychains4?\s+)?(?:nmap|masscan|rustscan|nxc|netexec|crackmapexec|cme|impacket-[a-z0-9_-]+|[A-Za-z0-9_-]+\.py|ldapsearch|smbclient|smbmap|rpcclient|enum4linux(?:-ng)?|kerbrute|bloodhound(?:-python)?|sharphound|bloodyad|certipy(?:-ad)?|certify(?:\.exe)?|rubeus(?:\.exe)?|mimikatz(?:\.exe)?|pypykatz|evil-winrm|xfreerdp|ssh|sshpass|hashcat|john|hydra|medusa|ncrack|crowbar|ffuf|feroxbuster|gobuster|dirb|dirsearch|wfuzz|httpx|nuclei|nikto|whatweb|wpscan|arjun|sqlmap|git-dumper|git|curl|wget|snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|mysql|mssqlclient|sqlcmd|psql|redis-cli|mongosh|sqlite3|sqlplus|odat|dig|nslookup|host|dnsrecon|chisel|ligolo[a-z_-]*|sshuttle|responder|ike-scan|ipmitool|nth|hashid|hash-identifier|haiti|searchsploit|exiftool|linpeas|winpeas|whoami|id|uname|find|getcap|ps|netstat|ss|ip|ifconfig|ipconfig|arp|route|systeminfo|schtasks|reg|cmdkey|icacls|accesschk|klist|nltest|powerview|get-net\w+|get-domain\w*|get-ad\w+|get-gppermission|get-acl|get-childitem|gci|invoke-\w+|cat|type|strings|ltrace|strace|ldd|readelf|objdump|ilspycmd|wmic|systemctl|2to3|gcc|javac|python[23]?|pip[23]?|sc(?=\s+qc\b)|head(?=\s+-|\s+\d{3,6}\.))\b/i;
 
   // Convenience for pasted terminal output without a specific action card.

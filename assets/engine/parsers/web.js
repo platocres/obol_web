@@ -208,7 +208,49 @@
   }
   C._exposed_artifacts = _exposed_artifacts;
 
+  var _POST_FUZZ_DATA_RE = /(?:^|\s)(?:-d|--data(?:-\w+)?)\s+(?:"[^"]*FUZZ[^"]*"|'[^']*FUZZ[^']*'|\S*FUZZ\S*)/;
+  var _SQLI_FUZZ_PAYLOAD_RE = /['"\\]|%27|%22|%5c|--|\b(?:or|and|union|select|sleep|waitfor)\b/i;
+
+  function _is_post_body_fuzz_cmd(command) {
+    var cmd = String(command || '');
+    if (!_POST_FUZZ_DATA_RE.test(cmd)) return false;
+    var urls = reAll(/https?:\/\/[^\s'"]+/gi, cmd);
+    for (var i = 0; i < urls.length; i++) {
+      var uNoQuery = urls[i][0].split('?')[0];
+      if (uNoQuery.indexOf('FUZZ') >= 0) return false;
+    }
+    return true;
+  }
+
   function _parse_web_content(text, ws, source, facts, command) {
+    var h = 'host:' + ws.target;
+    if (_is_post_body_fuzz_cmd(command)) {
+      var sawPostLive = false, sqli500Payload = '';
+      reAll(C._WEB_WFUZZ_RE, text).forEach(function (m) {
+        if (m.groups.code !== '000') sawPostLive = true;
+        if (m.groups.code === '500' && !sqli500Payload && _SQLI_FUZZ_PAYLOAD_RE.test(m.groups.payload || '')) {
+          sqli500Payload = (m.groups.payload || '').trim();
+        }
+      });
+      reAll(C._WEB_FFUF_RE, text).forEach(function (m) {
+        if (m.groups.code !== '000') sawPostLive = true;
+        if (m.groups.code === '500' && !sqli500Payload && _SQLI_FUZZ_PAYLOAD_RE.test(m.groups.token || '')) {
+          sqli500Payload = (m.groups.token || '').trim();
+        }
+      });
+      _add(facts, mkFact('web.parameterized', h, { method: 'POST', via: 'post-fuzz', evidence: 'POST body parameter fuzzing' }, S, source));
+      if (sawPostLive && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+        var pfMeta = _extract_web_origin(text, command, ws);
+        var pfHr = { via: 'post-fuzz' };
+        if (pfMeta.origin) pfHr.origin = pfMeta.origin;
+        if (pfMeta.port) pfHr.port = pfMeta.port;
+        _add(facts, mkFact('http.reachable', h, pfHr, S, source));
+      }
+      if (sqli500Payload) {
+        _add(facts, mkFact('web.sqli_candidate', h, { method: 'POST', via: 'post-fuzz-500', payload: sqli500Payload.slice(0, 80) }, S, source));
+      }
+      return;
+    }
     var paths = {}, pathCodes = Object.create(null), hasLiveStatus = false;
     function recordPath(normP, code) {
       if (!normP) return;
@@ -344,6 +386,25 @@
     try {
       var obj = JSON.parse(text);
       if (!obj || !Array.isArray(obj.results)) return false;
+      var effCmd = String(command || (obj.commandline || ''));
+      var h = 'host:' + ws.target;
+      if (_is_post_body_fuzz_cmd(effCmd)) {
+        var sawLive = false, sqliPay = '';
+        obj.results.forEach(function (r) {
+          if (!r) return;
+          if (r.status) sawLive = true;
+          var fz = (r.input && r.input.FUZZ) ? String(r.input.FUZZ) : '';
+          if (r.status === 500 && !sqliPay && _SQLI_FUZZ_PAYLOAD_RE.test(fz)) sqliPay = fz;
+        });
+        _add(facts, mkFact('web.parameterized', h, { method: 'POST', via: 'post-fuzz', evidence: 'POST body parameter fuzzing' }, S, source));
+        if (sawLive && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+          _add(facts, mkFact('http.reachable', h, { via: 'post-fuzz' }, S, source));
+        }
+        if (sqliPay) {
+          _add(facts, mkFact('web.sqli_candidate', h, { method: 'POST', via: 'post-fuzz-500', payload: sqliPay.slice(0, 80) }, S, source));
+        }
+        return true;
+      }
       var paths = {}, firstUrl = '';
       obj.results.forEach(function (r) {
         if (!r || r.status === 404) return;
@@ -504,33 +565,165 @@
   var _HTTP_AUTH_PARAM_PASS_RE = /(?:^|[?&\s"'{,])["']?(?:pass(?:word|wd)?|pwd)["']?\s*[:=]\s*["']?[^&\s"',}]+/i;
   var _HTTP_AUTH_ENDPOINT_RE = /(?:^(?:>\s*)?(?:POST|GET)\s+\/[^\s?]*?(?:login|signin|sign-in|auth|authenticate)\b|https?:\/\/[^/\s"']+\/[^\s"'?#]*?(?:login|signin|sign-in|auth|authenticate)\b)/im;
 
+  function _extract_http_request_only(cmd, t) {
+    var parts = [String(cmd || '')];
+    var lines = String(t || '').split(/\r?\n/);
+    var inRawReq = false;
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (/^>\s*/.test(ln)) {
+        parts.push(ln.replace(/^>\s*/, ''));
+        continue;
+      }
+      if (i === 0 && /^(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+\/\S*\s+HTTP\/[12]/i.test(ln)) {
+        inRawReq = true;
+      }
+      if (inRawReq) {
+        if (/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/i.test(ln)) break;
+        parts.push(ln);
+      }
+    }
+    return parts.join('\n');
+  }
+
+  function _parse_xml_ldap_bind_creds(text, ws, source, facts) {
+    var t = String(text || '');
+    if (t.indexOf('<bind-dn>') < 0 || t.indexOf('<bind-password>') < 0) return;
+    var h = 'host:' + ws.target;
+    var dnRe = /<bind-dn>\s*CN=([^,<\r\n]+)\s*,\s*([^<\r\n]*DC=[^<\r\n]+)<\/bind-dn>/gi;
+    var pwM = /<bind-password>\s*([^<\r\n]+?)\s*<\/bind-password>/i.exec(t);
+    if (!pwM || !pwM[1]) return;
+    var bindPw = pwM[1].trim();
+    var dm;
+    while ((dm = dnRe.exec(t)) !== null) {
+      var bindUser = dm[1].trim();
+      var fullDn = 'CN=' + bindUser + ',' + dm[2].trim();
+      var dcParts = reAll(/DC=([A-Za-z0-9-]+)/gi, fullDn).map(function (m) { return m[1]; });
+      var domainName = dcParts.join('.').toLowerCase();
+      var baseDn = dcParts.map(function (p) { return 'DC=' + p; }).join(',');
+      if (domainName) {
+        var domScope = 'domain:' + domainName;
+        _add(facts, mkFact('ad.domain_known', domScope, { domain: domainName, via: 'xml-bind-dn' }, S, source));
+        _add(facts, mkFact('ad.base_dn', domScope, { base_dn: baseDn, domain: domainName, via: 'xml-bind-dn' }, S, source));
+        _add(facts, mkFact('host.domain', h, { domain: domainName, via: 'xml-bind-dn' }, S, source));
+      }
+      if (C._add_plaintext_credential) {
+        C._add_plaintext_credential(facts, ws, source, bindUser, bindPw, domainName, 'xml-bind-dn');
+      } else {
+        var cv = { user: bindUser, password: bindPw, domain: domainName || undefined, method: 'xml-bind-dn' };
+        _add(facts, mkFact('credential.plaintext', h, cv, S, source));
+        _add(facts, mkFact('credential.password', h, cv, S, source));
+        _add(facts, mkFact('credential.available', h, cv, S, source));
+      }
+      _add(facts, mkFact('credential.candidate', h, { kind: 'ldap_bind_credential', user: bindUser, password: bindPw, domain: domainName || undefined, via: 'xml-bind-dn' }, S, source));
+    }
+  }
+  C._parse_xml_ldap_bind_creds = _parse_xml_ldap_bind_creds;
+
   function _parse_web_surface(text, ws, command, source, facts) {
     if (_is_sql_client_output(text, ws, command)) return;
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
+    if (C._is_outbound_simplehttp_callback && C._is_outbound_simplehttp_callback(text, command, ws)) return;
     if (/\bftp:\/\/[^\s'"]+/i.test(command || '') && !/\bhttps?:\/\/[^\s'"]+/i.test(command || '') && !/^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text || '')) return;
     var t = text || '', cmd = command || '', h = 'host:' + ws.target;
     var cmdAndText = cmd + '\n' + t;
+    var reqOnlyText = _extract_http_request_only(cmd, t);
+    var hasHtmlFormMarkup = /<(?:form|input|html|body)\b/i.test(t);
     var hasOcrLogin = reSearch(_OCR_USER_INPUT_RE, t) && reSearch(_OCR_PASS_INPUT_RE, t);
     var isHttpExchange = /\b(?:curl|wget|httpie)\b/i.test(cmd)
       || /^(?:[<>]\s*)?(?:POST|GET)\s+\/\S+\s+HTTP\/[12]/im.test(t)
       || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)
       || /^URL:\s*https?:\/\/\S+/im.test(t);
-    var hasHttpAuthParams = isHttpExchange && reSearch(_HTTP_AUTH_PARAM_USER_RE, cmdAndText) && reSearch(_HTTP_AUTH_PARAM_PASS_RE, cmdAndText);
-    var hasHttpAuthPost = isHttpExchange && reSearch(_HTTP_AUTH_ENDPOINT_RE, cmdAndText)
-      && (/\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd) || /^(?:>\s*)?POST\s+\//im.test(t) || hasHttpAuthParams);
-    var hasConnFailure = /curl:\s*\(\d+\)|Connection refused|Could not resolve host|Failed to connect|No route to host/i.test(t);
-    var hasLiveCmdResponse = t.trim().length > 0 && !hasConnFailure && !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+404\b/im.test(t);
+    var hasHttpAuthParams = isHttpExchange && reSearch(_HTTP_AUTH_PARAM_USER_RE, reqOnlyText) && reSearch(_HTTP_AUTH_PARAM_PASS_RE, reqOnlyText);
+    var hasHttpAuthPost = isHttpExchange && reSearch(_HTTP_AUTH_ENDPOINT_RE, reqOnlyText)
+      && (/\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd) || /^(?:>\s*)?POST\s+\//im.test(reqOnlyText) || hasHttpAuthParams);
+    var hasConnFailure = /curl:\s*\(\d+\)|Connection refused|Could not resolve host|The remote name could not be resolved|WebCmdletWebResponseException|Invoke-WebRequest[^\r\n]*WebException|Name or service not known|Temporary failure in name resolution|Failed to connect|No route to host/i.test(t);
+    var isHelpOrVerCmd = /(?:^|\s)(?:--help|-h|--version|-V|--manual|-M)(?:\s|$)/.test(cmd)
+      || /^\s*Usage:\s*(?:curl|wget|http)\b/im.test(t);
+    var isOutboundReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(t));
+    var hasLiveCmdResponse = t.trim().length > 0 && !hasConnFailure && !isHelpOrVerCmd && !isOutboundReqOnly && !/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+404\b/im.test(t);
 
-    if (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t) || (hasLiveCmdResponse && reSearch(_PARAM_URL_RE, cmd)) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
+    var hasInboundHttpReq = !isHelpOrVerCmd && /^(?:[<>]\s*)?(?:POST|GET)\s+\/\S+\s+HTTP\/[12]/im.test(t);
+    if (!isHelpOrVerCmd && (((hasLiveCmdResponse || hasInboundHttpReq) && reSearch(_PARAM_URL_RE, reqOnlyText)) || (hasHtmlFormMarkup && (reSearch(_PARAM_URL_RE, t) || reSearch(_FORM_INPUT_RE, t))) || (hasLiveCmdResponse && reSearch(_PARAM_URL_RE, cmd)) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost)) {
       _add(facts, mkFact('web.parameterized', h, { evidence: hasOcrLogin ? 'OCR browser form input controls' : 'parameter or form input observed' }, S, source));
     }
-    if (reSearch(_UPLOAD_FORM_RE, t)) _add(facts, mkFact('web.upload_form', h, { evidence: 'file-upload form' }, S, source));
-    if (reSearch(_LOGIN_FORM_RE, t) || hasOcrLogin || hasHttpAuthParams || hasHttpAuthPost) {
+    if (!isHelpOrVerCmd && hasHtmlFormMarkup && reSearch(_UPLOAD_FORM_RE, t)) _add(facts, mkFact('web.upload_form', h, { evidence: 'file-upload form' }, S, source));
+    if (!isHelpOrVerCmd && ((hasHtmlFormMarkup && reSearch(_LOGIN_FORM_RE, t)) || hasOcrLogin || hasHttpAuthPost || (hasHttpAuthParams && /\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd)))) {
       _add(facts, mkFact('web.login_form', h, { evidence: hasOcrLogin ? 'OCR browser login form controls' : 'password input form' }, S, source));
     }
-    if ((hasOcrLogin || ((hasHttpAuthParams || hasHttpAuthPost) && t.trim().length > 0)) && !hasConnFailure) {
-      _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : 'http-auth-surface' }, S, source));
+    if (!isHelpOrVerCmd && (hasOcrLogin || ((hasHttpAuthParams || hasHttpAuthPost) && t.trim().length > 0 && !isOutboundReqOnly) || (/\b(?:curl|wget|httpie)\b/i.test(cmd) && hasLiveCmdResponse)) && !hasConnFailure) {
+      _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : ((hasHttpAuthParams || hasHttpAuthPost) ? 'http-auth-surface' : 'http-client') }, S, source));
     }
+
+    // Laravel session cookie
+    if (/^\s*(?:<\s*)?Set-Cookie:\s*laravel_session=/im.test(t)) {
+      _add(facts, mkFact('web.tech', h, { name: 'laravel', product: 'Laravel', via: 'cookie' }, S, source));
+      if (!hasConnFailure) _add(facts, mkFact('http.reachable', h, { via: 'laravel-cookie' }, S, source));
+    }
+
+    // GraphQL introspection & validation errors
+    if (/"data"\s*:\s*\{[\s\S]{0,600}?"__(?:schema|type)"\s*:/.test(t)) {
+      _add(facts, mkFact('web.graphql_schema', h, { introspection: true, via: 'graphql-introspection' }, S, source));
+      _add(facts, mkFact('web.tech', h, { name: 'graphql', product: 'GraphQL', via: 'introspection' }, S, source));
+      if (!hasConnFailure) _add(facts, mkFact('http.reachable', h, { via: 'graphql' }, S, source));
+    } else if (/"errors"\s*:\s*\[[\s\S]{0,600}?Cannot query field\b/i.test(t)) {
+      _add(facts, mkFact('web.tech', h, { name: 'graphql', product: 'GraphQL', via: 'validation-error' }, S, source));
+      if (!hasConnFailure) _add(facts, mkFact('http.reachable', h, { via: 'graphql' }, S, source));
+    }
+
+    // Spring Boot /actuator/sessions active session map
+    var hasActuatorSessionsCtx = /actuator\/sessions\b/i.test(cmdAndText);
+    var jsonBodyCand = t.trim();
+    var hdrSplitIdx = t.search(/\r?\n\r?\n[\[{]/);
+    if (hdrSplitIdx >= 0) jsonBodyCand = t.slice(hdrSplitIdx).trim();
+    var parsedJsonObj = null;
+    if (jsonBodyCand && (jsonBodyCand.charAt(0) === '{' || jsonBodyCand.charAt(0) === '[')) {
+      try { parsedJsonObj = JSON.parse(jsonBodyCand); } catch (_je) {}
+    }
+    if (parsedJsonObj && typeof parsedJsonObj === 'object' && !Array.isArray(parsedJsonObj)) {
+      var jKeys = Object.keys(parsedJsonObj);
+      var allSessionPairs = jKeys.length > 0 && jKeys.every(function (k) {
+        var v = parsedJsonObj[k];
+        return /^(?:[0-9a-fA-F]{24,64}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})$/.test(k)
+          && typeof v === 'string' && /^[A-Za-z0-9_.@-]{2,64}$/.test(v);
+      });
+      var sessionsArr = Array.isArray(parsedJsonObj.sessions) ? parsedJsonObj.sessions : null;
+      if (hasActuatorSessionsCtx || allSessionPairs || (sessionsArr && sessionsArr.some(function (s) { return s && s.id && (s.principalName || s.username); }))) {
+        var actUsers = [];
+        if (sessionsArr) {
+          sessionsArr.forEach(function (s) {
+            if (!s || typeof s !== 'object') return;
+            var su = s.principalName || s.username || '';
+            var sid = s.id || s.sessionId || '';
+            if (typeof su === 'string' && /^[A-Za-z0-9_.@-]{2,64}$/.test(su) && sid) {
+              actUsers.push(su);
+              _add(facts, mkFact('credential.candidate', h, { kind: 'session_token', user: su, token: String(sid), service: 'http', endpoint: '/actuator/sessions', via: 'actuator-sessions' }, S, source));
+            }
+          });
+        }
+        jKeys.forEach(function (k) {
+          var v = parsedJsonObj[k];
+          if (typeof v === 'string' && /^[A-Za-z0-9_.@-]{2,64}$/.test(v)) {
+            actUsers.push(v);
+            _add(facts, mkFact('credential.candidate', h, { kind: 'session_token', user: v, token: k, service: 'http', endpoint: '/actuator/sessions', via: 'actuator-sessions' }, S, source));
+          }
+        });
+        if (actUsers.length) {
+          var uniqAct = C.uniqueSortedCI(actUsers);
+          _add(facts, mkFact('web.actuator', h, { endpoint: '/actuator/sessions', users: uniqAct, count: uniqAct.length }, S, source));
+          if (!hasConnFailure) _add(facts, mkFact('http.reachable', h, { via: 'actuator-sessions' }, S, source));
+        }
+      }
+    }
+
+    // Valid non-error JSON API response over curl/wget/httpie -> http.reachable
+    if (parsedJsonObj !== null && !hasConnFailure && /\b(?:curl|wget|httpie)\b/i.test(cmd)
+        && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+      _add(facts, mkFact('http.reachable', h, { via: 'json-api' }, S, source));
+    }
+
+    // XML LDAP <bind-dn> + <bind-password> configuration response
+    _parse_xml_ldap_bind_creds(t, ws, source, facts);
   }
   C._parse_web_surface = _parse_web_surface;
 
@@ -668,6 +861,26 @@
           else passCtx.push(pEntry);
         }
       }
+      if (!um && !pm && /\\r\\n|\\n|(?:user(?:name)?|login)\s*[:=]/i.test(body)) {
+        var subLines = body.replace(/\\r\\n|\\n/g, '\n').split('\n');
+        for (var sli = 0; sli < subLines.length; sli++) {
+          var sub = subLines[sli].trim().replace(/^['"`]+|['"`;,]+$/g, '');
+          var inlU = /(?:^|\b)(user(?:name)?|login|uid|account)\s*[:=]\s*([^\s'"\\;,]{2,96})/i.exec(sub);
+          if (inlU && _valid_diff_token(inlU[2], true)) {
+            var inlUEnt = { key: inlU[1], val: inlU[2].trim(), changed: pfx === '+' || pfx === '-' };
+            if (pfx === '-') usersMinus.push(inlUEnt);
+            else if (pfx === '+') usersPlus.push(inlUEnt);
+            else usersCtx.push(inlUEnt);
+          }
+          var inlP = /(?:^|\b)(pass(?:word|wd)?|pwd|secret)\s*[:=]\s*([^\s'"\\;,]{3,128})/i.exec(sub);
+          if (inlP && _valid_diff_token(inlP[2], false)) {
+            var inlPEnt = { key: inlP[1], val: inlP[2].trim(), changed: pfx === '+' || pfx === '-' };
+            if (pfx === '-') passMinus.push(inlPEnt);
+            else if (pfx === '+') passPlus.push(inlPEnt);
+            else passCtx.push(inlPEnt);
+          }
+        }
+      }
     }
     flushHunk();
     return pairs;
@@ -697,7 +910,13 @@
     if (head) branch = head.groups.branch;
     var lc = (command || '').toLowerCase();
     var hasGitDiff = /^diff --git\s+a\//m.test(text) || (/^commit\s+[0-9a-f]{7,40}\b/m.test(text) && /^@@\s+-\d+/m.test(text)) || (/\bgit\s+(?:show|log|diff)\b/.test(lc) && /^@@\s+-\d+/m.test(text));
-    var hasGitDumpSuccess = (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) && reSearch(C._GIT_DUMPER_SUCCESS_RE, text);
+    var gitHead200M = /Testing\s+(https?:\/\/[^\s]+\/\.git\/HEAD)\s+\[200\]/i.exec(text);
+    if (gitHead200M) {
+      _add(facts, mkFact('http.exposed', h, { kind: 'git', url: gitHead200M[1], path: '/.git/HEAD', status: 200, tool: 'git-dumper' }, S, source));
+      _add(facts, mkFact('web.exposed_artifact', h, { kind: 'git', url: gitHead200M[1], path: '/.git/HEAD' }, S, source));
+      _add(facts, mkFact('http.reachable', h, { via: 'git-dumper' }, S, source));
+    }
+    var hasGitDumpSuccess = ((lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) && reSearch(C._GIT_DUMPER_SUCCESS_RE, text)) || !!gitHead200M;
     var sourceFound = !!head || hasGitDiff || (hasGitDumpSuccess && (!/\b(?:error|failed|not found|403|404)\b/i.test(text) || /(?:Fetching|Downloading)\s+[^\r\n]*\b(?:HEAD|refs\/heads|objects\/pack|config|index)\b|\[\+\]\s*Running\s+git\s+checkout/i.test(text)));
     if (sourceFound) {
       var toolName = (lc.indexOf('git-dumper') >= 0 || /\[\+\]\s*Fetching\s+\.git\//i.test(text)) ? 'git-dumper' : (hasGitDiff ? 'git' : 'curl');
@@ -779,6 +998,41 @@
     var colSet = {};
     var textNoUrls = text.replace(/https?:\/\/\S+/gi, '');
     reAll(/\b(user(?:name)?|login|email|pass(?:word)?|passwd|pwd|hash|token|api[_-]?key)\b/i, textNoUrls).forEach(function (m) { colSet[m[1].toLowerCase()] = true; });
+    var asciiTblRe = /^\+(?:-+\+)+[ \t]*\r?\n\|([^\r\n]+)\|[ \t]*\r?\n\+(?:-+\+)+[ \t]*\r?\n((?:\|[^\r\n]+\|[ \t]*\r?\n)+)\+(?:-+\+)+/gm;
+    var atm;
+    while ((atm = asciiTblRe.exec(text)) !== null) {
+      var hdrCells = atm[1].split('|').map(function (c) { return c.trim(); });
+      var uIdx = -1, pIdx = -1;
+      for (var hci = 0; hci < hdrCells.length; hci++) {
+        var hc = hdrCells[hci];
+        if (uIdx < 0 && /^(?:user(?:_?name)?|uname|login|email|account|usr|admin(?:_?user)?)$/i.test(hc)) uIdx = hci;
+        else if (pIdx < 0 && /^(?:pass(?:word|wd|_?hash)?|pwd|hash|secret|user_pass)$/i.test(hc)) pIdx = hci;
+      }
+      if (uIdx < 0 || pIdx < 0) continue;
+      hasDumpedTable = true;
+      var dataRows = atm[2].split(/\r?\n/);
+      for (var dri = 0; dri < dataRows.length; dri++) {
+        var dr = dataRows[dri].trim();
+        if (!dr || dr.charAt(0) !== '|') continue;
+        var rowInner = dr.slice(1, dr.charAt(dr.length - 1) === '|' ? -1 : dr.length);
+        var cells = rowInner.split('|').map(function (c) { return c.trim(); });
+        if (uIdx >= cells.length || pIdx >= cells.length) continue;
+        var rUser = cells[uIdx], rSec = cells[pIdx];
+        if (!rUser || !rSec || /^(?:<blank>|null|none|-+)$/i.test(rUser) || /^(?:<blank>|null|none|-+)$/i.test(rSec)) continue;
+        var crackedInlineM = /^([0-9a-fA-F]{16,128}|\$[^\s(]+|\*[0-9A-Fa-f]{40})\s+\(([^)\r\n]{1,64})\)$/.exec(rSec);
+        if (crackedInlineM) {
+          var crPw = crackedInlineM[2].trim();
+          if (C._add_plaintext_credential) C._add_plaintext_credential(facts, ws, source, rUser, crPw, '', 'sqlmap-dump');
+          _add(facts, mkFact('db.creds', h, { user: rUser, password: crPw, tool: 'sqlmap', via: 'sqlmap-dump' }, S, source));
+        } else if (/^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128}|\*[0-9A-Fa-f]{40}|\$(?:1|2[abxy]|5|6|y|P|H|apr1|pbkdf2)[^\s]*|pbkdf2_sha\d+\$[^\s]+|sha256:\d+:[^\s]+)$/i.test(rSec)) {
+          _add(facts, mkFact('hash.crackable', h, { user: rUser, hash: rSec, via: 'sqlmap-dump' }, S, source));
+          _add(facts, mkFact('credential.candidate', h, { kind: 'database_dump_hash', user: rUser, hash: rSec, via: 'sqlmap-dump' }, S, source));
+        } else {
+          if (C._add_plaintext_credential) C._add_plaintext_credential(facts, ws, source, rUser, rSec, '', 'sqlmap-dump');
+          _add(facts, mkFact('db.creds', h, { user: rUser, password: rSec, tool: 'sqlmap', via: 'sqlmap-dump' }, S, source));
+        }
+      }
+    }
     var credentialColumns = C.uniqueSortedCI(Object.keys(colSet));
     var hasDumpSignal = !!(reSearch(C._SQLMAP_DUMP_RE, text) || /\bdumped to CSV file\b|\bfetching entries for table\b/i.test(text) || hasDumpedTable);
     if (credentialColumns.length && hasDumpSignal) {
@@ -786,6 +1040,7 @@
       if (tableRefs.length) v2.tables = tableRefs.slice(0, 20);
       _add(facts, mkFact('db.creds', h, v2, S, source));
       _add(facts, mkFact('credential.candidate', h, { kind: 'database_dump_secret', count: credentialColumns.length, sources: credentialColumns.slice(0, 20) }, S, source));
+      if (!vuln && !tableRefs.length) _add(facts, mkFact('web.sqli_confirmed', h, { tool: 'sqlmap', evidence: 'sqlmap dumped table credentials' }, S, source));
     }
     var shell = reSearch(C._SQLMAP_OS_SHELL_RE, text);
     if (shell) _add(facts, mkFact('foothold.webshell', h, { tool: 'sqlmap', method: 'os-shell', evidence: C._line_for_match(text, shell) }, S, source));
@@ -871,6 +1126,17 @@
       var winFile = param ? param.groups.path : 'windows_system_file';
       filesRead.push(winFile);
       if (isLfiMove && !isXxe) _add(facts, mkFact('web.lfi_confirmed', h, { file: winFile, os: 'windows', method: method, evidence: C._line_for_match(text, win) }, S, source));
+    }
+    var adminIniMd5M = /(?:^|\r?\n)\s*(?:\[Administrator\][\s\S]{0,240}?\r?\n\s*Password|AdministratorPassword)\s*=\s*([0-9a-fA-F]{32})\b/i.exec(text || '');
+    if (adminIniMd5M) {
+      osFamily = osFamily || 'windows';
+      var iniParam = reSearch(C._LFI_FILE_PARAM_RE, command);
+      var iniFile = iniParam ? iniParam.groups.path : 'administrator_ini';
+      filesRead.push(iniFile);
+      var md5Hex = adminIniMd5M[1].toLowerCase();
+      if (isLfiMove && !isXxe) _add(facts, mkFact('web.lfi_confirmed', h, { file: iniFile, os: 'windows', method: method, evidence: '[Administrator] Password=' + md5Hex }, S, source));
+      _add(facts, mkFact('hash.crackable', h, { user: 'Administrator', hash: md5Hex, format: 'raw-md5', hash_type: 'md5', via: 'lfi' }, S, source));
+      _add(facts, mkFact('credential.candidate', h, { kind: 'hashed_ini_password', user: 'Administrator', hash: md5Hex, hash_type: 'md5', via: 'lfi' }, S, source));
     }
     var lc = (command || '').toLowerCase();
     var decoded = (lc.indexOf('php://filter') >= 0 || lc.indexOf('convert.base64') >= 0 || /^[A-Za-z0-9+/]{40,}={0,2}\s*$/m.test(text)) ? _php_filter_source(text) : '';
@@ -962,6 +1228,10 @@
       uid || win || replWhoami
       || /\[\+\]\s*(?:[^\r\n]*\b(?:shell|rce|executed|exploited|pwned|success|ready|uploaded)\b)|(?:\bshell\s+(?:uploaded|ready|url|location)\b|\bFile\s+Renamed\s+to\b)/i.test(text)
     ));
+    var icmpEchoM = /\bIP\s+(\d{1,3}(?:\.\d{1,3}){3})\s+>\s+\d{1,3}(?:\.\d{1,3}){3}:\s+ICMP\s+echo\s+request\b/i.exec(text || '');
+    if (icmpEchoM && (!ws.target || ws.target === 'unknown' || icmpEchoM[1] === ws.target)) {
+      _add(facts, mkFact('web.cmdi_confirmed', h, { method: 'os_command_injection', via: 'icmp-callback', source_ip: icmpEchoM[1], evidence: C._line_for_match(text, icmpEchoM) }, S, source));
+    }
     if (!uid && !win && !replWhoami && !hasUploadExecSuccess) return;
     var effId = actionId;
     if (!effId || effId === 'operator-ingest') {
@@ -1058,6 +1328,7 @@
     reAll(_RESP_PASS_RE, text).forEach(function (m) {
       var pw = m.groups.p;
       if (_RESP_CRED_STOPWORDS.indexOf(pw.toLowerCase()) >= 0) return;
+      if (/^[0-9a-fA-F]{32}$|^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$/.test(pw)) return;
       var cred = { password: pw };
       if (docUser) cred.user = docUser;
       var key = (cred.user || '') + '|' + pw;
@@ -1191,16 +1462,39 @@
   // The product names itself in the login page title and asset paths.
   var _FP_NVMS_RE = /NVMS[\s-]?1000|\/vh_www\/|TVT[\s_-]?NVMS/i;
 
-  function _parse_web_fingerprint(text, ws, source, facts) {
-    if (!text || !text.trim()) return;
-    if (_is_sql_client_output(text, ws, '')) return;
+  function _parse_web_fingerprint(text, ws, source, facts, command) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    if (!t.trim() && !cmd.trim()) return;
+    if (_is_sql_client_output(t, ws, cmd)) return;
+    if (C._is_outbound_simplehttp_callback && C._is_outbound_simplehttp_callback(t, cmd, ws)) return;
     var h = 'host:' + ws.target;
-    if (reSearch(_FP_JENKINS_RE, text)) {
-      _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'response-header', evidence: C._line_for_match(text, reSearch(_FP_JENKINS_RE, text)) }, S, source));
-    } else if (reSearch(_FP_JENKINS_BODY_RE, text)) {
+    var jHdrM = reSearch(_FP_JENKINS_RE, t);
+    if (jHdrM) {
+      _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'response-header', evidence: C._line_for_match(t, jHdrM) }, S, source));
+      var jVerM = /^\s*X-Jenkins\s*:\s*(\d+\.\d+(?:\.\d+)?)\b/im.exec(t);
+      if (jVerM && jVerM[1]) {
+        var jVer = jVerM[1];
+        _add(facts, mkFact('exploit.versioned_banner', h, { product: 'Jenkins', version: jVer, search_query: 'Jenkins ' + jVer, via: 'x-jenkins-header' }, S, source));
+        var jParts = jVer.split('.').map(function (n) { return parseInt(n, 10); });
+        var isCve2024_23897 = jParts.length === 2
+          ? (jParts[0] < 2 || (jParts[0] === 2 && jParts[1] <= 441))
+          : (jParts[0] < 2 || (jParts[0] === 2 && (jParts[1] < 426 || (jParts[1] === 426 && jParts[2] <= 2))));
+        if (isCve2024_23897) {
+          _add(facts, mkFact('vuln.jenkins', h, { product: 'Jenkins', version: jVer, cve: 'CVE-2024-23897', via: 'x-jenkins-header', lead: true }, S, source));
+        }
+      }
+    } else if (reSearch(_FP_JENKINS_BODY_RE, t)) {
       _add(facts, mkFact('web.fingerprint.jenkins', h, { via: 'page-chrome' }, S, source));
     }
-    if (reSearch(_FP_NVMS_RE, text)) {
+    if ((/\bjenkins-cli\.jar\b/i.test(cmd) || /\bjenkins-cli\b/i.test(cmd))
+        && (/(?:ERROR:\s*(?:Too many arguments:|Failed to parse\b|No argument is allowed:|CmdLineException)|(?:ERROR:|:\s*)No such (?:job|item|node)\b)/i.test(t)
+          || (/\s@\/[^\s'"]+/.test(cmd) && t.trim() && !/\b(?:Connection refused|Unable to Unable|Failed to connect)\b/i.test(t)))) {
+      var cliPathM = /\s@(\/[^\s'"]+)/.exec(cmd);
+      var cliPath = cliPathM ? cliPathM[1] : 'jenkins_cli_leak';
+      _add(facts, mkFact('loot.files', h, { files: [cliPath], path: cliPath, tool: 'jenkins-cli', via: 'jenkins-cli-file-read' }, S, source));
+    }
+    if (reSearch(_FP_NVMS_RE, t)) {
       _add(facts, mkFact('web.fingerprint.nvms', h, { via: 'product-name', product: 'NVMS-1000' }, S, source));
     }
   }

@@ -79,6 +79,42 @@
         if (names.length) return names;
       }
     }
+    if (/^\s*-{2,}(?:[ \t]+-{2,})+\s*$/m.test(text)) {
+      var sLines = text.split(/\r?\n/);
+      var uIdx = -1;
+      for (var si = 0; si < sLines.length; si++) {
+        if (/^\s*-{2,}(?:[ \t]+-{2,})+\s*$/.test(sLines[si])) { uIdx = si; break; }
+      }
+      if (uIdx > 0) {
+        var spans = [], dm, dRe = /-{2,}/g;
+        while ((dm = dRe.exec(sLines[uIdx])) !== null) spans.push({ start: dm.index, end: dm.index + dm[0].length });
+        if (spans.length >= 2) {
+          var targetCol = 0;
+          var hdrLn = sLines[uIdx - 1];
+          for (var ci = 0; ci < spans.length; ci++) {
+            var hEnd = ci + 1 < spans.length ? spans[ci + 1].start : hdrLn.length;
+            var hName = hdrLn.slice(spans[ci].start, hEnd).trim().toLowerCase();
+            if (hName === 'name' || hName === 'database' || hName === 'datname' || hName === 'tablename' || hName === 'table_name') {
+              targetCol = ci;
+              break;
+            }
+          }
+          for (var sri = uIdx + 1; sri < sLines.length; sri++) {
+            var srLn = sLines[sri];
+            if (!srLn.trim() || /^\s*(?:\(\d+\s+rows?(?:\s+affected)?\)|SQL(?:\s*\([^)]*\))?>|\d+>)/i.test(srLn)) break;
+            var cStart = spans[targetCol].start;
+            var cEnd = targetCol + 1 < spans.length ? spans[targetCol + 1].start : srLn.length;
+            var cVal = srLn.slice(cStart, cEnd).trim();
+            if (!cVal) {
+              var wsToks = srLn.trim().split(/\s+/);
+              cVal = wsToks[targetCol] || '';
+            }
+            if (cVal && /^[A-Za-z0-9_$][A-Za-z0-9_$.-]*$/.test(cVal)) names.push(cVal);
+          }
+          if (names.length) return names;
+        }
+      }
+    }
     text.split(/\r?\n/).forEach(function (ln) {
       var t = ln.trim();
       if (!t || /^[-+]+$/.test(t) || /^\(\d+\s+rows?\)$/i.test(t)) return;
@@ -171,8 +207,31 @@
     return { user: cleanUser, password: password };
   }
 
+  function _le32HexToUint(h8) {
+    var b0 = parseInt(h8.slice(0, 2), 16);
+    var b1 = parseInt(h8.slice(2, 4), 16);
+    var b2 = parseInt(h8.slice(4, 6), 16);
+    var b3 = parseInt(h8.slice(6, 8), 16);
+    return ((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0);
+  }
+
+  function _parse_redis_requirepass(text, ws, source, facts) {
+    if (!text) return;
+    var h = 'host:' + ws.target;
+    reAll(/^[ \t]*requirepass[ \t]+['"]?([^\s'"#\r\n]{4,128})['"]?[ \t]*$/gm, text).forEach(function (m) {
+      var rpPw = (m[1] || '').trim();
+      if (!rpPw || (C._valid_password && !C._valid_password(rpPw))) return;
+      var rpVal = { password: rpPw, service: 'redis', via: 'redis-conf' };
+      _add(facts, mkFact('credential.plaintext', h, rpVal, S, source));
+      _add(facts, mkFact('credential.available', h, { password: rpPw, service: 'redis', method: 'redis-conf' }, S, source));
+      _add(facts, mkFact('db.creds', h, rpVal, S, source));
+    });
+  }
+  C._parse_redis_requirepass = _parse_redis_requirepass;
+
   function _parse_database_output(text, ws, command, source, facts) {
     text = String(text || '');
+    if (/^\s*(?:where(?:\.exe)?|which|whereis|type\s+-a|command\s+-v|get-command|gcm|dir|ls|gci|get-childitem|find)\b/i.test(command || '')) return;
     var ctx = (ws && ws.context) || {};
     var followPrompt = ctx.followPrompt ? String(ctx.followPrompt) : '';
     var promptLine = ctx.promptLine ? String(ctx.promptLine) : '';
@@ -194,6 +253,7 @@
           _add(facts, mkFact('foothold.windows', h, val, S, source));
           if (reSearch(C._SYSTEM_ID_RE, ident)) {
             _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'xp_cmdshell', tool: toolName }, S, source));
+            _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: 'xp_cmdshell', tool: toolName }, S, source));
           }
           C._add_os_observation(facts, ws, source, 'windows', 'xp_cmdshell command execution (' + ident + ')', 'high', 'mssql', true);
         }
@@ -280,12 +340,110 @@
       });
     }
 
+    // Pipe-delimited SQL SELECT cleartext user/password rows & MSSQL SUSER_SID() binary SID hex
+    var isSqlmapCtx = /\bsqlmap\b/i.test(command || '') || /\bback-end DBMS:\s/i.test(text);
+    var sqlCtxHay = (command || '') + '\n' + promptLine + '\n' + text;
+    var hasCleartextSelectCtx = !isSqlmapCtx && (/\bSELECT\b[\s\S]{1,180}?\bFROM\s+(?:[A-Za-z0-9_]+\.)?[`"'\[]?(?:users?|accounts?|members?|admins?|logins?|credentials?|auth\w*|tbl_users?|wp_users|staff|employees?|operators?|customers?)\b/i.test(sqlCtxHay)
+      || /(?:^|\n)\s*sqlite3?>\s*/i.test(promptLine + '\n' + text));
+    if (hasCleartextSelectCtx && text.indexOf('|') >= 0) {
+      var hdrUserIdx = -1, hdrPassIdx = -1, seenClearPair = {};
+      text.split(/\r?\n/).forEach(function (rawLn) {
+        var ln = rawLn.trim();
+        if (!ln || ln.indexOf('|') < 0 || /^[\s|+-]+$/.test(ln) || /^\(\d+\s+rows?\)$/i.test(ln)) return;
+        ln = ln.replace(/^\s*(?:sqlite3?|mysql|MariaDB\s*\[[^\]]*\]|postgres[-=#]*|SQL(?:\s*\([^)]*\))?)>\s*/i, '');
+        if (/^\s*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|PRAGMA|\.[a-z]+)\b/i.test(ln)) return;
+        var rawParts = ln.split('|').map(function (c) { return c.trim(); });
+        if (rawParts.length >= 3 && rawParts[0] === '' && rawParts[rawParts.length - 1] === '') {
+          rawParts = rawParts.slice(1, -1);
+        } else if (rawParts.length >= 2 && rawParts[rawParts.length - 1] === '') {
+          rawParts = rawParts.slice(0, -1);
+        }
+        if (rawParts.length < 2 || rawParts.length > 8) return;
+        var lowParts = rawParts.map(function (c) { return c.toLowerCase(); });
+        var uH = -1, pH = -1;
+        for (var hi = 0; hi < lowParts.length; hi++) {
+          if (uH < 0 && /^(?:user(?:name|_name)?|uname|login|account|email)$/.test(lowParts[hi])) uH = hi;
+          if (pH < 0 && /^(?:pass(?:word|wd)?|pwd|pw|secret|cleartext)$/.test(lowParts[hi])) pH = hi;
+        }
+        if (uH >= 0 && pH >= 0) {
+          hdrUserIdx = uH;
+          hdrPassIdx = pH;
+          return;
+        }
+        var uCand = '', pCand = '';
+        if (hdrUserIdx >= 0 && hdrPassIdx >= 0 && hdrUserIdx < rawParts.length && hdrPassIdx < rawParts.length) {
+          uCand = rawParts[hdrUserIdx];
+          pCand = rawParts[hdrPassIdx];
+        } else {
+          var startIdx = /^\d+$/.test(rawParts[0]) ? 1 : 0;
+          var foundUIdx = -1;
+          for (var ci = startIdx; ci < rawParts.length - 1; ci++) {
+            var cellU = rawParts[ci];
+            if (!cellU || /^\d+$/.test(cellU) || /^(?:id|uid|user|username|login|name|email|mail|role|admin|pass|passwd|password|pwd|hash|secret|token|status|active|created|updated|null|true|false)$/i.test(cellU)) continue;
+            var cleanedCellU = C._clean_username ? C._clean_username(cellU) : cellU;
+            if (cleanedCellU && C._valid_username && C._valid_username(cleanedCellU, false)) {
+              uCand = cleanedCellU;
+              foundUIdx = ci;
+              break;
+            }
+          }
+          if (foundUIdx >= 0) {
+            for (var pi = foundUIdx + 1; pi < rawParts.length; pi++) {
+              var cellP = rawParts[pi];
+              if (!cellP || /^\d+$/.test(cellP)) continue;
+              if (/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(cellP)) continue;
+              if (/^\d{4}-\d{2}-\d{2}/.test(cellP)) continue;
+              if (/^(?:true|false|null|none|yes|no|admin|administrator|user|member|guest|staff|moderator|editor|author|subscriber|enabled|disabled|active|inactive)$/i.test(cellP)) continue;
+              if (/^(?:https?:\/\/|\/[A-Za-z0-9_.-]+\/)/.test(cellP)) continue;
+              pCand = cellP;
+              break;
+            }
+          }
+        }
+        var finalU = C._clean_username ? C._clean_username(uCand) : uCand;
+        var finalP = (pCand || '').trim();
+        if (!finalU || !finalP || finalP.length < 4 || finalP.length > 64) return;
+        if (!C._valid_username(finalU, false) || !C._valid_password(finalP)) return;
+        if (/^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{56}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128}|\*[0-9a-fA-F]{40}|\$(?:1|2[abxy]|5|6|y|P|H|S|apr1)\$[^\s]+|md5[0-9a-fA-F]{32}|SCRAM-SHA-256\$\d+:[^\s]+|pbkdf2_)/i.test(finalP)) return;
+        var pairKey = finalU.toLowerCase() + '|' + finalP;
+        if (seenClearPair[pairKey]) return;
+        seenClearPair[pairKey] = true;
+        _add(facts, mkFact('credential.candidate', h, { kind: 'database_plaintext', user: finalU, password: finalP, via: 'database' }, S, source));
+        if (C._add_plaintext_credential) {
+          C._add_plaintext_credential(facts, ws, source, finalU, finalP, '', 'database', '');
+        } else {
+          _add(facts, mkFact('credential.plaintext', h, { user: finalU, password: finalP, via: 'database' }, S, source));
+          _add(facts, mkFact('credential.available', h, { user: finalU, password: finalP, method: 'database' }, S, source));
+        }
+      });
+    }
+
+    reAll(/\b(?:0x)?010([45])00000000000515000000([0-9a-fA-F]{8})([0-9a-fA-F]{8})([0-9a-fA-F]{8})(?:([0-9a-fA-F]{8}))?\b/gi, text).forEach(function (sm) {
+      var sa1 = _le32HexToUint(sm[2]), sa2 = _le32HexToUint(sm[3]), sa3 = _le32HexToUint(sm[4]);
+      if (sa1 === 0 && sa2 === 0 && sa3 === 0) return;
+      var domSid = 'S-1-5-21-' + sa1 + '-' + sa2 + '-' + sa3;
+      _add(facts, mkFact('ad.domain_sid', C._scope_for_domain(ws), { sid: domSid, domain_sid: domSid, via: 'mssql-suser-sid' }, S, source));
+    });
+
+    _parse_redis_requirepass(text, ws, source, facts);
+
     var isRedisCmd = /\bredis-cli\b/i.test(command || '')
       || /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*/m.test(text + '\n' + promptLine + '\n' + followPrompt);
+    var redisAuthM = (isRedisCmd || low.indexOf('redis') >= 0)
+      ? (/\bredis-cli\b[^\r\n]*?(?:\s-a\s+['"]?([^\s'"]+)['"]?|\bauth\s+['"]?([^\s'"]+)['"]?)/i.exec(command || '')
+        || /^(?:\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*)?auth\s+['"]?([^\s'"\r\n]+)['"]?\s*$/im.exec(promptLine + '\n' + text))
+      : null;
+    var redisAuthSecret = redisAuthM ? (redisAuthM[1] || redisAuthM[2] || '').trim() : '';
+    var hasRedisAuthSupplied = !!redisAuthSecret || /\bNOAUTH\b/i.test(text);
     var hasRedisBareReply = isRedisCmd && !_REDIS_DENIED_RE.test(text) && /^(?:\+OK|OK|\+PONG|PONG|\(integer\)\s+\d+)\s*$/im.test(text);
     var isRedisHit = ((low.indexOf('redis') >= 0 || isRedisCmd || /^redis_version:/im.test(text)) && (text.toLowerCase().indexOf('# server') >= 0 || /^redis_version:/im.test(text) || /^\+PONG\b|^PONG\b|^\+OK\b/im.test(text) || /^\s*\d+\)\s+"/m.test(text))) || hasRedisBareReply;
+    if (redisAuthSecret && !_REDIS_DENIED_RE.test(text) && /^\s*(?:\+OK|OK)\s*$/im.test(text)) {
+      _add(facts, mkFact('credential.validated', h, { service: 'redis', tool: 'redis-cli', outcome: 'accepted' }, S, source));
+      _add(facts, mkFact('db.session', h, { service: 'redis', tool: 'redis-cli', detail: 'authenticated database session established' }, S, source));
+      _add(facts, mkFact('db.reachable', h, { service: 'redis', port: 6379, tool: 'redis-cli' }, S, source));
+    }
     if (isRedisHit) {
-      if (!denied && !_REDIS_DENIED_RE.test(text)) {
+      if (!denied && !_REDIS_DENIED_RE.test(text) && !hasRedisAuthSupplied) {
         _add(facts, mkFact('config.review', h, { kind: 'unauthenticated_redis', service: 'redis', detail: 'redis responded to INFO/KEYS without authentication' }, S, source));
         _add(facts, mkFact('redis.unauth', h, { port: 6379, tool: 'redis-cli' }, S, source));
       }
@@ -354,7 +512,8 @@
     // from a bare `show tables;`/`show databases;` in a sub-shell. Gated on the command verb so a
     // multi-column select or describe grid (interior pipes, different intent) never enters here.
     var showDb = /\bshow\s+(?:databases|schemas)\b/i.test(low)
-      || /\bselect\s+name\s+from\s+(?:master\.\s*)?(?:sys\.\s*)?databases\b/i.test(low + '\n' + text)
+      || /\bselect\s+(?:TOP\s+\d+\s+)?(?:\*|name(?:\s*,[^\r\n]+)?)\s+from\s+(?:master\.\s*(?:\.\s*)?(?:dbo\.\s*)?|(?:sys|dbo)\.\s*)?sysdatabases\b/i.test(low + '\n' + promptLine + '\n' + text)
+      || /\bselect\s+name\s+from\s+(?:master\.\s*)?(?:sys\.\s*)?databases\b/i.test(low + '\n' + promptLine + '\n' + text)
       || /\bselect\s+datname\s+from\s+(?:pg_catalog\.)?pg_database\b/i.test(low + '\n' + text)
       || /(?:^|\n)\s*\\l(?:ist)?\+?(?:\s|;|$)/i.test((command || '') + '\n' + text)
       || /^\s*List of databases\s*$/im.test(text)
@@ -413,13 +572,14 @@
       var sessionText = text
         + (followPrompt ? '\n' + followPrompt : '')
         + (_DB_INTERACTIVE_PROMPT_LINE_RE.test(promptLine) ? '\n' + promptLine : '');
+      var sessionTextNoPaths = sessionText.replace(/[A-Za-z]:\\[^\r\n]*\.(?:exe|dll)\b/gi, '');
       var tlow = sessionText.toLowerCase(), svc = null;
       if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(sessionText) || /^\s*mysql\s*>|Welcome to the (?:MySQL|MariaDB) monitor/im.test(sessionText)) &&
           (/\bmysql\s*>/.test(sessionText) || /mariadb\s*\[/i.test(sessionText) || /Welcome to the (?:MySQL|MariaDB) monitor/i.test(sessionText) || tlow.indexOf('information_schema') >= 0 ||
            /\bversion\(\)/i.test(sessionText) || /server version:\s*\S/i.test(sessionText) ||
            /^\s*\d+\.\d+\.\d+(?!\.\d)(?:-[A-Za-z0-9._-]+)?\s*$/im.test(text))) svc = 'mysql';
       else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)\s*>|\bENVCHANGE\(DATABASE\)|\bImpacket\b[\s\S]{0,240}\bSQL\s*>/i.test(sessionText)) &&
-               (/\bSQL\s*(?:\([^)]*\)\s*)?>/.test(sessionText) || /microsoft sql server|\bENVCHANGE\(DATABASE\)/i.test(sessionText) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
+               (/\bSQL\s*(?:\([^)]*\)\s*)?>/.test(sessionText) || /microsoft sql server|\bENVCHANGE\(DATABASE\)/i.test(sessionTextNoPaths) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
       // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
       else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b|\bpsql\s*\(\d+\.\d+/i.test(sessionText) || /^\s*[A-Za-z][A-Za-z0-9_.-]{0,62}=[#>](?:\s|$)/m.test(sessionText) || /\b(?:pg_shadow|pg_database|pg_authid|pg_tables)\b/i.test(low + '\n' + sessionText)) &&

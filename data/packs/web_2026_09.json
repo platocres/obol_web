@@ -359,10 +359,11 @@
         "curl"
       ],
       "os": [],
-      "requires_all": [
-        "web.sqli_confirmed"
+      "requires_all": [],
+      "requires_any": [
+        "web.sqli_confirmed",
+        "web.sqli_candidate"
       ],
-      "requires_any": [],
       "produces": [
         "db.creds",
         "credential.candidate",
@@ -428,10 +429,11 @@
         "sqlmap"
       ],
       "os": [],
-      "requires_all": [
-        "web.sqli_confirmed"
+      "requires_all": [],
+      "requires_any": [
+        "web.sqli_confirmed",
+        "web.sqli_candidate"
       ],
-      "requires_any": [],
       "produces": [
         "db.creds",
         "credential.candidate",
@@ -1103,7 +1105,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "http.reachable",
+        "web.fingerprint.jenkins",
+        "service.jenkins",
         "vuln.jenkins"
       ],
       "produces": [
@@ -1369,7 +1372,7 @@
         "ffuf"
       ],
       "requires_all": [
-        "web.users"
+        "http.reachable"
       ],
       "produces": [
         "credential.available"
@@ -1406,7 +1409,13 @@
           "note": "Always try the enumerated app users against SSH too - web and shell passwords are reused constantly, and an SSH hit is a direct foothold."
         }
       ],
-      "requires_any": []
+      "requires_any": [
+        "web.users",
+        "web.login_form",
+        "credential.available",
+        "credential.candidate",
+        "ad.user_list"
+      ]
     },
     {
       "id": "idor-harvest",
@@ -1822,7 +1831,7 @@
     {
       "id": "graphql-abuse",
       "title": "GraphQL Introspection and Broken Authorization",
-      "phase": "access",
+      "phase": "enum",
       "hypothesis": "A GraphQL endpoint fronts the whole data model from one URL and is routinely under-secured. Introspection often stays on, handing you every type, query, and mutation; from there you probe for authorization enforced per-resolver rather than centrally, which means a query returning another user's data or a mutation you should not be allowed to call. Batched queries can also bypass rate limits. Introspect first, map the sensitive operations, then test each for missing authorization and injection.",
       "tool": "curl",
       "tools": [
@@ -1830,6 +1839,7 @@
         "graphql"
       ],
       "requires_any": [
+        "web.graphql_schema",
         "web.content_map",
         "http.reachable"
       ],
@@ -2139,7 +2149,7 @@
         "credential.candidate"
       ],
       "priority": 86,
-      "phase": "exploit",
+      "phase": "creds",
       "proves": "demonstrates arbitrary file read access on the Jenkins controller via args4j CLI expansion",
       "does_not_prove": "file read only; does not provide interactive remote code execution without cascading credential decryption or admin session forgery",
       "report": {

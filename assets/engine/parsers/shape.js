@@ -82,7 +82,8 @@
     //     saved to a file mints nothing. A status line or a Server header is an unambiguous web signal.
     var isNslookup = /^Server:[ \t]*\S+[ \t]*\r?\nAddress(?:es)?[ \t]*:/im.test(text);
     var isSqlPaste = !!(C._is_sql_client_output && C._is_sql_client_output(text, ws, source));
-    var isHttpShape = !isNslookup && !isSqlPaste && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text));
+    var isOutboundSimple = !!(C._is_outbound_simplehttp_callback && C._is_outbound_simplehttp_callback(text, source, ws));
+    var isHttpShape = !isNslookup && !isSqlPaste && !isOutboundSimple && (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(text) || /^(?:<\s*)?Server:[ \t]*\S/im.test(text));
     if (isHttpShape && !hasKind(facts, 'http.reachable')) {
       _add(facts, mkFact('http.reachable', h, { via: 'shape' }, S, source));
       var servers = [];
@@ -283,7 +284,8 @@
           }, S, source));
         }
       }
-      if (psFiles.length) {
+      var hasSixCharPsMode = /^[ \t]*(?:d|[arhs-])[arhs-]{5}[ \t]+(?:\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}|\d{4}[\/.-]\d{1,2}[\/.-]\d{1,2})[ \t]+\d{1,2}:\d{2}/im.test(text);
+      if (psFiles.length >= 2 || (psFiles.length === 1 && hasSixCharPsMode)) {
         _add(facts, mkFact('loot.files', h, { files: psFiles.slice(0, 200), count: psFiles.length, tool: 'powershell', via: 'shape' }, S, source));
       }
     }
@@ -425,13 +427,21 @@
     }
 
     // (6e) Command-less PEM / OpenSSH / PuTTY private key shape
-    if (/-----BEGIN (?:OPENSSH|RSA|DSA|EC|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-----|PuTTY-User-Key-File-\d/.test(text)) {
-      var isEncPem = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(text)
-        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(text);
-      if (!hasKind(facts, 'loot.ssh_key')) _add(facts, mkFact('loot.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
-      if (!hasKind(facts, 'credential.ssh_key')) _add(facts, mkFact('credential.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
-      if (!hasKind(facts, 'credential.certificate')) _add(facts, mkFact('credential.certificate', h, { kind: 'private_key', encrypted: isEncPem, via: 'shape' }, S, source));
-      if (isEncPem && !hasKind(facts, 'hash.crackable')) {
+    var pemScanText = text;
+    if (/<\?php\b|<(?:!doctype|html|script|!--)/i.test(pemScanText)) {
+      pemScanText = pemScanText.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    }
+    if (/-{3,5}BEGIN (?:OPENSSH|RSA|DSA|EC|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-{2,5}|PuTTY-User-Key-File-\d/.test(pemScanText)) {
+      var isEncPem = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(pemScanText)
+        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(pemScanText);
+      var isX509CertPem = /-{3,5}BEGIN CERTIFICATE-{2,5}|\b(?:Certify|certipy|pkcs12|x509|Certificate\s+Template)\b/i.test(pemScanText)
+        && !/-{3,5}BEGIN OPENSSH PRIVATE KEY-{2,5}|PuTTY-User-Key-File-\d/.test(pemScanText);
+      if (!isX509CertPem) {
+        if (!hasKind(facts, 'loot.ssh_key')) _add(facts, mkFact('loot.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
+        if (!hasKind(facts, 'credential.ssh_key')) _add(facts, mkFact('credential.ssh_key', h, { encrypted: isEncPem, via: 'shape' }, S, source));
+      }
+      if (!hasKind(facts, 'credential.certificate')) _add(facts, mkFact('credential.certificate', h, { kind: isX509CertPem ? 'x509_keypair' : 'private_key', encrypted: isEncPem, via: 'shape' }, S, source));
+      if (isEncPem && !isX509CertPem && !hasKind(facts, 'hash.crackable')) {
         _add(facts, mkFact('hash.crackable', h, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'shape' }, S, source));
         _add(facts, mkFact('hash.candidate', h, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'shape' }, S, source));
       }
@@ -577,7 +587,9 @@
     // (8) Un-keyed OS / kernel / version shapes (uname -a, /proc/version, uname -r, /etc/os-release, lsb_release, ver, sudo -V, pkexec --version)
     // Skip raw HTTP HTML bodies unless the HTTP response also proves RCE / LFI (e.g. uid=0(root) or root:x:0:0:).
     var isWebRceShape = /uid=\d+\([A-Za-z0-9_.-]+\)|^root:[x*!]:0:0:/m.test(text);
-    if (!isHttpShape || isWebRceShape) {
+    var isAttackerLocalShape = !!(C._is_attacker_local_turn && C._is_attacker_local_turn(ws, source, text))
+      || /\bLinux\s+(?:kali|parrot|pwnbox|exegol|blackarch|archlinux|commando|slingshot)\s+[0-9]+\.[0-9]+/i.test(text);
+    if ((!isHttpShape || isWebRceShape) && !isAttackerLocalShape) {
       if (!hasKind(facts, 'host.kernel')) {
         var mUname = C._UNAME_RE && C._UNAME_RE.exec(text);
         var mProcVer = !mUname && /Linux version\s+([0-9][^\s]+)/i.exec(text);
@@ -614,9 +626,76 @@
       if (mSudoV && !hasKind(facts, 'vuln.baron_samedit')) {
         _add(facts, mkFact('vuln.baron_samedit', h, { version: mSudoV[1], cve: 'CVE-2021-3156', via: 'shape', lead: true }, S, source));
       }
+      var mSudoChroot = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.9\.(?:1[4-6](?:p\d+)?|17(?:p0)?(?![0-9p])))\b/i.exec(text);
+      if (mSudoChroot && !hasKind(facts, 'privesc.sudo')) {
+        _add(facts, mkFact('privesc.sudo', h, { version: mSudoChroot[1], cve: 'CVE-2025-32463', via: 'sudo-chroot' }, S, source));
+        if (!hasKind(facts, 'privesc.leads')) {
+          _add(facts, mkFact('privesc.leads', h, { kinds: ['privesc.sudo'], count: 1, via: 'shape' }, S, source));
+        }
+      }
       var mPkexec = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(text);
       if (mPkexec && !hasKind(facts, 'vuln.polkit')) {
         _add(facts, mkFact('vuln.polkit', h, { version: mPkexec[1], cve: 'CVE-2021-4034', via: 'shape', lead: true }, S, source));
+      }
+    }
+
+    // (10b) Raw-HTTP / second-order UNION SELECT / information_schema reflection in HTTP response body
+    if (!isSqlPaste && !isOutboundSimple && !hasKind(facts, 'web.sqli_confirmed')
+        && (isHttpShape || /\b(?:curl|wget|httpie)\b/i.test(source || ''))) {
+      var sqliSplitIdx = text.search(/\r?\n\r?\n/);
+      var sqliRespBody = (isHttpShape && sqliSplitIdx >= 0) ? text.slice(sqliSplitIdx + 2) : text;
+      sqliRespBody = sqliRespBody
+        .replace(/^>[ \t]*[^\r\n]*$/gm, '')
+        .replace(/\bUNION\s+(?:ALL\s+)?SELECT\b[^\r\n<]{0,160}\bFROM\s+information_schema\.[A-Za-z_]+/gi, '');
+      if (!/You have an error in your SQL syntax|PG::SyntaxError|SQLSTATE\[42000\]/i.test(sqliRespBody)
+          && (/\bUNION\s+(?:ALL\s+)?SELECT\b/i.test(text + '\n' + (source || ''))
+              || /<(?:td|tr|pre|li|div|span)\b[^>]*>\s*(?:information_schema|performance_schema)\s*<\//i.test(sqliRespBody))
+          && (/\btable_schema\b[\s\S]{0,160}?\btable_name\b/i.test(sqliRespBody)
+              || /<(?:td|pre|li|span|div)\b[^>]*>\s*(?:information_schema|performance_schema|mysql)\s*<\//i.test(sqliRespBody))) {
+        _add(facts, mkFact('web.sqli_confirmed', h, { method: 'union_based', via: 'shape' }, S, source));
+      }
+    }
+
+    // (10c) Colon-delimited <user>:<email>:[flag:]<bcrypt> credential dump rows
+    if (!isCrack && text.indexOf('$2') >= 0 && text.indexOf('@') >= 0) {
+      var bcEmailRe = /^[ \t]*([A-Za-z0-9_.-]{2,48}):([A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}):(?:[01]:)?(\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53})[ \t]*$/gm;
+      var mBcEm, seenBcEm = Object.create(null);
+      while ((mBcEm = bcEmailRe.exec(text)) !== null) {
+        var bcKey = mBcEm[1] + ':' + mBcEm[3];
+        if (seenBcEm[bcKey]) continue;
+        seenBcEm[bcKey] = 1;
+        var bcVal = { user: mBcEm[1], email: mBcEm[2], hash: mBcEm[3], format: 'bcrypt', hash_type: 'bcrypt', via: 'shape' };
+        _add(facts, mkFact('credential.candidate', h, bcVal, S, source));
+        _add(facts, mkFact('hash.crackable', h, bcVal, S, source));
+        _add(facts, mkFact('hash.candidate', h, bcVal, S, source));
+      }
+    }
+
+    // (10d) Net-SNMP snmpd.conf USM createUser <user> (MD5|SHA*) <authpass> [<privproto> <privpass>]
+    if (/createUser[ \t]+/i.test(text)) {
+      var snmpCuRe = /^[ \t]*createUser[ \t]+([A-Za-z0-9._-]{2,48})[ \t]+(?:MD5|SHA(?:-?\d+)?)[ \t]+(?:"([^"\r\n]{6,128})"|'([^'\r\n]{6,128})'|([^\s'"#\r\n]{6,128}))/gim;
+      var mSnmpCu, seenSnmpCu = Object.create(null);
+      while ((mSnmpCu = snmpCuRe.exec(text)) !== null) {
+        var cuUser = mSnmpCu[1];
+        var cuPass = mSnmpCu[2] || mSnmpCu[3] || mSnmpCu[4] || '';
+        if (!cuUser || !cuPass || seenSnmpCu[cuUser + ':' + cuPass]) continue;
+        seenSnmpCu[cuUser + ':' + cuPass] = 1;
+        var cuVal = { user: cuUser, password: cuPass, service: 'snmp', secret_type: 'plaintext', kind: 'snmpv3_createuser', via: 'shape' };
+        _add(facts, mkFact('credential.candidate', h, cuVal, S, source));
+        _add(facts, mkFact('credential.plaintext', h, cuVal, S, source));
+        _add(facts, mkFact('credential.password', h, cuVal, S, source));
+        _add(facts, mkFact('credential.available', h, cuVal, S, source));
+      }
+    }
+
+    // (10e) Ansible Vault $ANSIBLE_VAULT;1.[12];AES256 encrypted blob
+    if (text.indexOf('$ANSIBLE_VAULT;') >= 0 && /\$ANSIBLE_VAULT;1\.[12];AES256\b/.test(text)) {
+      if (!hasKind(facts, 'loot.material')) {
+        _add(facts, mkFact('loot.material', h, { kind: 'ansible_vault', via: 'shape' }, S, source));
+      }
+      if (!hasKind(facts, 'hash.crackable')) {
+        _add(facts, mkFact('hash.crackable', h, { format: 'ansible', hash_type: 'ansible', tool: 'ansible2john', via: 'shape' }, S, source));
+        _add(facts, mkFact('hash.candidate', h, { format: 'ansible', hash_type: 'ansible', tool: 'ansible2john', via: 'shape' }, S, source));
       }
     }
 
@@ -825,11 +904,12 @@
     { fact: 'vuln.zabbix_agent', re: /Zabbix Agent|10050\/tcp\s+open[^\r\n]{0,80}?zabbix/i, cve: '' },
     { fact: 'vuln.myfaces_jsf', re: /javax\.faces\.ViewState|Apache MyFaces|\bMyFaces\b/i, cve: '' },
     { fact: 'vuln.node_serialize', re: /node-serialize|_\$\$ND_FUNC\$\$_/i, cve: 'CVE-2017-5941' },
-    { fact: 'vuln.gitea', re: /\bGitea\b|Git with a cup of tea/i, cve: '' },
+    { fact: 'vuln.gitea', re: /\bGitea\s+(?:Version:\s*)?v?(?:0\.\d+|1\.(?:[0-9]|1[0-5])(?![0-9]))(?:\.\d+)?\b|CVE-202[0-2]-\d+[^\r\n]*\bGitea\b|\bGitea\b[^\r\n]*CVE-202[0-2]-\d+/i, cve: '' },
   ];
   var _VULN_SIGS_HINT_RE = /(?:CVE-\d{4}-|EDB-\d+|vsftpd|proftpd|mod_copy|samba|smbd|SMBGhost|BlueKeep|rdp-vuln|Shellshock|cgi-bin|Heartbleed|Drupal|phpMyAdmin|MiniServ|Webmin|Usermin|OFBiz|Cacti|Zabbix|Splunk|Text4Shell|commons|FreeSWITCH|mod_event_socket|JDWP|Java Debug|Xrunjdwp|agentlib:jdwp|getRuntime|Aerospike|aerospike|Pico|screen-4\.5|Screen 4|Mouse|Solr|AChat|Nibbleblog|IIS|WebDAV|ScStoragePathFromUrl|ExplodingCan|PRTG|GitLab|October|HttpFileServer|HFS|rejetto|ColdFusion|CFIDE|Oracle TNS|TNSLSNR|1521\/tcp|H2 Database|h2-console|8082\/tcp|9092\/tcp|chkrootkit|10050\/tcp|MyFaces|ViewState|node-serialize|ND_FUNC|Gitea|cup of tea)/i;
   function _parse_vulnmatch(text, ws, source, facts, command) {
     text = String(text || ''); if (!text.trim() || !_VULN_SIGS_HINT_RE.test(text)) return;
+    if (C._is_outbound_simplehttp_callback && C._is_outbound_simplehttp_callback(text, command !== undefined ? command : source, ws)) return;
     var cleanText = /\b(?:closed|filtered|unfiltered|open\|filtered)\b/i.test(text)
       ? text.replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
       : text;
@@ -849,7 +929,7 @@
       if (isLocalPathListingCmd && s.fact !== 'vuln.screen_suid' && s.fact !== 'vuln.chkrootkit') continue;
       if (!s.re.test(cleanText) || hasKind(facts, s.fact)) continue;
       if (s.fact === 'vuln.cacti'
-          && !/CVE-2022-46169|\bCacti\s+v?\d+\.\d+|<title>[^<]*\bCacti\b|Set-Cookie:[^\r\n]*\bCacti\b|\/cacti\/(?:index|remote_agent|auth_login|graph_view)\.php\b|\b\d+\/tcp\s+open[^\r\n]*\bcacti\b|HTTPServer\[[^\]]*cacti|\bWhatWeb\b[^\r\n]*\bCacti\b|^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b[\s\S]{0,4000}?\bCacti\b/im.test(cleanText)) {
+          && !/CVE-2022-46169|\bCacti\s+(?:version\s+)?v?\d+\.\d+|<title>[^<]*\bCacti\b|Set-Cookie:[^\r\n]*\bCacti\b|\/cacti\/(?:index|remote_agent|auth_login|graph_view)\.php\b|\b\d+\/tcp\s+open[^\r\n]*\bcacti\b|HTTPServer\[[^\]]*cacti|\bWhatWeb\b[^\r\n]*\bCacti\b|^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b[\s\S]{0,4000}?\bCacti\b/im.test(cleanText)) {
         continue;
       }
       if (s.fact === 'vuln.shellshock' && !_SHELLSHOCK_EXPLICIT_RE.test(cleanText)) {
@@ -872,6 +952,11 @@
       }
       _add(facts, mkFact(s.fact, h, { cve: s.cve || null, via: 'vulnmatch', lead: true }, S, source));
     }
+    if (!isLocalPathListingCmd && !hasKind(facts, 'vuln.gitea')
+        && (/\bGitea\b|Git with a cup of tea/i.test(cleanText))
+        && !facts.some(function (f) { return f && f.kind === 'web.tech' && f.value && String(f.value.name || f.value.product || '').toLowerCase() === 'gitea'; })) {
+      _add(facts, mkFact('web.tech', h, { name: 'gitea', product: 'gitea', via: 'vulnmatch' }, S, source));
+    }
   }
   C._parse_vulnmatch = _parse_vulnmatch;
   function parse(text, scope, cmd, existingFacts) {
@@ -886,7 +971,7 @@
     var baseFacts = seed.slice();
     var initialLen = baseFacts.length;
     _parse_shape(textStr, ws, source, baseFacts);
-    _parse_vulnmatch(textStr, ws, source, baseFacts);
+    _parse_vulnmatch(textStr, ws, source, baseFacts, cmd);
     return baseFacts.slice(initialLen);
   }
   OBOL.parsers = OBOL.parsers || {};

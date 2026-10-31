@@ -397,8 +397,8 @@ function renderedTopSelection() {
     'On Active (port 135/445 open, port 5985 closed), win-interactive-shell leads with impacket-wmiexec/psexec and gates out evil-winrm');
 
   const ewCmdObj = winShellMove.commands.find(c => /evil-winrm/i.test(c.run));
-  ok(ewCmdObj && ewCmdObj.requires_port === 5985 && !O.pack.commandIsEligible(ewCmdObj, coach.facts.forAction(winShellMove, ewCmdObj), winShellMove),
-    'evil-winrm command on win-interactive-shell has requires_port: 5985 and is ineligible when port 5985 is closed');
+  ok(ewCmdObj && (ewCmdObj.requires_port === 5985 || (Array.isArray(ewCmdObj.requires_port) && ewCmdObj.requires_port.includes(5985))) && !O.pack.commandIsEligible(ewCmdObj, coach.facts.forAction(winShellMove, ewCmdObj), winShellMove),
+    'evil-winrm command on win-interactive-shell requires port 5985/5986 and is ineligible when WinRM is closed');
 
   console.log('\n=== 6. Full Novice Simulation ("Always Run Command #1 on Card #1") Through Active ===');
   await S.createEngagement('Novice Active Simulation');

@@ -47,7 +47,7 @@
     'web-content': {
       looksFor: "a content-discovery tool's status/path lines (feroxbuster/gobuster/ffuf) - the 200s and 301s, and whether a page carries a form, a parameter, or an exposed file.",
       regex: '200 GET /path, 301 GET /dir',
-      emits: ['web.content_map', 'web.paths', 'web.exposed_artifact', 'web.upload_form', 'web.login_form', 'web.users', 'web.source'],
+      emits: ['web.content_map', 'web.paths', 'web.exposed_artifact', 'web.upload_form', 'web.login_form', 'web.users', 'web.source', 'web.actuator', 'web.graphql_schema'],
     },
     'web-params': {
       looksFor: "arjun's '[+] Parameter detected: id (GET)' lines, and reflected/dynamic parameters.",
@@ -57,7 +57,7 @@
     'web-exploit': {
       looksFor: 'a web-bug confirmation - a SQL error or boolean/timing divergence, an LFI file read, a command-injection echo, an SSTI math result, an SSRF/XXE/deserialization callback, a reflected XSS, or an accepted upload.',
       regex: 'SQL syntax; root:x:0:0; uid=…; {{7*7}}=49',
-      emits: ['web.sqli_confirmed', 'web.lfi_confirmed', 'web.cmdi_confirmed', 'web.ssti_confirmed', 'web.ssrf_confirmed',
+      emits: ['web.sqli_candidate', 'web.sqli_confirmed', 'web.lfi_confirmed', 'web.cmdi_confirmed', 'web.ssti_confirmed', 'web.ssrf_confirmed',
         'web.xxe_confirmed', 'web.xss_confirmed', 'web.nosqli_confirmed', 'web.deserial_confirmed', 'web.authz_bypass',
         'web.idor_candidate', 'web.jwt_secret', 'web.upload_confirmed', 'web.rce', 'foothold.webshell', 'cloud.credential'],
     },
@@ -102,7 +102,7 @@
       regex: 'GenericAll, Unconstrained, has control over, Computer:X Password:Y',
       emits: ['ad.graph.collected', 'ad.attack_paths', 'ad.control_paths', 'ad.acl_lead', 'ad.acl_paths', 'ad.domain_control',
         'ad.gmsa', 'ad.gpo_writable', 'ad.unconstrained', 'ad.group_joined', 'ad.computer_added',
-        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd', 'ad.nopac', 'ad.maq_allow', 'ad.gpo_abuse', 'ad.unconstrained_delegation', 'ad.kerberoastable', 'ad.asrep_roastable', 'ad.dcsync_principals', 'ad.high_value', 'ad.esc_templates', 'ad.foreign_principals', 'ad.targeted_kerberoast'],
+        'lateral.movement', 'ad.coerced_auth', 'ad.gpo_control', 'ad.sid_history', 'ad.laps_lead', 'credential.candidate', 'ad.delegation', 'ad.laps', 'ad.rbcd', 'ad.nopac', 'ad.maq_allow', 'ad.gpo_abuse', 'ad.unconstrained_delegation', 'ad.kerberoastable', 'ad.asrep_roastable', 'ad.dcsync_principals', 'ad.dcsync_granted', 'ad.high_value', 'ad.esc_templates', 'ad.foreign_principals', 'ad.targeted_kerberoast'],
     },
     'adcs': {
       looksFor: 'certipy / pywhisker output - a `find -vulnerable` run naming ESC1-16 templates (adcs.vulnerable), a saved .pfx certificate from `req` or a shadow-credentials add (credential.certificate), and a `certipy auth` that exchanges a cert for the account’s NT hash (hash.ntlm → a usable credential).',

@@ -134,6 +134,41 @@
     if (summary && Array.isArray(summary.ports)) {
       summary.ports.forEach(function (p) { var n = parseInt(p, 10); if (!isNaN(n)) ports.push(n); });
     }
+    var hasLoopbackFoothold = false;
+    for (var lfi = 0; lfi < list.length; lfi++) {
+      var lff = list[lfi];
+      if (!lff || (lff.state && OBOL.facts && lff.state !== OBOL.facts.ProofState.SUPPORTED && lff.state !== 'supported')) continue;
+      if (strictScope && lff.scope && lff.scope.indexOf('host:') === 0 && lff.scope !== 'host:target' && lff.scope !== targetScope) continue;
+      var lfk = lff.kind || lff.k || '';
+      if (lfk === 'foothold.linux' || lfk === 'foothold.windows' || lfk === 'pivot.ports') {
+        hasLoopbackFoothold = true;
+        break;
+      }
+    }
+    if (hasLoopbackFoothold) {
+      for (var lpi = 0; lpi < list.length; lpi++) {
+        var lpf = list[lpi];
+        if (!lpf || (lpf.state && OBOL.facts && lpf.state !== OBOL.facts.ProofState.SUPPORTED && lpf.state !== 'supported')) continue;
+        if (strictScope && lpf.scope && lpf.scope.indexOf('host:') === 0 && lpf.scope !== 'host:target' && lpf.scope !== targetScope) continue;
+        var lpk = lpf.kind || lpf.k || '';
+        if (lpk !== 'scan.local.listeners' && lpk !== 'pivot.ports') continue;
+        var lpv = lpf.value || {};
+        var lpArr = Array.isArray(lpv.ports) ? lpv.ports : [];
+        for (var lpj = 0; lpj < lpArr.length; lpj++) {
+          var lpn = parseInt(lpArr[lpj] && typeof lpArr[lpj] === 'object' ? lpArr[lpj].port : lpArr[lpj], 10);
+          if (lpn === 3306 || lpn === 5432) ports.push(lpn);
+        }
+        if (Array.isArray(lpv.forwards)) {
+          for (var lpfw = 0; lpfw < lpv.forwards.length; lpfw++) {
+            var fw = lpv.forwards[lpfw] || {};
+            var fwp = parseInt(fw.rport || fw.remotePort || fw.port, 10);
+            if (fwp === 3306 || fwp === 5432) ports.push(fwp);
+          }
+        }
+        var lps = parseInt(lpv.port, 10);
+        if (lps === 3306 || lps === 5432) ports.push(lps);
+      }
+    }
     ports = ports.filter(function (v, i, a) { return a.indexOf(v) === i; });
     ports.sort(function (a, b) { return a - b; });
     return ports;
@@ -236,7 +271,7 @@
       }
     }
     var webEvidence = vals('http.reachable').concat(vals('web.server')).concat(vals('http.response'))
-      .concat(vals('http.headers')).concat(vals('web.login_form')).concat(vals('web.tech')).concat(vals('web.parameterized'));
+      .concat(vals('http.headers')).concat(vals('http.redirect')).concat(vals('web.login_form')).concat(vals('web.tech')).concat(vals('web.parameterized'));
     var extraOrigins = [];
     webEvidence.forEach(function (v) {
       if (!v || typeof v !== 'object') return;
@@ -245,7 +280,7 @@
         var vp = parseInt(v.port, 10);
         if (vp && !NON_WEB_HTTP_PORTS[vp]) discoveredPorts[vp] = true;
       }
-      var uStr = v.origin || v.base_url || v.url || '';
+      var uStr = v.origin || v.base_url || v.url || v.location || v.target || v.to || '';
       if (uStr) {
         var parsed = _parseUrlOrigin(uStr, hostAddr);
         if (parsed) {
@@ -284,14 +319,72 @@
     extraOrigins.forEach(function (eo) {
       pushOrigin(eo.scheme, eo.host, eo.port);
     });
-    vals('web.vhost').forEach(function (v) {
+    var baseVhostDom = '';
+    var adDoms = vals('ad.domain_known');
+    for (var adi = 0; adi < adDoms.length; adi++) {
+      var adDomName = adDoms[adi] && (adDoms[adi].name || adDoms[adi].domain);
+      if (adDomName) { baseVhostDom = String(adDomName).trim(); break; }
+    }
+    if (!baseVhostDom) {
+      var hDomVals = vals('host.domain');
+      for (var hdv = 0; hdv < hDomVals.length; hdv++) {
+        var hdStr = hDomVals[hdv] && (hDomVals[hdv].domain || hDomVals[hdv].name);
+        if (hdStr) { baseVhostDom = String(hdStr).trim(); break; }
+      }
+    }
+    if (!baseVhostDom) {
+      var fqVals0 = vals('host.fqdn');
+      for (var fqi = 0; fqi < fqVals0.length; fqi++) {
+        var fqs0 = String((fqVals0[fqi] && (fqVals0[fqi].fqdn || fqVals0[fqi].name)) || '').trim();
+        var fqp0 = fqs0.split('.');
+        if (fqp0.length >= 3) { baseVhostDom = fqp0.slice(1).join('.'); break; }
+        if (fqp0.length === 2 && !/^\d+$/.test(fqp0[0]) && /^[a-z]{2,}$/i.test(fqp0[1])) { baseVhostDom = fqs0; break; }
+      }
+    }
+    if (!baseVhostDom) {
+      for (var eoi = 0; eoi < extraOrigins.length; eoi++) {
+        var eoh = String((extraOrigins[eoi] && extraOrigins[eoi].host) || '').trim();
+        if (!eoh || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(eoh) || eoh.indexOf(':') >= 0) continue;
+        var eop = eoh.split('.');
+        if (eop.length >= 3) { baseVhostDom = eop.slice(1).join('.'); break; }
+        if (eop.length === 2 && !/^\d+$/.test(eop[0]) && /^[a-z]{2,}$/i.test(eop[1])) { baseVhostDom = eoh; break; }
+      }
+    }
+    if (!baseVhostDom && opts.params && opts.params.domain) baseVhostDom = String(opts.params.domain).trim();
+    factArr.forEach(function (f) {
+      if (!f || f.state === 'refuted' || f.kind !== 'web.vhost') return;
+      if (tgtIp && f.scope && f.scope.indexOf('host:') === 0 && f.scope.slice(5) !== tgtIp) return;
+      var v = f.value;
       if (!v || typeof v !== 'object') return;
-      var vh = String(v.vhost || v.hostname || v.domain || v.name || '').trim();
-      if (!vh || vh.indexOf('.') < 0) return;
+      var srcM = /Host\s*:\s*['"]?FUZZ\.([A-Za-z0-9.-]+)/i.exec(String(f.source || ''));
+      var qualDom = (srcM && srcM[1] ? srcM[1].replace(/\.+$/, '') : '') || baseVhostDom;
+      var rawList = [];
+      if (Array.isArray(v.vhosts)) {
+        for (var vi = 0; vi < v.vhosts.length; vi++) {
+          var el = v.vhosts[vi];
+          rawList.push(el && typeof el === 'object' ? (el.vhost || el.hostname || el.domain || el.name || '') : el);
+        }
+      }
+      var sing = v.vhost || v.hostname || v.domain || v.name || '';
+      if (sing) rawList.push(sing);
       var vp = parseInt(v.port, 10) || (portNums[0] || 80);
       if (NON_WEB_HTTP_PORTS[vp]) return;
       var vsc = v.scheme ? String(v.scheme).toLowerCase() : (tlsPorts[vp] ? 'https' : 'http');
-      pushOrigin(vsc, vh, vp);
+      for (var rli = 0; rli < rawList.length; rli++) {
+        var vh = String(rawList[rli] || '').trim().replace(/^['"]+|['"]+$/g, '');
+        if (!vh) continue;
+        var vhp = _parseUrlOrigin(vh, hostAddr);
+        if (vhp && vhp.host && vhp.host.indexOf('.') > 0) {
+          pushOrigin(vhp.scheme, vhp.host, vhp.port);
+          continue;
+        }
+        vh = vh.replace(/:\d+$/, '');
+        if (vh.indexOf('.') < 0 && qualDom) {
+          vh = vh + '.' + qualDom.replace(/^\.+|\.+$/g, '');
+        }
+        if (vh.indexOf('.') < 0) continue;
+        pushOrigin(vsc, vh, vp);
+      }
     });
     function markByParsed(parsed) {
       if (!parsed) return false;
@@ -349,6 +442,8 @@
       if (tgtIp && actTgt && actTgt !== tgtIp) return;
       var aid = act.action_id || act.actionId || '';
       var cmdText = String(act.command || act.dispatch || '');
+      if (aid === 'vhost-discovery' || aid === 'param-discovery') return;
+      if (/-H\s*['"]?Host:[^'"]*FUZZ\b|\b(?:gobuster|feroxbuster)\s+(?:vhost|dns)\b|[?&][^=\s]+=FUZZ\b/i.test(cmdText)) return;
       if (aid !== 'content-discovery' && !/\b(?:ffuf|gobuster|feroxbuster|dirsearch)\b/i.test(cmdText)) return;
       var um = cmdText.match(/https?:\/\/[^\s/'"]+/i) || String(act.stdout || '').slice(0, 600).match(/https?:\/\/[^\s/'"]+/i);
       if (um) markByParsed(_parseUrlOrigin(um[0], hostAddr));
@@ -399,7 +494,7 @@
     var wsd = opts.workspace || { root: '.', scandir: 'scans', lootdir: 'loot', exploitdir: 'exploit', wwwdir: 'www', proofdir: 'proof' };
     var arProf = _arsenalProfile();
 
-    var projObj = (_baseCtxCache && resolved && facts && !(opts.action && opts.action.id === 'asrep-roast'))
+    var projObj = (_baseCtxCache && resolved && facts && !(opts.action && (opts.action.id === 'asrep-roast' || opts.action.id === 'kerberoast')))
       ? Object.getPrototypeOf(facts) : null;
     if (projObj === Object.prototype) projObj = null;
     var projMap = projObj ? _baseCtxCache.get(projObj) : null;
@@ -419,10 +514,11 @@
     if (ports.length) ctx.nmap_ports = ports.join(',');
 
     var dom = firstVal(facts, 'ad.domain_known');
-    if (!ctx.domain && dom && dom.name) {
-      ctx.domain = dom.name;
-      ctx.basedn = dom.name.split('.').map(function (p) { return 'DC=' + p; }).join(',');
-      ctx.dc = dom.name;
+    var domStr = dom && String(dom.name || dom.domain || '').trim();
+    if (!ctx.domain && domStr) {
+      ctx.domain = domStr;
+      ctx.basedn = domStr.split('.').map(function (p) { return 'DC=' + p; }).join(',');
+      ctx.dc = domStr;
     }
     if (!ctx.domain) {
       var hdoms = fvals('host.domain');
@@ -434,10 +530,28 @@
     if (!ctx.domain) {
       var fqdns = fvals('host.fqdn');
       for (var fq = 0; fq < fqdns.length; fq++) {
-        var fqStr = String(fqdns[fq].fqdn || fqdns[fq].name || '');
+        var fqStr = String(fqdns[fq].fqdn || fqdns[fq].name || '').trim().replace(/\.+$/, '');
         var fqParts = fqStr.split('.');
         if (fqParts.length >= 3) {
           ctx.domain = fqParts.slice(1).join('.');
+          break;
+        } else if (fqParts.length === 2 && !/^\d+$/.test(fqParts[0]) && /^[a-z]{2,}$/i.test(fqParts[1])) {
+          ctx.domain = fqStr;
+          break;
+        }
+      }
+    }
+    if (!ctx.domain) {
+      var woFallback = webOrigins(facts, { target: tgt, params: params, engagement: cacheEng, activities: opts.activities }).all || [];
+      for (var woi = 0; woi < woFallback.length; woi++) {
+        var woh = String((woFallback[woi] && woFallback[woi].host) || '').trim().replace(/\.+$/, '');
+        if (!woh || /^(?:\d{1,3}\.){3}\d{1,3}$/.test(woh) || woh.indexOf(':') >= 0) continue;
+        var woParts = woh.split('.');
+        if (woParts.length >= 3) {
+          ctx.domain = woParts.slice(1).join('.');
+          break;
+        } else if (woParts.length === 2 && !/^\d+$/.test(woParts[0]) && /^[a-z]{2,}$/i.test(woParts[1])) {
+          ctx.domain = woh;
           break;
         }
       }
@@ -514,11 +628,11 @@
       if (c0.domain && !ctx.domain) ctx.domain = c0.domain;
     }
     }
+    var isExplicitAnon = !!(resolved && (
+      (resolved.selectionSource === 'explicit' && !resolved.credentialId)
+      || (resolved.engagement && resolved.engagement.context && resolved.engagement.context.anonymousByTarget && tgt && resolved.engagement.context.anonymousByTarget[tgt])
+    ));
     if (!ctx.user) {
-      var isExplicitAnon = !!(resolved && (
-        (resolved.selectionSource === 'explicit' && !resolved.credentialId)
-        || (resolved.engagement && resolved.engagement.context && resolved.engagement.context.anonymousByTarget && tgt && resolved.engagement.context.anonymousByTarget[tgt])
-      ));
       if (!isExplicitAnon && !ctx.password && !ctx.nthash) {
         var valUsers = [];
         if (!resolved) {
@@ -547,22 +661,61 @@
         }
       }
     }
-    if (!ctx.user && !resolved) {
+    if (!ctx.user && !(resolved && resolved.credentialId) && !isExplicitAnon) {
       var fhList = fvals('foothold.linux').concat(fvals('foothold.windows'));
       for (var fi = 0; fi < fhList.length; fi++) {
-        var fu = fhList[fi] && (fhList[fi].identity || fhList[fi].user);
+        var fu = fhList[fi] && (fhList[fi].user || fhList[fi].identity || fhList[fi].username);
         if (fu) {
-          ctx.user = String(fu).replace(/^.*\\/, '').trim();
+          var cleanFu = String(fu).replace(/^.*\\/, '').split('@')[0].trim();
+          if (cleanFu) {
+            ctx.user = cleanFu;
+            break;
+          }
+        }
+      }
+      if (!ctx.user && fhList.length) {
+        var huVals = fvals('host.users').concat(fvals('host.user'));
+        for (var hui = 0; hui < huVals.length; hui++) {
+          var huv = huVals[hui] || {};
+          var uArr = Array.isArray(huv.users) ? huv.users : [huv.user || huv.username || huv.name || ''];
+          for (var uai = 0; uai < uArr.length; uai++) {
+            var uRaw = uArr[uai] && typeof uArr[uai] === 'object' ? (uArr[uai].user || uArr[uai].username || uArr[uai].name || '') : uArr[uai];
+            var uClean = String(uRaw || '').replace(/^.*\\/, '').split('@')[0].trim();
+            if (uClean && !/^(?:root|daemon|bin|sys|sync|games|man|lp|mail|news|uucp|proxy|www-data|backup|list|irc|gnats|nobody|systemd-[\w-]+|messagebus|sshd|tss|_[\w-]+|nt authority|system|local service|network service|defaultaccount|wdagutilityaccount|guest|krbtgt)$/i.test(uClean)) {
+              ctx.user = uClean;
+              break;
+            }
+          }
           if (ctx.user) break;
         }
       }
     }
-    if (!ctx.user && opts && opts.action && opts.action.id === 'asrep-roast') {
-      var cands = fvals('credential.candidate');
-      for (var ci = 0; ci < cands.length; ci++) {
-        if (cands[ci] && cands[ci].kind === 'asrep_roastable' && cands[ci].user) {
-          ctx.user = String(cands[ci].user).trim();
-          break;
+    if (!ctx.user && opts && opts.action && (opts.action.id === 'asrep-roast' || opts.action.id === 'kerberoast')) {
+      if (opts.action.id === 'kerberoast') {
+        var asrepFacts = fvals('hash.asrep');
+        for (var ari = 0; ari < asrepFacts.length; ari++) {
+          var arv = asrepFacts[ari] || {};
+          var arUser = arv.user || (Array.isArray(arv.users) && arv.users[0]) || '';
+          if (!arUser) {
+            var arHashes = Array.isArray(arv.hashes) ? arv.hashes : (arv.hash ? [arv.hash] : []);
+            for (var ahi = 0; ahi < arHashes.length; ahi++) {
+              var ahm = /\$krb5asrep\$(?:\d+\$)?([^$:@\s]+)(?:@[^$:\s]+)?[:$]/i.exec(String(arHashes[ahi] || ''));
+              if (ahm && ahm[1]) { arUser = ahm[1]; break; }
+            }
+          }
+          if (arUser) {
+            ctx.user = String(arUser).replace(/^.*\\/, '').split('@')[0].trim();
+            if (ctx.user) break;
+          }
+        }
+      }
+      if (!ctx.user) {
+        var cands = fvals('credential.candidate');
+        for (var ci = 0; ci < cands.length; ci++) {
+          if (cands[ci] && (cands[ci].kind === 'asrep_roastable' || cands[ci].kind === 'asrep_hash') && cands[ci].user) {
+            ctx.user = String(cands[ci].user).replace(/^.*\\/, '').split('@')[0].trim();
+            if (ctx.user) break;
+          }
         }
       }
       if (!ctx.user) {

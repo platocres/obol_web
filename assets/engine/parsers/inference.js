@@ -67,7 +67,7 @@
     svcctl: 1, ntsvcs: 1, epmapper: 1, browser: 1, davhlp: 1, currentversion: 1,
     currentcontrolset: 1, microsoft: 1, windows: 1
   };
-  var _ATTACKER_HOSTS = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec|htb|tryhackme|arch|debian-vm|vbox|vmware)$/i;
+  var _ATTACKER_HOSTS = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec|htb|tryhackme|vagrant|arch|archlinux|blackarch|debian-vm|vbox|vmware)$/i;
   var _REMOTE_OFFENSIVE_TOOLS = /^\s*(?:nmap|masscan|rustscan|impacket-[\w.-]+|GetNPUsers[\w.]*|GetUserSPNs[\w.]*|secretsdump[\w.]*|wmiexec[\w.]*|psexec[\w.]*|smbexec[\w.]*|atexec[\w.]*|dcomexec[\w.]*|lookupsid[\w.]*|getTGT[\w.]*|getST[\w.]*|addcomputer[\w.]*|bloodyAD|dacledit[\w.]*|owneredit[\w.]*|certipy[\w-]*|nxc|netexec|crackmapexec|cme|smbclient|smbmap|rpcclient|enum4linux[\w-]*|ldapsearch|kerbrute|evil-winrm|ffuf|gobuster|feroxbuster|wfuzz|dirb|dirsearch|nikto|whatweb|httpx|nuclei|hydra|john|hashcat|responder|ntlmrelayx[\w.]*|sqlmap|bloodhound[\w.-]*|pywhisker[\w.]*|sccmhunter[\w.]*|snmpwalk|onesixtyone|showmount)\b/i;
 
   function _strip_cmd_wrappers(cmd) {
@@ -232,8 +232,19 @@
         _add(facts, mkFact('hash.crackable', scope, hVal, S, source));
         _add(facts, mkFact('hash.candidate', scope, hVal, S, source));
       } else {
+        var modTagM = /^\$(pkzip2?|zip2|7z|rar[35]?|pfx(?:ng)?|keepass|sshng|ansible)\$/i.exec(rawHash);
+        if (modTagM && !hVal.hash_type) {
+          var modTagLow = modTagM[1].toLowerCase().replace(/^pkzip2$/, 'pkzip').replace(/^pfxng$/, 'pfx').replace(/^rar[35]$/, 'rar');
+          hVal.hash_type = modTagLow;
+          if (!hVal.format) hVal.format = modTagLow;
+        }
         _add(facts, mkFact('hash.crackable', scope, hVal, S, source));
         _add(facts, mkFact('hash.candidate', scope, hVal, S, source));
+        if (/^\$(?:pkzip2?|zip2|7z|rar[35]?|pfx(?:ng)?|keepass|ansible)\$/i.test(rawHash) && !hasKind(facts, 'loot.material')) {
+          var matVal = { kind: hVal.hash_type || 'encrypted_archive', via: via };
+          if (credObj.file) matVal.file = credObj.file;
+          _add(facts, mkFact('loot.material', scope, matVal, S, source));
+        }
       }
       return;
     }
@@ -277,6 +288,16 @@
     var ctxPrompt = (ws && ws.context && ws.context.promptLine) ? String(ws.context.promptLine) : '';
     var followPrompt = (ws && ws.context && ws.context.followPrompt) ? String(ws.context.followPrompt) : '';
     var lhost = (ws && ws.context && ws.context.params && ws.context.params.lhost) || '';
+    var priorFacts = ((ws && Array.isArray(ws.facts)) ? ws.facts : []).concat((ws && Array.isArray(ws.seedFacts)) ? ws.seedFacts : []);
+    var hasLinuxTargetFoothold = priorFacts.some(function (f) {
+      return f && (f.kind === 'foothold.linux' || f.kind === 'access.root');
+    });
+    var hasTargetContainerCtx = priorFacts.some(function (f) {
+      return f && /^privesc\.(?:docker|docker_group|container_group|lxd|lxd_group|group_lxd)$/.test(f.kind);
+    });
+    var nonAdminWhoamiInTurn = /\bwhoami\b/i.test(String(command || '') + '\n' + rawStr)
+      && /^[ \t]*[A-Za-z0-9_.-]+\\(?!administrator\b|system\b|sistema\b)[A-Za-z0-9_.$-]+[ \t]*$/im.test(rawStr)
+      && !/^[ \t]*(?:nt authority\\system|[A-Za-z0-9_.-]+\\administrator)[ \t]*$/im.test(rawStr);
 
     function _scanPromptLines(linesArr, hasExternalTrailing, fromCtx) {
       var out = {
@@ -336,7 +357,9 @@
           out.locus = 'local';
           out.hasCommand = !!String(winSshM[5] || '').trim() || hasTrailingOutput;
           out.promptLine = l;
-          if (/^administrator$/i.test(out.user) || /^C:\\Users\\Administrator(?:\\|$)/i.test(out.cwd)) {
+          var isSshDotSvcAdmin = /^C:\\Users\\Administrator\\\.[A-Za-z0-9_.-]+(?:\\|$)/i.test(out.cwd);
+          if (/^administrator$/i.test(out.user)
+              || (/^C:\\Users\\Administrator(?:\\|$)/i.test(out.cwd) && !isSshDotSvcAdmin && !nonAdminWhoamiInTurn)) {
             out.isPrivileged = true;
           }
           break;
@@ -354,10 +377,17 @@
           out.locus = 'local';
           out.hasCommand = !!cmdAfterWin || hasTrailingOutput;
           out.promptLine = l;
+          var isDotSvcUnderAdmin = /^C:\\Users\\Administrator\\\.[A-Za-z0-9_.-]+(?:\\|$)/i.test(cwdWin);
           var uMatch = /^C:\\Users\\([^\\>\r\n]+)/i.exec(cwdWin);
           if (uMatch && !/^(?:Public|Default|All Users)$/i.test(uMatch[1])) {
-            out.user = uMatch[1];
-            if (/^administrator$/i.test(uMatch[1])) out.isPrivileged = true;
+            if (/^administrator$/i.test(uMatch[1])) {
+              if (!isDotSvcUnderAdmin && !nonAdminWhoamiInTurn) {
+                out.user = uMatch[1];
+                out.isPrivileged = true;
+              }
+            } else {
+              out.user = uMatch[1];
+            }
           }
           break;
         }
@@ -382,7 +412,11 @@
           out.hasCommand = !!cmdAfterNix || hasTrailingOutput;
           out.promptLine = l;
           var hasTunStamp = /\[(?:tun|tap|vpn|wg)\d*:/i.test(promptPrefixOnly) || (lhost && promptPrefixOnly.indexOf(lhost) >= 0);
-          if (_ATTACKER_HOSTS.test(h) || _ATTACKER_HOSTS.test(u) || hasTunStamp || _REMOTE_OFFENSIVE_TOOLS.test(_strip_cmd_wrappers(cmdAfterNix))) {
+          var isLocalDockerToolContainer = /^[0-9a-f]{12}$/i.test(h)
+            && !hasLinuxTargetFoothold && !hasTargetContainerCtx
+            && (/\bdocker\s+(?:run|exec)\b/i.test(String(command || '') + '\n' + rawStr)
+                || /^\s*(?:sqlite3|strings|objdump|readelf|gdb|radare2|r2|gcc|g\+\+|python[23]?|john|hashcat|openssl|file|tar|unzip|7za?|apk|apt(?:-get)?|pip3?|gem|cargo)\b/i.test(_strip_cmd_wrappers(cmdAfterNix || command || '')));
+          if (_ATTACKER_HOSTS.test(h) || _ATTACKER_HOSTS.test(u) || hasTunStamp || isLocalDockerToolContainer || _REMOTE_OFFENSIVE_TOOLS.test(_strip_cmd_wrappers(cmdAfterNix))) {
             out.locus = 'remote';
           } else {
             out.locus = 'local';
@@ -392,14 +426,52 @@
           break;
         }
 
-        // Bare sh-5.1$ / bash-5.0# prompt (almost always a reverse shell on a Linux target)
-        var shM = /^(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*([#$])\s*(.*)$/.exec(l);
+        // Bare sh-5.1$ / bash-5.0# or custom argv[0] SUID bash (<progname>-5.1#) prompt
+        var shM = /^(?:(?:sh|bash|zsh|dash|ksh)-[\d.]+|(?!(?:HTTP|TLS|SSL|SSH|CVE|PHP|GCC|GDB)-)[A-Za-z0-9_.-]{2,32}-[3-6]\.\d+(?:\.\d+)?)\s*([#$])\s*(.*)$/.exec(l);
         if (shM) {
           out.locus = 'local';
           out.osFamily = 'linux';
           out.isPrivileged = shM[1] === '#';
           out.user = out.isPrivileged ? 'root' : '';
           out.hasCommand = !!(shM[2] && shM[2].trim()) || hasTrailingOutput;
+          out.promptLine = l;
+          break;
+        }
+
+        // Alpine / Ash / BusyBox absolute-path prompt: `/root # [cmd]`, `/var/www/html $ [cmd]`, `/ # [cmd]`
+        var alpineM = /^(\/(?:[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?)?)[ \t]+([#$])(?:[ \t]+(\S.*)|[ \t]*)$/.exec(l);
+        if (alpineM) {
+          var alpPath = alpineM[1];
+          var alpSig = alpineM[2];
+          var alpTail = String(alpineM[3] || '').trim();
+          var isKnownUnixRootPath = alpPath === '/' || alpPath === '/root' || alpPath === '/tmp'
+            || /^\/(?:home|var|opt|srv|etc|usr|app|data|run|mnt)\b/.test(alpPath);
+          var isShellTail = !alpTail || fromCtx
+            || /^(?:id|whoami|uname|cat|ls|pwd|cd|find|env|ps|ip|ifconfig|netstat|ss|crontab|sudo|su|chmod|chown|cp|mv|rm|echo|python[23]?|sh|bash|ash|apk|wget|curl|nc|socat|tar|grep|awk|sed|head|tail|strings|hostname)\b/.test(alpTail);
+          if (isKnownUnixRootPath && isShellTail) {
+            out.locus = 'local';
+            out.osFamily = 'linux';
+            out.cwd = alpPath;
+            out.isPrivileged = alpSig === '#' || alpPath === '/root' || alpPath.indexOf('/root/') === 0;
+            out.user = out.isPrivileged ? 'root' : '';
+            out.hasCommand = !!alpTail || hasTrailingOutput;
+            out.promptLine = l;
+            break;
+          }
+        }
+
+        // Bare `#` or `# <cmd>` after established Linux foothold + `/root` working directory transition
+        if (hasLinuxTargetFoothold
+            && (/\bcd\s+\/root\b/.test(String(command || '') + '\n' + rawStr)
+                || /^\/root\s*$/m.test(rawStr)
+                || /\/root\b/.test(ctxPrompt))
+            && /^#(?:[ \t]+((?:id|whoami|pwd|ls|cat|head|tail|find|uname|hostname|ip|ifconfig|ps|chmod|chown|cp|mv|rm|crontab|grep)\b.*))?$/.test(l)) {
+          out.locus = 'local';
+          out.osFamily = 'linux';
+          out.cwd = '/root';
+          out.isPrivileged = true;
+          out.user = 'root';
+          out.hasCommand = true;
           out.promptLine = l;
           break;
         }
@@ -887,7 +959,7 @@
   var _ATOM_WIN_SID_RE = /\bS-1-5-21-\d+-\d+-\d+(?:-\d+)?\b/g;
   var _ATOM_LDAP_DN_RE = /\b(?:CN|OU|DC)=[^,\r\n]{1,64}(?:,(?:CN|OU|DC)=[^,\r\n]{1,64})+\b/gi;
   var _ATOM_SPN_RE = /(?<![\/\\.A-Za-z0-9_-])(MSSQLSvc|HTTP|cifs|ldap|host|wsman|krbtgt|exchangeMDB|termsrv|vnc|nfs|ipp|restrictedkrbhost|wsmansvc|dns|gc|smtp|imap|pop3?|kadmin|netlogon)\/(?![0-9]+(?:\.[0-9]+)?\b)([A-Za-z0-9_.\-]*[A-Za-z][A-Za-z0-9_.\-]*(?::\d{1,5})?)\b/gi;
-  var _ATOM_MOD_HASH_RE = /(?:\$krb5(?:tgs|asrep)\$[^\s"']+|(?:\$DCC2\$\d+#[^#\s]+#[0-9a-fA-F]{32})|\$(?:2[abxy]|5|6|1|y|NT|apr1|keepass|pfx|pkzip2?|rar5|pdf|office|sntp-ms|rakp)\$[^\s"':]+|pbkdf2_sha(?:1|256|512)\$[^\s"']+)/gi;
+  var _ATOM_MOD_HASH_RE = /(?:\$krb5(?:tgs|asrep)\$[^\s"']+|(?:\$DCC2\$\d+#[^#\s]+#[0-9a-fA-F]{32})|\$(?:2[abxy]|5|6|1|y|NT|apr1|keepass|pfx(?:ng)?|pkzip2?|zip2|7z|rar[35]?|sshng|ansible|pdf|office|sntp-ms|rakp)\$[^\s"':]+|pbkdf2_sha(?:1|256|512)\$[^\s"']+)/gi;
   var _ATOM_NTHASH_PAIR_RE = /(?:^|\b|:)(?:aad3b435b51404eeaad3b435b51404ee|[0-9a-fA-F]{32}|NO PASSWORD\*+):([0-9a-fA-F]{32})\b/gi;
   var _ATOM_HEX32_RE = /\b([0-9a-fA-F]{32})\b/g;
   var _ATOM_JWT_RE = /\beyJ[A-Za-z0-9_-]{4,}\.eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]*\b/g;
@@ -1266,13 +1338,17 @@
 
     var cmdTool = _canonicalToolName(cmdLow.split(/\s+/)[0]);
     var isHttpTool = cmdTool === 'curl' || cmdTool === 'wget' || cmdTool === 'httpie';
+    var hasXmlEvidence = /<!doctype|<!entity|<\?xml|application\/xml|text\/xml|\.xml\b|xmlns[:=]/i.test(String(command || ''));
+    var hasGraphqlEvidence = /\/graphql\b|"query"\s*:|\b__schema\b|\b__type\b|\bIntrospectionQuery\b/i.test(String(command || ''));
     var bestMove = null, bestScore = 0;
 
     for (var i = 0; i < packs.length; i++) {
       var m = packs[i];
       if (!m || !m.commands) continue;
+      if (isHttpTool && m.id && /xxe/i.test(m.id) && !hasXmlEvidence) continue;
       var score = 0;
       if (m.id && cmdLow.indexOf(m.id.toLowerCase()) >= 0) score += 8;
+      if (hasGraphqlEvidence && m.id && /graphql/i.test(m.id)) score += 8;
 
       for (var c = 0; c < m.commands.length; c++) {
         var cmdObj = m.commands[c];
@@ -1581,6 +1657,11 @@
         var sysFact = mkFact('access.system', h, { identity: mMachEnv[1], method: 'machine-account-env', via: 'context-inference' }, S, source);
         sysFact.origin = 'stdout_telemetry';
         _add(facts, sysFact);
+        if (!hasKind(facts, 'access.admin')) {
+          var admSysFact = mkFact('access.admin', h, { identity: mMachEnv[1], method: 'machine-account-env', via: 'context-inference' }, S, source);
+          admSysFact.origin = 'stdout_telemetry';
+          _add(facts, admSysFact);
+        }
         if (!hasKind(facts, 'foothold.windows') && !globalIdx.hasFoothold) {
           var fwFact = mkFact('foothold.windows', h, { identity: mMachEnv[1], method: 'machine-account-env', via: 'context-inference' }, S, source);
           fwFact.origin = 'stdout_telemetry';
@@ -1603,13 +1684,17 @@
       return f && (f.kind === 'foothold.linux' || f.kind === 'access.root'
         || (f.kind === 'host.os_family' && f.value && String(f.value.family || '').toLowerCase() === 'linux'));
     });
+    var hasExplicitSpnAnchor = /\b(?:SPN\(\d+\)\s*=|servicePrincipalName|setspn|\$krb5tgs\$|GetUserSPNs)\b/i.test(analysisText + '\n' + (command || ''));
     if (!isKnownLinuxCtx && (atoms.spns.length > 0 || /^\s*SPN\(\d+\)\s*=/im.test(analysisText))
-        && (!isWebClient || /\b(?:SPN\(\d+\)\s*=|servicePrincipalName|setspn|\$krb5tgs\$)/i.test(analysisText))) {
+        && (!isWebClient || hasExplicitSpnAnchor)
+        && (hasExplicitSpnAnchor || !(C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text)))) {
       var spnCands = atoms.spns.slice();
       var spnLineRe = /^\s*SPN\(\d+\)\s*=\s*([A-Za-z][A-Za-z0-9_.-]*\/[^\s"']+)/gim, spnLm;
       while ((spnLm = spnLineRe.exec(analysisText)) !== null) {
         if (spnCands.indexOf(spnLm[1]) < 0) spnCands.push(spnLm[1]);
       }
+      var knownAdSpnSvcRe = /^(?:mssqlsvc|https?|cifs|ldaps?|host|wsmans?|wsmansvc|rpcss|termsrv|restrictedkrbhost|dns|kadmin|nfs|smtp|imap|pop3?|gc|exchange\w*|vnc|ipp|netlogon|dfsr-[a-z0-9-]+)$/i;
+      var spnFileExtRe = /\.(?:php|html?|js|css|json|xml|txt|png|jpe?g|gif|svg|ico|exe|dll|ps1|bat|cmd|vbs|sh|py|rb|pl|jar|war|zip|tar|gz|7z|rar|log|bak|old|conf|cfg|ini|yml|yaml|sql|db|sqlite3?|mdb)$/i;
       var publicSpnDomainRe = /(?:^|\.)(?:cloudfront\.net|amazonaws\.com|azurewebsites\.net|akamai[a-z0-9-]*\.net|fastly\.net|cloudflare\.com|jsdelivr\.net|unpkg\.com|googleapis\.com|gstatic\.com|bootstrapcdn\.com|jquery\.com|fontawesome\.com|github\.io|githubusercontent\.com|microsoft\.com|windows\.net|office\.com|live\.com|msecnd\.net|w3\.org|schema\.org|mozilla\.org|wordpress\.org|wordpress\.com|gravatar\.com|wp\.com|digicert\.com|verisign\.com|letsencrypt\.org)$/i;
       for (var spi = 0; spi < spnCands.length; spi++) {
         var spnRaw = String(spnCands[spi] || '').trim();
@@ -1617,7 +1702,9 @@
         if (spnSlash <= 0) continue;
         var spnSvc = spnRaw.slice(0, spnSlash).toLowerCase();
         if (spnSvc === 'krbtgt') continue;
+        if (!hasExplicitSpnAnchor && !knownAdSpnSvcRe.test(spnSvc)) continue;
         var spnHostPart = spnRaw.slice(spnSlash + 1).split('/')[0].split(':')[0].replace(/\.$/, '').trim();
+        if (spnFileExtRe.test(spnHostPart)) continue;
         if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?){2,}$/.test(spnHostPart)) continue;
         if (!/\.[A-Za-z]{2,24}$/.test(spnHostPart)) continue;
         var spnFqdn = spnHostPart.toLowerCase();
@@ -2185,7 +2272,10 @@
     }
 
     // 7D. POSIX Identity (`uid=33(www-data) gid=33(www-data)`) Co-Occurrence
-    if (atoms.posixId && !isRemoteScanner) {
+    var isLocalAttackerOrDockerTurn = !isWebClient
+      && ((C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text))
+          || (promptMeta.locus === 'remote' && /^[0-9a-f]{12}$/i.test(promptMeta.host || '')));
+    if (atoms.posixId && !isRemoteScanner && !isLocalAttackerOrDockerTurn) {
       if (isWebClient && !hasKind(facts, 'web.rce')) {
         _add(facts, mkFact('web.rce', h, { user: atoms.posixId.user, uid: atoms.posixId.uid, via: 'context-cooccurrence' }, S, source));
       }
@@ -2219,8 +2309,13 @@
           _add(facts, mkFact('foothold.windows', h, { identity: winSvcId, method: isWebClient ? 'web-rce' : (cmdSem.tool || 'shell'), via: 'context-cooccurrence' }, S, source));
           if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'windows', winSvcId, 'high', 'whoami', true);
         }
-        if (winAuthDom === 'nt authority' && /^(?:system|sistema|syst\u00e8me)$/i.test(winAuthAcct) && !hasKind(facts, 'access.system')) {
-          _add(facts, mkFact('access.system', h, { identity: winSvcId, method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+        if (winAuthDom === 'nt authority' && /^(?:system|sistema|syst\u00e8me)$/i.test(winAuthAcct)) {
+          if (!hasKind(facts, 'access.system')) {
+            _add(facts, mkFact('access.system', h, { identity: winSvcId, method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+          }
+          if (!hasKind(facts, 'access.admin')) {
+            _add(facts, mkFact('access.admin', h, { identity: winSvcId, method: cmdSem.tool || 'shell', via: 'context-cooccurrence' }, S, source));
+          }
         }
       }
     }
@@ -2307,18 +2402,28 @@
     if (hasUnhandledNtPair7E || hasUnhandledModOrTuple7E) {
       for (var hli = 0; hli < maxLineScan; hli++) {
         var hLine = lines[hli].trim();
-        if (!hLine || hLine.length > 2048 || _lineHasNegPolarity(lines, hli)) continue;
+        if (!hLine) continue;
+        var hasDollarLine = hLine.indexOf('$') >= 0;
+        var isLongJohnModLine = hasDollarLine && /\$(?:pkzip2?|zip2|7z|rar[35]?|pfx(?:ng)?|keepass|sshng|ansible)\$/i.test(hLine);
+        if (hLine.length > (hasDollarLine ? 65536 : 2048)) continue;
+        if (!isLongJohnModLine && _lineHasNegPolarity(lines, hli)) continue;
 
         // Extract candidate username from the same line (`DOMAIN\user`, `user@domain`, `user:rid:lm:nt`, `user:$2y$...`, or `array('user', '$2a$...')`)
-        var lineUser = '', lineDom = '';
+        var lineUser = '', lineDom = '', lineFile = '';
         _ATOM_DOM_USER_RE.lastIndex = 0;
         var duM = _ATOM_DOM_USER_RE.exec(hLine);
         if (duM && !isBoilerplateUser(duM[2])) { lineDom = duM[1]; lineUser = duM[2]; }
         if (!lineUser) {
-          var colonUserM = /^([A-Za-z0-9_.\-$]{2,48}):(?:\d+:|\$)/.exec(hLine)
+          var colonUserM = /^([A-Za-z0-9_.\-$/]{2,96}):(?:\d+:|\$)/.exec(hLine)
             || /\b(?:user(?:name)?|account|login)\s*[:=]\s*['"]?([A-Za-z0-9_.\-$]{2,48})/i.exec(hLine)
             || /(?:array\s*\(|[\[(])\s*['"]([A-Za-z0-9_.\-$]{2,48})['"]\s*,\s*['"](?:\$(?:1|2[abxy]|5|6|y|apr1)\$|pbkdf2_sha(?:1|256|512)\$|[0-9a-fA-F]{32}['"])/i.exec(hLine);
-          if (colonUserM && !isBoilerplateUser(colonUserM[1])) lineUser = colonUserM[1];
+          if (colonUserM) {
+            if (isLongJohnModLine || /[\/]|\.(?:zip|7z|rar|pfx|p12|kdbx|pem|key|id_rsa|yml|yaml|vault)$/i.test(colonUserM[1])) {
+              lineFile = colonUserM[1];
+            } else if (!isBoilerplateUser(colonUserM[1])) {
+              lineUser = colonUserM[1];
+            }
+          }
         }
 
         _ATOM_NTHASH_PAIR_RE.lastIndex = 0;
@@ -2339,7 +2444,7 @@
         _ATOM_MOD_HASH_RE.lastIndex = 0;
         var modM = _ATOM_MOD_HASH_RE.exec(hLine);
         if (modM && modM[0] && !cmdSem.echoSet[modM[0].toLowerCase()]) {
-          _emit_credential_facts(facts, h, { user: lineUser, domain: lineDom, hash: modM[0], via: 'context-cooccurrence' }, source);
+          _emit_credential_facts(facts, h, { user: lineUser, domain: lineDom, file: lineFile || undefined, hash: modM[0], via: 'context-cooccurrence' }, source);
           continue;
         }
 
@@ -2353,6 +2458,28 @@
             _add(facts, mkFact('hash.crackable', h, tupVal, S, source));
             _add(facts, mkFact('hash.candidate', h, tupVal, S, source));
           }
+        }
+      }
+    }
+
+    // 7E-pkzip. zip2john stderr banner (`ver 2.0 efh ... PKZIP Encr:`) when stdout hash was redirected to file,
+    // plus guaranteed loot.material co-minting whenever an archive/keystore modular hash is present.
+    if (analysisText.indexOf('PKZIP Encr:') >= 0 && /\bver\s+\d+\.\d+\b[^\r\n]*\bPKZIP\s+Encr:/i.test(analysisText)) {
+      if (!hasKind(facts, 'loot.material')) {
+        _add(facts, mkFact('loot.material', h, { kind: 'pkzip', tool: 'zip2john', via: 'context-cooccurrence' }, S, source));
+      }
+      if (!hasKind(facts, 'hash.crackable')) {
+        _add(facts, mkFact('hash.crackable', h, { format: 'pkzip', hash_type: 'pkzip', tool: 'zip2john', via: 'context-cooccurrence' }, S, source));
+        _add(facts, mkFact('hash.candidate', h, { format: 'pkzip', hash_type: 'pkzip', tool: 'zip2john', via: 'context-cooccurrence' }, S, source));
+      }
+    }
+    if (!hasKind(facts, 'loot.material') && atoms.modHashes.length > 0) {
+      for (var mhi = 0; mhi < atoms.modHashes.length; mhi++) {
+        var archModM = /^\$(pkzip2?|zip2|7z|rar[35]?|pfx(?:ng)?|keepass|ansible)\$/i.exec(atoms.modHashes[mhi]);
+        if (archModM) {
+          var archKind = archModM[1].toLowerCase().replace(/^pkzip2$/, 'pkzip').replace(/^pfxng$/, 'pfx').replace(/^rar[35]$/, 'rar');
+          _add(facts, mkFact('loot.material', h, { kind: archKind, via: 'context-cooccurrence' }, S, source));
+          break;
         }
       }
     }
@@ -2394,7 +2521,9 @@
       // Directory User List Co-Occurrence (Domain\User or UPN + SID / SPN / DN / ad.user_list contract)
       var isLocalTokenInspect = /\b(?:whoami|klist|token::(?:list|elevate|whoami)|sekurlsa::|lsadump::(?:sam|secrets|cache))\b/i.test((command || '') + '\n' + analysisText)
         || /(?:PRIVILEGES INFORMATION|TOKEN INFORMATION|USER INFORMATION|->\s*Impersonated\s*!)/i.test(analysisText);
-      if (!hasKind(facts, 'ad.user_list') && !isLocalTokenInspect && !/\b(?:rpcdump|rpcinfo)\b/i.test(command || '') && !/Protocol:\s*\[MS-/i.test(analysisText) && (atoms.sids.length > 0 || atoms.spns.length > 0 || atoms.dns.length > 0 || expects('ad.user_list'))) {
+      var isStaticPsOrRegAcl = /\bImport-Module\s+ActiveDirectory\b|\bfunction\s+[A-Za-z]+-[A-Za-z0-9]+\b|\bCmdletBinding\s*\(|\bparam\s*\(|\bforeach\s*\(\s*\$/i.test(analysisText)
+        || /\bGet-Acl\b|Microsoft\.PowerShell\.Core\\Registry::|\bRegistryRights\s*:/i.test((command || '') + '\n' + analysisText);
+      if (!hasKind(facts, 'ad.user_list') && !isLocalTokenInspect && !isStaticPsOrRegAcl && !/\b(?:rpcdump|rpcinfo)\b/i.test(command || '') && !/Protocol:\s*\[MS-/i.test(analysisText) && (atoms.sids.length > 0 || atoms.spns.length > 0 || atoms.dns.length > 0 || expects('ad.user_list'))) {
         var coUsers = [], coUsersSeen = Object.create(null);
         var inUserLow = (cmdSem.inputUser || '').toLowerCase();
         for (var dui = 0; dui < atoms.domUsers.length; dui++) {
@@ -2413,7 +2542,9 @@
     }
 
     // 7G. UNC Share Path Co-Occurrence (`\\host\ShareName\...`)
-    if (atoms.uncPaths.length > 0 && !hasKind(facts, 'smb.shares')) {
+    var isNetLocalGroupOrUser = /\bnet1?(?:\.exe)?\s+(?:localgroup|group|user)\b/i.test(command || '')
+      || /^\s*Alias name\s+\S+[\s\S]{0,320}?^\s*Members\s*\r?\n-+/im.test(analysisText);
+    if (atoms.uncPaths.length > 0 && !isNetLocalGroupOrUser && !hasKind(facts, 'smb.shares')) {
       var uncShares = [];
       var gLhost = String((ws && ws.context && ws.context.params && ws.context.params.lhost) || '').trim().toLowerCase();
       var gLhostSub = _subnet24(gLhost);
@@ -2725,11 +2856,30 @@
           C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows SYSTEM access', 'high', 'entailment', true);
         }
       }
-      else if (/^privesc\.(?:sudo|sudo_rights|sudo_binary|script_sink|suid|suid_candidate|capabilities|capability|cron|cron_writable|cron_wildcard|writable_etc|passwd_writable|PATH|ld_preload|docker|docker_group|lxd|lxd_group|group_lxd|container_group|privileged_group)$/.test(k) && !isWebOrRemoteCmd) {
+      else if (/^privesc\.(?:sudo|sudo_rights|sudo_binary|script_sink|suid|suid_candidate|capabilities|capability|cron|cron_writable|cron_wildcard|writable_etc|passwd_writable|PATH|ld_preload|docker|docker_group|lxd|lxd_group|group_lxd|container_group)$/.test(k) && !isWebOrRemoteCmd) {
         ensureFact('host.up', h, { target: ws.target });
         ensureFact('foothold.linux', h, { method: 'entailed-by-privesc' });
         if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
           C._add_os_observation(facts, ws, source, 'linux', 'Entailed by Linux local privilege enumeration', 'high', 'entailment', true);
+        }
+      }
+      else if (k === 'privesc.privileged_group' && !isWebOrRemoteCmd) {
+        ensureFact('host.up', h, { target: ws.target });
+        var privGrpText = JSON.stringify(v || {});
+        var isWinPrivGrp = v.os === 'windows'
+          || alreadyHeld('foothold.windows', h)
+          || /\b(?:Backup Operators|Server Operators|Print Operators|Account Operators|DnsAdmins|Hyper-V Administrators|Cryptographic Operators|Network Configuration Operators|Remote Management Users|Event Log Readers|Exchange Windows Permissions|Organization Management|BUILTIN\\)\b/i.test(privGrpText)
+          || (!isKnownLinuxHost && facts.some(function (f) { return f && f.kind === 'host.os_family' && f.scope === h && f.value && String(f.value.family || '').toLowerCase() === 'windows'; }));
+        if (isWinPrivGrp && !isKnownLinuxHost) {
+          ensureFact('foothold.windows', h, { method: 'entailed-by-privesc' });
+          if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+            C._add_os_observation(facts, ws, source, 'windows', 'Entailed by Windows privileged group membership', 'high', 'entailment', true);
+          }
+        } else {
+          ensureFact('foothold.linux', h, { method: 'entailed-by-privesc' });
+          if (!alreadyHeld('host.os_family', h) && C._add_os_observation) {
+            C._add_os_observation(facts, ws, source, 'linux', 'Entailed by Linux privileged group membership', 'high', 'entailment', true);
+          }
         }
       }
       else if (/^privesc\.(?:windows_privilege|unquoted_service|unquoted_service_path|weak_service_permission|always_install_elevated|autologon|autorun|scheduled_task|stored_creds|stored_credentials|dll_hijack_candidate|patch_gap|sebackup|serestore|semanagevolume|wsl|wsus)$/.test(k) && !isWebOrRemoteCmd) {

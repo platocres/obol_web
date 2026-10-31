@@ -43,7 +43,7 @@
     ['smb.null_session', 'enum'], ['smb.guest_session', 'enum'], ['smb.shares', 'enum'],
     ['enum.deep', 'enum'],
     ['web.content_map', 'enum'], ['web.vhost', 'enum'], ['web.source', 'enum'],
-    ['web.users', 'enum'], ['web.parameterized', 'enum'],
+    ['web.users', 'enum'], ['web.parameterized', 'enum'], ['web.graphql_schema', 'enum'],
     ['hash.', 'creds'], ['kerberos.tickets', 'creds'], ['credential.', 'creds'],
     ['access.root', 'escalate'], ['access.system', 'escalate'],
     ['access.admin', 'escalate'], ['mssql.sysadmin', 'escalate'],
@@ -166,7 +166,20 @@
       && typeof action.eligible === 'function' && factset && action.eligible(factset)) {
       return 0;
     }
-    return Math.max(0, phaseIndex(phaseOfAction(action)) - frontierIndex(factset));
+    var actPhase = phaseOfAction(action);
+    var frontier = frontierIndex(factset);
+    if (action && factset && actPhase === 'access' && frontier === 2
+      && typeof action.eligible === 'function' && action.eligible(factset)) {
+      var reqs = [].concat(action.requires || [], action.requires_all || [], action.requires_any || []);
+      var hasCredOrHashReq = reqs.some(function (k) { return /^(?:credential\.|hash\.)/.test(k || ''); });
+      if (!hasCredOrHashReq && Array.isArray(factset.facts) && factset.facts.some(function (f) {
+        return f && f.state === ProofState.SUPPORTED
+          && /^(?:web\.fingerprint\.|vuln\.|exploit\.versioned_banner$|service\.(?:web_terminal|ajp13|java-rmi|jenkins)$|web\.upload_form$)/.test(f.kind || '');
+      })) {
+        return 0;
+      }
+    }
+    return Math.max(0, phaseIndex(actPhase) - frontier);
   }
 
   // Evaluate concrete state vector of an engagement for DAG-based state-transition guidance

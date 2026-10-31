@@ -483,13 +483,44 @@
         return users.length ? [{ kind: 'ad.user_list', scope: dom(ws), value: { users: users, count: users.length, method: 'nxc-passnotreq', note: 'PASSWD_NOTREQD accounts (try a blank password)' } }] : [];
       } },
 
-    { id: 'ldap-adcs', proto: 'ldap', module: 'adcs', produces: ['adcs.vulnerable'],
+    { id: 'ldap-adcs', proto: 'ldap', module: 'adcs', produces: ['adcs.vulnerable', 'config.review'],
       gate: ['credential.available', 'ldap.reachable'],
       extract: function (text, ws) {
         // nxc ldap -M adcs lists CAs / templates; a vulnerable ESC template is the ADCS lead (-> adcs-esc /
-        // certifried / cert-authenticate). A plain CA listing with no ESC verdict is just enumeration.
-        return /ESC\d|vulnerable|enrollee supplies subject|ENROLLEE_SUPPLIES_SUBJECT|EDITF_ATTRIBUTESUBJECTALTNAME/i.test(text)
-          ? [{ kind: 'adcs.vulnerable', scope: dom(ws), value: { detail: 'vulnerable ADCS template/CA via nxc adcs', tool: 'nxc' } }] : [];
+        // certifried / cert-authenticate). A plain CA listing with PKI Enrollment Server / CN discovery mints config.review.
+        if (/ESC\d|vulnerable|enrollee supplies subject|ENROLLEE_SUPPLIES_SUBJECT|EDITF_ATTRIBUTESUBJECTALTNAME/i.test(text)) {
+          return [{ kind: 'adcs.vulnerable', scope: dom(ws), value: { detail: 'vulnerable ADCS template/CA via nxc adcs', tool: 'nxc' } }];
+        }
+        var srvM = /Found PKI Enrollment Server:\s*(\S+)/i.exec(text);
+        var cnM = /Found CN:\s*([^\r\n]+)/i.exec(text);
+        if (srvM || cnM) {
+          var crVal = { kind: 'adcs_ca_discovered', detail: 'ADCS PKI Enrollment Server discovered via nxc adcs', tool: 'nxc' };
+          if (srvM) crVal.server = srvM[1].trim();
+          if (cnM) crVal.ca = cnM[1].trim();
+          return [{ kind: 'config.review', scope: host(ws), value: crVal }];
+        }
+        return [];
+      } },
+    { id: 'ldap-badsuccessor', proto: 'ldap', module: 'badsuccessor', produces: ['ad.acl_lead', 'ad.control_paths', 'kerberos.tickets'],
+      gate: ['credential.available', 'ldap.reachable'],
+      extract: function (text, ws) {
+        var out = [];
+        var hasDmsaPerm = (/(?:Users|Principals|Accounts|Objects)\s+with\s+permissions\s+to\s+create\s+dMSA\s+objects|can\s+create\s+dMSA\s+objects|vulnerable\s+to\s+BadSuccessor|msDS-DelegatedManagedServiceAccount|\[\+\]\s*BADSUCCESSOR\b[^\r\n]*(?:found|allows|writable|OU=)/i.test(text))
+          && !/\b(?:no|0)\s+(?:users|principals|accounts|ous?)\b[^\r\n]{0,40}?\b(?:with\s+permissions|found)\b|\bnot\s+vulnerable\b/i.test(text);
+        var ticketM = /(?:(?:Service|TGT)\s+)?ticket\s+saved\s+to\s+['"]?([^\s'"]+\.(?:ccache|kirbi))['"]?|\bSaving\s+ticket\s+(?:in|to)\s+['"]?([^\s'"]+\.(?:ccache|kirbi))['"]?/i.exec(text);
+        var ticketFile = ticketM ? (ticketM[1] || ticketM[2] || '').trim() : '';
+        if (hasDmsaPerm) {
+          out.push({ kind: 'ad.acl_lead', scope: dom(ws), value: { right: 'CreateChild-dMSA', detail: 'dMSA creation permission found via nxc badsuccessor', tool: 'nxc' } });
+          out.push({ kind: 'ad.control_paths', scope: dom(ws), value: { right: 'CreateChild-dMSA', method: 'badsuccessor', tool: 'nxc' } });
+        }
+        if (ticketFile) {
+          out.push({ kind: 'kerberos.tickets', scope: dom(ws), value: { file: ticketFile, files: [ticketFile], tool: 'nxc-badsuccessor' } });
+          if (!hasDmsaPerm) {
+            out.push({ kind: 'ad.acl_lead', scope: dom(ws), value: { right: 'CreateChild-dMSA', detail: 'dMSA ticket acquired via nxc badsuccessor', tool: 'nxc' } });
+            out.push({ kind: 'ad.control_paths', scope: dom(ws), value: { right: 'CreateChild-dMSA', ticket: ticketFile, method: 'badsuccessor', tool: 'nxc' } });
+          }
+        }
+        return out;
       } },
     { id: 'ldap-user-desc', proto: 'ldap', module: 'user-desc', produces: ['credential.candidate'],
       gate: ['credential.available', 'ldap.reachable'],
@@ -699,6 +730,8 @@
     'daclread': 'ldap-daclread',
     'group-mem': 'ldap-group-mem',
     'adcs': 'ldap-adcs',
+    'badsuccessor': 'ldap-badsuccessor',
+    'badsucce': 'ldap-badsuccessor',
     'user-desc': 'ldap-user-desc',
     'get-desc-users': 'ldap-get-desc-users',
     'enum_trusts': 'ldap-enum-trusts',
@@ -733,9 +766,9 @@
       });
     }
     if (text) {
-      var bannerRe = /^\s*([A-Z0-9_-]{3,20})\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+/gm, bm;
+      var bannerRe = /^\s*([A-Z0-9_.-]{3,20})\s+\d{1,3}(?:\.\d{1,3}){3}\s+\d+\s+\S+/gm, bm;
       while ((bm = bannerRe.exec(text)) !== null) {
-        var bKey = bm[1].toLowerCase();
+        var bKey = bm[1].toLowerCase().replace(/\.+$/, '');
         var catId = MODULE_BANNER_MAP[bKey];
         if (catId && CAT_BY_ID[catId] && out.indexOf(CAT_BY_ID[catId]) < 0) {
           out.push(CAT_BY_ID[catId]);

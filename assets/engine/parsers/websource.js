@@ -202,7 +202,7 @@
     xxx: 1, xxxx: 1, todo: 1, none: 1, null: 1, example: 1, placeholder: 1, redacted: 1,
     testpassword: 1, mysecretpassword: 1, yourpassword: 1, enterpassword: 1, 'p@ssw0rd': 1, passw0rd: 1
   };
-  var _PLACEHOLDER_RE = /^\$\{.*\}$|^<.*>$|^%.*%$|^\$\w+$|^\{\{.*\}\}$/;
+  var _PLACEHOLDER_RE = /^\$\{.*\}$|^<.*>$|^%.*%$|^\$\w+$|^\{\{.*\}\}$|^\$(?:user(?:name)?|pass(?:word|wd)?|pwd|uname|login|email|hash|secret|token|input|req(?:uest)?|post|get|row|data|this|self|args?|argv|param|val(?:ue)?)(?:$|->|\[)|^\$[A-Za-z_]\w*(?:->|\[)|^['".\s]*\$[A-Za-z_]\w*['".\s]*$/i;
   var _GETBYTES_RE = /GetBytes\(\s*["'](?<s>[^"']{6,})["']/g;
   var _SIGNING_MARK_RE = /SymmetricSecurityKey|SigningCredentials|JwtSecurityToken|HmacSha\d|new HMAC|jwt\.sign/i;
   var _SECRET_KEY_RE = /\b(?:SECRET_KEY(?:_BASE)?|secret_key_base|app_secret|jwt_secret)['"]?\]?\s*[:=]\s*(?:["'](?<s>[^"'\r\n]{6,})["']|(?<uval>[0-9a-fA-F]{32,256})\b)/gi;
@@ -222,7 +222,10 @@
   var _VCS_TOKEN_RE = /\b(?<token>gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}|glpat-[A-Za-z0-9_-]{20,})\b/g;
   // A pasted PRIVATE KEY (id_rsa / .pem / .ppk-exported) is a key IN HAND -> credential.certificate, which
   // lights ssh-key-login. This is the payoff of pulling an id_rsa a share-spider flagged.
-  var _PRIVKEY_RE = /-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-----|PuTTY-User-Key-File-\d/;
+  var _PRIVKEY_RE = /-{3,5}BEGIN (?:OPENSSH|RSA|DSA|EC|PGP|ENCRYPTED(?: PRIVATE KEY)?) PRIVATE KEY-{2,5}|PuTTY-User-Key-File-\d/;
+  var _REDIS_REQUIREPASS_RE = /^[ \t]*requirepass[ \t]+(?:"([^"\r\n]{3,128})"|'([^'\r\n]{3,128})'|([^\s'"#\r\n]{3,128}))[ \t]*(?:#.*)?$/gim;
+  var _MONIT_HTTPD_PORT_RE = /\bset\s+httpd\s+port\s+(\d{1,5})\b/i;
+  var _MONIT_ALLOW_CRED_RE = /^[ \t]*allow[ \t]+["']?([A-Za-z_][A-Za-z0-9_.-]{1,47})["']?:(?:"([^"\r\n]{3,128})"|'([^'\r\n]{3,128})'|([^\s"'#;\r\n]{3,128}))["']?(?:[ \t]+(?:readonly|read-only))?[ \t]*(?:#.*)?$/gim;
   // A password inside a DB connection string (web.config / appsettings / JDBC): "...;Password=P@ss;...".
   // The field regexes above want a quoted literal; a connection string is semicolon-delimited, so catch it
   // directly - but only in a connection-string context, so a stray "pwd=" elsewhere isn't a false positive.
@@ -297,7 +300,7 @@
 
   var _ASSOC_ARRAY_SECRET_HINT_RE = /['"](?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd|dbpass|secret|api[_-]?key|token)['"]\s*=>\s*['"][^'"\r\n]{1,128}['"]/i;
   var _XML_ATTR_SECRET_HINT_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option|user|account|login|member|admin|server|resource)\b[^>\r\n]{0,1024}?\b(?:(?:name|key|id)\s*=\s*["'][^"'\r\n]{0,128}(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)["']|(?:password|passwd|pwd|secret)\s*=\s*["'][^"'\r\n]{1,256}["'])[^>\r\n]{0,1024}\/?>/i;
-  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle):|define\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]|\$(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:user(?:name)?|pass(?:word|wd)?|pwd)\s*=|\$\w{1,48}(?:\[[^\]]+\])*?\[\s*['"](?:(?:db|database|mysql|pg|postgres|mssql|sql)_?)?(?:user(?:name)?|pass(?:word|wd)?|pwd)['"]\s*\]\s*=|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/i;
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle|h2|sqlite):|\bspring\.datasource\.(?:username|password|url)\b|^\s*datasource:\s*\r?\n[\s\S]{1,240}?\busername:\s*\S+|define\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]|\$(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:user(?:name)?|pass(?:word|wd)?|pwd)\s*=|\$\w{1,48}(?:\[[^\]]+\])*?\[\s*['"](?:(?:db|database|mysql|pg|postgres|mssql|sql)_?)?(?:user(?:name)?|pass(?:word|wd)?|pwd)['"]\s*\]\s*=|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/im;
 
   function _has_source_secret(text) {
     var t = text || '';
@@ -309,15 +312,22 @@
     var hasParen = t.indexOf('(') >= 0;
     var hasProto = hasColon && t.indexOf('://') >= 0;
     var hasVcsHint = t.indexOf('gh') >= 0 || t.indexOf('github_pat_') >= 0 || t.indexOf('glpat-') >= 0;
-    var hasPrivKeyHint = t.indexOf('PRIVATE KEY-----') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
+    var hasPrivKeyHint = t.indexOf('PRIVATE KEY--') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
     var hasArrow = hasEq && t.indexOf('=>') >= 0;
     var hasXmlTag = t.indexOf('<') >= 0 && t.indexOf('>') >= 0;
     var hasDbHint = hasArrow || hasDollar || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
-      || t.indexOf('jdbc:') >= 0 || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+      || t.indexOf('jdbc:') >= 0 || t.indexOf('spring.datasource') >= 0 || t.indexOf('datasource:') >= 0
+      || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
       || (t.indexOf(';') >= 0 && (t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0));
-    return !!((hasPrivKeyHint && reSearch(_PRIVKEY_RE, t))
+    var pemHintText = hasPrivKeyHint && /<\?php\b|<(?:!doctype|html|script|!--)/i.test(t)
+      ? t.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+      : t;
+    return !!((hasPrivKeyHint && reSearch(_PRIVKEY_RE, pemHintText))
       || (hasVcsHint && reSearch(_VCS_TOKEN_RE, t))
       || (hasProto && reSearch(_URI_CRED_RE, t))
+      || (t.indexOf('requirepass') >= 0 && reSearch(_REDIS_REQUIREPASS_RE, t))
+      || ((_MONIT_HTTPD_PORT_RE.test(t) || /\bcheck\s+process\b|\bset\s+daemon\b/i.test(t)) && (reSearch(_MONIT_ALLOW_CRED_RE, t) || _MONIT_HTTPD_PORT_RE.test(t)))
+      || (hasXmlTag && t.indexOf('<bind-dn>') >= 0 && t.indexOf('<bind-password>') >= 0)
       || reSearch(_SIGNING_MARK_RE, t)
       || (hasEqOrColon && reSearch(_SECRET_KEY_RE, t))
       || (hasEqOrColon && reSearch(_CONFIG_PW_RE, t))
@@ -345,7 +355,7 @@
     var hasParen = t.indexOf('(') >= 0;
     var hasProto = hasColon && t.indexOf('://') >= 0;
     var hasVcsHint = t.indexOf('gh') >= 0 || t.indexOf('github_pat_') >= 0 || t.indexOf('glpat-') >= 0;
-    var hasPrivKeyHint = t.indexOf('PRIVATE KEY-----') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
+    var hasPrivKeyHint = t.indexOf('PRIVATE KEY--') >= 0 || t.indexOf('PuTTY-User-Key-File-') >= 0;
 
     if (C && C._extract_diff_cred_pairs && (t.indexOf('\n+') >= 0 || t.indexOf('\n-') >= 0 || t.charAt(0) === '+' || t.charAt(0) === '-')) {
       var diffPairs = C._extract_diff_cred_pairs(t);
@@ -432,7 +442,11 @@
       reAll(_INI_PW_RE, t).forEach(function (m) {
         if (isInteractiveAuthCli && /^[ \t]*(?:Enter[ \t]+)?Password[ \t]*:/i.test(m[0])) return;
         if (!m.groups.dq && !m.groups.sq && m.groups.s && m.groups.s.slice(-1) === ':') return;
-        var s = _clean_secret(m.groups.dq || m.groups.sq || m.groups.s);
+        var evLine = C._line_for_match ? C._line_for_match(t, m) : m[0];
+        var rawIniVal = m.groups.dq || m.groups.sq || m.groups.s || '';
+        if (rawIniVal.indexOf('$') >= 0 && /\b(?:SELECT\s+.+\s+FROM|INSERT\s+INTO|UPDATE\s+\S+\s+SET|WHERE\s+)/i.test(evLine)) return;
+        if (!m.groups.dq && !m.groups.sq && /^[0-9a-fA-F]{32}$/.test(rawIniVal) && /\[Administrator\]\s*\r?\n\s*Password=/i.test(t)) return;
+        var s = _clean_secret(rawIniVal);
         if (!s || seen[s] || !_valid_config_pw(s)) return;
         seen[s] = true;
         _add(facts, mkFact('credential.candidate', scope, { kind: 'config_secret', password: s, key: m.groups.key.toLowerCase(), source: 'config-field' }, S, source));
@@ -450,18 +464,74 @@
     }
 
     // a pasted private key is a key in hand → credential.certificate (lights ssh-key-login).
-    if (hasPrivKeyHint && reSearch(_PRIVKEY_RE, t)) {
-      var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(t)
-        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(t);
-      _add(facts, mkFact('credential.certificate', scope, { kind: 'private_key', encrypted: isEncKey, source: 'source-disclosure' }, S, source));
-      if (!/-----BEGIN PGP PRIVATE KEY-----/.test(t)) {
+    var pemText = hasPrivKeyHint && /<\?php\b|<(?:!doctype|html|script|!--)/i.test(t)
+      ? t.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+      : t;
+    if (hasPrivKeyHint && reSearch(_PRIVKEY_RE, pemText)) {
+      var isEncKey = /ENCRYPTED|Proc-Type:\s*4\s*,\s*ENCRYPTED|DEK-Info:/i.test(pemText)
+        || /\bb3BlbnNzaC1rZXktdjEAAAAA(?!BG5vbmU)[A-Za-z0-9+/]{4}/.test(pemText);
+      var isX509CertPair = /-{3,5}BEGIN CERTIFICATE-{2,5}|\b(?:Certify|certipy|pkcs12|x509|Certificate\s+Template)\b/i.test(pemText)
+        && !/-{3,5}BEGIN OPENSSH PRIVATE KEY-{2,5}|PuTTY-User-Key-File-\d/.test(pemText);
+      _add(facts, mkFact('credential.certificate', scope, { kind: isX509CertPair ? 'x509_keypair' : 'private_key', encrypted: isEncKey, source: 'source-disclosure' }, S, source));
+      if (!/-{3,5}BEGIN PGP PRIVATE KEY-{2,5}/.test(pemText) && !isX509CertPair) {
         _add(facts, mkFact('loot.ssh_key', scope, { encrypted: isEncKey, via: 'source-disclosure' }, S, source));
         _add(facts, mkFact('credential.ssh_key', scope, { encrypted: isEncKey, via: 'source-disclosure' }, S, source));
       }
-      if (isEncKey) {
+      if (isEncKey && !isX509CertPair) {
         _add(facts, mkFact('hash.crackable', scope, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
         _add(facts, mkFact('hash.candidate', scope, { format: 'ssh', hash_type: 'ssh', tool: 'ssh2john', via: 'source-disclosure' }, S, source));
       }
+    }
+
+    // Redis requirepass directive in redis.conf
+    if (t.indexOf('requirepass') >= 0) {
+      reAll(_REDIS_REQUIREPASS_RE, t).forEach(function (m) {
+        var rp = _clean_secret(m[1] || m[2] || m[3] || '');
+        if (!rp || !_valid_config_pw(rp)) return;
+        var rpKey = 'redis:' + rp;
+        if (seen[rpKey]) return;
+        seen[rpKey] = true;
+        seen[rp] = true;
+        var rVal = { user: 'default', password: rp, service: 'redis', method: 'redis-conf' };
+        _add(facts, mkFact('credential.plaintext', scope, rVal, S, source));
+        _add(facts, mkFact('credential.password', scope, rVal, S, source));
+        _add(facts, mkFact('credential.available', scope, rVal, S, source));
+        _add(facts, mkFact('db.creds', scope, { user: 'default', password: rp, service: 'redis', via: 'redis-conf' }, S, source));
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'redis_requirepass', password: rp, service: 'redis', source: 'redis-conf' }, S, source));
+      });
+    }
+
+    // Monit control file (set httpd port <N> + allow <user>:<password>)
+    var monitPortM = _MONIT_HTTPD_PORT_RE.exec(t);
+    var isMonitCtx = !!monitPortM || /\bmonitrc\b/i.test(command || '') || (/\bcheck\s+process\b/i.test(t) && /\bset\s+daemon\b/i.test(t));
+    if (isMonitCtx) {
+      var mPort = monitPortM ? parseInt(monitPortM[1], 10) : 0;
+      if (mPort > 0 && mPort <= 65535) {
+        _add(facts, mkFact('scan.local.listeners', scope, {
+          ports: [mPort],
+          listeners: [{ addr: '127.0.0.1', port: mPort, proto: 'tcp', service: 'monit' }],
+          via: 'monitrc'
+        }, S, source));
+      }
+      reAll(_MONIT_ALLOW_CRED_RE, t).forEach(function (m) {
+        var mu = m[1].trim(), mp = _clean_secret(m[2] || m[3] || m[4] || '');
+        if (!mu || !mp || !_valid_config_pw(mp) || /^(?:localhost|\d+)$/i.test(mu)) return;
+        var mKey = 'monit:' + mu + ':' + mp;
+        if (seen[mKey]) return;
+        seen[mKey] = true;
+        seen[mp] = true;
+        var mVal = { user: mu, password: mp, service: 'monit', method: 'monitrc' };
+        if (mPort > 0) mVal.port = mPort;
+        _add(facts, mkFact('credential.plaintext', scope, mVal, S, source));
+        _add(facts, mkFact('credential.password', scope, mVal, S, source));
+        _add(facts, mkFact('credential.available', scope, mVal, S, source));
+        _add(facts, mkFact('credential.candidate', scope, { kind: 'monit_httpd_credential', user: mu, password: mp, service: 'monit', port: mPort || undefined, source: 'monitrc' }, S, source));
+      });
+    }
+
+    // XML LDAP <bind-dn> + <bind-password> configuration read on-host or via source disclosure
+    if (t.indexOf('<bind-dn>') >= 0 && t.indexOf('<bind-password>') >= 0 && C._parse_xml_ldap_bind_creds) {
+      C._parse_xml_ldap_bind_creds(t, ws, source, facts);
     }
 
     // a password inside a DB connection string (only in a connection-string context).
@@ -497,7 +567,8 @@
 
     // Hardcoded DB connector calls and full User+Password DSN strings in disclosed source
     if (t.indexOf('=>') >= 0 || hasDollar || t.indexOf('connect') >= 0 || t.indexOf('Connect') >= 0 || t.indexOf('PDO') >= 0
-        || t.indexOf('jdbc:') >= 0 || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
+        || t.indexOf('jdbc:') >= 0 || t.indexOf('spring.datasource') >= 0 || t.indexOf('datasource:') >= 0
+        || t.indexOf('DB') >= 0 || t.indexOf('MYSQL') >= 0 || t.indexOf('setProperty') >= 0 || t.indexOf('.put(') >= 0
         || t.indexOf('Password') >= 0 || t.indexOf('password') >= 0 || t.indexOf('PWD') >= 0 || t.indexOf('PASS') >= 0) {
       _parse_source_db_connectors(t, scope, source, facts, seen);
     }
@@ -711,6 +782,7 @@
     _add(facts, mkFact('credential.available', scope, avVal, S, source));
     if (emitDbCreds) {
       _add(facts, mkFact('credential.plaintext', scope, avVal, S, source));
+      _add(facts, mkFact('credential.password', scope, avVal, S, source));
       _add(facts, mkFact('db.creds', scope, Object.assign({ user: u, password: p, service: service, via: idiom }, extra || {}), S, source));
     }
     if (!seen[p]) {
@@ -920,6 +992,36 @@
       var svc = rawEng === 'mariadb' ? 'mysql' : (rawEng === 'sqlserver' ? 'mssql' : rawEng);
       _emitConcreteSourceCred(facts, scope, source, seen, juM[1].trim(), jpM[1].trim(), svc, 'jdbc-url', true);
     });
+
+    // 7. Spring Boot spring.datasource.(url|username|password) (.properties and application.yml)
+    var sdUserM = /^[ \t]*spring\.datasource\.username[ \t]*[:=][ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(t);
+    var sdPassM = /^[ \t]*spring\.datasource\.password[ \t]*[:=][ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(t);
+    var sdUrlM = /^[ \t]*spring\.datasource\.url[ \t]*[:=][ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(t);
+    if (!sdUserM || !sdPassM) {
+      var ymlBlockM = /^[ \t]*datasource:[ \t]*\r?\n((?:[ \t]{2,}[^\r\n]+\r?\n?){2,10})/im.exec(t);
+      if (ymlBlockM) {
+        var yb = ymlBlockM[1];
+        if (!sdUserM) sdUserM = /^[ \t]*username[ \t]*:[ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(yb);
+        if (!sdPassM) sdPassM = /^[ \t]*password[ \t]*:[ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(yb);
+        if (!sdUrlM) sdUrlM = /^[ \t]*url[ \t]*:[ \t]*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s'"#\r\n]+))/im.exec(yb);
+      }
+    }
+    if (sdUserM && sdPassM) {
+      var sdUser = (sdUserM[1] || sdUserM[2] || sdUserM[3] || '').trim();
+      var sdPass = (sdPassM[1] || sdPassM[2] || sdPassM[3] || '').trim();
+      var sdUrl = sdUrlM ? (sdUrlM[1] || sdUrlM[2] || sdUrlM[3] || '').trim() : '';
+      var sdEngM = /\bjdbc:(mysql|mariadb|postgresql|sqlserver|oracle|h2|sqlite):/i.exec(sdUrl);
+      var sdRawEng = sdEngM ? sdEngM[1].toLowerCase() : '';
+      var sdSvc = sdRawEng === 'mariadb' ? 'mysql' : (sdRawEng === 'sqlserver' ? 'mssql' : (sdRawEng || defaultJdbcSvc));
+      var sdExtra = {};
+      var sdHostDbM = /jdbc:[a-z0-9]+:\/\/([^/:?;\s]+)(?::(\d+))?(?:\/([A-Za-z0-9_.-]+))?/i.exec(sdUrl);
+      if (sdHostDbM) {
+        if (sdHostDbM[1]) sdExtra.host = sdHostDbM[1];
+        if (sdHostDbM[2]) sdExtra.port = parseInt(sdHostDbM[2], 10);
+        if (sdHostDbM[3]) sdExtra.dbname = sdHostDbM[3];
+      }
+      _emitConcreteSourceCred(facts, scope, source, seen, sdUser, sdPass, sdSvc, 'spring-datasource', true, sdExtra);
+    }
   }
   C._parse_source_db_connectors = _parse_source_db_connectors;
 
@@ -938,6 +1040,9 @@
   var _CONFIG_SYNTAX_ERR_LINE_RE = /^\s*(?:Error|Fatal|Warning):\s*invalid line \d+ in \S+:[^\r\n]*$/gim;
 
   function _has_web_disclosure(text, command) {
+    var cmdStr = String(command || '');
+    if (/\b(?:swaks|sendmail|smtp-user-enum)\b|\b(?:nc|ncat|netcat|telnet|openssl\s+s_client)\b[^\r\n]*\s(?:25|110|143|465|587|993|995)\b/i.test(cmdStr)) return false;
+    if (/^\s*(?:(?:<-|<--|S:)?\s*220[\s-][^\r\n]*\bE?SMTP\b|(?:<-|<--|S:)?\s*\+OK\b[^\r\n]*(?:POP3|Dovecot)|\* OK\b[^\r\n]*IMAP4|(?:->|-->|C:)?\s*(?:EHLO|HELO|MAIL\s+FROM:|RCPT\s+TO:)\s+\S)/im.test(text || '')) return false;
     var t = _inbound_http_segment(text);
     if (!/\S/.test(t)) return false;
     if (!/php|Fatal error|Parse error|Warning:|Traceback|500\b|Werkzeug|Server Error|Error:|flask|django|fastapi|express|<configuration/i.test(t)) return false;
@@ -1172,6 +1277,11 @@
   function _has_web_vuln_sinks(text, command) {
     var t = _inbound_http_segment(text);
     if (!/\S/.test(t)) return false;
+    var cmdStr = String(command || '');
+    if (!/^\s*(?:<\s*)?HTTP\/[12]/im.test(t)) {
+      if (/^\s*(?:sudo\s+)?(?:echo|printf|cat\s*(?:<<|>)|tee|exiftool|convert|magick|msfvenom)\b/i.test(cmdStr)) return false;
+      if (/[12]?>>?\s*['"]?[^\s'"]+\.(?:php[0-9]?|phtml|phar|inc|jsp|jspx|asp|aspx|png|jpe?g|gif)\b/i.test(cmdStr)) return false;
+    }
     if (!_WEB_SOURCE_CONTEXT_RE.test(t)) return false;
     if (_is_outbound_http_request_only(t)) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
@@ -1184,6 +1294,7 @@
 
   function _parse_web_vuln_sinks(text, ws, command, source, facts) {
     var t = _inbound_http_segment(text);
+    if (!/^\s*(?:<\s*)?HTTP\/[12]/im.test(t) && C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text)) return;
     if (!_has_web_vuln_sinks(t, command)) return;
     var scope = _scope(ws);
     var hits = [];

@@ -623,6 +623,189 @@
     'credential.available': 1, 'credential.plaintext': 1, 'credential.candidate': 1
   };
 
+  function extractLoopbackDbPorts(factList) {
+    var hasAccess = false, i, f, k;
+    if (!Array.isArray(factList)) return null;
+    for (i = 0; i < factList.length; i++) {
+      f = factList[i];
+      if (!f || (f.state && f.state !== 'supported')) continue;
+      k = f.kind || '';
+      if (k === 'foothold.linux' || k === 'foothold.windows' || k === 'pivot.ports') {
+        hasAccess = true;
+        break;
+      }
+    }
+    if (!hasAccess) return null;
+    var found = null;
+    for (i = 0; i < factList.length; i++) {
+      f = factList[i];
+      if (!f || (f.state && f.state !== 'supported')) continue;
+      k = f.kind || '';
+      if (k !== 'scan.local.listeners' && k !== 'pivot.ports') continue;
+      var v = f.value || {};
+      var arr = Array.isArray(v.ports) ? v.ports : [];
+      for (var j = 0; j < arr.length; j++) {
+        var pn = parseInt(arr[j] && typeof arr[j] === 'object' ? arr[j].port : arr[j], 10);
+        if (pn === 3306 || pn === 5432) {
+          if (!found) found = {};
+          found[pn] = true;
+        }
+      }
+      if (Array.isArray(v.forwards)) {
+        for (var fw = 0; fw < v.forwards.length; fw++) {
+          var fwo = v.forwards[fw] || {};
+          var fwp = parseInt(fwo.rport || fwo.remotePort || fwo.port, 10);
+          if (fwp === 3306 || fwp === 5432) {
+            if (!found) found = {};
+            found[fwp] = true;
+          }
+        }
+      }
+      var sp = parseInt(v.port, 10);
+      if (sp === 3306 || sp === 5432) {
+        if (!found) found = {};
+        found[sp] = true;
+      }
+    }
+    return found;
+  }
+
+  function augmentProjectedKinds(facts, baseHave) {
+    if (!baseHave || !facts) return baseHave;
+    var out = baseHave, cloned = false;
+    function ensureClone() {
+      if (!cloned) {
+        var c = {};
+        for (var bk in baseHave) c[bk] = baseHave[bk];
+        out = c;
+        cloned = true;
+      }
+    }
+    if ((baseHave['port:88'] || baseHave['ad.dc_candidate']) && !baseHave['kerberos.reachable']) {
+      ensureClone();
+      out['kerberos.reachable'] = 1;
+    }
+    if (baseHave['foothold.linux'] || baseHave['foothold.windows'] || baseHave['pivot.ports']) {
+      var fl = (facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts))
+        ? facts._resolvedContext.allScopedFacts
+        : (Array.isArray(facts.facts) ? facts.facts : null);
+      var lbp = extractLoopbackDbPorts(fl);
+      if (lbp) {
+        if (lbp[3306] && (!out['port:3306'] || !out['service.mysql'])) {
+          ensureClone();
+          out['port:3306'] = 1;
+          out['service.mysql'] = 1;
+        }
+        if (lbp[5432] && (!out['port:5432'] || !out['service.postgresql'])) {
+          ensureClone();
+          out['port:5432'] = 1;
+          out['service.postgresql'] = 1;
+        }
+      }
+    }
+    return out;
+  }
+
+  function hasUncrackedAsrep(facts) {
+    if (!facts) return false;
+    var list = (facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts))
+      ? facts._resolvedContext.allScopedFacts
+      : (Array.isArray(facts.facts) ? facts.facts : []);
+    var sawAsrep = false, asrepUsers = [], seenAsrepU = Object.create(null);
+    var crackedUsers = Object.create(null), hasAnyCrackedAsrepMethod = false;
+    function normPrincipal(raw) {
+      var s = String(raw || '').trim();
+      if (!s) return '';
+      s = s.replace(/^.*\\/, '').split('@')[0].trim().toLowerCase();
+      return s;
+    }
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (!f || (f.state && f.state !== 'supported')) continue;
+      var v = f.value || {};
+      if (f.kind === 'hash.asrep') {
+        sawAsrep = true;
+        var uCandidates = [];
+        if (v.user) uCandidates.push(v.user);
+        if (v.principal) uCandidates.push(v.principal);
+        if (Array.isArray(v.users)) {
+          for (var ui = 0; ui < v.users.length; ui++) uCandidates.push(v.users[ui]);
+        }
+        var hList = Array.isArray(v.hashes) ? v.hashes : (v.hash ? [v.hash] : []);
+        for (var hi = 0; hi < hList.length; hi++) {
+          var hm = /\$krb5asrep\$(?:\d+\$)?\*?([^$:@\s]+)(?:[$@:][^\s]*)?/i.exec(String(hList[hi] || ''));
+          if (hm && hm[1]) uCandidates.push(hm[1]);
+        }
+        for (var ci = 0; ci < uCandidates.length; ci++) {
+          var nu = normPrincipal(uCandidates[ci]);
+          if (nu && !seenAsrepU[nu]) {
+            seenAsrepU[nu] = 1;
+            asrepUsers.push(nu);
+          }
+        }
+      } else if (f.kind === 'credential.available' || f.kind === 'credential.plaintext') {
+        var hasSecret = !!(v.password || v.secret);
+        var cu = normPrincipal(v.user || v.username || v.principal);
+        if (hasSecret && cu) crackedUsers[cu] = 1;
+        var meth = String(v.method || '').toLowerCase();
+        var ht = String(v.hash_type || '').toLowerCase();
+        if (hasSecret && (meth.indexOf('crack') >= 0 || meth.indexOf('hashcat') >= 0 || meth.indexOf('john') >= 0) && (!ht || ht === 'asrep' || ht === 'krb5asrep')) {
+          hasAnyCrackedAsrepMethod = true;
+        }
+      }
+    }
+    if (!sawAsrep) return false;
+    if (asrepUsers.length > 0) {
+      for (var aui = 0; aui < asrepUsers.length; aui++) {
+        if (!crackedUsers[asrepUsers[aui]]) return true;
+      }
+      return false;
+    }
+    return !hasAnyCrackedAsrepMethod && Object.keys(crackedUsers).length === 0;
+  }
+
+  function hasUnauthenticatedCert(facts) {
+    if (!facts) return false;
+    var list = (facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts))
+      ? facts._resolvedContext.allScopedFacts
+      : (Array.isArray(facts.facts) ? facts.facts : []);
+    var sawCert = false, certUsers = [], seenCertU = Object.create(null);
+    var authedUsers = Object.create(null), hasCertDerivedAuth = false;
+    function normU(raw) {
+      var s = String(raw || '').trim();
+      if (!s) return '';
+      s = s.replace(/^CN=/i, '').replace(/,.*$/, '').replace(/^.*\\/, '').split('@')[0].trim().toLowerCase();
+      return s;
+    }
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      if (!f || (f.state && f.state !== 'supported')) continue;
+      var v = f.value || {};
+      if (f.kind === 'credential.certificate') {
+        sawCert = true;
+        var cu = normU(v.user || v.upn || v.principal || v.subject || v.account);
+        if (cu && !seenCertU[cu]) {
+          seenCertU[cu] = 1;
+          certUsers.push(cu);
+        }
+      } else if (f.kind === 'credential.available' || f.kind === 'credential.validated' || f.kind === 'kerberos.tickets' || /\.authenticated$/.test(f.kind || '')) {
+        var au = normU(v.user || v.username || v.principal || v.impersonate);
+        var hasAuthMat = f.kind === 'credential.validated' || f.kind === 'kerberos.tickets' || /\.authenticated$/.test(f.kind || '') || !!(v.nthash || v.hash || v.password || v.secret);
+        if (au && hasAuthMat) authedUsers[au] = 1;
+        var srcStr = String(v.method || v.via || v.tool || f.source || '').toLowerCase();
+        if (hasAuthMat && /certipy|pkinit|gettgtpkinit|certificate/.test(srcStr)) hasCertDerivedAuth = true;
+      }
+    }
+    if (!sawCert) return false;
+    if (certUsers.length > 0) {
+      for (var cui = 0; cui < certUsers.length; cui++) {
+        if (!authedUsers[certUsers[cui]]) return true;
+      }
+      return false;
+    }
+    return !hasCertDerivedAuth;
+  }
+
   function canUseFastHave(facts, preHave) {
     return !!(preHave && facts && root.OBOL && root.OBOL.facts && root.OBOL.facts.FactSet
       && facts.has === root.OBOL.facts.FactSet.prototype.has
@@ -646,7 +829,7 @@
       if (proj && (!projMemo || projMemo.fLen !== fLen)) {
         projMemo = {
           fLen: fLen,
-          have: proj.kinds(),
+          have: augmentProjectedKinds(proj, proj.kinds()),
           fam: hostOsFamily(proj)
         };
         _resolvedFactsCache.set(proj, projMemo);
@@ -655,7 +838,7 @@
         fLen: fLen,
         scLen: scLen,
         aLen: aLen,
-        have: projMemo ? projMemo.have : facts.kinds(),
+        have: projMemo ? projMemo.have : augmentProjectedKinds(facts, facts.kinds()),
         fam: projMemo ? projMemo.fam : hostOsFamily(facts),
         elig: new WeakMap(),
         settled: new WeakMap()
@@ -714,7 +897,7 @@
     var rMemo = !facts._checkingCredPool ? getResolvedFactsMemo(facts) : null;
     var sigBase = 0;
     if (rMemo) {
-      sigBase = v2GetActionMeta(this).sigLen * 2;
+      sigBase = v2GetActionMeta(this).cacheKey;
       var cachedS = rMemo.settled.get(this);
       if (cachedS === sigBase + 2) return true;
       if (cachedS === sigBase + 1) return false;
@@ -764,13 +947,13 @@
       }
     }
     if (this.id === 'validate-credential' && facts.context) {
+      var vcTgt = facts.context.target || '';
+      var vcPorts = (root.OBOL && root.OBOL.command && root.OBOL.command.openPorts) ? root.OBOL.command.openPorts(facts, vcTgt) : [];
       var isAlreadyAuth = facts.has('credential.validated') || facts.has('smb.authenticated')
         || facts.has('winrm.authenticated') || facts.has('ldap.authenticated')
         || facts.has('ssh.authenticated') || facts.has('rdp.authenticated') || facts.has('mssql.authenticated');
-      if (isAlreadyAuth) return true;
-      var vcTgt = facts.context.target || '';
+      if (isAlreadyAuth && vcPorts && vcPorts.length > 0) return true;
       if (appList.length > 0 && !allApplicableCompleted) return false;
-      var vcPorts = (root.OBOL && root.OBOL.command && root.OBOL.command.openPorts) ? root.OBOL.command.openPorts(facts, vcTgt) : [];
       if (appList.length === 0 && (!vcPorts || vcPorts.length === 0)) return false;
       if (!facts._checkingCredPool && facts.context.selectionSource === 'cross-host-reuse' && allScoped && root.OBOL && root.OBOL.context && root.OBOL.context.resolve) {
         var vcEng = facts._resolvedContext && facts._resolvedContext.engagement;
@@ -859,21 +1042,30 @@
           var mootByEscalation = fastH
             ? !!(fastH['access.admin'] || fastH['access.system'] || fastH['access.root'] || fastH['loot.ntds'])
             : (facts.has('access.admin') || facts.has('access.system') || facts.has('access.root') || facts.has('loot.ntds'));
+          if (hasAsrep && !hasTgs) {
+            return mootByEscalation || !hasUncrackedAsrep(facts);
+          }
           if (cracked || mootByEscalation) return true;
           return false;
         }
       }
     }
+    var have = canUseFastHave(facts, preHave) ? preHave : augmentProjectedKinds(facts, facts.kinds());
+    if (this.id === 'bloodhound-collect' && (have['ad.graph.collected'] || have['ad.attack_paths'])) return true;
     if (facts.context && !sMeta.isObjectiveFlagOnly) {
       var eng = facts._resolvedContext && facts._resolvedContext.engagement;
       var tgtIp = facts.context.target || '';
       if (eng && Array.isArray(eng.activities)) {
-        var latestAct = null;
-        for (var mai = eng.activities.length - 1; mai >= 0; mai--) {
+        var latestAct = null, latestAt = -Infinity, newestFirst = eng.activities.length >= 2 && Number(eng.activities[0] && eng.activities[0].at) > Number(eng.activities[eng.activities.length - 1] && eng.activities[eng.activities.length - 1].at);
+        for (var mai = newestFirst ? 0 : eng.activities.length - 1; newestFirst ? (mai < eng.activities.length) : (mai >= 0); newestFirst ? mai++ : mai--) {
           var mAct = eng.activities[mai];
           if (mAct && (mAct.action_id || mAct.actionId) === action.id && (!tgtIp || !mAct.target || mAct.target === tgtIp)) {
-            latestAct = mAct;
-            break;
+            if (typeof mAct.at === 'number') {
+              if (mAct.at > latestAt) { latestAt = mAct.at; latestAct = mAct; }
+            } else {
+              latestAct = mAct;
+              break;
+            }
           }
         }
         if (latestAct) {
@@ -886,11 +1078,9 @@
     var rawPk = this.produces || [];
     if (!rawPk.length) return false;
     var pk = sMeta.settledPk;
-    var have = canUseFastHave(facts, preHave) ? preHave : facts.kinds();
     if (!sMeta.hasPrimaryPk && facts.commandCompleted) {
       if (someCleanCompleted) return true;
     }
-    if (this.id === 'bloodhound-collect' && (have['ad.graph.collected'] || have['ad.attack_paths'])) return true;
     if (this.id === 'ad-path-manual' && ((have['ad.attack_paths'] && have['ad.acl_lead']) || have['ad.control_paths'])) return true;
     if (this.id === 'bloodyad-acl' || this.id === 'ad-acl-abuse') {
       return !!(have['ad.control_paths'] || have['ad.domain_control'] || have['loot.ntds'] || have['access.admin']);
@@ -1037,11 +1227,25 @@
   }
 
   var HTTP_SURFACE_PORT_KINDS = ['port:80', 'port:443', 'port:8080', 'port:8443', 'port:8000', 'port:8888'];
-  function hasActionReqKind(action, hasFn, reqKind) {
+  function hasActionReqKind(action, hasFn, reqKind, facts) {
     if (hasFn(reqKind)) return true;
     if (reqKind === 'http.reachable' && action && action.id === 'ftp-webroot-upload-webshell') {
       for (var p = 0; p < HTTP_SURFACE_PORT_KINDS.length; p++) {
         if (hasFn(HTTP_SURFACE_PORT_KINDS[p])) return true;
+      }
+    }
+    if (reqKind === 'kerberos.reachable') {
+      if (hasFn('port:88') || hasFn('ad.dc_candidate')) return true;
+    }
+    if (reqKind === 'port:3306' || reqKind === 'service.mysql' || reqKind === 'port:5432' || reqKind === 'service.postgresql') {
+      if (facts) {
+        var fl = (facts._resolvedContext && Array.isArray(facts._resolvedContext.allScopedFacts))
+          ? facts._resolvedContext.allScopedFacts
+          : (Array.isArray(facts.facts) ? facts.facts : null);
+        var lbp = extractLoopbackDbPorts(fl);
+        if (lbp && ((lbp[3306] && (reqKind === 'port:3306' || reqKind === 'service.mysql')) || (lbp[5432] && (reqKind === 'port:5432' || reqKind === 'service.postgresql')))) {
+          return true;
+        }
       }
     }
     return false;
@@ -1072,10 +1276,8 @@
       var rk = action.requires_all[i];
       var hasRk = fastHave ? !!fastHave[rk] : facts.has(rk);
       if (!hasRk) {
-        if (rk === 'http.reachable') {
-          if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
-          if (hasActionReqKind(action, hasFactFn, rk)) continue;
-        }
+        if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+        if (hasActionReqKind(action, hasFactFn, rk, facts)) continue;
         return true;
       }
     }
@@ -1085,6 +1287,8 @@
         if (reqAnyCtx[i]) { anyPossible = true; break; }
         var yk = action.requires_any[i];
         if (fastHave ? fastHave[yk] : facts.has(yk)) { anyPossible = true; break; }
+        if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+        if (hasActionReqKind(action, hasFactFn, yk, facts)) { anyPossible = true; break; }
       }
       if (!anyPossible) return true;
     }
@@ -1095,7 +1299,7 @@
     var rMemo = getResolvedFactsMemo(facts);
     var sigBase = 0;
     if (rMemo) {
-      sigBase = v2GetActionMeta(this).sigLen * 2;
+      sigBase = v2GetActionMeta(this).cacheKey;
       var cachedE = rMemo.elig.get(this);
       if (cachedE === sigBase + 2) return true;
       if (cachedE === sigBase + 1) return false;
@@ -1126,10 +1330,8 @@
     for (var i = 0; i < this.requires_all.length; i++) {
       var rk2 = this.requires_all[i];
       if (fastHave ? fastHave[rk2] : facts.has(rk2)) continue;
-      if (rk2 === 'http.reachable') {
-        if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
-        if (hasActionReqKind(this, hasFactFn, rk2)) continue;
-      }
+      if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+      if (hasActionReqKind(this, hasFactFn, rk2, facts)) continue;
       return false;
     }
     if (this.requires_any.length) {
@@ -1137,6 +1339,8 @@
       for (var j = 0; j < this.requires_any.length; j++) {
         var yk2 = this.requires_any[j];
         if (fastHave ? fastHave[yk2] : facts.has(yk2)) { any = true; break; }
+        if (!hasFactFn) hasFactFn = fastHave ? function (k) { return !!fastHave[k]; } : function (k) { return facts.has(k); };
+        if (hasActionReqKind(this, hasFactFn, yk2, facts)) { any = true; break; }
       }
       if (!any && !credentialProbeAllowed(this, facts)) return false;
     }
@@ -1162,10 +1366,8 @@
             var qk = this.requires_all[qi];
             if (CONTEXT_SENSITIVE_KIND_RE.test(qk)) break;
             if (!facts.has(qk)) {
-              if (qk === 'http.reachable') {
-                if (!invHasFn) invHasFn = function (k) { return facts.has(k); };
-                if (hasActionReqKind(this, invHasFn, qk)) continue;
-              }
+              if (!invHasFn) invHasFn = function (k) { return facts.has(k); };
+              if (hasActionReqKind(this, invHasFn, qk, facts)) continue;
               return 'blocked until ' + friendly(qk) + ' exists';
             }
           }
@@ -1184,14 +1386,14 @@
     }
     var hasFactFn = function (k) { return facts.has(k); };
     for (var i = 0; i < this.requires_all.length; i++) {
-      if (!hasActionReqKind(this, hasFactFn, this.requires_all[i])) {
+      if (!hasActionReqKind(this, hasFactFn, this.requires_all[i], facts)) {
         return 'blocked until ' + friendly(this.requires_all[i]) + ' exists';
       }
     }
     if (this.requires_any.length) {
       var anyMet = false;
       for (var j = 0; j < this.requires_any.length; j++) {
-        if (facts.has(this.requires_any[j])) { anyMet = true; break; }
+        if (hasActionReqKind(this, hasFactFn, this.requires_any[j], facts)) { anyMet = true; break; }
       }
       if (!anyMet && !credentialProbeAllowed(this, facts)) {
         var alts = this.requires_any.map(friendly).join(' or ');
@@ -1719,8 +1921,8 @@
     'privesc.kernel_exploit': 1,
     'ad.nopac': 1, 'vuln.printnightmare': 1, 'ad.maq_allow': 1,
     'mssql.sysadmin': 1, 'hash.sntp': 1, 'loot.keepass_dump': 1,
-    'hash.crackable': 1, 'privesc.writable_etc': 1, 'privesc.suid': 1, 'smb.smbv1': 1,
-    'service.web_terminal': 1,
+    'hash.crackable': 1, 'privesc.writable_etc': 1, 'privesc.writable_passwd': 1, 'privesc.sudo': 1, 'privesc.suid': 1, 'smb.smbv1': 1,
+    'service.web_terminal': 1, 'web.graphql_schema': 1,
   };
   var V2_PRIV = { 'access.admin': 1, 'access.system': 1, 'access.root': 1, 'loot.ntds': 1, 'objective.flag': 1, 'objective.local_flag': 1, 'objective.root_flag': 1 };
   // An exploit/foothold move is EVIDENCED (not a bare-port gamble) when the box actually shows a
@@ -1745,12 +1947,14 @@
   // gamble. Without this a confirmed SQLi left sqlmap-automation capped as speculative, below weaker leads.
   function v2EvidenceFact(g) { if (/\.reachable$/.test(g)) return false; return !!V2_SPECIFIC[g] || !!V2_AD_LEAD[g] || V2_EVIDENCE_RE.test(g) || /_confirmed$/.test(g); }
   var _v2ActionMetaCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+  var _v2ActionMetaSeq = 0;
   function v2GetActionMeta(a) {
     var prod = a.produces || [], ra = a.requires_all || [], ry = a.requires_any || [], cmds = a.commands || [];
+    var cmd0Run = cmds.length && cmds[0] ? String(cmds[0].run || '') : '';
     var sigLen = (prod.length << 16) ^ (ra.length << 8) ^ ry.length ^ (cmds.length << 24);
     var canCache = !!(_v2ActionMetaCache && a && typeof a === 'object');
     var m = canCache ? _v2ActionMetaCache.get(a) : null;
-    if (m && m.sigLen === sigLen && m.locus === a.locus && m.aid === a.id) return m;
+    if (m && m.sigLen === sigLen && m.cmd0Run === cmd0Run && m.locus === a.locus && m.aid === a.id) return m;
     var adviceOnly = prod.length > 0;
     var isObjectiveFlagOnly = prod.length > 0;
     var alwaysSpecProd = false, producesFoothold = false, producesCred = false, producesPriv = false, i, k;
@@ -1822,6 +2026,8 @@
     }
     m = {
       sigLen: sigLen,
+      cmd0Run: cmd0Run,
+      cacheKey: (++_v2ActionMetaSeq) * 4,
       aid: a.id,
       locus: a.locus,
       locusCost: locusRank(a.locus) * 0.3,
@@ -1856,7 +2062,8 @@
   function v2Earned(a, haveObj) {
     if (!haveObj) return false;
     if (a.id === 'linux-kernel-exploit') return !!haveObj['privesc.kernel_exploit'];
-    if (a.id === 'baron-samedit') return !!(haveObj['vuln.baron_samedit'] || haveObj['privesc.kernel_exploit']);
+    if (a.id === 'baron-samedit') return !!(haveObj['vuln.baron_samedit'] || haveObj['privesc.kernel_exploit'] || haveObj['privesc.sudo']);
+    if (a.id === 'eternalblue') return !!haveObj['smb.ms17_010'];
     if ((a.id === 'bloodyad-acl' || a.id === 'ad-acl-abuse') && (haveObj['ad.attack_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.control_paths'])) return true;
     var gates = v2GetActionMeta(a).earnedGates;
     for (var i = 0; i < gates.length; i++) if (haveObj[gates[i]]) return true;
@@ -1865,6 +2072,7 @@
   function v2Indicated(a, haveObj) {
     if (!haveObj) return false;
     if (a.id === 'linux-kernel-exploit' && haveObj['privesc.kernel_exploit']) return true;
+    if (a.id === 'eternalblue') return !!haveObj['smb.ms17_010'];
     var g = v2GetActionMeta(a).evidenceGates;
     for (var i = 0; i < g.length; i++) if (haveObj[g[i]]) return true;
     return false;
@@ -1876,6 +2084,7 @@
     // whose id merely contains "relay"/"responder"/"check" would be wrongly capped below everything).
     var meta = v2GetActionMeta(a);
     if (meta.adviceOnly) return false;
+    if (a.id === 'eternalblue' && (!haveObj || !haveObj['smb.ms17_010'])) return true;
     if (a.speculative || meta.alwaysSpecProd) return true;
     // A move that claims a real PAYOFF - a foothold/privilege, or a VALIDATED credential - while eligible
     // without any proven indicator (a fingerprint, a held credential/hash, a foothold) is a gamble: blind
@@ -2183,18 +2392,23 @@
     return Math.max(0, d0 - d1);
   }
   function v2EligAgainst(a, kindsObj) {
-    var i, ra = a.requires_all;
+    var i, ra = a.requires_all, hasFn = null;
     for (i = 0; i < ra.length; i++) {
       var rk = ra[i];
       if (!kindsObj[rk]) {
-        if (rk === 'http.reachable' && hasActionReqKind(a, function (k) { return !!kindsObj[k]; }, rk)) continue;
+        if (!hasFn) hasFn = function (k) { return !!kindsObj[k]; };
+        if (hasActionReqKind(a, hasFn, rk)) continue;
         return false;
       }
     }
     var ry = a.requires_any;
     if (ry.length) {
       var any = false;
-      for (i = 0; i < ry.length; i++) if (kindsObj[ry[i]]) { any = true; break; }
+      for (i = 0; i < ry.length; i++) {
+        if (kindsObj[ry[i]]) { any = true; break; }
+        if (!hasFn) hasFn = function (k) { return !!kindsObj[k]; };
+        if (hasActionReqKind(a, hasFn, ry[i])) { any = true; break; }
+      }
       if (!any) return false;
     }
     return true;
@@ -2330,7 +2544,7 @@
     var activePack = bundle.activePack;
     var producers = bundle.producers;
     var rMemo = getResolvedFactsMemo(facts);
-    var haveObj = rMemo ? rMemo.have : facts.kinds();
+    var haveObj = rMemo ? rMemo.have : augmentProjectedKinds(facts, facts.kinds());
     var fam = rMemo ? rMemo.fam : hostOsFamily(facts);
     var live = [];
     for (var _li = 0; _li < activePack.length; _li++) {
@@ -2369,7 +2583,7 @@
     // Self-disables the moment you map (a path/graph fact mints) or land a foothold, so the post-map killchain,
     // where the named abuse IS the next step, is untouched. (ranker-sim.js measures this.)
     var v2Mapped = !!(haveObj['ad.attack_paths'] || haveObj['ad.control_paths'] || haveObj['ad.graph.collected']);
-    var specializeHold = !onlySpeculativeCrossDomainCred && !!haveObj['credential.available'] && !v2Mapped && !v2Foothold && !haveObj['adcs.vulnerable'] && !haveObj['db.session'] && !haveObj['mssql.authenticated'];
+    var specializeHold = !onlySpeculativeCrossDomainCred && !!haveObj['credential.available'] && !v2Mapped && !haveObj['adcs.vulnerable'] && !haveObj['ad.trusts'] && !haveObj['access.admin'] && !haveObj['access.system'] && !haveObj['loot.ntds'];
     var SPECIALIZE_RE = /^(adcs\.vulnerable|credential\.certificate|ad\.trusts|sccm\.)/;
     function isSpecialize(a) { return (a.produces || []).some(function (k) { return SPECIALIZE_RE.test(k); }); }
 
@@ -2393,7 +2607,7 @@
       || haveObj['port:445'] || haveObj['port:139'] || haveObj['port:5985'] || haveObj['port:5986'] || haveObj['port:3389'] || haveObj['port:22']);
     var isDcBox = !!(haveObj['ad.dc_candidate'] || haveObj['ad.domain_controller']);
     var isAdTarget = !!(haveObj['ad.domain_known'] || isDcBox || haveObj['service.ldap'] || haveObj['port:389'] || haveObj['port:88'] || haveObj['kerberos.reachable'] || haveObj['ldap.reachable']);
-    var adMapped = !!(haveObj['ad.graph.collected'] || haveObj['ad.control_paths'] || haveObj['ad.acl_lead'] || haveObj['ad.attack_paths']);
+    var adMapped = !!(haveObj['ad.graph.collected'] || haveObj['ad.control_paths'] || haveObj['ad.attack_paths']);
     var inEscalationWindow = !!(haveObj['credential.available'] && !haveObj['access.admin'] && !haveObj['access.system'] && !haveObj['loot.ntds']);
 
     var hasFtpWebroot = (typeof facts.values === 'function' ? (facts.values('config.review') || []) : []).some(function (v) {
@@ -2420,6 +2634,30 @@
         return haveObj[k] && ((/^privesc\./.test(k) && k !== 'privesc.leads') || ACTIONABLE_PRIVESC_VULN_RE.test(k));
       });
     });
+    var freshAuthReadableShare = false;
+    if (rec.recent && rec.recent['smb.readable_share'] && !validateFirst && haveObj['credential.available'] && Array.isArray(facts.facts)) {
+      var lastCredAvailIdx = -1, lastReadableShareIdx = -1;
+      for (var _rsi = 0; _rsi < facts.facts.length; _rsi++) {
+        var _rsf = facts.facts[_rsi];
+        if (!_rsf || _rsf.state !== 'supported') continue;
+        if (_rsf.kind === 'credential.available') lastCredAvailIdx = _rsi;
+        else if (_rsf.kind === 'smb.readable_share') {
+          var _shName = String((_rsf.value && (_rsf.value.share || _rsf.value.name)) || '').trim();
+          if (!/^(?:IPC\$|ADMIN\$|C\$|PRINT\$)$/i.test(_shName)) lastReadableShareIdx = _rsi;
+        }
+      }
+      if (lastReadableShareIdx > lastCredAvailIdx) {
+        var hasLaterLeadAfterShare = false;
+        for (var _lsi = lastReadableShareIdx + 1; _lsi < facts.facts.length; _lsi++) {
+          var _lsf = facts.facts[_lsi];
+          if (_lsf && _lsf.state === 'supported' && /^(?:credential\.(?:available|plaintext)|loot\.(?:files|material|gpp|ntds|sam)|hash\.(?:tgs|asrep|ntlm)|foothold\.|access\.(?:shell|admin|system|root)|ad\.(?:acl_lead|control_paths))$/.test(_lsf.kind)) {
+            hasLaterLeadAfterShare = true;
+            break;
+          }
+        }
+        freshAuthReadableShare = !hasLaterLeadAfterShare;
+      }
+    }
 
     var distCache = Object.create(null);
     var haveAllTruthy = true, baseHave = {};
@@ -2684,10 +2922,11 @@
       if (haveObj['hash.tgs'] && a.transition === 'crack_tgs' && !haveObj['loot.ntds']) {
         promote(4, 4);
       }
-      if (haveObj['hash.asrep'] && a.transition === 'crack_asrep' && !haveObj['credential.available'] && !haveObj['loot.ntds']) {
+      if (haveObj['hash.asrep'] && a.transition === 'crack_asrep' && hasUncrackedAsrep(facts) && !haveObj['loot.ntds']) {
         promote(4, 4);
       }
-      if (st.credTier === 'crackable_hash' && (!spec || indicated) && (a.transition.indexOf('crack') === 0 || a.produces.indexOf('credential.available') >= 0)) {
+      var hasConcreteCrackableFormat = !!(haveObj['hash.ntlm'] || haveObj['hash.tgs'] || haveObj['hash.asrep'] || haveObj['hash.netntlm'] || haveObj['hash.mscache'] || haveObj['loot.shadow']);
+      if (st.credTier === 'crackable_hash' && (!spec || indicated) && !(a.id === 'crack-identify' && (hasConcreteCrackableFormat || (!onlySpeculativeCrossDomainCred && haveObj['credential.available']))) && (a.transition.indexOf('crack') === 0 || a.produces.indexOf('credential.available') >= 0)) {
         promote(4, 3);
       }
       if (isAdTarget && hasGppCand && !haveObj['credential.available'] && a.transition === 'gpp') {
@@ -2697,8 +2936,12 @@
         if (a.transition === 'map_acl') promote(4, 3);
         else if (a.id === 'ad-acl-abuse') promote(4, 2);
       }
-      if ((haveObj['adcs.vulnerable'] || haveObj['credential.certificate']) && !haveObj['loot.ntds'] && !haveObj['access.admin'] && (a.id === 'adcs-esc' || a.id === 'cert-authenticate')) {
-        promote(4, 3);
+      if (!haveObj['loot.ntds'] && !haveObj['access.admin']) {
+        if (a.id === 'adcs-esc' && haveObj['adcs.vulnerable']) {
+          promote(4, 3);
+        } else if (a.id === 'cert-authenticate' && haveObj['credential.certificate'] && hasUnauthenticatedCert(facts)) {
+          promote(4, 3);
+        }
       }
       if ((haveObj['db.session'] || haveObj['mssql.authenticated'] || haveObj['mssql.sysadmin']) && !haveObj['foothold.windows'] && !haveObj['access.shell'] && !haveObj['access.admin'] && !haveObj['access.system'] && a.id === 'mssql-xp-cmdshell') {
         promote(4, 3);
@@ -2734,7 +2977,7 @@
       if (isAdTarget && (!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares']) && a.transition === 'gpp') {
         promote(4, 2);
       }
-      if ((!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session']) && a.transition === 'loot_browse') {
+      if ((((!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session'])) || freshAuthReadableShare) && a.transition === 'loot_browse') {
         promote(4, 2);
       }
 
@@ -2774,13 +3017,13 @@
           }
         }
       }
-      if (isAdTarget && !onlySpeculativeCrossDomainCred && haveObj['credential.available'] && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
+      if (isAdTarget && !onlySpeculativeCrossDomainCred && (haveObj['credential.available'] || haveObj['hash.asrep']) && a.transition === 'kerberoast' && !haveObj['hash.tgs'] && st.adPosture !== 'dcsync_ready' && !haveObj['loot.ntds']) {
         promote(3, 3);
       }
       if ((st.credTier === 'domain_user' || (!onlySpeculativeCrossDomainCred && haveObj['credential.available']) || haveObj['credential.validated']) && isAdTarget && !adMapped) {
         if (a.transition === 'map_acl') promote(3, 3);
         else if (a.transition === 'map_graph') promote(3, 2);
-        else if (a.transition === 'map_manual') promote(3, 1);
+        else if (a.transition === 'map_manual') promote(3, 2);
       }
       if (hasWinShellSurface && (st.credTier === 'domain_user' || (!onlySpeculativeCrossDomainCred && haveObj['credential.available'])) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
         promote(3, 1);
@@ -2797,14 +3040,16 @@
       }
       if (isAdTarget && !haveObj['ad.user_list'] && !haveObj['credential.available'] && !haveObj['foothold.windows'] && !haveObj['access.shell']) {
         if (a.id === 'recon-smb-anon' || a.id === 'ad-anon-ldap-enum' || a.id === 'ad-user-enum') {
-          if (haveObj['scan.nmap.version'] || tier >= 2) promote(2, 2);
-          else promote(tier, 2);
+          promote(2, 2);
         } else if (a.id === 'mitm6-ipv6-takeover' || a.id === 'responder-poison' || a.id === 'ntlm-relay-attack' || a.id === 'timeroasting' || a.id === 'check-subdomain-takeover' || a.id === 'check-dns-email') {
           if (tier > 0) tier = 0;
           stageRank = -1;
         } else if (a.id === 'nmap-vuln-scripts' && haveObj['scan.nmap.version']) {
           stageRank = -1;
         }
+      }
+      if (isAdTarget && a.id === 'recon-smb-anon' && haveObj['smb.null_session'] && !haveObj['smb.shares'] && !haveObj['blocker.smb_null_denied'] && !haveObj['credential.available'] && !haveObj['foothold.windows'] && !haveObj['access.shell']) {
+        promote(2, 2);
       }
 
       // Demote AD-specific transitions on non-AD targets
@@ -2909,6 +3154,9 @@
         if (xsp !== ysp) return xsp ? 1 : -1;
       }
       if (y.stageRank !== x.stageRank) return y.stageRank - x.stageRank;
+      if ((x.a.transition === 'map_graph' && y.a.transition === 'map_manual') || (x.a.transition === 'map_manual' && y.a.transition === 'map_graph')) {
+        return x.a.transition === 'map_graph' ? -1 : 1;
+      }
       if (y.score !== x.score) return y.score - x.score;
       if (y.a.priority !== x.a.priority) return y.a.priority - x.a.priority;
       // House toolkit: among moves equal on goal-progress AND hand-tuned priority, prefer the one that uses

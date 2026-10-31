@@ -440,6 +440,7 @@
       url: 'https://github.com/itm4n/PrivescCheck/releases/latest/download/PrivescCheck.ps1', dest: 'PrivescCheck.ps1', bins: ['PrivescCheck.ps1'], source: 'itm4n/PrivescCheck', license: 'MIT', purpose: 'Comprehensive PowerShell Windows privilege-escalation enumerator', av_note: AV },
     { key: 'domainpasswordspray', label: 'DomainPasswordSpray', category: 'AD', os: 'windows', class: 'stage-win',
       url: 'https://raw.githubusercontent.com/dafthack/DomainPasswordSpray/master/DomainPasswordSpray.ps1', dest: 'DomainPasswordSpray.ps1', bins: ['DomainPasswordSpray.ps1'], source: 'dafthack/DomainPasswordSpray', license: 'MIT', purpose: 'Lockout-aware Active Directory password spraying from a Windows foothold', av_note: AV },
+    { key: 'sharpgpoabuse', label: 'SharpGPOAbuse', category: 'AD', os: 'windows', class: 'stage-win', url: 'https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_Any/SharpGPOAbuse.exe', dest: 'SharpGPOAbuse.exe', bins: ['SharpGPOAbuse.exe'], source: 'FSecureLABS/SharpGPOAbuse', license: 'GPL-3.0', purpose: 'Abuse writable Active Directory Group Policy Objects from a Windows foothold', av_note: AV },
     { key: 'invoke-powershelltcp', label: 'Invoke-PowerShellTcp', category: 'Windows privesc', os: 'windows', class: 'stage-win',
       url: 'https://raw.githubusercontent.com/samratashok/nishang/master/Shells/Invoke-PowerShellTcp.ps1', dest: 'Invoke-PowerShellTcp.ps1', bins: ['Invoke-PowerShellTcp.ps1', 'rev.ps1'], source: 'samratashok/nishang', license: 'GPL-3.0', purpose: 'Nishang PowerShell interactive reverse shell script (stager / rev.ps1)', av_note: AV },
   ];
@@ -467,7 +468,7 @@
   ['bash', 'sh', 'cmd', 'powershell', 'pwsh', 'stty', 'script', 'sudo', 'wmic', 'sc', 'reg',
    'icacls', 'certutil', 'msiexec', 'lxc', 'pymongo',
    'cat', 'grep', 'find', 'ln', 'tar', 'unzip', 'strings', 'uname', 'ip', 'systemctl',
-   'busctl', 'sudoedit', 'screen', 'tmux', 'git', 'python', 'ruby', 'gpg', 'docker',
+   'busctl', 'sudoedit', 'screen', 'tmux', 'git', 'python', 'python2', 'debugfs', 'ruby', 'gpg', 'docker',
    'kubectl', 'aws', 'az', 'gcloud', 'wsl', 'net', 'schtasks', 'type', 'diskshadow',
    'fodhelper', 'procmon', 'sqlplus', 'burp', 'graphql', 'barmie', 'quiche-client',
    'ifconfig', 'ipconfig', 'netstat', 'route', 'arp', 'unshadow', 'runas', 'robocopy'].forEach(function (n) {
@@ -750,6 +751,7 @@
     'impacket-goldenpac': 'impacket-goldenPac <domain>/<user>:<pass>@<dc-fqdn>',
     'impacket-dpapi': 'impacket-dpapi masterkey -file <mk> -sid <sid> -password <pass>',
     sccmhunter: 'sccmhunter find -u <user> -p <pass> -d <domain> -dc-ip <dc-ip>',
+    sharpgpoabuse: 'SharpGPOAbuse.exe --AddLocalAdmin --UserAccount <user> --GPOName "<GPO>"',
     pygpoabuse: 'pygpoabuse.py <domain>/<user>:<pass> -gpo-id <id>',
     'zerologon-scan': 'zerologon_tester.py <dc-netbios> <dc-ip>',
     'petitpotam.py': 'petitpotam.py -u <user> -p <pass> <listener-ip> <dc-ip>',

@@ -187,7 +187,7 @@
     if (service) value.service = service;
     var h = 'host:' + ws.target;
     if (port === 53 || sl === 'domain' || sl === 'dns') _add(facts, mkFact('dns.reachable', h, value, S, source));
-    if (port === 161 || sl.indexOf('snmp') >= 0) _add(facts, mkFact('snmp.reachable', h, value, S, source));
+    if (((port === 161 || port === 162) && proto === 'udp') || /^snmp(?:d|-trap)?$/i.test(slClean)) _add(facts, mkFact('snmp.reachable', h, value, S, source));
     if (port === 69 || sl === 'tftp') _add(facts, mkFact('tftp.reachable', h, value, S, source));
     if (proto !== 'tcp') return;
     var hasLinuxOs = facts.some(function (f) { return (f.kind === 'host.os_family' || f.kind === 'host.os_hint') && f.value && f.value.family === 'linux'; });
@@ -331,6 +331,13 @@
     }
     var fqdns = {};
     reAll(C._NMAP_FQDN_RE, text).forEach(function (m) { fqdns[m.groups.fqdn.trim().toLowerCase()] = true; });
+    reAll(/^\s*Nmap scan report for\s+([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)\s+\(\d{1,3}(?:\.\d{1,3}){3}\)/gim, text).forEach(function (m) {
+      var candHost = (m[1] || '').replace(/\.$/, '').toLowerCase();
+      if (!candHost || C._IPV4_RE.test(candHost) || /^\d+(?:\.\d+)+$/.test(candHost)) return;
+      if (/^localhost(?:\.|$)/i.test(candHost)) return;
+      if (!/\.[a-z][a-z0-9-]*$/i.test(candHost)) return;
+      fqdns[candHost] = true;
+    });
     reAll(C._NMAP_FQDN_RE, text).forEach(function (m) {
       var parts = m.groups.fqdn.trim().toLowerCase().split('.').filter(Boolean);
       if (parts.length > 2) domains[parts.slice(1).join('.')] = true;
@@ -371,7 +378,8 @@
       var parts = fqdn.split('.').filter(Boolean);
       var value = { fqdn: fqdn };
       if (parts.length) value.hostname = parts[0];
-      if (parts.length > 1) value.domain = parts.slice(1).join('.');
+      if (parts.length === 2) value.domain = fqdn;
+      else if (parts.length > 2) value.domain = parts.slice(1).join('.');
       _add(facts, mkFact('host.fqdn', h, value, S, source));
     });
     if (/auth-owners/i.test(text)) {
@@ -408,6 +416,9 @@
     }
     if (/\bSMBv1\b[^\r\n]{0,120}?\b(?:enabled|true|dangerous)\b|\bNT LM 0\.12\s*\(SMBv1\)/i.test(text)) {
       _add(facts, mkFact('smb.smbv1', h, { enabled: true, tool: 'nmap' }, S, source));
+    }
+    if (/smb-security-mode[\s\S]{0,200}?(?:\baccount_used:\s*guest\b|key=["']account_used["']>\s*guest\s*<)/i.test(text)) {
+      _add(facts, mkFact('smb.guest_session', h, { tool: 'nmap' }, S, source));
     }
     if (/smb-enum-shares:/i.test(text)) {
       var nseShares = [];

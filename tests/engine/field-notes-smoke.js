@@ -51,7 +51,7 @@ ok(fb && fb.land.length > 0 && !fb.authored, 'un-authored command falls back to 
 // 3. Reactive doctors: present, keyed by blocker.* (or ssh.key_rejected), each with a title + body.
 const docKeys = Object.keys(OBOL.FIELD_DOCTORS);
 ok(docKeys.length >= 8, 'a set of reactive blocker doctors is seeded (' + docKeys.length + ')');
-ok(docKeys.every((k) => /^(blocker\.|ssh\.key_rejected)/.test(k)), 'every reactive doctor is keyed by a diagnostic fact');
+ok(docKeys.every((k) => /^(blocker\.|ssh\.key_rejected|exploit\.hazard_)/.test(k)), 'every reactive doctor is keyed by a diagnostic fact');
 ok(docKeys.every((k) => OBOL.FIELD_DOCTORS[k].title && OBOL.FIELD_DOCTORS[k].body), 'every reactive doctor has a title and body');
 ok(OBOL.FIELD_DOCTORS['ssh.key_rejected'] && /chmod 600/.test(OBOL.FIELD_DOCTORS['ssh.key_rejected'].code || ''), 'the SSH-key doctor hands the chmod 600 fix');
 

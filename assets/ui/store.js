@@ -1266,7 +1266,7 @@
           if (!multiTarget && s === 'domain:domain' && /^(credential\.|dns\.)/.test(f.kind)) return true;
           if (!targetDomains[normalizeDomain(s.slice(7))]) return false;
           if (isLinux && !hasAdOrSmb) {
-            return s === 'domain:domain' && (f.kind.indexOf('credential.') === 0 || f.kind.indexOf('dns.') === 0);
+            return f.kind.indexOf('credential.') === 0 || f.kind.indexOf('dns.') === 0;
           }
           if (!isDc && DC_ONLY_DOMAIN_RE.test(f.kind)) return false;
           return true;
@@ -1482,6 +1482,52 @@
                 }
               }
             }
+          }
+        }
+      }
+      if (OBOL.facts && OBOL.facts.makeFact) {
+        var hasLoopbackAccess = mapped.some(function (f) {
+          return f && f.state === 'supported' && (f.kind === 'foothold.linux' || f.kind === 'foothold.windows' || f.kind === 'pivot.ports');
+        });
+        if (hasLoopbackAccess) {
+          var loopbackPorts = {};
+          for (var lbi = 0; lbi < mapped.length; lbi++) {
+            var lbf = mapped[lbi];
+            if (!lbf || lbf.state !== 'supported' || (lbf.kind !== 'scan.local.listeners' && lbf.kind !== 'pivot.ports')) continue;
+            var lbv = lbf.value || {};
+            var lbList = Array.isArray(lbv.ports) ? lbv.ports : [];
+            for (var lbp = 0; lbp < lbList.length; lbp++) {
+              var pNum = parseInt(lbList[lbp] && typeof lbList[lbp] === 'object' ? lbList[lbp].port : lbList[lbp], 10);
+              if (pNum === 3306 || pNum === 5432) loopbackPorts[pNum] = true;
+            }
+            if (Array.isArray(lbv.forwards)) {
+              for (var lbfw = 0; lbfw < lbv.forwards.length; lbfw++) {
+                var fwObj = lbv.forwards[lbfw] || {};
+                var fwP = parseInt(fwObj.rport || fwObj.remotePort || fwObj.port, 10);
+                if (fwP === 3306 || fwP === 5432) loopbackPorts[fwP] = true;
+              }
+            }
+            var singleLbP = parseInt(lbv.port, 10);
+            if (singleLbP === 3306 || singleLbP === 5432) loopbackPorts[singleLbP] = true;
+          }
+          var projectLoopbackKind = function (kName, portVal) {
+            if (!mapped.some(function (f) { return f && f.state === 'supported' && f.kind === kName; })) {
+              mapped.push(OBOL.facts.makeFact({
+                kind: kName,
+                scope: hostScope,
+                state: 'supported',
+                source: 'loopback-db-projection',
+                value: { port: portVal, proto: 'tcp', loopback: true }
+              }));
+            }
+          };
+          if (loopbackPorts[3306]) {
+            projectLoopbackKind('port:3306', 3306);
+            projectLoopbackKind('service.mysql', 3306);
+          }
+          if (loopbackPorts[5432]) {
+            projectLoopbackKind('port:5432', 5432);
+            projectLoopbackKind('service.postgresql', 5432);
           }
         }
       }

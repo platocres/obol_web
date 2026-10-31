@@ -11,16 +11,16 @@
   // Files per group, in load order. Populated as bundles are built; tolerant of absent files.
   var GROUPS = {
     parsers: [
-      'assets/engine/parsers/common.js?v=2f745338',
-      'assets/engine/parsers/nmap.js?v=2262a57c', 'assets/engine/parsers/directory.js?v=c6b83d4f',
-      'assets/engine/parsers/creds.js?v=18aadd03', 'assets/engine/parsers/host.js?v=f7778d94',
-      'assets/engine/parsers/services.js?v=48375359', 'assets/engine/parsers/database.js?v=23c0b49c',
-      'assets/engine/parsers/web.js?v=2b1ee17e', 'assets/engine/parsers/websource.js?v=22e3aa89',
-      'assets/engine/parsers/findings.js?v=7e2431bf', 'assets/engine/parsers/edb.js?v=fd79d90f', 'assets/engine/parsers/shape.js?v=56fa03d2',
-      'assets/engine/parsers/pivot.js?v=b11b57c1', 'assets/engine/parsers/dns.js?v=24395a65',
-      'assets/engine/parsers/blockers.js?v=d690eda0',
-      'assets/engine/parsers/nxc-catalog.js?v=7c423272', 'assets/engine/parsers/inference.js?v=8fa96c9d',
-      'assets/engine/parsers/index.js?v=19d3187e',
+      'assets/engine/parsers/common.js?v=002a0aeb',
+      'assets/engine/parsers/nmap.js?v=9a64c707', 'assets/engine/parsers/directory.js?v=3da182f3',
+      'assets/engine/parsers/creds.js?v=d4da470f', 'assets/engine/parsers/host.js?v=904f6b14',
+      'assets/engine/parsers/services.js?v=eb2ef763', 'assets/engine/parsers/database.js?v=1ff167fb',
+      'assets/engine/parsers/web.js?v=5f4c2bfb', 'assets/engine/parsers/websource.js?v=4ffffed8',
+      'assets/engine/parsers/findings.js?v=7e2431bf', 'assets/engine/parsers/edb.js?v=fd79d90f', 'assets/engine/parsers/shape.js?v=280c3f0e',
+      'assets/engine/parsers/pivot.js?v=6ae232c4', 'assets/engine/parsers/dns.js?v=24395a65',
+      'assets/engine/parsers/blockers.js?v=ecc2b93f',
+      'assets/engine/parsers/nxc-catalog.js?v=89afbfa8', 'assets/engine/parsers/inference.js?v=f311cd0e',
+      'assets/engine/parsers/index.js?v=91b4525e',
     ],
     graph: ['assets/engine/graph.js?v=5f845ab4', 'assets/ui/routes/graph.js?v=42b74dc8'],
     domain: ['assets/jszip.min.js?v=c96375d5', 'assets/engine/bloodhound.js?v=9c4aaa25', 'assets/ui/bhgraph.js?v=b3d6a062', 'assets/ui/routes/domain.js?v=f86f8e9e'],
@@ -43,7 +43,7 @@
     // route UI). The coach background-loads this after mount so "See It Run" can show real example output
     // in Next Steps without putting the fixtures on the critical boot path.
     studydata: ['data/tool-glossary.js?v=cf257324', 'data/study-fixtures.js?v=23029800', 'assets/engine/study.js?v=f8aac721'],
-    decisionmap: ['data/decision-forks.js?v=3aaa2f1c', 'data/parser-signatures.js?v=a0c5afc4', 'data/coverage-expected.js?v=acc4df5e', 'data/flag-reach.js?v=f91ede7b', 'assets/engine/decisionmap.js?v=3a57f6be', 'assets/ui/decisiontree.js?v=0f23b0f7'],
+    decisionmap: ['data/decision-forks.js?v=3aaa2f1c', 'data/parser-signatures.js?v=ec5ffa77', 'data/coverage-expected.js?v=acc4df5e', 'data/flag-reach.js?v=f91ede7b', 'assets/engine/decisionmap.js?v=3a57f6be', 'assets/ui/decisiontree.js?v=0f23b0f7'],
     checklist: ['data/oscp-scope.js?v=47e64691', 'assets/ui/routes/checklist.js?v=7ea32b01'],
     target: ['assets/engine/graph.js?v=5f845ab4', 'assets/ui/routes/target.js?v=c343b25d'],
     creds: ['assets/ui/routes/creds.js?v=30d4cd96'],

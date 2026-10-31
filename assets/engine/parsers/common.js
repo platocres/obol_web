@@ -53,7 +53,7 @@
   // other dash-led artifacts never match as a user (a real account never starts with '-' or '.').
   C._NXC_USER_ROW_RE = /^(?:LDAP|SMB)\s+\S+\s+\d+\s+\S+\s+(?!\[[^\]]+\]|GROUP-MEM\b|Share\b|Permissions\b|---+)(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9$][A-Za-z0-9._$-]+)\b/im;
   C._NXC_RID_USER_RE = /^(?:(?:SMB|RPC)\s+\S+\s+\d+\s+\S+\s+)?(?:0x[0-9a-f]+|\d+):\s+(?:[^\\\s]+\\)?(?<user>[A-Za-z0-9._$-]{2,})\s+\(SidTypeUser\)/im;
-  C._RPC_USER_RE = /\buser:\[(?<user>[^\]]+)\]\s+rid:\[[^\]]+\]|\bAccount:\s*(?:[^\\\s]+\\)?(?<user2>[A-Za-z0-9._$-]{2,})\s+Name:|\bFound user:\s*(?<user3>[A-Za-z0-9._$-]+),\s*uid\s*=\s*\d+|^\s+username:\s*['"]?(?<user4>[A-Za-z0-9._$-]{2,})['"]?\s*$/im;
+  C._RPC_USER_RE = /\buser:\[(?<user>[^\]]+)\]\s+rid:\[[^\]]+\]|\bAccount:\s*(?:[^\\\s]+\\)?(?<user2>[A-Za-z0-9._$-]{2,})\s+Name:|\bFound user:\s*(?<user3>[A-Za-z0-9._$-]+),\s*uid\s*=\s*\d+|^\s+username:\s*['"]?(?<user4>[A-Za-z0-9._$-]{2,})['"]?\s*$|\[\+\]\s*Found\s+(?:account|user)\s*\[0*[0-9a-fA-Fx]+\]\s*(?:[^\\\s]+\\)?(?<user5>[A-Za-z0-9_.$-]{2,})/im;
   C._BASE_DN_RE = /\b(?:namingContexts|defaultNamingContext|rootDomainNamingContext):\s*([A-Za-z0-9_=,.-]+)/i;
   C._ASREP_RE = /(\$krb5asrep\$[^\s]+)/i;
   C._ASREP_USER_RE = /\$krb5asrep\$(?:\d+\$)?(?![0-9a-fA-F]{32}\$[0-9a-fA-F]{32})(?!\d+\$[0-9a-fA-F]{32})(?<user>[^:@$\s)]+)(?:[@$](?![0-9a-fA-F]{32}\b)(?<domain>[A-Za-z0-9_.-]+))?(?=[:$)\s]|$)/i;
@@ -74,7 +74,7 @@
   C._AD_CONTROL_RIGHT_RE = /\b(GenericAll|GenericWrite|WriteDACL|WriteDacl|WriteOwner|FullControl|AllExtendedRights|ForceChangePassword|AddMember|WriteMembers|ReadGMSAPassword|msDS-AllowedToActOnBehalfOfOtherIdentity|AllowedToAct|RBCD|DCSync|GetChanges|GetChangesAll)\b/i;
   C._AD_CONTROL_SUCCESS_RE = /\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b[^\r\n]{0,200}?\b(?:groupMember|member|owner(?:sid)?|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b|\b(?:groupMember|owner(?:sid)?|GenericAll|FullControl|DACL|delegation|msDS-AllowedToAct|AllowedToAct|RBCD|rights?|DCSync|replicat)\b[^\r\n]{0,200}?\b(?:success(?:fully)?|modified|changed|granted|added|written|set|able to replicate)\b/i;
   C._ADD_COMPUTER_SUCCESS_RE = /\b(?:success(?:fully)?\s+)?(?:added|created)\s+(?:machine|computer)\s+(?:account\s+)?['"]?(?<name>[A-Za-z0-9_.-]+\$?)['"]?/i;
-  C._TICKET_FILE_RE = /\b(?:Saving|Saved|Wrote|Writing|Ticket written)\b[^\n]*?(?<file>[A-Za-z0-9_./\\@$+-]+\.(?:ccache|kirbi))/i;
+  C._TICKET_FILE_RE = /\b(?:Saving|Saved|Wrote|Writing|Ticket written|ticket saved)\b[^\n]*?(?<file>[A-Za-z0-9_./\\@$+-]+\.(?:ccache|kirbi))/i;
   C._IMPERSONATE_RE = /\bimpersonat(?:e|ing)\s+(?:user\s+)?['"]?(?<user>[A-Za-z0-9._$-]+)/i;
   C._GMSA_HASH_RE = /(?:^|[\s"'])(?:(?<domain>[A-Za-z0-9_.-]{1,64})\\)?(?<user>[A-Za-z0-9._-]{1,64}\$)\s*[:\s]+(?:NTLM|NTHASH|RC4_HMAC|rc4_hmac)\s*[:=]\s*(?<nt>[0-9a-fA-F]{32})/i;
   C._GMSA_READ_ERROR_RE = /\b(no\s+object\s+found|noresulterror|does\s+not\s+exist|not\s+found|access[_\s]?denied|insufficient|denied|unauthorized|traceback|exception)\b/i;
@@ -264,9 +264,9 @@
   C._NXC_AUTH_RE = /^\s*(?<proto>SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(?<host>\S+)\s+\d+\s+\S+\s+\[\+\]\s+(?<auth>.+)$/im;
   C._AUTH_MATERIAL_RE = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$-]{2,}):(?<secret>[^\s()]+)/;
   C._NT_HASH_RE = /^(?:[0-9a-fA-F]{32}:)?[0-9a-fA-F]{32}$/;
-  C._EW_PROMPT_RE = /\*Evil-WinRM\*\s+PS\s+/i;
+  C._EW_PROMPT_RE = /(?:\*Evil-WinRM\*|evil-winrm(?:-py)?)\s+PS\s+/i;
   C._BH_ZIP_RE = /(?<![\w.-])[\w.-]{1,120}\.zip\b/i;
-  C._BH_JSON_RE = /\b(?:users|groups|computers|domains|ous|gpos|containers|sessions|localadmins|trusts|acls)\.json\b/i;
+  C._BH_JSON_RE = /(?:^|[^\w.-])(?:[\w.-]{1,120}_)?(?:users|groups|computers|domains|ous|gpos|containers|sessions|localadmins|trusts|acls)\.json\b/i;
   C._ATTACK_PATH_RE = /\b(?:attack path|shortest paths? to domain admins?|path to da|owned principal)\b/i;
   C._FAILURE_REASONS = {
     status_logon_failure: 'logon_failure',
@@ -279,8 +279,8 @@
   C._SHARE_HEADER_WORDS = new Set(['share', 'sharename', '-----', '---------', 'name']);
   C._SHARE_PERMISSION_WORDS = new Set(['READ', 'WRITE', 'READ,WRITE', 'WRITE,READ', 'NO ACCESS', 'NONE']);
   C._JOHN_NOISE_PREFIXES = ['loaded ', 'session.', 'cost ', 'will run ', 'press ', 'use the ', 'warning:', 'no password hashes', 'password hash', 'password hashes'];
-  C._INTERACTIVE_WIN_TOOLS = new Set(['evil-winrm', 'wmiexec', 'psexec', 'atexec', 'smbexec', 'winrs']);
-  C._INTERACTIVE_RE = /\*Evil-WinRM\*\s+PS|semi-interactive shell|Launching semi-interactive|^\[[^\]]+\]:\s*PS[> ]/im;
+  C._INTERACTIVE_WIN_TOOLS = new Set(['evil-winrm', 'evil-winrm-py', 'wmiexec', 'psexec', 'atexec', 'smbexec', 'winrs']);
+  C._INTERACTIVE_RE = /(?:\*Evil-WinRM\*|evil-winrm(?:-py)?)\s+PS|semi-interactive shell|Launching semi-interactive|^\[[^\]]+\]:\s*PS[> ]/im;
   C._WPSCAN_USER_SECTION_RE = /User\(s\) Identified[\s\S]*/i;
   C._WPSCAN_USER_RE = /^\s*\[\+\]\s+(?<u>[A-Za-z0-9._@-]{2,64})\s*$/m;
   C._WPSCAN_VULN_RE = /\[!\]\s*Title:\s*(?<t>[^\r\n]+?)\s*$/m;
@@ -527,7 +527,7 @@
       if (inKrb && trimmed && !/^\$(?:krb5|DCC2)/i.test(trimmed)
         && !/^\[[-+*!]\]|^(?:SMB|LDAP|WINRM|MSSQL|SSH|FTP|RDP)\s+|^(?:Session|Status|Hash|Time|Speed|Recovered|Progress|Restore|Rejected|Candidates|Started|Stopped)\.*:|^(?:Loaded\s+\d+|ServicePrincipalName\b|---)/i.test(trimmed)
         && !/^(?:ok|no|on|in|to|of|is|it|at|by|or|as|up|if|be|do)$/i.test(trimmed)
-        && (/^(?:[0-9a-fA-F*$]+(?::[^\s:]+)?|:[^\s:]+|[A-Za-z0-9_./:@$-]*\*\$[0-9a-fA-F*$]+)$/.test(trimmed))) {
+        && (/^(?:(?:[0-9a-fA-F*$]+|\.{2,}\[?snip\]?\.{0,3}|\[\.{3}\])+(?::[^\s:]+)?|:[^\s:]+|[A-Za-z0-9_./:@$-]*\*\$[0-9a-fA-F*$]+)$/i.test(trimmed))) {
         out[out.length - 1] = out[out.length - 1].replace(/[ \t]+$/, '') + trimmed;
       } else {
         out.push(line);
@@ -583,6 +583,15 @@
     var major = parseInt(m[1], 10), minor = parseInt(m[2], 10), patch = m[3] !== undefined ? parseInt(m[3], 10) : 0;
     var abi = m[4] !== undefined ? parseInt(m[4], 10) : null;
     var h = 'host:' + ws.target;
+    var evidenceStr = ks;
+    if (Array.isArray(facts)) {
+      for (var fi = facts.length - 1; fi >= 0; fi--) {
+        var ff = facts[fi];
+        if (ff && ff.scope === h && ff.value && ff.value.evidence && (ff.kind === 'host.kernel' || ff.kind === 'os.guess' || ff.kind === 'host.os')) {
+          evidenceStr += ' ' + String(ff.value.evidence);
+        }
+      }
+    }
     if ((major === 2 && minor === 6 && patch >= 22) || (major === 2 && minor > 6) || major === 3 || (major === 4 && (minor < 8 || (minor === 8 && patch < 3)))) {
       var isEl7PatchedDirtyCow = false;
       if (major === 3 && minor === 10 && patch === 0) {
@@ -596,15 +605,20 @@
           }
         }
       }
-      if (!isEl7PatchedDirtyCow) {
+      var isUbuntu44PatchedDirtyCow = (major === 4 && minor === 4 && patch === 0 && abi !== null && abi >= 45);
+      if (!isEl7PatchedDirtyCow && !isUbuntu44PatchedDirtyCow) {
         _add(facts, mkFact('vuln.dirtycow', h, { cve: 'CVE-2016-5195', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
         _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2016-5195'], names: ['dirtycow'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
         if (leadKinds) leadKinds['privesc.kernel_exploit'] = true;
       }
     }
     if (major === 5 && (minor > 8 || (minor === 8 && patch >= 0)) && (minor < 16 || (minor === 16 && patch < 11))) {
+      var debBuildM = /\bDebian\s+5\.10\.(\d+)\b/i.exec(evidenceStr);
+      var debBuild = debBuildM ? parseInt(debBuildM[1], 10) : null;
       var isDistroPatchedDirtyPipe = (major === 5 && minor === 15 && patch === 0 && abi !== null && abi >= 25)
-        || (major === 5 && minor === 13 && patch === 0 && abi !== null && abi >= 35);
+        || (major === 5 && minor === 13 && patch === 0 && abi !== null && abi >= 35)
+        || (major === 5 && minor === 10 && patch === 0 && abi !== null && abi >= 13)
+        || (debBuild !== null && debBuild >= 102);
       if (!(major === 5 && minor === 10 && patch >= 102) && !(major === 5 && minor === 15 && patch >= 25) && !isDistroPatchedDirtyPipe) {
         _add(facts, mkFact('vuln.dirtypipe', h, { cve: 'CVE-2022-0847', kernel: ks, via: 'kernel-version', lead: true }, ProofState.SUPPORTED, source));
         _add(facts, mkFact('privesc.kernel_exploit', h, { cves: ['CVE-2022-0847'], names: ['dirtypipe'], kernel: ks, via: 'kernel-version' }, ProofState.SUPPORTED, source));
@@ -639,6 +653,7 @@
     if (!password || ['?', '*', '!', '!!', 'x', 'NP', '<password>', '{{password}}', '(null)', 'null', 'none'].indexOf(password) >= 0) return false;
     if (/^(?:\*+|!+|[-=_*]+|\(null\)|no\s+password\*+)$/i.test(password)) return false;
     if (/\$\([^)\r\n]+\)|\$\{[^}\r\n]+\}|`[^`\r\n]+`/.test(password)) return false;
+    if (/^(?:Select|ConvertFrom|ConvertTo|Get|Set|New|Invoke|Write|Read|Out|Format|Where|ForEach)-[A-Za-z][A-Za-z0-9]*$/i.test(password)) return false;
     var l = password.toLowerCase();
     if (l === '(null)' || l === 'null' || l.indexOf('status') === 0 || l.indexOf('recovered') === 0 || l.indexOf('progress') === 0 || l.indexOf('guess') === 0 || l.indexOf('no password') === 0) return false;
     return true;
@@ -675,7 +690,7 @@
     var users = {};
     [C._NXC_RID_USER_RE, C._RPC_USER_RE].forEach(function (rx) {
       reAll(rx, text).forEach(function (m) {
-        var raw = (m.groups && (m.groups.user || m.groups.user2 || m.groups.user3 || m.groups.user4)) || '';
+        var raw = (m.groups && (m.groups.user || m.groups.user2 || m.groups.user3 || m.groups.user4 || m.groups.user5)) || '';
         var user = _clean_username(raw);
         if (_valid_username(user, false)) users[user] = true;
       });

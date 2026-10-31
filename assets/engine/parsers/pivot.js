@@ -233,6 +233,14 @@
     var uniqPorts = Object.keys(portSet).map(Number).sort(function (a, b) { return a - b; });
     if (uniqPorts.length) {
       _add(facts, mkFact('pivot.ports', h, { ports: uniqPorts, forwards: forwards, via: 'chisel' }, S, source));
+      var _TUNNELED_DB_MAP = { 5432: 'postgresql', 3306: 'mysql', 1433: 'mssql', 6379: 'redis', 27017: 'mongodb' };
+      uniqPorts.forEach(function (p) {
+        var eng = _TUNNELED_DB_MAP[p];
+        if (!eng) return;
+        var pVal = { port: p, protocol: 'tcp', service: eng, tunneled: true, via: 'chisel' };
+        _add(facts, mkFact('port:' + p, h, pVal, S, source));
+        _add(facts, mkFact('service.' + eng, h, pVal, S, source));
+      });
     }
     return facts;
   }

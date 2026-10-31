@@ -33,7 +33,7 @@
     // web fuzzing throttled by a WAF / rate limiter. The separator before "limit" must be a space or a
     // hyphen ("rate limited", "rate-limiting"), NOT nothing: "ratelimit" with no separator is nmap's own
     // --defeat-rst-ratelimit flag line, which is informational and must never raise this blocker.
-    { kind: 'blocker.rate_limited', re: /(?:HTTP\/[0-9.]+\s+429\b|\bstatus(?:\s+code)?\s*[:=]\s*429\b|\b429\s+Too Many Requests\b)|Too Many Requests|rate[ -]limit(?:ed|ing)?|temporarily blocked|request(?:s)? (?:have been )?throttled/i },
+    { kind: 'blocker.rate_limited', re: /(?:HTTP\/[0-9.]+\s+429\b|\bstatus(?:\s+code)?\s*[:=]\s*429\b|\b429\s+Too Many Requests\b)|Too Many Requests|\brate[ -]limit(?:ed|ing| exceeded| reached)\b|x-rate-limit-remaining\s*:\s*0\b|temporarily blocked|request(?:s)? (?:have been )?throttled/i },
     // http vs https mismatch: curl/tooling hitting the wrong scheme.
     { kind: 'blocker.tls_scheme', re: /SSL.*WRONG_VERSION_NUMBER|wrong version number|record layer failure|sslv3 alert handshake failure|routines::?(?:unexpected eof|wrong version)|CA_MD_TOO_WEAK|ca md too weak|'SSL routines'/i },
     // hashcat/john refusing the hash: wrong mode, a username: prefix left on, or CRLF in the hash file.
@@ -52,11 +52,11 @@
     // gobuster/ffuf hitting a wildcard/catch-all response and refusing to run until you filter it.
     { kind: 'blocker.web_wildcard', re: /the server returns a status code that matches the provided options for non existing urls|To continue please exclude the status code|use the "--wildcard" switch|WildcardResponse|Wildcard response found:/i },
     // access denied / permission barriers (service refused authenticated access or local account confusion).
-    { kind: 'blocker.access_denied', re: /STATUS_ACCESS_DENIED|Access is denied|0xc0000022|\[\!\]\s*Access Denied\b|E_ACCESSDENIED|CERTSRV_E_TEMPLATE_DENIED|ERROR 1130 \(HY000\)|is not allowed to connect to this (?:MySQL|MariaDB) server|Certificate is not valid for client authentication|KDC_ERR_CLIENT_NOT_TRUSTED|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|^\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b/im },
+    { kind: 'blocker.access_denied', re: /STATUS_ACCESS_DENIED|Access is denied|0xc0000022|\[\!\]\s*Access Denied\b|E_ACCESSDENIED|CERTSRV_E_TEMPLATE_DENIED|ERROR 1130 \(HY000\)|is not allowed to connect to this (?:MySQL|MariaDB) server|Certificate is not valid for client authentication|KDC_ERR_CLIENT_NOT_TRUSTED|\bMsg 15247\b|User does not have permission to perform this action|You do not have permission to run the RECONFIGURE statement|Cannot open Service Control Manager|This operation might require other privileges|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|^\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b/im },
     // authentication rejected (bad password or wrong account scope).
-    { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|WinRMAuthorizationError|ldap_bind:\s*Invalid credentials|Authentication failure|Failed to authenticate|Login failed for user|\[\!\]\s*Authentication error\b|ERROR 1045 \(28000\)|Access denied for user|Error de inicio de sesi[oó]n del usuario|Unable to connect to LDAP, verify your credentials|^\s*\(error\)\s+(?:WRONGPASS|NOAUTH\s+Authentication\s+required|ERR\s+invalid\s+(?:username-password|password))\b/im },
+    { kind: 'blocker.logon_failure', re: /STATUS_LOGON_FAILURE|0xc000006d|WinRMAuthorizationError|KDC_ERR_CLIENT_REVOKED|GSSAPI::GssApiError[\s\S]{0,240}?Invalid token was supplied|ldap_bind:\s*Invalid credentials|Authentication failure|Failed to authenticate|Login failed for user|\[\!\]\s*Authentication error\b|ERROR 1045 \(28000\)|Access denied for user|Error de inicio de sesi[o\u00f3]n del usuario|Unable to connect to LDAP, verify your credentials|^\s*\(error\)\s+(?:WRONGPASS|NOAUTH\s+Authentication\s+required|ERR\s+invalid\s+(?:username-password|password))\b/im },
     // Kerberos clock skew: DC rejected ticket because time drift > 5 mins.
-    { kind: 'blocker.clock_skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large/i },
+    { kind: 'blocker.clock_skew', re: /KRB_AP_ERR_SKEW|clock skew too great|time difference too large|Ticket not yet valid/i },
     // hashcat/john cannot use the GPU/OpenCL (common in a VM) - fall back to CPU / --force.
     { kind: 'blocker.hashcat_env', re: /No devices found\/left|clGetPlatformIDs|No OpenCL compatible|ADL_Main_Control_Create|increase.*--force|You can use --force to override/i },
     // anonymous LDAP bind rejected by DC policy (DSID-0C09075A).
@@ -162,6 +162,20 @@
       }
       if (w.kind === 'blocker.potato' && /Operation failed or timed out/i.test(t) && !/CoGetInstanceFromIStorage|RpcServerRegisterIf.*failed|the handle is invalid|CreateProcessAsUser.*(?:failed|1314)|BITS.*(?:not|disabled)|potato.*fail/i.test(t)) {
         if (!/(?:printspoofer|[a-z0-9_]*potato)/i.test(String(command || '') + '\n' + t)) continue;
+      }
+      if (w.kind === 'blocker.rate_limited') {
+        var tRate = /x-rate-limit-/i.test(t)
+          ? t.replace(/^\s*(?:[<>*]\s*)?x-rate-limit-(?:limit|reset|window|policy|retry-after)\s*:[^\r\n]*$/gim, '')
+             .replace(/^\s*(?:[<>*]\s*)?x-rate-limit-remaining\s*:\s*(?!0\b)\d+[^\r\n]*$/gim, '')
+          : t;
+        if (w.re.test(tRate)) addWall(w, tRate);
+        continue;
+      }
+      if (w.kind === 'blocker.dcsync_denied') {
+        var hasNtdsDump = /^(?:[^\\\r\n:]+\\)?[^\s:\r\n]+:\d+:[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::\s*$/m.test(t)
+          || /\bkrbtgt:(?:\d+:)?[0-9a-fA-F]{32}:[0-9a-fA-F]{32}:::/i.test(t)
+          || (facts && facts.some(function (f) { return f && (f.kind === 'loot.ntds' || f.kind === 'hash.krbtgt'); }));
+        if (hasNtdsDump) continue;
       }
       if (w.kind === 'blocker.logon_failure' && (enum4linuxSucceeded || /\\\$krb5(?:asrep|tgs)\$|Testing credentials \(\$krb5/i.test(t) || (/^(?:bloodyad-acl|dcsync)\b/i.test(command || '') && /Traceback \(most recent call last\):|SessionError:\s*STATUS_LOGON_FAILURE/i.test(t)))) continue;
       if (w.re.test(t)) addWall(w, t);

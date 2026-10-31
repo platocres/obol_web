@@ -495,7 +495,9 @@
         "db.tables",
         "db.creds",
         "credential.candidate",
-        "foothold.webshell"
+        "foothold.webshell",
+        "credential.available",
+        "credential.plaintext"
       ],
       "expected_facts": [
         {
@@ -538,8 +540,6 @@
         }
       ],
       "forbidden_supported_kinds": [
-        "credential.available",
-        "credential.plaintext",
         "access.admin",
         "access.system",
         "foothold.windows",
@@ -791,9 +791,36 @@
         "exploit.candidate"
       ],
       "expected_facts": [
-        {"kind": "privesc.kernel_exploit", "value_contains": {"cves": ["CVE-2016-5195", "CVE-2021-3560", "CVE-2021-4034"]}},
-        {"kind": "privesc.sudo_binary", "value_contains": {"bin": "tar", "gtfobins_id": "tar", "nopasswd": true}},
-        {"kind": "privesc.capability", "value_contains": {"count": 1, "entries": [{"path": "/usr/bin/python3.8", "capabilities": "cap_setuid+ep"}]}}
+        {
+          "kind": "privesc.kernel_exploit",
+          "value_contains": {
+            "cves": [
+              "CVE-2016-5195",
+              "CVE-2021-3560",
+              "CVE-2021-4034"
+            ]
+          }
+        },
+        {
+          "kind": "privesc.sudo_binary",
+          "value_contains": {
+            "bin": "tar",
+            "gtfobins_id": "tar",
+            "nopasswd": true
+          }
+        },
+        {
+          "kind": "privesc.capability",
+          "value_contains": {
+            "count": 1,
+            "entries": [
+              {
+                "path": "/usr/bin/python3.8",
+                "capabilities": "cap_setuid+ep"
+              }
+            ]
+          }
+        }
       ],
       "forbidden_supported_kinds": [
         "access.admin",
@@ -817,8 +844,22 @@
         "privesc.stored_credentials"
       ],
       "expected_facts": [
-        {"kind": "privesc.windows_privilege", "value_contains": {"privileges": ["SeAssignPrimaryTokenPrivilege", "SeImpersonatePrivilege"]}},
-        {"kind": "privesc.always_install_elevated", "value_contains": {"hklm": true, "hkcu": true}}
+        {
+          "kind": "privesc.windows_privilege",
+          "value_contains": {
+            "privileges": [
+              "SeAssignPrimaryTokenPrivilege",
+              "SeImpersonatePrivilege"
+            ]
+          }
+        },
+        {
+          "kind": "privesc.always_install_elevated",
+          "value_contains": {
+            "hklm": true,
+            "hkcu": true
+          }
+        }
       ],
       "forbidden_supported_kinds": [
         "access.admin",
@@ -1417,12 +1458,14 @@
       "command": "psexec.py corp.local/a:p@10.10.10.10",
       "stdout": "outputs/ad_psexec_system.txt",
       "expected_supported_kinds": [
-        "access.system"
+        "access.system",
+        "access.admin"
       ],
       "domain": "corp.local",
       "allow_default_forbidden_supported_kinds": [
         "access.system",
-        "foothold.windows"
+        "foothold.windows",
+        "access.admin"
       ]
     },
     {

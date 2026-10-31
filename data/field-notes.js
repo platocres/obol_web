@@ -9335,6 +9335,19 @@
       "mistakes": [
         "Cracking duplicate hashes."
       ]
+    },
+    {
+      "when": "You found an AS-REP-roastable user (DONT_REQ_PREAUTH) whose hash did not crack, and you have an enumerated domain user list.",
+      "land": [
+        "Run impacket-GetUserSPNs with -no-preauth <asrep_user> and -usersfile <userlist> against -dc-host to request TGS tickets without a password."
+      ],
+      "look": [
+        "$krb5tgs$23$*... hashes returned for any account in the user list that holds an SPN."
+      ],
+      "win": "Kerberoastable TGS hashes recovered without any cracked domain password.",
+      "mistakes": [
+        "Omitting the trailing slash after {{domain}}/ or passing an account that still requires Kerberos pre-authentication."
+      ]
     }
   ],
   "password-spray": [
@@ -9743,6 +9756,19 @@
       "win": "A built-in path lead.",
       "mistakes": [
         "Uploading tools when whoami /all already answers."
+      ]
+    },
+    {
+      "when": "Targeting a Windows Server 2025 domain controller where your account may have CreateChild or Write rights on an Organizational Unit.",
+      "land": [
+        "Run NetExec LDAP with -M badsuccessor to check whether any non-admin principal can create a delegated Managed Service Account (dMSA) in a writable OU."
+      ],
+      "look": [
+        "BADSUCCESSOR output naming principals and writable OUs vulnerable to dMSA privilege escalation."
+      ],
+      "win": "Writable OU identified for Windows Server 2025 dMSA (BadSuccessor) impersonation of privileged accounts.",
+      "mistakes": [
+        "Overlooking dMSA creation rights on OUs when standard BloodHound or DACL checks show no direct Domain Admins path."
       ]
     }
   ],
@@ -10736,6 +10762,19 @@
       "win": "Template converted to vulnerable default ESC1 configuration with backup preserved.",
       "mistakes": [
         "Not preserving the backup file needed to revert changes after compromise."
+      ]
+    },
+    {
+      "when": "You hold any valid domain credential and want a fast LDAP check for Active Directory Certificate Services CAs and enrollment endpoints.",
+      "land": [
+        "Run NetExec LDAP with -M adcs to list enterprise CAs, DNS hostnames, web enrollment URLs, and published templates."
+      ],
+      "look": [
+        "ADCS module lines naming the CA server, CA name, and enabled certificate templates."
+      ],
+      "win": "Enterprise CA name and host discovered over LDAP, ready for certipy find -vulnerable.",
+      "mistakes": [
+        "Assuming no CA exists in the forest without querying the Configuration naming context via -M adcs or certipy."
       ]
     }
   ],
@@ -15162,6 +15201,19 @@
       "win": "Interactive WinRM shell session established via PKI certificate authentication.",
       "mistakes": [
         "Certificate expired, missing client authentication EKU, or key password unhandled."
+      ]
+    },
+    {
+      "when": "You hold a valid Kerberos TGT or service ticket (.ccache) and NTLM authentication is disabled or rejected on WinRM.",
+      "land": [
+        "Export KRB5CCNAME pointing to the ccache file, ensure /etc/krb5.conf and /etc/hosts map the target FQDN and realm, and connect with evil-winrm -i <fqdn> -r <realm>."
+      ],
+      "look": [
+        "*Evil-WinRM* PS C:\\Users\\...> interactive prompt authenticated via Kerberos."
+      ],
+      "win": "Interactive WinRM PowerShell session established using Kerberos ccache authentication.",
+      "mistakes": [
+        "Passing a raw IP address instead of the host FQDN with -i, or clock skew exceeding 5 minutes against the KDC."
       ]
     }
   ],

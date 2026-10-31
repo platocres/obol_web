@@ -88,8 +88,9 @@
       var footholdValue = { method: tool };
       var nonSystem = identities.filter(function (i) { return i.toLowerCase() !== 'nt authority\\system'; });
       if (!nonSystem.length && !isSystem) {
-        var pm = /^\s*(?:\*?Evil-WinRM\*?\s+)?(?:PS\s+)?[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(?:\\[^>"'\r\n]*)?>/im.exec(fullExecText);
-        if (pm && pm[1] && !/^(Public|Default|All Users)$/i.test(pm[1])) nonSystem.push(pm[1]);
+        var pm = /^\s*(?:\*?Evil-WinRM\*?\s+)?(?:PS\s+)?[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(\\[^>"'\r\n]*)?>/im.exec(fullExecText);
+        var isDotSvcSubdir = !!(pm && pm[1] && /^administrator$/i.test(pm[1]) && pm[2] && /^\\\.[A-Za-z0-9_.-]+(?:\\|$)/.test(pm[2]));
+        if (pm && pm[1] && !/^(Public|Default|All Users)$/i.test(pm[1]) && !isDotSvcSubdir) nonSystem.push(pm[1]);
       }
       if (!nonSystem.length && !isSystem) {
         var sshWinPm = /^\s*(?:[A-Za-z0-9_.-]+\\)?([A-Za-z0-9_.$-]+)@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.exec(fullExecText);
@@ -116,7 +117,10 @@
       }
       _add(facts, mkFact('foothold.windows', h, footholdValue, S, source));
       C._add_os_observation(facts, ws, source, 'windows', 'Windows command execution output', 'high', tool, true);
-      if (isSystem) _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: tool }, S, source));
+      if (isSystem) {
+        _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: tool }, S, source));
+        _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: tool }, S, source));
+      }
       var lowCmd = (command || '').toLowerCase();
       var isXpCmdshell = /xp_cmdshell/i.test(command || '') || /xp_cmdshell/i.test(text || '');
       if (!isSystem && (isAdminWhoami || (!isXpCmdshell && (['wmiexec', 'psexec', 'smbexec', 'atexec', 'dcomexec'].indexOf(tool) >= 0 || ['wmiexec', 'atexec'].some(function (t) { return lowCmd.indexOf(t) >= 0; }))))) {
@@ -162,9 +166,10 @@
   var _SSH_POSTAUTH_WELCOME_RE = /^\s*Welcome to (?:Ubuntu|Debian|Alpine|CentOS|Red Hat|Fedora|Kali|Rocky|AlmaLinux|SUSE|openSUSE|Arch Linux|Gentoo|FreeBSD)\b[^\r\n]*/im;
   var _SSH_POSTAUTH_LASTLOGIN_RE = /^\s*Last login:\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}/im;
   var _SSH_RESTRICTED_BANNER_RE = /\b(?:You are in a )?(?:limited shell|restricted shell|lshell|rbash)\b|Type '\?' or 'help' to get the list of allowed commands|\*\*\*\s*forbidden\s*(?:command|character|path)/i;
-  var _ATTACKER_PROMPT_ENTITY_RE = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec)$/i;
+  var _ATTACKER_PROMPT_ENTITY_RE = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec|htb|tryhackme|vagrant|archlinux|blackarch)$/i;
+  var _ATTACKER_REMOTE_OR_LISTENER_CMD_RE = /\b(?:ssh|sshpass|scp|sftp|curl|wget|httpie|nc|ncat|netcat|socat|rlwrap|pwncat(?:-cs)?|penelope|chisel|ligolo[a-z0-9_-]*|nxc|netexec|crackmapexec|cme|evil-winrm|winrs|xfreerdp|rdesktop|impacket-[a-z0-9_-]+|(?:wmi|ps|smb|at|dcom)exec(?:\.py)?|msfconsole|telnet|rlogin|rsh|rexec|psql|sqlplus|odat|mysql|mariadb|mssqlclient(?:\.py)?|sqsh|redis-cli|mongosh|mongo|ftp|lftp|smbclient|rpcclient|ldapsearch|bloodyad|certipy(?:-ad)?|kerbrute|snmpwalk|snmp-check|onesixtyone|enum4linux(?:-ng)?|nikto|sqlmap|wfuzz|ffuf|gobuster|feroxbuster|dirsearch|wpscan|nuclei|httpx|git-dumper|ansible(?:-playbook)?|kubectl|docker\s+-H)\b|\bhttps?:\/\/|(?:^|\s)(?:--?(?:rhost|target|host|url)|-H)\s+\S|\b(?:python[23]?|ruby|perl|php|bash|sh)\s+[^\r\n]*(?:exploit|rce|pwn|shell|cve[-_])/i;
 
-  function _parse_unix_prompt_line(rawLine) {
+  function _parse_unix_prompt_line(rawLine, opts) {
     var l = String(rawLine || '').replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').trim();
     if (!l || /^[┌╭└╰]──/.test(l) || /\[(?:tun|tap|vpn|wg)\d*:/i.test(l)) return null;
     var bm = /^(?:\([^)]+\)\s*)?\[([A-Za-z0-9_.-]+)(?:@|\u327f)([A-Za-z0-9_.-]+)(?:[:\s]+([^\]]*))?\]\s*([#$%])(?:\s+.*)?$/.exec(l);
@@ -183,19 +188,110 @@
     if (sm) {
       return { user: sm[2] === '#' ? 'root' : '', host: '', cwd: '', sigil: sm[2], isBareSh: true, raw: l };
     }
+    var csm = /^(?!(?:HTTP|TLS|SSL|SSH|CVE|PHP|GCC|GDB)-)([A-Za-z0-9_.-]{2,32}-[3-6]\.\d+(?:\.\d+)?)\s*([#$])(?:\s+.*)?$/.exec(l);
+    if (csm) {
+      return { user: csm[2] === '#' ? 'root' : '', host: '', cwd: '', sigil: csm[2], isBareSh: true, raw: l };
+    }
+    var apm = opts && opts.isPromptCtx
+      ? /^(\/(?:[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?)?)[ \t]+([#$])(?:\s+.*)?$/.exec(l)
+      : /^(\/(?:[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?)?)[ \t]+([#$])(?:[ \t]*|[ \t]+(?:id|whoami|pwd|ls|cat|uname|hostname|ps|env|sh|bash|ash|su|sudo|cd|find|exit)\b.*)$/.exec(l);
+    if (apm) {
+      return { user: apm[2] === '#' ? 'root' : '', host: '', cwd: apm[1], sigil: apm[2], isBareSh: true, raw: l };
+    }
     return null;
   }
+
+  function _is_attacker_prompt_string(promptLine) {
+    if (!promptLine) return false;
+    var first = String(promptLine).replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').split(/\r?\n/)[0].trim();
+    if (!first) return false;
+    if (/\[(?:tun|tap|vpn|wg)\d*:/i.test(first)) return true;
+    var boxM = /^[┌╭]──\s*\(([A-Za-z0-9_.-]+)(?:@|\u327f)([A-Za-z0-9_.-]+)\)/.exec(first);
+    if (boxM && (_ATTACKER_PROMPT_ENTITY_RE.test(boxM[1]) || _ATTACKER_PROMPT_ENTITY_RE.test(boxM[2]))) return true;
+    var p = _parse_unix_prompt_line(first, { isPromptCtx: true });
+    if (p && ((p.user && _ATTACKER_PROMPT_ENTITY_RE.test(p.user)) || (p.host && _ATTACKER_PROMPT_ENTITY_RE.test(p.host)))) return true;
+    return false;
+  }
+  C._is_attacker_prompt_string = _is_attacker_prompt_string;
+
+  function _is_attacker_local_turn(ws, command, text) {
+    var promptLine = (ws && ws.context && ws.context.promptLine) || '';
+    if (!_is_attacker_prompt_string(promptLine)) return false;
+    var cmd = String(command || '').trim();
+    if (_ATTACKER_REMOTE_OR_LISTENER_CMD_RE.test(cmd)) return false;
+    var tgt = String((ws && ws.target) || '').trim().toLowerCase();
+    if (tgt && tgt !== 'unknown' && cmd.toLowerCase().indexOf(tgt) >= 0) return false;
+    var dom = String((ws && ws.domainSeed) || '').trim().toLowerCase();
+    if (dom && cmd.toLowerCase().indexOf(dom) >= 0) return false;
+    if (text) {
+      if (/\b(?:connect to \[[^\]]+\] from|Connection received on|listening on \[any\] \d+|\bMeterpreter session \d+ opened|\bCommand shell session \d+ opened)\b/i.test(text)) return false;
+      if (_match_verified_remote_unix_prompt(text, promptLine).matched) return false;
+    }
+    return true;
+  }
+  C._is_attacker_local_turn = _is_attacker_local_turn;
+
+  function _is_outbound_simplehttp_callback(text, command, ws) {
+    var t = String(text || '');
+    if (!/(?:^\s*(?:<\s*)?Server:\s*SimpleHTTP\/\d|HTTPServer\[[^\]]*SimpleHTTP\/|\bSimpleHTTP\/\d+(?:\.\d+)*\s+Python\/\d)/im.test(t)) return false;
+    var cmd = String(command || '');
+    var urlHosts = [];
+    if (/\b(?:wget|curl|iwr|invoke-webrequest|irm|invoke-restmethod|certutil|bitsadmin|fetch|aria2c|axel|lwp-download|python[23]?)\b/i.test(cmd)) {
+      reAll(/https?:\/\/(?:\[([0-9a-fA-F:]+)\]|([^/:?\s'"#]+))/gi, cmd).forEach(function (m) {
+        var uh = (m[1] || m[2] || '').toLowerCase();
+        if (uh) urlHosts.push(uh);
+      });
+    }
+    reAll(/^--\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}--\s+https?:\/\/(?:\[([0-9a-fA-F:]+)\]|([^/:?\s'"#]+))/gim, t).forEach(function (m) {
+      var uh = (m[1] || m[2] || '').toLowerCase();
+      if (uh) urlHosts.push(uh);
+    });
+    if (!urlHosts.length) return false;
+    var tgt = String((ws && ws.target) || '').trim().toLowerCase();
+    var dom = String((ws && ws.domainSeed) || '').trim().toLowerCase();
+    var knownTargetHosts = Object.create(null);
+    if (tgt && tgt !== 'unknown') knownTargetHosts[tgt] = 1;
+    if (dom) knownTargetHosts[dom] = 1;
+    var pools = [(ws && ws.facts) || [], (ws && ws.seedFacts) || []];
+    for (var pi = 0; pi < pools.length; pi++) {
+      var arr = pools[pi];
+      if (!Array.isArray(arr)) continue;
+      for (var fi = 0; fi < arr.length; fi++) {
+        var f = arr[fi];
+        if (!f || !f.value) continue;
+        if (f.kind === 'host.hostname' || f.kind === 'host.fqdn' || f.kind === 'web.vhost') {
+          var hv = String(f.value.hostname || f.value.fqdn || f.value.vhost || f.value.name || '').trim().toLowerCase();
+          if (hv) knownTargetHosts[hv] = 1;
+        }
+      }
+    }
+    var hasKnownTarget = Object.keys(knownTargetHosts).length > 0;
+    for (var hi = 0; hi < urlHosts.length; hi++) {
+      var hName = urlHosts[hi];
+      if (hName === '127.0.0.1' || hName === 'localhost' || hName === '::1' || hName === '0.0.0.0') return false;
+      if (knownTargetHosts[hName]) return false;
+      if (dom && hName.length > dom.length + 1 && hName.slice(-(dom.length + 1)) === '.' + dom) return false;
+    }
+    if (hasKnownTarget) return true;
+    var promptLine = (ws && ws.context && ws.context.promptLine) || '';
+    var hasTargetPrompt = !!(promptLine && !_is_attacker_prompt_string(promptLine) && (_parse_unix_prompt_line(promptLine, { isPromptCtx: true }) || /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/i.test(promptLine)));
+    var isStagingTransfer = /\b(?:certutil\b[^\r\n]*-urlcache|bitsadmin\b[^\r\n]*\/transfer|curl\b[^\r\n]*(?:-[A-Za-z]*[oO]\b|--output\b|>\s*\S)|\b(?:iwr|invoke-webrequest)\b[^\r\n]*(?:-outfile|-o)\b)/i.test(cmd)
+      || /(?:^|\r?\n)\s*Saving to:\s*[`'"]/i.test(t);
+    return hasTargetPrompt || isStagingTransfer;
+  }
+  C._is_outbound_simplehttp_callback = _is_outbound_simplehttp_callback;
 
   function _match_verified_remote_unix_prompt(promptStr, callerPromptLine, opts) {
     if (!promptStr) return { matched: false };
     var allowSameHost = !!(opts && opts.allowSameHost);
-    var callerParsed = callerPromptLine ? _parse_unix_prompt_line(String(callerPromptLine).split(/\r?\n/)[0]) : null;
+    var isPromptCtx = !!(opts && opts.isPromptCtx);
+    var callerParsed = callerPromptLine ? _parse_unix_prompt_line(String(callerPromptLine).split(/\r?\n/)[0], { isPromptCtx: true }) : null;
     var callerHostLow = (callerParsed && callerParsed.host) ? callerParsed.host.toLowerCase() : '';
     var callerUserLow = (callerParsed && callerParsed.user) ? callerParsed.user.toLowerCase() : '';
     var callerSigil = (callerParsed && callerParsed.sigil) || '';
     var lines = String(promptStr).split(/\r?\n/);
     for (var i = 0; i < lines.length; i++) {
-      var p = _parse_unix_prompt_line(lines[i]);
+      var p = _parse_unix_prompt_line(lines[i], { isPromptCtx: isPromptCtx });
       if (!p) continue;
       if (p.host && _ATTACKER_PROMPT_ENTITY_RE.test(p.host)) continue;
       if (p.user && _ATTACKER_PROMPT_ENTITY_RE.test(p.user)) continue;
@@ -252,6 +348,7 @@
     var h = 'host:' + ws.target;
     var cs = ((command || '') + ' ' + (source || '')).toLowerCase();
     var isSshCmd = (C._is_ssh_command && C._is_ssh_command(command || '')) || /\bssh\b/.test(cs);
+    if (!isSshCmd && _is_attacker_local_turn(ws, command, text)) return;
     if (isMultiUidDump && !isSshCmd) return;
     var m = isMultiUidDump ? null : reSearch(C._LINUX_ID_RE, text || '');
     if (!m) {
@@ -262,8 +359,21 @@
       var callerPrompt = (ws && ws.context && ws.context.promptLine) || '';
       var followPrompt = (ws && ws.context && ws.context.followPrompt) || '';
       var inBodyPrompt = _match_verified_remote_unix_prompt(text || '', callerPrompt);
-      var followPromptMatch = _match_verified_remote_unix_prompt(followPrompt, callerPrompt);
+      var followPromptMatch = _match_verified_remote_unix_prompt(followPrompt, callerPrompt, { isPromptCtx: true });
       var landedPrompt = followPromptMatch.matched ? followPromptMatch : inBodyPrompt;
+      if (!landedPrompt.matched && (welcomeM || lastLoginM)) {
+        var fpClean = String(followPrompt || '').replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').trim();
+        var bodyLines = String(text || '').replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').split(/\r?\n/);
+        var lastBodyLine = '';
+        for (var bli = bodyLines.length - 1; bli >= 0; bli--) {
+          if (bodyLines[bli].trim()) { lastBodyLine = bodyLines[bli].trim(); break; }
+        }
+        var bareSigM = /^([#$])(?:\s+(?:id|whoami|pwd|ls|uname|cat|sh|bash|su|sudo|cd|find)\b.*)?$/.exec(fpClean)
+          || /^([#$])$/.exec(lastBodyLine);
+        if (bareSigM) {
+          landedPrompt = { matched: true, user: bareSigM[1] === '#' ? 'root' : '', host: '', sigil: bareSigM[1], isRoot: bareSigM[1] === '#', raw: bareSigM[0] };
+        }
+      }
       var hasVerifiedLanding = landedPrompt.matched;
       if (!restrictedM && !((welcomeM || lastLoginM) && hasVerifiedLanding) && !hasVerifiedLanding) return;
       var sshUser = _extract_ssh_cmd_user(command) || (landedPrompt.matched ? landedPrompt.user : '');
@@ -515,7 +625,7 @@
     systemctl: 'systemctl', journalctl: 'journalctl', service: 'service',
     apt: 'apt', 'apt-get': 'apt-get', yum: 'yum', dnf: 'dnf', pip: 'pip', pip3: 'pip', npm: 'npm', composer: 'composer',
     screen: 'screen', tmux: 'tmux', xargs: 'xargs', cat: 'cat', base64: 'base64', cut: 'cut', flock: 'flock',
-    apache2: 'apache2', openvpn: 'openvpn', capsh: 'capsh', setarch: 'setarch', time: 'time', timeout: 'timeout',
+    apache2: 'apache2', nginx: 'nginx', openvpn: 'openvpn', capsh: 'capsh', setarch: 'setarch', time: 'time', timeout: 'timeout',
     watch: 'watch', expect: 'expect', ionice: 'ionice', nice: 'nice', nohup: 'nohup', stdbuf: 'stdbuf',
     taskset: 'taskset', chroot: 'chroot', nsenter: 'nsenter', unshare: 'unshare', doas: 'doas',
     'ansible-playbook': 'ansible-playbook', logrotate: 'logrotate', borg: 'borg', restic: 'restic'
@@ -691,6 +801,7 @@
   }
 
   function _parse_linux_privesc_output(text, ws, command, source, facts, leadKinds) {
+    if (_is_attacker_local_turn(ws, command, text)) return;
     var lowered = text.toLowerCase(), lc = (command || '').toLowerCase(), h = 'host:' + ws.target;
     var textNoPem = String(text || '').replace(/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g, '');
     var loweredNoPem = textNoPem.toLowerCase();
@@ -822,10 +933,24 @@
     if (sudoVer && sudoVer[1]) {
       _add(facts, mkFact('vuln.baron_samedit', h, { cve: 'CVE-2021-3156', version: sudoVer[1], lead: true }, S, source));
     }
+    var sudoChrootVer = /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+(1\.9\.(?:1[4-6](?:p\d+)?|17(?:p0)?(?![0-9p])))\b/i.exec(textNoPem);
+    if (sudoChrootVer && sudoChrootVer[1]) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.sudo', { cve: 'CVE-2025-32463', version: sudoChrootVer[1], via: 'sudo-chroot' }, leadKinds);
+    }
 
     var pkexecVer = /pkexec\s+version\s+(0\.(?:0\d\d|10[0-5]))\b/i.exec(textNoPem);
     if (pkexecVer && pkexecVer[1]) {
       _add(facts, mkFact('vuln.polkit', h, { cve: 'CVE-2021-4034', version: pkexecVer[1], lead: true }, S, source));
+    }
+
+    var imVerM = /Version:\s+ImageMagick\s+(6\.\d+\.\d+-\d+|7\.0\.\d+-\d+|7\.1\.(?:0-\d+|1-(?:[0-2]?\d|3[0-5])))\b/i.exec(textNoPem);
+    if (imVerM && imVerM[1]) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.library_or_script_hijack', {
+        target: 'ImageMagick ' + imVerM[1],
+        target_type: 'so',
+        reason: 'imagemagick_delegate_la_search_path',
+        cve: 'CVE-2024-41817'
+      }, leadKinds);
     }
 
     var sudoEntries = [];
@@ -1023,13 +1148,23 @@
     }
 
     var writableLsPaths = Object.create(null);
+    var readonlyOrRootLsPaths = Object.create(null);
     textNoPem.split(/\r?\n/).forEach(function (raw) {
       var tl = raw.trim();
       if (!tl || tl.length > 2048) return;
-      if (!/^[-d][r-][w-][xsStT-](?:[r-]w[xsStT-][r-][w-][xsStT-]|[r-][w-][xsStT-][r-]w[xsStT-])/.test(tl)) return;
       var pm = /(?:^|\s)(\/[A-Za-z0-9._\/-]+)$/.exec(tl);
-      if (pm && pm[1]) writableLsPaths[pm[1]] = 1;
+      if (!pm || !pm[1]) return;
+      if (/^[-d][r-][w-][xsStT-](?:[r-]w[xsStT-][r-][w-][xsStT-]|[r-][w-][xsStT-][r-]w[xsStT-])/.test(tl)) {
+        writableLsPaths[pm[1]] = 1;
+      } else if (/^[-d][r-]-[xsStT-][r-]-[xsStT-][r-]-[xsStT-]/.test(tl)
+          || /^[-d][rwx-]{3}[r-]-[xsStT-][r-]-[xsStT-][.+@]?\s+\d+\s+root\s+/i.test(tl)) {
+        readonlyOrRootLsPaths[pm[1]] = 1;
+      }
     });
+    var cronOwnedUsers = _collect_known_owned_linux_users(ws, facts, callerPromptObj);
+    if (activePrincipal && activePrincipal.toLowerCase() !== 'root') {
+      cronOwnedUsers[activePrincipal.toLowerCase()] = 1;
+    }
 
     var hasHijackableCronPath = false, hasWritableCronPath = false;
     reAll(/^\s*PATH\s*=\s*([^\r\n#]+)/gim, textNoPem).forEach(function (pm) {
@@ -1039,7 +1174,9 @@
         var sg = segs[si].trim().replace(/\/+$/, '');
         if ((sg === '/bin' || sg === '/usr/bin') && si < sysBinIdx) sysBinIdx = si;
         if (/^\/(?:usr\/local\/s?bin|tmp|var\/tmp|dev\/shm|home\/|opt\/)/i.test(sg) && si < customBinIdx) customBinIdx = si;
-        if ((/^\/(?:tmp|var\/tmp|dev\/shm|home\/)/i.test(sg) || !!writableLsPaths[sg]) && si < writableBinIdx) writableBinIdx = si;
+        var homeSegM = /^\/home\/([^/\s]+)/i.exec(sg);
+        var isWritableHomeSeg = !!(homeSegM && !readonlyOrRootLsPaths[sg] && cronOwnedUsers[homeSegM[1].toLowerCase()]);
+        if ((/^\/(?:tmp|var\/tmp|dev\/shm)(?:\/|$)/i.test(sg) || isWritableHomeSeg || !!writableLsPaths[sg]) && si < writableBinIdx) writableBinIdx = si;
       }
       if (customBinIdx < sysBinIdx) hasHijackableCronPath = true;
       if (writableBinIdx < sysBinIdx) hasWritableCronPath = true;
@@ -1089,10 +1226,16 @@
         var refsWritableTarget = reAll(/(\/[A-Za-z0-9._\/-]+)/g, trimmed).some(function (m) {
           return !!writableLsPaths[m[1]];
         });
-        var refsWritableTree = /(?:^|\s|['"=])\/(?:tmp|var\/tmp|dev\/shm|home\/[^/\s]+)\/\S+/.test(schedCmd);
+        var refsWritableTree = /(?:^|\s|['"=])\/(?:tmp|var\/tmp|dev\/shm)\/\S+/.test(schedCmd);
+        var refsWritableHome = reAll(/(?:^|\s|['"=])(\/home\/([^/\s]+)\/[^\s'";|&)#]+)/g, schedCmd).some(function (hm) {
+          var fullP = hm[1], homeOwner = (hm[2] || '').toLowerCase();
+          if (writableLsPaths[fullP]) return true;
+          if (readonlyOrRootLsPaths[fullP]) return false;
+          return !!cronOwnedUsers[homeOwner];
+        });
         var wcArchM = _WILDCARD_ARCHIVER_RE.exec(schedCmd);
         if (wcArchM) wildcardCronEv.push({ tool: wcArchM[1].toLowerCase(), evidence: trimmed.slice(0, 220) });
-        if (refsWritableTarget || refsWritableTree || wcArchM || isWritableRunParts) writableCronLines.push(trimmed);
+        if (refsWritableTarget || refsWritableTree || refsWritableHome || wcArchM || isWritableRunParts) writableCronLines.push(trimmed);
       }
     });
     var cronLines = C.uniqueSortedCI(writableCronLines.concat(scheduledCronLines));
@@ -1247,6 +1390,7 @@
     if (observedSystem) {
       C._add_os_observation(facts, ws, source, 'windows', 'Windows local command output', 'high', 'local-enum', true);
       _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: 'local-enum' }, S, source));
+      _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: 'local-enum' }, S, source));
     }
     var sysinfo = {};
     reAll(C._SYSTEMINFO_FIELD_RE, text).forEach(function (m) { sysinfo[m.groups.key.toLowerCase()] = m.groups.value.trim(); });
@@ -1996,8 +2140,9 @@
       if (!pm) return;
       var pw = (pm[1] || pm[2] || pm[3] || '').trim();
       if (!pw) return;
-      var uhM = /(?:^|[\s'"])([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)/.exec(line);
-      var lM = /\s-l\s+['"]?([A-Za-z0-9_.$-]+)['"]?/.exec(line);
+      var lineNoPw = line.replace(/\s-pw\s+(?:'[^'\r\n]*'|"[^"\r\n]*"|[^\s'"]+)/i, ' ');
+      var uhM = /(?:^|[\s'"])([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)/.exec(lineNoPw);
+      var lM = /\s-l\s+['"]?([A-Za-z0-9_.$-]+)['"]?/.exec(lineNoPw);
       var rawU = (uhM && uhM[1]) || (lM && lM[1]) || '';
       var cleanU = rawU ? C._clean_username(rawU) : '';
       var key = cleanU + '|' + pw;
@@ -2223,7 +2368,7 @@
     var inNotableUserAdded = false;
     for (var li = 0; li < lines.length; li++) {
       var line = lines[li];
-      if (/\bin\s+[\w.]+\s*\(|^\s*File\s+"[^"]+",\s+line\s+\d+|^\s*Traceback\b|\b[\w]+\.run\s*\(/i.test(line)) continue;
+      if (/\bin\s+[\w.]+\s*\(|^\s*File\s+"[^"]+",\s+line\s+\d+|^\s*Traceback\b|\b[\w]+\.run\s*\(|^\s*usage:\s+\S+/i.test(line)) continue;
       var lpDirM = /(?:[\u2550\u2500]+[\u2563\u2524]|={3,}|-{3,})\s*(?:Unexpected in|Files inside)\s+(\/[A-Za-z0-9_.\-\/]+)/i.exec(line);
       if (lpDirM) { currentDir = lpDirM[1].trim().replace(/\/+$/, ''); inNotableUserAdded = false; continue; }
       if (/(?:[\u2550\u2500]+[\u2563\u2524]|={3,}|-{3,})\s*Executable files potentially added by user\b/i.test(line)) {
@@ -2446,10 +2591,11 @@
   var _ACCESSCHK_WRITE_RE = /^\s*(?:RW|W)\s+(?:BUILTIN\\Users|Everyone|NT AUTHORITY\\(?:Authenticated Users|INTERACTIVE)|Authenticated Users|\bUsers\b)/im;
   var _ACCESSCHK_SVC_HDR_RE = /^\s*RW\s+([A-Za-z0-9_.-]{2,64})\s*$/;
 
+  var _REG_CLSID_PATH_RE = /(?:Microsoft\.PowerShell\.Core\\Registry::)?(?:HKEY_CLASSES_ROOT|HKCR|HKLM:?\\SOFTWARE\\Classes|HKEY_LOCAL_MACHINE\\SOFTWARE\\Classes):?\\CLSID\\\{[0-9A-Fa-f-]{36}\}(?:\\InProcServer32|\b)/i;
   var _ICACLS_INHERITED_ACE_RE = /(?:^|\s)(?<principal>(?:[A-Za-z0-9_.-]+\\)?[A-Za-z0-9_. $-]{2,64}?):(?:\((?:I|OI|CI|IO|NP)\))+\((?<rights>F|M|W|GW|GA|WD|AD|WA|[^\r\n()]*?(?:WD|AD|WriteData|CreateFiles|Modify|Full)[^\r\n()]*)\)/i;
   var _ICACLS_NONADMIN_WRITE_ACE_RE = /(?:^|\s)(?<principal>(?:[A-Za-z0-9_.-]+\\)[A-Za-z0-9_. $-]{2,64}|Everyone|Authenticated Users|Users):(?:\((?:I|OI|CI|IO|NP)\))*\((?<rights>F|M|W|GW|GA|WD|AD|WA|[^\r\n()]*?(?:WD|AD|WriteData|CreateFiles|Modify|Full)[^\r\n()]*)\)/i;
-  var _GETACL_INLINE_ALLOW_RE = /(?<principal>(?:[A-Za-z0-9_.-]+\\)[A-Za-z0-9_. $-]{2,48}|Everyone|Authenticated Users|Users)\s+Allow\s+(?<rights>(?:FullControl|Modify|WriteData|CreateFiles|GenericAll|GenericWrite|\bWrite\b)(?:,\s*[A-Za-z]+)*)/gi;
-  var _GETACL_HDR_RE = /^\s*Path\s+Owner\s+Access\b|^\s*FileSystemRights\s*:/im;
+  var _GETACL_INLINE_ALLOW_RE = /(?<principal>(?:[A-Za-z0-9_.-]+\\)[A-Za-z0-9_. $-]{2,48}|Everyone|Authenticated Users|Users)\s+Allow\s+(?<rights>(?:FullControl|Modify|WriteData|CreateFiles|WriteKey|SetValue|CreateSubKey|GenericAll|GenericWrite|\bWrite\b)(?:,\s*[A-Za-z]+)*)/gi;
+  var _GETACL_HDR_RE = /^\s*Path\s+Owner\s+Access\b|^\s*(?:FileSystemRights|RegistryRights)\s*:|(?:HKEY_CLASSES_ROOT|HKCR|HKLM:?\\SOFTWARE\\Classes):?\\CLSID\\\{[0-9A-Fa-f-]{36}\}/im;
 
   function _looks_like_icacls_accesschk(text) {
     var raw = text || '';
@@ -2460,6 +2606,8 @@
   C._looks_like_icacls_accesschk = _looks_like_icacls_accesschk;
 
   function _program_path_from_line(line) {
+    var rm = reSearch(_REG_CLSID_PATH_RE, String(line || ''));
+    if (rm) return rm[0].replace(/^Microsoft\.PowerShell\.Core\\Registry::/i, '').trim();
     var cleaned = String(line || '').replace(/Microsoft\.PowerShell\.Core\\FileSystem::/gi, '');
     var m = reSearch(_ICACLS_PATH_RE, cleaned);
     if (m) return m[0].trim();
@@ -2520,14 +2668,14 @@
       paths[currentPath] = true;
     });
 
-    // Get-Acl Format-List blocks (FileSystemRights / AccessControlType / IdentityReference)
-    if (/FileSystemRights\s*:/i.test(text) && /IdentityReference\s*:/i.test(text)) {
+    // Get-Acl Format-List blocks (FileSystemRights / RegistryRights / AccessControlType / IdentityReference)
+    if (/(?:FileSystemRights|RegistryRights)\s*:/i.test(text) && /IdentityReference\s*:/i.test(text)) {
       var flBlocks = text.split(/\r?\n\s*\r?\n/);
       flBlocks.forEach(function (blk) {
         var bp = _program_path_from_line(blk) || currentPath;
         if (!bp) return;
         if (!/AccessControlType\s*:\s*Allow/i.test(blk)) return;
-        var fsrM = /FileSystemRights\s*:\s*([^\r\n]*(?:FullControl|Modify|WriteData|CreateFiles|GenericAll|GenericWrite|\bWrite\b)[^\r\n]*)/i.exec(blk);
+        var fsrM = /(?:FileSystemRights|RegistryRights)\s*:\s*([^\r\n]*(?:FullControl|Modify|WriteData|CreateFiles|WriteKey|SetValue|CreateSubKey|GenericAll|GenericWrite|\bWrite\b)[^\r\n]*)/i.exec(blk);
         var idrM = /IdentityReference\s*:\s*([^\r\n]+)/i.exec(blk);
         if (!fsrM || !idrM) return;
         var flPrin = idrM[1].trim();
@@ -2790,6 +2938,7 @@
       || (t.indexOf('.so') >= 0 && /^\s*[A-Za-z0-9_.+-]+\.so(?:\.\d+)*\s*=>\s*(?:not found|\/\S+)/m.test(t))
       || (t.indexOf('[') >= 0 && /\b(?:RPATH|RUNPATH|Library rpath|Library runpath)\b[^\r\n]*\[[^\]]+\]/i.test(t))
       || (t.indexOf('(') >= 0 && /\b(?:Process\.Start\s*\(|ProcessStartInfo\b|\[DllImport\s*\(|LoadLibrary(?:Ex)?[AW]?\s*\(|\bsystem\s*\(\s*"[^"\r\n]+"|\bpopen\s*\(\s*"[^"\r\n]+"|\bexec[lv]p\s*\(\s*"[^"\r\n]+")/.test(t))
+      || (t.indexOf('*') >= 0 && /(?:__libc_start_main|GLIBC_2\.\d+|libc\.so\.6)/.test(t) && /\b(?:7z|7za|7zr|tar|rsync|zip|chown|chmod)\b[^\r\n;|&]*?(?:\s(?:[\w./-]*\/)?\*(?:\.[A-Za-z0-9]{1,8})?(?=\s|$|[;|&><)]))/i.test(t))
       || /\.(?:dll|so|ps1|py|sh)\b[^\r\n]*(?:NAME NOT FOUND|PATH NOT FOUND|FileNotFoundException)/i.test(t);
     if (!matchedPositive) return false;
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, cmd)) return false;
@@ -2990,6 +3139,23 @@
       }, leadKinds);
     }
 
+    // 1D. Wildcard archiver / permission command embedded in inspected binary strings/source -> privesc.cron_wildcard
+    var binWildcardHits = [];
+    t.split(/\r?\n/).forEach(function (rawLine) {
+      var wl = rawLine.trim();
+      if (!wl || wl.length > 260) return;
+      var wm = /\b(7z|7za|7zr|tar|rsync|zip|chown|chmod)\b[^\r\n;|&]*?(?:\s(?:[\w./-]*\/)?\*(?:\.[A-Za-z0-9]{1,8})?(?=\s|$|[;|&><")]))/i.exec(wl);
+      if (wm) binWildcardHits.push({ tool: wm[1].toLowerCase(), evidence: wl.slice(0, 220) });
+    });
+    if (binWildcardHits.length) {
+      _add_host_privesc_fact(facts, ws, source, 'privesc.cron_wildcard', {
+        tool: binWildcardHits[0].tool,
+        evidence: binWildcardHits[0].evidence,
+        via_binary: viaBin || null,
+        count: binWildcardHits.length
+      }, leadKinds);
+    }
+
     // 2. Missing or user-writable shared libraries, DLLs, and helper scripts -> privesc.library_or_script_hijack
     var libHijacks = [], seenLib = {};
     function addLibHijack(target, tType, reason) {
@@ -3078,8 +3244,9 @@
 
   // ---- POSIX/BSD whoami & doas/sudo/su/SUID/local-exploit subshell escalation ----
   var _POSIX_WHOAMI_NOISE_RE = /^(?:whoami|hostname|id|uname|pwd|ls|dir|groups|env|set|ver|date|ipconfig|ifconfig|netstat|ss|systeminfo|tasklist|ps|w|last|cat|type|echo|clear|exit|error|denied|failed|failure|unknown|none|null|invalid|unauthorized|not|command|usage|help)$/i;
-  var _POSIX_SUID_SUBSHELL_RE = /(?:\/(?:usr\/)?s?bin\/|(?:^|\s|['"(])\.?\/)(?:ba|da|z|k|a)?sh\b[^\r\n]*?-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i;
+  var _POSIX_SUID_SUBSHELL_RE = /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i;
   function _parse_posix_whoami_escalation(text, ws, command, source, facts) {
+    if (_is_attacker_local_turn(ws, command, text)) return;
     var followPrompt = (ws && ws.context && ws.context.followPrompt) || '';
     var callerPrompt = (ws && ws.context && ws.context.promptLine) || '';
     if (!text && !followPrompt) return;
@@ -3112,13 +3279,13 @@
     var hasDirectRoot = /\bwhoami\b/i.test(cmd) && /^\s*root\s*$/im.test(clean);
     var hasUidZero = /\b(?:e?uid)=0\(root\)/i.test(clean);
     var inBodyPromptM = _match_verified_remote_unix_prompt(clean, callerPrompt, { allowSameHost: true });
-    var followPromptM = _match_verified_remote_unix_prompt(followPrompt, callerPrompt, { allowSameHost: true });
+    var followPromptM = _match_verified_remote_unix_prompt(followPrompt, callerPrompt, { allowSameHost: true, isPromptCtx: true });
     var hasVerifiedRootPrompt = (inBodyPromptM.matched && inBodyPromptM.isRoot) || (followPromptM.matched && followPromptM.isRoot);
-    var callerPObj = callerPrompt ? _parse_unix_prompt_line(String(callerPrompt).split(/\r?\n/)[0]) : null;
+    var callerPObj = callerPrompt ? _parse_unix_prompt_line(String(callerPrompt).split(/\r?\n/)[0], { isPromptCtx: true }) : null;
     var hasVerifiedNonRootCaller = !!(callerPObj && callerPObj.sigil === '$'
-      && callerPObj.user && callerPObj.user.toLowerCase() !== 'root'
-      && !_ATTACKER_PROMPT_ENTITY_RE.test(callerPObj.user)
-      && (!callerPObj.host || !_ATTACKER_PROMPT_ENTITY_RE.test(callerPObj.host)));
+      && (callerPObj.isBareSh || (callerPObj.user && callerPObj.user.toLowerCase() !== 'root'
+        && !_ATTACKER_PROMPT_ENTITY_RE.test(callerPObj.user)
+        && (!callerPObj.host || !_ATTACKER_PROMPT_ENTITY_RE.test(callerPObj.host)))));
     var isHttpContextEsc = /^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(clean) || /\bhttps?:\/\//i.test(cmd);
     var hasLocalExploitEscalation = hasVerifiedNonRootCaller && !isSudoListOrFail && !isHttpContextEsc
       && (hasEchoedRoot || hasDirectRoot || hasUidZero || hasVerifiedRootPrompt)
@@ -3134,6 +3301,26 @@
       _add(facts, mkFact('access.admin', h, { identity: 'root', method: escTool }, S, source));
       _add(facts, mkFact('access.root', h, { method: escTool }, S, source));
       C._add_os_observation(facts, ws, source, 'linux', escTool + ' root escalation', 'high', escTool, true);
+      return;
+    }
+
+    // 3. Horizontal `su` transition to a non-root user prompt
+    if (!isSudoListOrFail && !isHttpContextEsc && /\bsu\b/i.test(cmd)) {
+      var horizPrompt = (followPromptM.matched && !followPromptM.isRoot && followPromptM.user) ? followPromptM
+        : ((inBodyPromptM.matched && !inBodyPromptM.isRoot && inBodyPromptM.user) ? inBodyPromptM : null);
+      var cmdSuTargetM = /\bsu\s+(?:-\s+|-l\s+)?([a-z_][a-z0-9_.-]{0,31})(?:\s|$)/i.exec(cmd);
+      var suTargetUser = horizPrompt ? horizPrompt.user : '';
+      if (!suTargetUser && cmdSuTargetM && cmdSuTargetM[1].toLowerCase() !== 'root'
+          && ((followPromptM.matched && !followPromptM.isRoot) || (inBodyPromptM.matched && !inBodyPromptM.isRoot))) {
+        suTargetUser = cmdSuTargetM[1];
+      }
+      if (suTargetUser && suTargetUser.toLowerCase() !== 'root'
+          && (!callerPObj || !callerPObj.user || suTargetUser.toLowerCase() !== callerPObj.user.toLowerCase())) {
+        _add(facts, mkFact('foothold.linux', h, { identity: suTargetUser, method: 'su' }, S, source));
+        _add(facts, mkFact('access.shell', h, { user: suTargetUser, os: 'linux', via: 'su' }, S, source));
+        _add(facts, mkFact('credential.validated', h, { user: suTargetUser, service: 'su', outcome: 'accepted' }, S, source));
+        C._add_os_observation(facts, ws, source, 'linux', 'su horizontal switch: ' + suTargetUser, 'high', 'su', true);
+      }
     }
   }
   C._parse_posix_whoami_escalation = _parse_posix_whoami_escalation;
@@ -3167,6 +3354,8 @@
       var ln = lines[i];
       var uzM = /^\s*(?:inflating|extracting):\s+(\S.*?)(?:\s+->\s+\S.*)?\s*$/i.exec(ln);
       if (uzM) { pushEntry(uzM[1]); continue; }
+      var uzPwM = /^\s*\[[^\]\r\n]+\]\s+(\S.+?)\s+password:\s*$/i.exec(ln);
+      if (uzPwM) { pushEntry(uzPwM[1]); continue; }
       var uzListM = /^\s*\d+\s+\d{2,4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+(\S.+?)\s*$/.exec(ln);
       if (uzListM && !/^-{3,}/.test(uzListM[1]) && !/\bfiles?\b$/i.test(uzListM[1])) { pushEntry(uzListM[1]); continue; }
       var szExtM = /^\s*Extracting\s+(\S.+?)\s*$/.exec(ln);
@@ -3179,6 +3368,19 @@
         pushEntry(ln.trim());
       }
     }
+    var archNameM = /^\s*Archive:\s+(\S+)/im.exec(clean)
+      || /([^\s'"]+\.(?:zip|7z|rar|tar(?:\.(?:gz|bz2|xz|zst))?|tgz|bak))\b/i.exec(cmd + '\n' + clean);
+    var archName = archNameM ? archNameM[1].trim() : '';
+    var isEncryptedArchive = /\b(?:encrypted|incorrect password|wrong password|need PK compat|skipping:[^\r\n]*need password|Enter password(?:\s+\(will not be echoed\))?:|Encrypted\s*=\s*\+)|^\s*\[[^\]\r\n]+\]\s+\S.+?\s+password:\s*$/im.test(clean);
+    var hasSensitiveArchiveMember = entries.some(function (ent) {
+      var b = (ent.split(/[\/\\]/).pop() || ent).toLowerCase();
+      return b === 'ntds.dit' || b === 'system' || b === 'sam' || /\.(?:kdbx|pfx|p12|psafe3)$/i.test(b);
+    }) || /(?:^|[\s\/\\:])(?:ntds\.dit|[^\s\/\\:]+\.(?:kdbx|pfx|p12|psafe3))(?:\s|$)/im.test(clean);
+    if (isEncryptedArchive || hasSensitiveArchiveMember) {
+      var matVal = { kind: isEncryptedArchive ? 'encrypted_archive' : 'sensitive_archive', encrypted: !!isEncryptedArchive, via: 'archive' };
+      if (archName) matVal.archive = archName;
+      _add(facts, mkFact('loot.material', h, matVal, S, source));
+    }
     if (!entries.length) return;
     var lootFiles = [];
     for (var ei = 0; ei < entries.length; ei++) {
@@ -3189,8 +3391,8 @@
         _add(facts, mkFact('credential.ssh_key', h, { path: ent, file: base, via: 'archive' }, S, source));
         _add(facts, mkFact('credential.candidate', h, { kind: 'ssh_private_key', file: ent, via: 'archive' }, S, source));
         lootFiles.push(ent);
-      } else if (/\.(?:bak|old|kdbx|psafe3|ovpn|sql|sqlite3?|db|pfx|p12)$/i.test(base)
-          || /^(?:tomcat-users\.xml|wp-config\.php|web\.config|\.htpasswd|\.env|authorized_keys|shadow|passwd|(?:config|settings|database|db|secret|cred)[A-Za-z0-9_.-]*\.(?:php|ini|yml|yaml|json|xml|conf|cfg))$/i.test(base)) {
+      } else if (/\.(?:bak|old|kdbx|psafe3|ovpn|sql|sqlite3?|db|mdb|accdb|pst|pfx|p12|dit)$/i.test(base)
+          || /^(?:ntds\.dit|sam|system|security|tomcat-users\.xml|wp-config\.php|web\.config|\.htpasswd|\.env|authorized_keys|shadow|passwd|(?:config|settings|database|db|secret|cred)[A-Za-z0-9_.-]*\.(?:php|ini|yml|yaml|json|xml|conf|cfg))$/i.test(base)) {
         lootFiles.push(ent);
       }
     }
@@ -3207,6 +3409,7 @@
     return /\bServer username:\s*\S+/i.test(t)
       || /\bgot system via technique\s+\d+/i.test(t)
       || /\[\*\]\s*(?:Meterpreter|Command shell) session \d+ opened\b/i.test(t)
+      || /\[\*\]\s*Migration completed successfully/i.test(t)
       || /\[\+\]\s*\S+\s*-\s*exploit\/(?:windows|linux|multi|osx|freebsd)\/local\/[A-Za-z0-9_/-]+:\s*The target appears to be vulnerable/i.test(t)
       || /^\s*meterpreter\s*>/im.test(t)
       || /\b(?:getuid|getsystem|local_exploit_suggester)\b/i.test(c);
@@ -3269,6 +3472,13 @@
       }
     }
 
+    if (/\[\*\]\s*Migration completed successfully/i.test(clean)) {
+      _add(facts, mkFact('access.shell', h, { handler: 'meterpreter', via: 'migration' }, S, source));
+      if (!/\b(?:linux\/|unix\/|freebsd\/|osx\/)/i.test(ctx)) {
+        _add(facts, mkFact('foothold.windows', h, { method: 'meterpreter-migrate' }, S, source));
+      }
+    }
+
     var lesMods = C.uniqueSortedCI(reAll(/\[\+\]\s*\S+\s*-\s*(?<mod>exploit\/(?:windows|linux|multi|osx|freebsd)\/local\/[A-Za-z0-9_/-]+):\s*The target appears to be vulnerable/gim, clean).map(function (m) {
       return m.groups.mod;
     }));
@@ -3317,6 +3527,19 @@
       }
     }
 
+    // 2B. Impacket reg.py backup -> Saved HKLM\(SAM|SYSTEM|SECURITY) to <path>
+    var regPySaved = reAll(/Saved\s+HKLM\\(SAM|SYSTEM|SECURITY)\s+to\s+([^\r\n]+)/gi, clean);
+    if (regPySaved.length) {
+      var pyHivePaths = C.uniqueSortedCI(regPySaved.map(function (m) { return m[2].trim().replace(/^['"]|['"]$/g, ''); }).filter(Boolean));
+      var hasSamHive = regPySaved.some(function (m) { return m[1].toUpperCase() === 'SAM'; });
+      if (pyHivePaths.length) {
+        _add(facts, mkFact('loot.files', h, { files: pyHivePaths, count: pyHivePaths.length, tool: 'reg-backup', via: 'reg-backup-hive', sensitive: pyHivePaths }, S, source));
+      }
+      if (hasSamHive) {
+        _add(facts, mkFact('loot.sam', h, { files: pyHivePaths, via: 'reg-backup', unparsed_hive: true }, S, source));
+      }
+    }
+
     // 3. robocopy /b ... ntds.dit backup-mode staging completion
     if (/\brobocopy(?:\.exe)?\b/i.test(combined) && /(?:^|\s)\/b\b/i.test(combined) && /\bntds\.dit\b/i.test(combined)) {
       var roboOk = (/\b100%\b|\bNew File\b[^\r\n]*\bntds\.dit\b|^\s*Files\s*:\s*\d+\s+[1-9]\d*\b/im.test(clean))
@@ -3327,5 +3550,97 @@
     }
   }
   C._parse_windows_admin_staging = _parse_windows_admin_staging;
+
+  // ---- Host auxiliary grammars: authorized_keys plant, ls /home, ls .ssh, ImageMagick version, stage delivery, relative find -type f ----
+  function _parse_host_auxiliary(text, ws, command, source, facts) {
+    var clean = String(text || '').replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '');
+    var cmd = String(command || '');
+    if (!clean && !cmd) return;
+    var h = 'host:' + ws.target;
+    var isAttackerLocal = _is_attacker_local_turn(ws, cmd, clean);
+    var callerPrompt = (ws && ws.context && ws.context.promptLine) || '';
+    var callerPObj = callerPrompt ? _parse_unix_prompt_line(String(callerPrompt).split(/\r?\n/)[0], { isPromptCtx: true }) : null;
+
+    // 1. Stage-delivery logs (Metasploit / custom HTTP/TCP stager serving payload stage to target)
+    if (/\bClient requested stage \d+\b|\bSending stage \(\d+ bytes\)\s+to\b/i.test(clean)) {
+      _add(facts, mkFact('host.tool_staged', h, { via: 'stage-delivery' }, S, source));
+    }
+
+    // 2. Error-free authorized_keys plant (remote curl PUT/upload or on-host tee/cp/mv/redirect)
+    var isCurlPutAuthKeys = /\bcurl\b[^\r\n]*(?:-X\s*PUT\b|-T\s+\S|--upload-file\b)[^\r\n]*\/\.?ssh\/authorized_keys\b/i.test(cmd);
+    var isLocalWriteAuthKeys = !isAttackerLocal && /(?:\b(?:tee|cp|mv)\b[^\r\n]*|>>?\s*['"]?)[^\r\n]*?(?:\/|^|['"\s~])\.?ssh\/authorized_keys\b/i.test(cmd);
+    if ((isCurlPutAuthKeys || isLocalWriteAuthKeys)
+        && /\b(?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp\d+)\b|\.pub\b|\bid_(?:rsa|ed25519|ecdsa|dsa)\b/i.test(cmd + '\n' + clean)
+        && !/\b(?:Permission denied|No such file or directory|Read-only file system|Operation not permitted|cannot open|cannot create|curl:\s*\(\d+\)|Access denied)\b/i.test(clean)
+        && !/HTTP\/[12](?:\.\d)?\s+[45]\d\d\b/i.test(clean)) {
+      _add(facts, mkFact('credential.ssh_key', h, { via: 'authorized-keys-plant' }, S, source));
+    }
+
+    if (isAttackerLocal) return;
+
+    // 3. ls /home (or ls inside /home CWD) -> host.users
+    var isLsHome = /^\s*(?:sudo\s+)?ls(?:\s+-[A-Za-z0-9-]+)*\s+\/home\/?\s*$/i.test(cmd)
+      || (/^\s*(?:sudo\s+)?ls(?:\s+-[A-Za-z0-9-]+)*\s*$/i.test(cmd) && callerPObj && /^\/home\/?$/.test(callerPObj.cwd || ''));
+    if (isLsHome && clean.trim() && !/\b(?:No such file or directory|Permission denied|cannot access)\b/i.test(clean)) {
+      var homeUsers = [];
+      var isLongLs = /^total\s+\d+\b|^[d-][rwxstST-]{9}/m.test(clean);
+      if (isLongLs) {
+        clean.split(/\r?\n/).forEach(function (ln) {
+          var dm = /^d[rwxstST-]{9}[.+@]?\s+\d+\s+\S+\s+\S+\s+\d+\s+(?:[A-Z][a-z]{2}\s+\d+\s+[\d:]+\s+|\d{4}-\d{2}-\d{2}\s+[\d:]+\s+)([a-z_][a-z0-9_.-]{0,31})\/?\s*$/i.exec(ln.trim());
+          if (dm && !/^(?:lost\+found)$/i.test(dm[1])) homeUsers.push(dm[1]);
+        });
+      } else {
+        clean.split(/\s+/).forEach(function (tok) {
+          var tClean = tok.replace(/\/$/, '').trim();
+          if (!tClean || /^(?:ls|total|lost\+found|\.+)$/i.test(tClean)) return;
+          if (/^[a-z_][a-z0-9_.-]{0,31}$/i.test(tClean)) homeUsers.push(tClean);
+        });
+      }
+      var uniqHome = C.uniqueSortedCI(homeUsers);
+      if (uniqHome.length) {
+        _add(facts, mkFact('host.users', h, { users: uniqHome, count: uniqHome.length, via: 'ls-home' }, S, source));
+      }
+    }
+
+    // 4. ls inside .ssh listing private key filename -> loot.ssh_key (unverified_read: true)
+    var isLsSsh = /\bls\b[^\r\n]*(?:^|[\s'"])(?:~|\S*)?\/?\.ssh\/?(?:\s|$|['"])/i.test(cmd)
+      || (/^\s*(?:sudo\s+)?ls(?:\s+-[A-Za-z0-9-]+)*\s*$/i.test(cmd) && callerPObj && /(?:^|\/)\.ssh\/?$/.test(callerPObj.cwd || ''));
+    if (isLsSsh && clean.trim() && !/\b(?:No such file or directory|Permission denied|cannot access)\b/i.test(clean)) {
+      var keyM = /(?:^|\s)(id_(?:rsa|ed25519|ecdsa|dsa|xmss)|identity)(?=\s|$)/im.exec(clean);
+      if (keyM) {
+        _add(facts, mkFact('loot.ssh_key', h, { file: keyM[1], unverified_read: true, via: 'ls-ssh' }, S, source));
+      }
+    }
+
+    // 5. ImageMagick CVE-2024-41817 version banner (when not routed through _parse_privesc)
+    var imAuxM = /Version:\s+ImageMagick\s+(6\.\d+\.\d+-\d+|7\.0\.\d+-\d+|7\.1\.(?:0-\d+|1-(?:[0-2]?\d|3[0-5])))\b/i.exec(clean);
+    if (imAuxM && !facts.some(function (f) { return f && f.kind === 'privesc.library_or_script_hijack'; })) {
+      var auxLeads = {};
+      _add_host_privesc_fact(facts, ws, source, 'privesc.library_or_script_hijack', {
+        target: 'ImageMagick ' + imAuxM[1],
+        target_type: 'so',
+        reason: 'imagemagick_delegate_la_search_path',
+        cve: 'CVE-2024-41817'
+      }, auxLeads);
+      _add_privesc_leads(facts, ws, source, auxLeads);
+    }
+
+    // 6. Non-empty relative `find <dir>/ -type f` enumerating local files -> loot.files
+    var relFindM = /^\s*(?:sudo\s+)?find\s+(?!\/(?:\s|$))([A-Za-z0-9_.-][A-Za-z0-9_./-]*)\s+[^\r\n]*-type\s+f\b/i.exec(cmd);
+    if (relFindM && !/\s-perm\b/i.test(cmd) && clean.trim()) {
+      var prefixNorm = relFindM[1].replace(/\/+$/, '');
+      var foundFiles = [];
+      clean.split(/\r?\n/).forEach(function (ln) {
+        var fl = ln.trim();
+        if (!fl || /^find:\s/i.test(fl) || fl.indexOf(' ') >= 0) return;
+        if (fl.indexOf(prefixNorm + '/') === 0 || fl.indexOf('./') === 0) foundFiles.push(fl);
+      });
+      if (foundFiles.length) {
+        var uniqFound = C.uniqueSortedCI(foundFiles);
+        _add(facts, mkFact('loot.files', h, { files: uniqFound.slice(0, 50), path: uniqFound[0], count: uniqFound.length, tool: 'find', via: 'find-type-f' }, S, source));
+      }
+    }
+  }
+  C._parse_host_auxiliary = _parse_host_auxiliary;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);
