@@ -10,7 +10,7 @@
   var reAll = C.reAll, reSearch = C.reSearch;
 
   var _MSSQL_WHOAMI_RE = /\bnt (?:service|authority)\\[\w$.-]+|(?<![A-Za-z]:\\)\b(?![A-Za-z]:\\)[A-Za-z0-9_.-]{2,32}\\[A-Za-z0-9_.$-]{2,32}\s*$|uid=\d+\(/im;
-  var _DB_ACCESS_DENIED_RE = /access denied|authentication failed|login failed|permission denied|ERROR 1045|can't connect to|connection refused|could not connect to server|timeout expired|login failed for user|ERROR 200[235]|FATAL:\s+password authentication failed|ORA-01017|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]/i;
+  var _DB_ACCESS_DENIED_RE = /access denied|authentication failed|login failed|permission denied|ERROR 1045|can't connect to|connection refused|could not connect to server|timeout expired|login failed for user|ERROR 200[235]|FATAL:\s*(?:(?:password|Peer|Ident|SCRAM|GSSAPI|PAM|LDAP|certificate|RADIUS|BSD)\s+authentication failed|no pg_hba\.conf entry for host\b|database\s+"[^"\r\n]+"\s+is not currently accepting connections|role\s+"[^"\r\n]+"\s+is not permitted to log in)|ORA-01017|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]/i;
   var _MONGO_AUTH_DENIED_RE = /MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|Mongo(?:Server|Network)?Error:\s*Authentication\s+failed|\berrmsg:\s*['"][^'"]*(?:requires\s+authentication|not\s+authorized|auth\s+failed)/i;
   var _MONGO_CONN_FAIL_RE = /\b(?:ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|connect\s+ECONNREFUSED|connection\s+refused|timed?\s*out|couldn't\s+connect\s+to\s+server)\b/i;
   var _MONGO_POSITIVE_DATA_RE = /\b(?:admin|local|config)\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b|\[\s*\{\s*['"_A-Za-z0-9$]+['"]?\s*:|\bObjectId\s*\(\s*['"][0-9a-fA-F]{24}['"]\s*\)|["']ok["']\s*:\s*1\b/i;
@@ -232,6 +232,8 @@
   function _parse_database_output(text, ws, command, source, facts) {
     text = String(text || '');
     if (/^\s*(?:where(?:\.exe)?|which|whereis|type\s+-a|command\s+-v|get-command|gcm|dir|ls|gci|get-childitem|find)\b/i.test(command || '')) return;
+    if (/^\s*(?:sudo\s+)?(?:[\w.~/-]+[\\/])?(?:mongo(?:sh)?|psql|mysql|mariadb|redis-cli|sqlcmd|sqlite3?)(?:\.exe)?\s+(?:--version|-version|--help|-help|-\?|-V|-h)\s*$/i.test(command || '')) return;
+    if (/^\s*MongoDB shell version\b/im.test(text) && /\bBuild Info:\s*\{/i.test(text) && !/\bconnecting to:\s*mongodb/i.test(text)) return;
     var ctx = (ws && ws.context) || {};
     var followPrompt = ctx.followPrompt ? String(ctx.followPrompt) : '';
     var promptLine = ctx.promptLine ? String(ctx.promptLine) : '';
@@ -429,23 +431,52 @@
 
     var isRedisCmd = /\bredis-cli\b/i.test(command || '')
       || /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*/m.test(text + '\n' + promptLine + '\n' + followPrompt);
+    var redisPortM = /\bredis-cli\b[^\r\n]*?\s-p\s+(\d{1,5})\b/i.exec(command || '')
+      || /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):(\d{1,5})>/m.exec(promptLine + '\n' + followPrompt + '\n' + text);
+    var redisPort = redisPortM ? parseInt(redisPortM[1], 10) : 6379;
+    if (!(redisPort >= 1 && redisPort <= 65535)) redisPort = 6379;
+    var isAlreadyOpenRedisRepl = /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>/.test(promptLine);
     var redisAuthM = (isRedisCmd || low.indexOf('redis') >= 0)
-      ? (/\bredis-cli\b[^\r\n]*?(?:\s-a\s+['"]?([^\s'"]+)['"]?|\bauth\s+['"]?([^\s'"]+)['"]?)/i.exec(command || '')
+      ? (/\bredis-cli\b[^\r\n]*?(?:\s(?:-a|--pass)\s+['"]?([^\s'"]+)['"]?|\bredis:\/\/[^:\s/'"]*:([^@\s'"]+)@|\bauth\s+['"]?([^\s'"]+)['"]?)/i.exec(command || '')
         || /^(?:\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*)?auth\s+['"]?([^\s'"\r\n]+)['"]?\s*$/im.exec(promptLine + '\n' + text))
       : null;
-    var redisAuthSecret = redisAuthM ? (redisAuthM[1] || redisAuthM[2] || '').trim() : '';
+    var redisAuthSecret = redisAuthM ? (redisAuthM[1] || redisAuthM[2] || redisAuthM[3] || '').trim() : '';
     var hasRedisAuthSupplied = !!redisAuthSecret || /\bNOAUTH\b/i.test(text);
     var hasRedisBareReply = isRedisCmd && !_REDIS_DENIED_RE.test(text) && /^(?:\+OK|OK|\+PONG|PONG|\(integer\)\s+\d+)\s*$/im.test(text);
+    var hasLiveRedisFollowPrompt = isRedisCmd && !/(?:Could\s+not\s+connect\s+to\s+Redis|Connection\s+refused|Connection\s+timed\s+out)/i.test(text)
+      && /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*$/m.test(followPrompt);
     var isRedisHit = ((low.indexOf('redis') >= 0 || isRedisCmd || /^redis_version:/im.test(text)) && (text.toLowerCase().indexOf('# server') >= 0 || /^redis_version:/im.test(text) || /^\+PONG\b|^PONG\b|^\+OK\b/im.test(text) || /^\s*\d+\)\s+"/m.test(text))) || hasRedisBareReply;
-    if (redisAuthSecret && !_REDIS_DENIED_RE.test(text) && /^\s*(?:\+OK|OK)\s*$/im.test(text)) {
+    if (redisAuthSecret && !_REDIS_DENIED_RE.test(text) && (isRedisHit || hasLiveRedisFollowPrompt || /^\s*(?:\+OK|OK|\+PONG|PONG)\s*$/im.test(text))) {
       _add(facts, mkFact('credential.validated', h, { service: 'redis', tool: 'redis-cli', outcome: 'accepted' }, S, source));
       _add(facts, mkFact('db.session', h, { service: 'redis', tool: 'redis-cli', detail: 'authenticated database session established' }, S, source));
-      _add(facts, mkFact('db.reachable', h, { service: 'redis', port: 6379, tool: 'redis-cli' }, S, source));
+      _add(facts, mkFact('service.redis', h, { port: redisPort, protocol: 'tcp', service: 'redis', tool: 'redis-cli' }, S, source));
+      _add(facts, mkFact('redis.reachable', h, { port: redisPort, tool: 'redis-cli' }, S, source));
+      _add(facts, mkFact('db.reachable', h, { service: 'redis', port: redisPort, tool: 'redis-cli' }, S, source));
     }
+    if ((isRedisHit || hasLiveRedisFollowPrompt || (isRedisCmd && /\b(?:NOAUTH|WRONGPASS|NOPERM)\b/i.test(text))) && !/(?:Could\s+not\s+connect\s+to\s+Redis|Connection\s+refused|Connection\s+timed\s+out)/i.test(text)) {
+      _add(facts, mkFact('service.redis', h, { port: redisPort, protocol: 'tcp', service: 'redis', tool: 'redis-cli' }, S, source));
+      _add(facts, mkFact('redis.reachable', h, { port: redisPort, tool: 'redis-cli' }, S, source));
+      _add(facts, mkFact('db.reachable', h, { service: 'redis', port: redisPort, tool: 'redis-cli' }, S, source));
+    }
+    var redisSeedPool = (ws && (ws.seedFacts || ws.facts)) || [];
+    var hasPriorRedisAuth = Array.isArray(redisSeedPool) && redisSeedPool.some(function (f) {
+      return f && f.kind === 'credential.validated' && f.value && String(f.value.service || '').toLowerCase() === 'redis';
+    });
     if (isRedisHit) {
-      if (!denied && !_REDIS_DENIED_RE.test(text) && !hasRedisAuthSupplied) {
+      if (!denied && !_REDIS_DENIED_RE.test(text) && !hasRedisAuthSupplied && !(isAlreadyOpenRedisRepl && hasPriorRedisAuth)) {
         _add(facts, mkFact('config.review', h, { kind: 'unauthenticated_redis', service: 'redis', detail: 'redis responded to INFO/KEYS without authentication' }, S, source));
-        _add(facts, mkFact('redis.unauth', h, { port: 6379, tool: 'redis-cli' }, S, source));
+        _add(facts, mkFact('redis.unauth', h, { port: redisPort, tool: 'redis-cli' }, S, source));
+      }
+    }
+
+    var sqlFlagFileM = /\b(?:load_file|pg_read_file|xp_cmdshell|openrowset)\b[^\r\n]*?\b(proof|root|local|user)\.txt\b/i.exec((command || '') + '\n' + promptLine + '\n' + text);
+    if (sqlFlagFileM) {
+      var sqlFlagCellM = /^\s*\|\s*([0-9a-fA-F]{32})\s*\|\s*$/m.exec(text);
+      if (sqlFlagCellM) {
+        var flagKindName = /^(?:proof|root)$/i.test(sqlFlagFileM[1]) ? 'objective.root_flag' : 'objective.user_flag';
+        var flagFileName = sqlFlagFileM[1].toLowerCase() + '.txt';
+        _add(facts, mkFact('proof.captured', h, { file: flagFileName, hash: sqlFlagCellM[1], via: 'sql-file-read' }, S, source));
+        _add(facts, mkFact(flagKindName, h, { file: flagFileName, hash: sqlFlagCellM[1], via: 'sql-file-read' }, S, source));
       }
     }
 
@@ -565,6 +596,24 @@
       _add(facts, mkFact('blocker.access_denied', h, { service: 'mongodb', reason: 'auth_required' }, S, source));
     }
 
+    var isPgRejectionCtx = low.indexOf('psql') >= 0
+      || /\bpsql:\s*(?:error:\s*)?(?:connection to server[^\r\n]*failed:\s*)?FATAL:/i.test(text)
+      || /\bFATAL:\s*no pg_hba\.conf entry for host\b/i.test(text);
+    if (isPgRejectionCtx) {
+      var pgPortM = /(?:^|\s)-p\s+(\d{1,5})\b/.exec(command || '') || /\bport\s+(\d{1,5})\s+failed:\s*FATAL:/i.exec(text);
+      var pgPort = pgPortM ? parseInt(pgPortM[1], 10) : 5432;
+      if (!(pgPort >= 1 && pgPort <= 65535)) pgPort = 5432;
+      if (/\bFATAL:\s*(?:no pg_hba\.conf entry for host\b|database\s+"[^"\r\n]+"\s+is not currently accepting connections|role\s+"[^"\r\n]+"\s+is not permitted to log in)/i.test(text)) {
+        _add(facts, mkFact('postgres.reachable', h, { port: pgPort, tool: 'psql' }, S, source));
+        _add(facts, mkFact('db.reachable', h, { service: 'postgresql', port: pgPort, tool: 'psql' }, S, source));
+        _add(facts, mkFact('blocker.access_denied', h, { service: 'postgresql', reason: 'pg_hba_rejected' }, S, source));
+      } else if (/\bFATAL:\s*(?:password|Peer|Ident|SCRAM|GSSAPI|PAM|LDAP|certificate|RADIUS|BSD)\s+authentication failed for user\b/i.test(text)) {
+        _add(facts, mkFact('postgres.reachable', h, { port: pgPort, tool: 'psql' }, S, source));
+        _add(facts, mkFact('db.reachable', h, { service: 'postgresql', port: pgPort, tool: 'psql' }, S, source));
+        _add(facts, mkFact('blocker.logon_failure', h, { service: 'postgresql', reason: 'auth_failed' }, S, source));
+      }
+    }
+
     // A successful interactive login -> db.session, the fact that unlocks the DB post-exploitation
     // (loot the tables, or MSSQL xp_cmdshell). Conservative: a recognizable engine-specific success
     // banner/prompt AND no access-denied line, so a failed login or an unrelated paste mints nothing.
@@ -588,7 +637,7 @@
                (/connected to:/i.test(sessionText) || /^\s*SQL\s*>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
       else if (!isMongoAuthDenied && !_MONGO_CONN_FAIL_RE.test(text) &&
                (low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
-               (hasMongoPositiveData || (/test>|\bmongosh\b/i.test(sessionText) && !/Mongo(?:Server|Network)?Error:/i.test(sessionText)))) {
+               (hasMongoPositiveData || ((/\bUsing MongoDB:\s*\d|\bCurrent Mongosh Log ID:\s*[0-9a-f]{16,}|\bMongoDB server version:\s*\d|\bImplicit session:\s*session\s*\{/i.test(sessionText) || /^\s*(?:rs\d+:(?:PRIMARY|SECONDARY)|test|admin|config|local|[A-Za-z0-9_-]{2,32})>\s*(?:show\s+(?:dbs|databases|collections|users)|use\s+\S+|db\.|$)/im.test(sessionText)) && !/Mongo(?:Server|Network)?Error:/i.test(sessionText)))) {
         svc = 'mongodb';
         _add(facts, mkFact('mongo.unauth', h, { port: 27017, tool: 'mongosh' }, S, source));
       }

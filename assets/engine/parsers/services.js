@@ -208,10 +208,11 @@
     }
 
     var hasFtpListingShape = reAll(/^\s*[-dlbcps][-rwxsStT]{9}[@+.]?\s+\d+\s+ftp\s+ftp\s+\d+\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+\S/gm, text).length >= 2;
-    var writeOk = !isMailCmd && !isSmtpOnlyTranscript && reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text);
+    var mkdirCreatedOk = !isMailCmd && !isSmtpOnlyTranscript && /^\s*257\s+"[^"\r\n]+"[^\r\n]*\bcreated\b/im.test(text);
+    var writeOk = (!isMailCmd && !isSmtpOnlyTranscript && reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text)) || mkdirCreatedOk;
     var hasFtpAnchorLine = !isMailCmd && !isSmtpOnlyTranscript && String(text || '').split(/\r?\n/).some(function (ln) {
       if (/^\s*220[ -]/i.test(ln)) return !_MAIL_220_BANNER_RE.test(ln);
-      return /^\s*(?:ftp>|local:\s*\S.*?\s+remote:\s*\S|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(ln);
+      return /^\s*(?:ftp>|local:\s*\S.*?\s+remote:\s*\S|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30|57)[ -]|331[ -]|Connected to\b)/i.test(ln);
     });
     var hasFtpSession = !isMailCmd && !isSmtpOnlyTranscript && !!(banners.length || loginSuccess || writeOk || isExplicitFtpCmd || hasFtpListingShape || hasFtpAnchorLine);
     var ftpFiles = [], ftpDownloaded = [], seenDl = {}, webrootMarkers = [];
@@ -248,7 +249,7 @@
         seenFtpAnchor = true;
       } else if (/^\s*220[ -]/i.test(line) && !_MAIL_220_BANNER_RE.test(line)) {
         seenFtpAnchor = true;
-      } else if (/^\s*(?:1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30)[ -]|331[ -]|Connected to\b)/i.test(line)) {
+      } else if (/^\s*(?:1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30|57)[ -]|331[ -]|Connected to\b)/i.test(line)) {
         seenFtpAnchor = true;
       }
       if (!seenFtpAnchor) return;
@@ -285,6 +286,22 @@
     var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
     var isAnon = /\banonymous\b/i.test(command) || anonInText;
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
+    if (loginSuccess && !isAnon) {
+      var ftpUserM = /^\s*Name\s*\([^)\r\n]*\):\s*([A-Za-z0-9._$@-]{1,64})\s*$/im.exec(text)
+        || /^\s*(?:--->?\s*)?USER\s+([A-Za-z0-9._$@-]{1,64})\s*$/im.exec(text)
+        || /^\s*331[\s-]+(?:Password required for|User|Please specify the password for)\s+['"]?([A-Za-z0-9._$@-]{1,64})['"]?(?:[\s.,:]|$)/im.exec(text)
+        || /^\s*230[\s-]+User\s+['"]?([A-Za-z0-9._$@-]{1,64})['"]?\s+logged\s+in\b/im.exec(text)
+        || /\bftps?:\/\/([^\/:\s@'"]+)(?::[^\/\s@'"]*)?@/i.exec(cmdStr)
+        || /\blftp\b[^\r\n]*?\s-u\s+['"]?([^,\s'"]+)/i.exec(cmdStr);
+      var ftpAuthUser = ftpUserM ? (C._clean_username ? C._clean_username(ftpUserM[1]) : ftpUserM[1].trim()) : '';
+      if (/^(?:logged|login|ok|successful|connected|access|granted|welcome|anonymous|ftp)$/i.test(ftpAuthUser)) ftpAuthUser = '';
+      var ftpAuthVal = { service: 'ftp', tool: 'ftp-client' };
+      if (ftpUriPort) ftpAuthVal.port = ftpUriPort;
+      if (ftpAuthUser && (!C._valid_username || C._valid_username(ftpAuthUser, false))) ftpAuthVal.user = ftpAuthUser;
+      _add(facts, mkFact('ftp.authenticated', h, ftpAuthVal, S, source));
+      var ftpValidVal = Object.assign({}, ftpAuthVal, { outcome: 'accepted' });
+      _add(facts, mkFact('credential.validated', h, ftpValidVal, S, source));
+    }
     if (loginSuccess && streamCreds.length) _emit_ftp_stream_creds(facts, ws, h, source, streamCreds);
     if (writeOk) _add(facts, mkFact('ftp.anon_write', h, { tool: 'ftp-client', anonymous: isAnon }, S, source));
     if (ftpFiles.length && C._emit_file_loot) C._emit_file_loot(facts, h, ftpFiles, 'ftp', (hasFtpUri && !banners.length) ? 'ftp-list' : 'ftp-listing', text, ws, source);
@@ -691,10 +708,50 @@
   function _parse_rsync_nfs(text, ws, command, source, facts) {
     if (!text) return;
     var h = 'host:' + ws.target;
-    var lc = String(command || '').toLowerCase();
+    var cmdStr = String(command || '');
+    var lc = cmdStr.toLowerCase();
+    var rGenericModRe = /^(?:files?|data|pub|public|shared?|shares?|backups?|bak|www|web|webroot|html|htdocs|docs?|documents?|media|images?|img|static|assets?|uploads?|downloads?|ftp|rsync|src|source|code|git|repos?|svn|logs?|tmp|temp|var|opt|etc|usr|srv|mnt|home|users?|root|admin|administrator|guest|anonymous|test|testing|dev|prod|staging|archive|archives|packages?|pkg|dist|mirror|mirrors|ubuntu|debian|centos|fedora|alpine|kali|kernel|cpan|cran|ctan|gnu)$/i;
     if (/\brsync\b/.test(lc) && !/connection refused|failed to connect|timed out|@ERROR:/i.test(text)) {
-      if (/^[drwxlst-]{10}\s+[\d,]+\s+\d{4}\/\d{2}\/\d{2}|^\s*[A-Za-z0-9_.-]+\s{2,}\S/m.test(text)) {
+      var rsFiles = [], rsSeenF = {};
+      reAll(/^[bcdlps-][rwxstST-]{9}[+@.]?\s+[\d,]+\s+\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2}\s+(\S[^\r\n]*)$/gm, text).forEach(function (m) {
+        var fn = m[1].trim().replace(/[ \t]+->[ \t]+[^\r\n]*$/, '');
+        if (!fn || fn === '.' || fn === '..') return;
+        if (!rsSeenF[fn.toLowerCase()]) { rsSeenF[fn.toLowerCase()] = true; rsFiles.push(fn); }
+      });
+      if (rsFiles.length) {
         _add(facts, mkFact('rsync.reachable', h, { port: 873, tool: 'rsync' }, S, source));
+        _add(facts, mkFact('loot.files', h, { files: rsFiles, count: rsFiles.length, tool: 'rsync', via: 'rsync-list' }, S, source));
+        var modTargetM = /(?:rsync:\/\/[^\/\s'"]+\/|::)([A-Za-z0-9_.-]{1,32})(?:\/|\s|['"]|$)/i.exec(cmdStr);
+        var modTarget = modTargetM ? modTargetM[1] : '';
+        var hasHomeDotfile = rsFiles.some(function (f) {
+          var base = f.split('/').pop();
+          return /^\.(?:ssh|bash_history|bashrc|bash_profile|bash_logout|profile|zshrc|zsh_history|viminfo|gnupg|config|local|cache)$/i.test(base);
+        });
+        if (modTarget && /^[a-z_][a-z0-9_-]{1,31}$/.test(modTarget) && !rGenericModRe.test(modTarget) && hasHomeDotfile) {
+          _add(facts, mkFact('host.users', h, { users: [modTarget], via: 'rsync-home' }, S, source));
+        }
+      } else {
+        var rsMods = [], rsEntries = [], rsUsers = [], rsSeenM = {};
+        reAll(/^[ \t]*([A-Za-z0-9_.-]{1,64})(?:\t+|[ \t]{2,})(\S[^\r\n]*)$/gm, text).forEach(function (m) {
+          var mn = m[1].trim(), mc = m[2].trim();
+          if (/^(?:@RSYNCD|MOTD|rsync|receiving|sent|total|speedup|WARNING|ERROR)$/i.test(mn)) return;
+          var mk = mn.toLowerCase();
+          if (!rsSeenM[mk]) {
+            rsSeenM[mk] = true;
+            rsMods.push(mn);
+            rsEntries.push({ name: mn, comment: mc });
+          }
+          if (/^[a-z_][a-z0-9_-]{1,31}$/.test(mn) && !rGenericModRe.test(mn) && /\bhome\b/i.test(mc)) {
+            rsUsers.push(mn);
+          }
+        });
+        if (rsMods.length) {
+          _add(facts, mkFact('rsync.reachable', h, { port: 873, tool: 'rsync' }, S, source));
+          _add(facts, mkFact('rsync.modules', h, { modules: rsMods, entries: rsEntries, count: rsMods.length, tool: 'rsync' }, S, source));
+          if (rsUsers.length) {
+            _add(facts, mkFact('host.users', h, { users: C.uniqueSortedCI(rsUsers), via: 'rsync-modules' }, S, source));
+          }
+        }
       }
     }
     if ((/\bshowmount\b/.test(lc) || /^Export list for\s+\S+:/im.test(text) || /^NFS\s+\d{1,3}(?:\.\d{1,3}){3}\s+2049\b/im.test(text)) && !/clnt_create:\s*RPC|connection refused|timed out/i.test(text)) {

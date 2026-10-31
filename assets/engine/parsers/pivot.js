@@ -160,7 +160,7 @@
     }
     var t = String(text || ''), cmd = String(command || '');
     var combined = cmd + '\n' + t;
-    if (/^\s*(?:man|which|whereis|type|help)\s+chisel\b/i.test(cmd) || /\bUsage:\s*chisel\b|--help\b/i.test(combined)) {
+    if (/^\s*(?:man|which|whereis|type|help)\s+chisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\b/i.test(cmd) || /\bUsage:\s*chisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\b|--help\b/i.test(combined)) {
       return facts;
     }
     var hasActiveBanner = /(?:(?:client|server):\s+Connected\s*\(Latency|\b(?:c|client|server):\s*Connected\b|session#\d+:\s*tun:|tun:\s*proxy#[^\r\n]*:\s*Listening\b|server:\s+Listening on\s+https?:\/\/|(?:client|server):\s+Connecting to ws:\/\/\S+)/i.test(t);
@@ -168,15 +168,15 @@
     if (hasErr && !/(?:(?:client|server):\s+Connected\s*\(Latency|\b(?:c|client|server):\s*Connected\b|session#\d+:\s*tun:|tun:\s*proxy#[^\r\n]*:\s*Listening\b)/i.test(t)) {
       return facts;
     }
-    var isChisel = /\bchisel(?:\.exe)?\b/i.test(cmd) ||
-      /\bchisel(?:\.exe)?\b/i.test(t) ||
+    var isChisel = /\bchisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\b/i.test(cmd) ||
+      /\bchisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\b/i.test(t) ||
       /\b(?:client|server):\s+(?:Connecting to ws:\/\/|Reverse tunnelling enabled|Fingerprint\s+[0-9a-f]{2}:|Connected\s*\(Latency)|\bsession#\d+:\s*tun:\s*proxy#|\btun:\s*proxy#R:/i.test(t);
     if (!isChisel) return facts;
 
-    var cmdHasTunnelSpec = /\bchisel(?:\.exe)?\s+(?:client|server)\b/i.test(cmd) &&
+    var cmdHasTunnelSpec = /\bchisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\s+(?:client|server)\b/i.test(cmd) &&
       (/\bR:(?:socks|\d)/i.test(cmd) || /--reverse\b/i.test(cmd) || _hasValidChiselForwardSpec(cmd));
     var textHasChiselProof = hasActiveBanner ||
-      (/\bchisel(?:\.exe)?\b/i.test(t) && /(?:Connected\b|Connected\s*\(|Listening on|tun:\s|proxy#(?:R:|\d)|session#\d+|R:socks)/i.test(t));
+      (/\bchisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\b/i.test(t) && /(?:Connected\b|Connected\s*\(|Listening on|tun:\s|proxy#(?:R:|\d)|session#\d+|R:socks)/i.test(t));
     if (!textHasChiselProof && !(cmdHasTunnelSpec && !hasErr)) return facts;
 
     var h = 'host:' + ((ws && ws.target) || 'unknown');
@@ -222,7 +222,7 @@
       recordFwd(+m[2], m[3] || '127.0.0.1', +m[4]);
     }
 
-    if (/\bchisel(?:\.exe)?\s+client\b/i.test(cmd)) {
+    if (/\bchisel(?:[_-][A-Za-z0-9._-]+|\d+)?(?:\.exe)?\s+client\b/i.test(cmd)) {
       var fwdSpecRe = /(?:^|\s)(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5}):(\[[0-9a-fA-F:]+\]|[A-Za-z0-9_.-]+):(\d{1,5})(?=\s|$)/g;
       while ((m = fwdSpecRe.exec(cmd)) !== null) {
         if (!_isValidChiselRemoteHost(m[3])) continue;

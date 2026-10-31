@@ -673,8 +673,8 @@
           }
         }
       }
-      if (!ctx.user && fhList.length) {
-        var huVals = fvals('host.users').concat(fvals('host.user'));
+      if (!ctx.user) {
+        var huVals = fvals('host.users').concat(fvals('host.user')).concat(fvals('smtp.users'));
         for (var hui = 0; hui < huVals.length; hui++) {
           var huv = huVals[hui] || {};
           var uArr = Array.isArray(huv.users) ? huv.users : [huv.user || huv.username || huv.name || ''];

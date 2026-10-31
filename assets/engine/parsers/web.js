@@ -630,10 +630,11 @@
     var reqOnlyText = _extract_http_request_only(cmd, t);
     var hasHtmlFormMarkup = /<(?:form|input|html|body)\b/i.test(t);
     var hasOcrLogin = reSearch(_OCR_USER_INPUT_RE, t) && reSearch(_OCR_PASS_INPUT_RE, t);
+    var isOcrUrlPage = /^URL:\s*https?:\/\/\S+/im.test(t) || /^(?:GET|POST|HEAD)\s+https?:\/\/\S+/i.test(cmd);
     var isHttpExchange = /\b(?:curl|wget|httpie)\b/i.test(cmd)
       || /^(?:[<>]\s*)?(?:POST|GET)\s+\/\S+\s+HTTP\/[12]/im.test(t)
       || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)
-      || /^URL:\s*https?:\/\/\S+/im.test(t);
+      || isOcrUrlPage;
     var hasHttpAuthParams = isHttpExchange && reSearch(_HTTP_AUTH_PARAM_USER_RE, reqOnlyText) && reSearch(_HTTP_AUTH_PARAM_PASS_RE, reqOnlyText);
     var hasHttpAuthPost = isHttpExchange && reSearch(_HTTP_AUTH_ENDPOINT_RE, reqOnlyText)
       && (/\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd) || /^(?:>\s*)?POST\s+\//im.test(reqOnlyText) || hasHttpAuthParams);
@@ -651,8 +652,8 @@
     if (!isHelpOrVerCmd && ((hasHtmlFormMarkup && reSearch(_LOGIN_FORM_RE, t)) || hasOcrLogin || hasHttpAuthPost || (hasHttpAuthParams && /\s(?:-d|--data(?:-\w+)?|-F)\s/i.test(' ' + cmd)))) {
       _add(facts, mkFact('web.login_form', h, { evidence: hasOcrLogin ? 'OCR browser login form controls' : 'password input form' }, S, source));
     }
-    if (!isHelpOrVerCmd && (hasOcrLogin || ((hasHttpAuthParams || hasHttpAuthPost) && t.trim().length > 0 && !isOutboundReqOnly) || (/\b(?:curl|wget|httpie)\b/i.test(cmd) && hasLiveCmdResponse)) && !hasConnFailure) {
-      _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : ((hasHttpAuthParams || hasHttpAuthPost) ? 'http-auth-surface' : 'http-client') }, S, source));
+    if (!isHelpOrVerCmd && (hasOcrLogin || (isOcrUrlPage && t.trim().length > 0 && !isOutboundReqOnly) || ((hasHttpAuthParams || hasHttpAuthPost) && t.trim().length > 0 && !isOutboundReqOnly) || (/\b(?:curl|wget|httpie)\b/i.test(cmd) && hasLiveCmdResponse)) && !hasConnFailure) {
+      _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : (isOcrUrlPage ? 'web-page' : ((hasHttpAuthParams || hasHttpAuthPost) ? 'http-auth-surface' : 'http-client')) }, S, source));
     }
 
     // Laravel session cookie
@@ -724,6 +725,57 @@
 
     // XML LDAP <bind-dn> + <bind-password> configuration response
     _parse_xml_ldap_bind_creds(t, ws, source, facts);
+
+    // Web application user roster sections (e.g., "REGISTERED USERS" / "ACTIVE USERS" / "USER LIST")
+    if ((isHttpExchange || hasHtmlFormMarkup) && !hasConnFailure && /\b(?:REGISTERED|ACTIVE|DIRECTORY)\s+USERS\b|\bUSERS?\s+LIST\b/i.test(t)) {
+      var rLines = t.replace(/<[^>]+>/g, '\n').split(/\r?\n/);
+      var inRoster = false, rosterUsers = [];
+      for (var rli = 0; rli < rLines.length; rli++) {
+        var rln = rLines[rli].trim();
+        if (!inRoster) {
+          if (/^(?:REGISTERED\s+USERS|ACTIVE\s+USERS|DIRECTORY\s+USERS|USERS?\s+LIST)\s*:?\s*$/i.test(rln)) {
+            inRoster = true;
+          }
+          continue;
+        }
+        if (!rln) continue;
+        var rEntryM = /^([A-Za-z][A-Za-z0-9_.-]{1,31})(?:\s*:\s*(?:ID-[A-Za-z0-9_-]+|Active|Disabled|Enabled|Inactive|Online|Offline|Admin|User|Guest|\d+)|\s+(?:Active|Disabled|Enabled|Inactive|Online|Offline))$/i.exec(rln);
+        if (rEntryM) {
+          var ru = rEntryM[1];
+          if (!/^(?:user|users|username|status|total|listing|name|account|phone|ip|id|none|null)$/i.test(ru)
+              && (!C._valid_username || C._valid_username(ru, false))) {
+            rosterUsers.push(ru);
+          }
+          continue;
+        }
+        if (rosterUsers.length >= 2) break;
+      }
+      var uniqRoster = C.uniqueSortedCI(rosterUsers);
+      if (uniqRoster.length >= 2) {
+        _add(facts, mkFact('web.users', h, { users: uniqRoster, count: uniqRoster.length, via: 'web-roster' }, S, source));
+      }
+    }
+
+    // Inline labeled credential disclosures on web notes/pages (e.g., "my creds for gogs: user:secret")
+    if ((isHttpExchange || hasHtmlFormMarkup) && !hasConnFailure && !isOutboundReqOnly && /\b(?:creds?|credentials?|login|account)\b/i.test(t)) {
+      var noteCredRe = /\b(?:creds?|credentials?|login|account)\b[^\r\n:]{0,48}:\s*['"]?([A-Za-z_][A-Za-z0-9_.-]{1,31}):([^\s'"<>]{4,128})['"]?\s*$/gim;
+      var ncm, seenNotePair = {};
+      while ((ncm = noteCredRe.exec(t)) !== null) {
+        var nUser = ncm[1], nPass = ncm[2].replace(/[.,;]+$/, '');
+        if (/^(?:https?|ftp|mailto|urn|tel|ssh|javascript|localhost)$/i.test(nUser)) continue;
+        if (/^\d{1,2}:\d{2}/.test(nPass) || /^\d+$/.test(nUser)) continue;
+        if (C._valid_username && !C._valid_username(nUser, false)) continue;
+        if (C._valid_password && !C._valid_password(nPass)) continue;
+        var nKey = nUser + '\x00' + nPass;
+        if (seenNotePair[nKey]) continue;
+        seenNotePair[nKey] = 1;
+        var noteCv = { user: nUser, password: nPass, service: 'http', method: 'web-note-disclosure' };
+        _add(facts, mkFact('credential.plaintext', h, noteCv, S, source));
+        _add(facts, mkFact('credential.password', h, noteCv, S, source));
+        _add(facts, mkFact('credential.available', h, noteCv, S, source));
+        _add(facts, mkFact('credential.candidate', h, { kind: 'web_disclosed_credential', user: nUser, password: nPass, via: 'web-note-disclosure' }, S, source));
+      }
+    }
   }
   C._parse_web_surface = _parse_web_surface;
 
@@ -1177,9 +1229,79 @@
   C._parse_web_lfi = _parse_web_lfi;
 
   var _WEBSHELL_UPLOAD_RECEIPT_RE = /(?:(?:File\s+Renamed\s+to|Shell\s+(?:Uploaded|URL|Location|Ready)|Uploaded\s+(?:to|shell|file)?|Webshell\s+(?:at|url|uploaded|location)?)\s*(?:!?\s*(?:Access\s+at|URL|at))?\s*[:\-=>]+\s*(?:https?:\/\/[^\s"'<>]+|\/[^\s"'<>]+|[A-Za-z0-9_./-]+\.(?:php[0-9]?|phtml|jsp|jspx|asp|aspx))\b|(?:https?:\/\/[^\s"'<>]+|\/[^\s"'<>]*)\/(?:wp-content\/uploads|uploads?|files?|media|content)\/[^\s"'<>]+\.(?:php[0-9]?|phtml|jsp|jspx|asp|aspx)\b)/i;
-  var _WEB_EXPLOIT_REPL_WHOAMI_RE = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]+)?whoami[ \t]*\r?\n(?:[ \t]*(?:\[[^\]\r\n]{1,24}\][^\r\n]{0,160}|(?:Result|Output|Response)[ \t]*:[ \t]*)\r?\n){0,2}[ \t]*(www-data|apache|nginx|http|httpd|lighttpd|tomcat\d*|nobody|root)[ \t]*$/im;
+  var _WEB_EXPLOIT_REPL_WHOAMI_RE = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]*)?whoami[ \t]*\r?\n(?:[ \t]*(?:\[[^\]\r\n]{1,24}\][^\r\n]{0,160}|(?:Result|Output|Response)[ \t]*:[ \t]*)?\r?\n){0,2}[ \t]*(www-data|apache|nginx|http|httpd|lighttpd|tomcat\d*|nobody|root)[ \t]*$/im;
+  var _WEB_EXPLOIT_PROMPT_WHOAMI_CUSTOM_RE = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell|pseudo-term)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]*)whoami[ \t]*\r?\n(?:[ \t]*\r?\n){0,2}[ \t]*([a-z_][a-z0-9_-]{1,31})[ \t]*$/im;
+  var _REPL_WHOAMI_DENY_RE = /^(?:whoami|id|pwd|ls|dir|cat|sh|bash|zsh|dash|python[23]?|ruby|perl|php|curl|wget|echo|exit|quit|help|error|warning|failed|failure|denied|forbidden|unauthorized|invalid|null|none|true|false|unknown|not|no|yes|ok|done|connecting|connected|sending|sent|loading|waiting|testing|checking|running|starting|stopped|closed|usage|syntax|exception|traceback|target|host|server|payload|exploit|shell|command|result|output|response|status)$/i;
   C._WEBSHELL_UPLOAD_RECEIPT_RE = _WEBSHELL_UPLOAD_RECEIPT_RE;
   C._WEB_EXPLOIT_REPL_WHOAMI_RE = _WEB_EXPLOIT_REPL_WHOAMI_RE;
+
+  function _decode_pct_ascii(s) {
+    return String(s || '').replace(/\+/g, ' ').replace(/%([0-9A-Fa-f]{2})/g, function (full, hx) {
+      var code = parseInt(hx, 16);
+      return (code >= 0x20 && code <= 0x7e) ? String.fromCharCode(code) : full;
+    });
+  }
+
+  function _extract_inbound_http_body_for_ssti(text) {
+    var t = String(text || '');
+    if (/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)) {
+      var blocks = t.split(/\r?\n\r?\n/);
+      var lastHdrIdx = -1;
+      for (var bi = 0; bi < blocks.length; bi++) {
+        if (/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(blocks[bi])) lastHdrIdx = bi;
+      }
+      if (lastHdrIdx >= 0 && lastHdrIdx + 1 < blocks.length) {
+        return blocks.slice(lastHdrIdx + 1).join('\n\n');
+      }
+    }
+    return t.replace(/^[ \t]*>[ \t]*[^\r\n]*$/gm, '');
+  }
+
+  function _detect_arithmetic_ssti(cmdStr, text) {
+    var reqProbe = _decode_pct_ascii(cmdStr) + '\n' + _decode_pct_ascii(_extract_http_request_only(cmdStr, text));
+    if (!/(?:\{\{|\$\{|<%=|#\{)/.test(reqProbe)) return null;
+    var respBody = _extract_inbound_http_body_for_ssti(text);
+    if (!/\S/.test(respBody)) return null;
+
+    function validDelimPair(openD, closeD) {
+      if (openD === '{{') return closeD === '}}';
+      if (openD === '<%=') return closeD === '%>';
+      return (openD === '${' || openD === '#{') && closeD === '}';
+    }
+
+    var mulRe = /(\{\{|\$\{|<%=|#\{)\s*(\d{1,5})\s*\*\s*(\d{1,5})\s*(\}\}|\}|%>)/g;
+    var mm;
+    while ((mm = mulRe.exec(reqProbe)) !== null) {
+      if (!validDelimPair(mm[1], mm[4])) continue;
+      var a = parseInt(mm[2], 10), b = parseInt(mm[3], 10);
+      var prod = a * b;
+      if (!(a >= 2 && b >= 2 && prod >= 10)) continue;
+      var rawExpr = mm[0];
+      if (respBody.indexOf(rawExpr) >= 0) continue;
+      var prodStr = String(prod);
+      var valRe = new RegExp('(?:^|[^0-9A-Za-z_.:])(' + prodStr + ')(?![0-9A-Za-z_.:])');
+      var vm = valRe.exec(respBody);
+      if (vm) {
+        return { expression: rawExpr, evaluated: prodStr, match: vm };
+      }
+    }
+
+    var repRe = /(\{\{|\$\{|<%=|#\{)\s*(?:(\d{1,2})\s*\*\s*['"]([A-Za-z0-9])['"]|['"]([A-Za-z0-9])['"]\s*\*\s*(\d{1,2}))\s*(\}\}|\}|%>)/g;
+    var rm;
+    while ((rm = repRe.exec(reqProbe)) !== null) {
+      if (!validDelimPair(rm[1], rm[6])) continue;
+      var cnt = parseInt(rm[2] || rm[5], 10);
+      var ch = rm[3] || rm[4];
+      if (!(cnt >= 4 && cnt <= 32 && ch)) continue;
+      var repStr = new Array(cnt + 1).join(ch);
+      if (respBody.indexOf(rm[0]) >= 0) continue;
+      var repM = new RegExp('(?:^|[^0-9A-Za-z_])(' + repStr + ')(?:[^0-9A-Za-z_]|$)').exec(respBody);
+      if (repM) {
+        return { expression: rm[0], evaluated: repStr, match: repM };
+      }
+    }
+    return null;
+  }
 
   function _parse_web_cmdi(actionId, text, ws, command, source, facts) {
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
@@ -1188,8 +1310,20 @@
     var cmdAndText = cmdStr + '\n' + (text || '');
     var isContentScannerCmd = (C._is_web_content_command && C._is_web_content_command(cmdStr))
       || /\b(?:gobuster|ffuf|feroxbuster|dirb|dirsearch|wfuzz|nikto|wpscan|whatweb)\b/i.test(cmdStr);
-    // SSTI math / config evaluation check (e.g., {{7*7}} -> 49 or 7777777)
-    if (actionId === 'ssti' || (/(\{\{\s*7\s*\*\s*(?:7|'7')|\$\{\s*7\s*\*\s*7|<%=\s*7\s*\*\s*7)/.test(cmdAndText))) {
+    // SSTI math / config evaluation check (e.g., {{4*4}} -> 16, {{7*7}} -> 49, {{7*'7'}} -> 7777777)
+    var arithSsti = !isContentScannerCmd ? _detect_arithmetic_ssti(cmdStr, text) : null;
+    if (arithSsti) {
+      _add(facts, mkFact('web.ssti_confirmed', h, {
+        method: 'template_injection',
+        expression: arithSsti.expression,
+        evaluated: arithSsti.evaluated,
+        evidence: C._line_for_match(text, arithSsti.match)
+      }, S, source));
+      if ((/\bhttps?:\/\/[^\s'"]+/i.test(cmdAndText) || /\b(?:curl|wget|httpie)\b/i.test(cmdStr))
+          && !facts.some(function (f) { return f && f.kind === 'http.reachable' && f.scope === h; })) {
+        _add(facts, mkFact('http.reachable', h, { via: 'web-ssti' }, S, source));
+      }
+    } else if (actionId === 'ssti' || (/(\{\{\s*7\s*\*\s*(?:7|'7')|\$\{\s*7\s*\*\s*7|<%=\s*7\s*\*\s*7)/.test(cmdAndText))) {
       var sstiHit = reSearch(/\b(?:49|7777777)\b|<Config\b|\bssti/i, text);
       if (sstiHit) {
         _add(facts, mkFact('web.ssti_confirmed', h, { method: 'template_injection', evidence: C._line_for_match(text, sstiHit) }, S, source));
@@ -1221,6 +1355,11 @@
         var hasReplPromptPrefix = /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell)[^>%\r\n]{0,24}[>#$:][ \t]*|(?![ \t\r\n])(?:[^\r\n]{0,80}?\b)?command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]*)whoami\b/i.test(wm[0]);
         if (hasReplPromptPrefix || (isHttpOrExploitScriptCtx && !/^\s*whoami\s*$/i.test(cmdStr))) {
           replWhoami = wm;
+        }
+      } else if (isHttpOrExploitScriptCtx && !/^\s*whoami\s*$/i.test(cmdStr)) {
+        var cwm = reSearch(_WEB_EXPLOIT_PROMPT_WHOAMI_CUSTOM_RE, text);
+        if (cwm && cwm[1] && !_REPL_WHOAMI_DENY_RE.test(cwm[1])) {
+          replWhoami = cwm;
         }
       }
     }
@@ -1435,8 +1574,10 @@
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return;
     var isGeneric = !actionId || actionId === 'operator-ingest';
     if (isGeneric || C._WEB_LFI_ACTION_IDS.has(actionId)) _parse_web_lfi(actionId, text, ws, command, source, facts);
-    if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (isGeneric && (/\b(?:curl|wget|httpie|burp|ysoserial|python3?|ruby|perl|php)\b|\bhttps?:\/\/[^\s'"]+/i.test(command || '') || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b|<\/?(?:!doctype|html|head|body|pre)\b/im.test(text) || _WEBSHELL_UPLOAD_RECEIPT_RE.test(text) || _WEB_EXPLOIT_REPL_WHOAMI_RE.test(text)))) {
-      _parse_web_cmdi(actionId, text, ws, command, source, facts);
+    if (isGeneric || C._WEB_CMDI_ACTION_IDS.has(actionId)) {
+      if (C._WEB_CMDI_ACTION_IDS.has(actionId) || (/\b(?:curl|wget|httpie|burp|ysoserial|python3?|ruby|perl|php)\b|\bhttps?:\/\/[^\s'"]+/i.test(command || '') || /^(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b|<\/?(?:!doctype|html|head|body|pre)\b/im.test(text) || _WEBSHELL_UPLOAD_RECEIPT_RE.test(text) || _WEB_EXPLOIT_REPL_WHOAMI_RE.test(text) || _WEB_EXPLOIT_PROMPT_WHOAMI_CUSTOM_RE.test(text))) {
+        _parse_web_cmdi(actionId, text, ws, command, source, facts);
+      }
     }
     if (isGeneric || C._WEB_SQLI_ACTION_IDS.has(actionId)) _parse_web_sqli_manual(text, ws, source, facts);
     if (isGeneric || C._WEB_SSRF_ACTION_IDS.has(actionId)) _parse_web_ssrf(actionId, text, ws, command, source, facts);
@@ -1499,5 +1640,155 @@
     }
   }
   C._parse_web_fingerprint = _parse_web_fingerprint;
+
+  var _WEBDAV_EXEC_EXT_RE = /^(?:aspx?|ashx|asmx|php\d?|phtml|phar|jsp|jspx|war|cfm|pl|py|cgi|sh|shtml)$/i;
+
+  function _parse_webdav_output(text, ws, command, source, facts) {
+    var t = String(text || '');
+    var cmd = String(command || '');
+    if (!/\b(?:davtest|cadaver)\b/i.test(cmd) && !/\bTesting DAV connection\b|\bOPEN\s+SUCCEED:\s*https?:\/\/|^dav:\/[^>]*>/im.test(t)) return;
+    var h = 'host:' + ws.target;
+    var isCadaver = /\bcadaver\b/i.test(cmd) || /^dav:\/[^>]*>/m.test(t);
+    var openM = /\bOPEN\s+SUCCEED:\s*(https?:\/\/\S+)/i.exec(t);
+    var upUrlM = /\bUpload\s+succeeded:\s*(https?:\/\/\S+)/i.exec(t);
+    var putSuccAll = reAll(/\bPUT\s+([A-Za-z0-9_.-]+)\s+SUCCEED(?::\s*(\S+))?/gi, t);
+    var execSuccAll = reAll(/\bEXEC\s+([A-Za-z0-9_.-]+)\s+SUCCEED(?::\s*(\S+))?/gi, t);
+    var mkcolSucc = /\bMKCOL\s+\S*\s*SUCCEED\b|\bCreating\s+[`'"]?[^`'":\r\n]+[`'"]?:\s+succeeded\b/i.test(t);
+    var cadaverPrompt = /^dav:\/[^>]*>/m.test(t);
+    var cadaverUpM = /\bUploading\s+(\S+)\s+to\s+[`'"]?([^\s`'":]+)[`'"]?:[\s\S]{0,200}?\b(?:succeeded|100(?:\.0)?%\s+of\s+\d+\s+bytes\s+succeeded)\b/i.exec(t);
+    var cadaverMoveExecM = /\b(?:Moving|Renaming)\s+[`'"]?(\S+?)[`'"]?\s+to\s+[`'"]?([^\s`'":]+\.(?:aspx?|ashx|php\d?|phtml|jsp|jspx|cfm|pl|py|cgi))[`'"]?:\s+succeeded\b/i.exec(t);
+
+    var davSucceeded = !!(openM || upUrlM || putSuccAll.length || execSuccAll.length || mkcolSucc || cadaverPrompt || cadaverUpM || cadaverMoveExecM);
+    if (!davSucceeded) return;
+
+    var hrVal = { via: isCadaver ? 'cadaver' : 'davtest' };
+    if (openM && openM[1]) hrVal.url = openM[1];
+    else if (upUrlM && upUrlM[1]) hrVal.url = upUrlM[1];
+    _add(facts, mkFact('http.reachable', h, hrVal, S, source));
+
+    var methods = [];
+    if (putSuccAll.length || upUrlM || cadaverUpM) methods.push('PUT');
+    if (mkcolSucc) methods.push('MKCOL');
+    if (/\bDELETE\b[^\r\n]*\bSUCCEED\b|\bDeleting\s+[^\r\n]*\bsucceeded\b/i.test(t)) methods.push('DELETE');
+    if (/\bMOVE\b[^\r\n]*\bSUCCEED\b|\b(?:Moving|Renaming)\s+[^\r\n]*\bsucceeded\b/i.test(t) || cadaverMoveExecM) methods.push('MOVE');
+    if (methods.length) {
+      _add(facts, mkFact('http.methods', h, { methods: methods, risky: methods.slice(), flags: ['http_methods_risky'], via: 'webdav' }, S, source));
+    }
+
+    var execExts = [];
+    putSuccAll.forEach(function (pm) {
+      var ext = String(pm[1] || '').replace(/^\./, '');
+      if (_WEBDAV_EXEC_EXT_RE.test(ext)) execExts.push(ext.toLowerCase());
+    });
+    execSuccAll.forEach(function (em) {
+      var ext = String(em[1] || '').replace(/^\./, '');
+      if (ext) execExts.push(ext.toLowerCase());
+    });
+    if (upUrlM && upUrlM[1]) {
+      var uExtM = /\.([A-Za-z0-9]+)(?:[?#]|$)/.exec(upUrlM[1]);
+      if (uExtM && _WEBDAV_EXEC_EXT_RE.test(uExtM[1])) execExts.push(uExtM[1].toLowerCase());
+    }
+    if (cadaverUpM) {
+      var cDest = cadaverUpM[2] || cadaverUpM[1] || '';
+      var cExtM = /\.([A-Za-z0-9]+)$/.exec(cDest);
+      if (cExtM && _WEBDAV_EXEC_EXT_RE.test(cExtM[1])) execExts.push(cExtM[1].toLowerCase());
+    }
+    if (upUrlM || execSuccAll.length || execExts.length || cadaverMoveExecM) {
+      var upVal = {
+        method: 'webdav_put',
+        tool: isCadaver ? 'cadaver' : 'davtest',
+        exec_confirmed: execSuccAll.length > 0
+      };
+      if (upUrlM && upUrlM[1]) upVal.url = upUrlM[1];
+      if (execExts.length) upVal.extensions = C.uniqueSortedCI(execExts);
+      _add(facts, mkFact('web.upload_confirmed', h, upVal, S, source));
+    }
+
+    var authM = /(?:^|\s)-+auth(?:entication)?\s+(?:'([^:'\s]+):([^']*)'|"([^:"\s]+):([^"]*)"|([^:'"\s]+):([^\s'"]+))/i.exec(cmd)
+      || /https?:\/\/([^:/@\s'"]+):([^@\s'"]+)@/i.exec(cmd);
+    if (authM && !/\bOPEN\s+FAIL\b|\b401\s+Unauthorized\b|\bAuthentication\s+failed\b/i.test(t)) {
+      var aUser = authM[1] || authM[3] || authM[5] || '';
+      var aPass = authM[2] || authM[4] || authM[6] || '';
+      if (aUser && aPass) {
+        _add(facts, mkFact('credential.validated', h, {
+          user: aUser,
+          password: aPass,
+          service: 'http',
+          protocol: 'webdav',
+          via: isCadaver ? 'cadaver' : 'davtest'
+        }, S, source));
+      }
+    }
+  }
+  C._parse_webdav_output = _parse_webdav_output;
+
+  function _parse_exploit_poc_verdicts(text, ws, command, source, facts) {
+    var t = String(text || '');
+    if (!t || !/\[[*+]\]/.test(t)) return;
+    if ((C._looks_like_edb_script && C._looks_like_edb_script(t, command))
+        || (C._looks_like_searchsploit && C._looks_like_searchsploit(t, command))) return;
+    var cmd = String(command || '');
+    var h = 'host:' + ws.target;
+    var lines = t.split(/\r?\n/);
+    var confirmedCves = [], seenCve = {};
+
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i];
+      if (!ln) continue;
+
+      if (/^\s*\[\+\]/.test(ln)) {
+        var hasNeg = /\b(?:isn['\u2019]?t|aren['\u2019]?t|wasn['\u2019]?t|weren['\u2019]?t|not|non|never|no|false|patched|immune|mitigated|failed|safe)\b/i.test(ln);
+        if (!hasNeg) {
+          var cveM = /^\s*\[\+\]\s*Checking\s+(?:if\s+)?[^\r\n]*?\bvulnerable\s+to\s+(CVE-\d{4}-\d{4,7})\b[^\r\n]*?\b(?:YES|VULNERABLE|CONFIRMED|TRUE)\b/i.exec(ln)
+            || /^\s*\[\+\]\s*(?:The\s+)?(?:target|host|server|service|instance|endpoint)\s+(?:is|appears(?:\s+to\s+be)?|seems)\s+vulnerable\s+to\s+(CVE-\d{4}-\d{4,7})\b/i.exec(ln)
+            || /^\s*\[\+\]\s*(CVE-\d{4}-\d{4,7})\s*[:\-]+\s*(?:VULNERABLE|YES|CONFIRMED)\b/i.exec(ln);
+          if (cveM) {
+            var cveUp = cveM[1].toUpperCase();
+            if (!seenCve[cveUp]) {
+              seenCve[cveUp] = 1;
+              confirmedCves.push({ cve: cveUp, evidence: ln.trim() });
+            }
+          }
+        }
+
+        var loginOkM = /^\s*\[\+\]\s*(?:Login|Logged\s+in|Authentication|Authenticated)\s+(?:successful|succeeded|ok)(?:\s+as\s+['"]?([A-Za-z0-9_.@-]+)['"]?)?[!\s.]*$/i.exec(ln);
+        if (loginOkM) {
+          var flagUserM = /(?:^|\s)(?:-u|--user(?:name)?)\s+(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(cmd);
+          var flagPassM = /(?:^|\s)(?:-p|--pass(?:word)?)\s+(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(cmd);
+          var lUser = loginOkM[1] || (flagUserM && (flagUserM[1] || flagUserM[2] || flagUserM[3])) || '';
+          var lPass = (flagPassM && (flagPassM[1] || flagPassM[2] || flagPassM[3])) || '';
+          var cvVal = { service: 'http', via: 'poc-login', evidence: ln.trim() };
+          if (lUser) cvVal.user = lUser;
+          if (lPass) cvVal.password = lPass;
+          _add(facts, mkFact('credential.validated', h, cvVal, S, source));
+        }
+      }
+
+      if (/^\s*\[[*+]\]/.test(ln)) {
+        var keyM = /^\s*\[[*+]\]\s*(?:([A-Za-z0-9_.-]{2,32})\s+)?(?:auth(?:entication)?\s+|api\s+|master\s+|access\s+|session\s+|admin\s+)?(key|token|secret)\s+(?:obtained|extracted|recovered|leaked|retrieved|found|captured)\s*:\s*['"]?([A-Za-z0-9+/=._:-]{8,256})['"]?\s*$/i.exec(ln);
+        if (keyM && !/^(?:none|null|false|failed|error|empty|n\/a)$/i.test(keyM[3])) {
+          var kcVal = {
+            kind: 'extracted_' + keyM[2].toLowerCase(),
+            key: keyM[3],
+            via: 'poc-output',
+            evidence: ln.trim()
+          };
+          if (keyM[1] && !/^(?:the|a|an|new|valid)$/i.test(keyM[1])) kcVal.user = keyM[1];
+          _add(facts, mkFact('credential.candidate', h, kcVal, S, source));
+        }
+      }
+    }
+
+    if (confirmedCves.length) {
+      var cveList = confirmedCves.map(function (x) { return x.cve; });
+      _add(facts, mkFact('exploit.candidate', h, {
+        cve: cveList[0],
+        cves: cveList,
+        via: 'poc-check',
+        evidence: confirmedCves[0].evidence
+      }, S, source));
+    }
+  }
+  C._parse_exploit_poc_verdicts = _parse_exploit_poc_verdicts;
 
 })(typeof globalThis !== 'undefined' ? globalThis : this);

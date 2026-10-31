@@ -116,7 +116,7 @@
       var followPromptVal = String((opts && opts.followPrompt) || (opts && opts.context && opts.context.followPrompt) || '');
       var promptConfirmed = !hasPromptTracking || Boolean(promptLineVal.trim() || followPromptVal.trim());
       var isMutatingCurl = /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*curl\b/.test(cmd)
-        && (/(?:\/dev\/tcp\/|\bmkfifo\b|\bbash\s+-i\b|\bnc(?:at)?\b|\bos\.system\b|\bsubprocess\b|\bexec\s*\(|\bsystem\s*\(|\binto\s+(?:outfile|dumpfile)\b|--data(?:-urlencode|-binary|-raw)?\b|-X\s+(?:POST|PUT|DELETE|PATCH)\b)/i.test(rawCmd)
+        && (/(?:\/dev\/tcp\/|\bmkfifo\b|\bbash(?:\s+|%20|\+)-[ic]\b|\bnc(?:at)?(?:\s+|%20|\+)|\bos\.system\b|\bsubprocess\b|\bexec\s*\(|\bsystem\s*\(|\binto\s+(?:outfile|dumpfile)\b|--data(?:-urlencode|-binary|-raw)?\b|-X\s+(?:POST|PUT|DELETE|PATCH)\b|`[^`\r\n]+`|%60|\$\([^)\r\n]*\)|%24%28|\$(?:IFS|\{IFS\})|%24(?:%7b)?IFS|(?:\/|%2f)(?:usr(?:\/|%2f))?s?bin(?:\/|%2f)(?:ba|da|z|k|a)?sh\b|(?:\||;|%7c|%3b)\s*(?:sudo(?:\s+|%20|\+))?(?:ba|da|z|k|a)?sh\b)/i.test(rawCmd)
           || /(?:^|\s)-(?:d|F)\s/.test(rawCmd));
       var isMutatingFind = /(?:^\s*|[;|&]\s*)(?:(?:sudo(?:\s+-u\s+\S+)?|timeout\s+\S+|env)\s+)*find\b/.test(cmd)
         && /(?:^|\s)-(?:exec|execdir|ok|okdir|delete)\b/i.test(rawCmd);
@@ -166,7 +166,7 @@
       var impNone = /doesn't have UF_DONT_REQUIRE_PREAUTH set|\b(?:No entries found|Total of records returned\s+0|No SPNs found|No delegation found)\b/i.test(body);
       return { complete: impNone || /Impacket v\d|\[\*\]\s*Received\s+\d+\s+endpoints\./i.test(body), negative: impNone };
     }
-    if (/doesn't have UF_DONT_REQUIRE_PREAUTH set|\bNo entries found!|\bis not vulnerable\b|\bthis instance is patched\b|\bmay not run sudo\b|\bnot allowed to run sudo\b|\bis not in the sudoers file\b|\[\+\]\s*0 passwords? have been found\b|\b(?:ciphertext length (?:was|is) not divisible by|bad decrypt|wrong final block length|padding (?:error|is invalid)|decryption failed|unable to decrypt)\b/i.test(body)) {
+    if (/doesn't have UF_DONT_REQUIRE_PREAUTH set|\bNo entries found!|\b(?:is\s+not|isn't|are\s+not|aren't|was\s+not|wasn't|were\s+not|weren't)\s+(?:vulnerable|exploitable|affected)\b|\bthis instance is patched\b|\bmay not run sudo\b|\bnot allowed to run sudo\b|\bis not in the sudoers file\b|\[\+\]\s*0 passwords? have been found\b|\b(?:ciphertext length (?:was|is) not divisible by|bad decrypt|wrong final block length|padding (?:error|is invalid)|decryption failed|unable to decrypt)\b/i.test(body)) {
       return { complete: true, negative: true };
     }
     if (_NEG_EXPLOIT_RE.test(body) && !/\b(?:Command shell|Meterpreter)\s+session\s+\d+\s+opened\b|\buid=\d+\([A-Za-z0-9_.-]+\)|\bnt authority\\(?:system|local service|network service)\b/i.test(body)) {
@@ -180,7 +180,7 @@
       return { complete: true, negative: !hasWinPriv };
     }
     if (/(?:^|[\s;|&])(?:dig|host|nslookup)\b/.test(cmd)) {
-      var dnsFail = /;\s*Transfer failed\.|;\s*communications error|status:\s*(?:REFUSED|NXDOMAIN|SERVFAIL)\b|Host\s+\S+\s+not found/i.test(body) && !/\bIN\s+(?:A|AAAA|SRV|SOA|NS|TXT|MX|CNAME|PTR)\s+\S/i.test(body);
+      var dnsFail = /(?:;\s*Transfer failed\.|;\s*communications error|status:\s*(?:REFUSED|NXDOMAIN|SERVFAIL)\b|Host\s+\S+\s+not found|\*\*\*\s*Can't\s+list\s+domain\b[^\r\n]*:\s*(?:Query\s+refused|Non-existent\s+domain|Server\s+failed|No\s+response)|\bQuery\s+refused\b)/i.test(body) && !/\bIN\s+(?:A|AAAA|SRV|SOA|NS|TXT|MX|CNAME|PTR)\s+\S/i.test(body);
       var dnsDone = dnsFail || /\bQuery time:\s*\d+\s*msec|\bIN\s+(?:A|AAAA|SRV|SOA|NS|TXT|MX|CNAME|PTR)\s+\S|Microsoft\s+DNS/i.test(body);
       return { complete: dnsDone, negative: dnsFail };
     }
@@ -216,6 +216,7 @@
       return { complete: bruteNone || /\b\d+ of \d+ target(?:s)? successfully completed\b/i.test(body), negative: bruteNone };
     }
     if (/\b(?:ntpdate|ntpsec-ntpdate|rdate)\b/.test(cmd)) return { complete: /(?:step|adjust) time|offset\s+[-+]?\d|time server/i.test(body), negative: false };
+    if (/^[ \t]*ExifTool Version Number[ \t]*:[ \t]*\d/im.test(body)) return { complete: true, negative: false };
     return { complete: false, negative: false };
   }
   function classify(opts) {
@@ -229,7 +230,7 @@
     prevArr.forEach(function (pf) {
       if (supported(pf) && pf.kind) priorKinds[pf.kind] = true;
     });
-    var isPassiveLocalFileView = /^\s*(?:(?:sudo(?:\s+-u\s+\S+)?)\s+)?(?:cat|head|tail|less|more|bat|batcat|nl|strings)\b/i.test(command)
+    var isPassiveLocalFileView = /^\s*(?:(?:sudo(?:\s+-u\s+\S+)?)\s+)?(?:cat|head|tail|less|more|bat|batcat|nl|strings|type|get-content|gc)\b/i.test(command)
       && !/[|;&`]|\$\(|\b(?:curl|wget|ssh|nxc|netexec|smbclient|rpcclient|ldapsearch|psql|mysql|mongosh|redis-cli)\b/i.test(command);
     var textForDenial = text;
     if (/Set-WSManQuickConfig|access\s+(?:is\s+)?denied|permission\s+denied/i.test(text)) {
@@ -245,7 +246,7 @@
     }
     var done = completion(text, command, opts), obs = observations(text);
     var denial = isPassiveLocalFileView
-      ? /^\s*(?:(?:\/usr\/bin\/|\/bin\/)?(?:cat|head|tail|less|more|bat|batcat|nl|strings)|-?(?:\/(?:usr\/)?bin\/)?(?:ba|da|a|z|k)?sh|sudo):\s+[^\r\n]*:\s*Permission denied\b/im.test(textForDenial)
+      ? /^\s*(?:(?:\/usr\/bin\/|\/bin\/)?(?:cat|head|tail|less|more|bat|batcat|nl|strings|type|get-content|gc)|-?(?:\/(?:usr\/)?bin\/)?(?:ba|da|a|z|k)?sh|sudo):\s+[^\r\n]*:\s*Permission denied\b/im.test(textForDenial)
       : (/STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable|\[!\]\s*Not running as SYSTEM\b|\bOperation failed:\s*Access is denied\b|Sorry,\s+user\s+\S+\s+is not allowed to execute\b|sudo:\s*PERM_ROOT:\s*setresuid|cannot be loaded because running scripts is disabled on this system|\bPSSecurityException\b|\bMsg 15247\b|User does not have permission to perform this action|You do not have permission to run the RECONFIGURE statement|Cannot open Service Control Manager|This operation might require other privileges|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|(?:^|\n)\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b|(?:^|\n)\s*(?!530\s)(?:[A-Za-z0-9_./-]+:\s+){1,3}Permission denied\s*(?:$|\r?\n)/i.test(textForDenial)
         || facts.some(function (f) { return supported(f) && /^(?:credential\.authorization|blocker\.(?:access_denied|account_not_delegated|dcsync_denied|ldap_anonymous_disabled))$/.test(f.kind || ''); }));
     var guestDisabled = /\\guest:\S*\s+STATUS_ACCOUNT_DISABLED/i.test(text) || (/\s-u\s+['"]?guest['"]?\b/i.test(command) && /STATUS_ACCOUNT_DISABLED/i.test(text));
@@ -268,7 +269,8 @@
       || facts.some(function (f) { return f && f.kind === 'credential.validation' && (f.state === 'refuted' || (f.value || {}).status === 'rejected'); });
     var isHttpResp = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
     var isHttp401or407 = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+40[17]\b/im.test(text) || /\bWWW-Authenticate:/i.test(text);
-    var isHttpAppContext = !isHttp401or407 && !hasHardTransportReject && (
+    var isExplicitHttpPostAuth = /^\s*POST\s+https?:\/\//i.test(command);
+    var isHttpAppContext = !isExplicitHttpPostAuth && !isHttp401or407 && !hasHardTransportReject && (
       /\b(?:curl|wget|sqlmap|ffuf|gobuster|feroxbuster|dirsearch|nikto|whatweb)\b/i.test(command)
       || /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+(?:200|301|302|303|307|308)\b/im.test(text)
       || /^\s*URL:\s*https?:\/\//im.test(text)
@@ -276,7 +278,7 @@
       || /\[Input\s+(?:Username|Password|Email)\]/i.test(text)
     );
     var httpAppLoginFailure = isHttpAppContext && /\b(?:authentication (?:failed|failure)|invalid (?:password|credentials?|username)|login (?:incorrect|failed))\b/i.test(text);
-    var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\binvalid (?:password|credentials)\b|\bLogin incorrect\b/i.test(text));
+    var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\b(?:invalid|incorrect|wrong)\s+(?:username(?:\s+(?:or|and|\/)\s+password)?|user\s*(?:or|\/)\s*password|password|credentials?)\b|\bLogin (?:incorrect|failed)\b/i.test(text));
     var hardTruncated = /\[truncated(?:,\s*[^\]]*|\s+output)\]|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
     var bareTruncated = !hardTruncated && /\[truncated\]/i.test(text);
     var truncated = hardTruncated || bareTruncated;
@@ -307,7 +309,7 @@
     var auth = nonAmbientProof.some(function (f) { return /^(?:(?:smb|ldap|winrm|rdp|ssh|mssql|ftp|wmi)\.authenticated|db\.session|credential\.validated|ad\.anonymous_bind|smb\.(?:null_session|guest_session))$/.test(f.kind); });
     var mixedAuth = obs.some(function (o) { return o.authentication === 'accepted'; }) && obs.some(function (o) { return o.authentication === 'rejected'; });
     var operation = /\b(?:nxc|netexec|crackmapexec|cme)\b/i.test(command) && /(?:\s--(?:users|groups|local-groups|shares|rid-brute|pass-pol|loggedon-users|sessions|disks|computers|ntds|sam|lsa|dpapi|mkfile|put-file|get-file|spider|gmsa|laps|kerberoasting|asreproast|bloodhound)\b|\s-(?:M|[xX])\s)/i.test(command);
-    var resultProof = nonAmbientProof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi)\.(?:reachable|authenticated)$|(?:ftp|ssh|smtp|http|https|snmp|dns|vnc|mysql|mssql)\.banner$|exploit\.versioned_banner$|db\.(?:session|reachable)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
+    var resultProof = nonAmbientProof.some(function (f) { return !(operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind)) && !/^(?:blocker\.|scan\.nmap\.|host\.|port:|ports\.|service\.|(?:smb|ldap|kerberos|winrm|rdp|ssh|mssql|ftp|wmi|postgres|redis|rsync)\.(?:reachable|authenticated)$|(?:ftp|ssh|smtp|http|https|snmp|dns|vnc|mysql|mssql)\.banner$|exploit\.versioned_banner$|db\.(?:session|reachable)$|smb\.(?:signing|smbv1)$|ad\.(?:domain_known|base_dn|dc_candidate|anonymous_bind)$|credential\.(?:available|validated|plaintext|hash|candidate|ntlm_hash)$)/.test(f.kind); });
     var substantiveProof = resultProof || nonAmbientProof.some(function (f) {
       return /^(?:hash\.|credential\.(?:available|plaintext|candidate|ntlm_hash|ssh_key|certificate)|privesc\.|loot\.|vuln\.|exploit\.|db\.(?:tables|databases|hashes|creds))/.test(f.kind || '')
         || (!operation && /^smb\.(?:null_session|guest_session)$/.test(f.kind || ''));
@@ -343,7 +345,12 @@
       || /\bConnection to \S+ \d+ port \[[^\]]+\] succeeded!/i.test(text)
       || /\bconnect to \[\d{1,3}(?:\.\d{1,3}){3}\]\s+from\b|\bConnection received on\s+\S+\s+\d+\b/i.test(text)
       || /\b(?:Command shell|Meterpreter)\s+session\s+\d+\s+opened\b/i.test(text);
-    var usageSignal = !guestDisabled && !hasExecProgressOrSocketOpen && /(?:^|\n)(?:[^\n]{0,150})?\busage:/i.test(textForUsage);
+    var explicitHelpCmd = /(?:^|\s)(?:-h|--help|-help|\/\?)\s*$/i.test(command.trim());
+    var helpUsagePrinted = explicitHelpCmd && !hardEnvironment && !denial && !rejected && /(?:^|\n)(?:[^\n]{0,150})?\b(?:usage|options|synopsis):/i.test(text);
+    if (helpUsagePrinted && !done.complete) {
+      done = { complete: true, negative: false };
+    }
+    var usageSignal = !guestDisabled && !isPassiveLocalFileView && !explicitHelpCmd && !hasExecProgressOrSocketOpen && /(?:^|\n)(?:[^\n]{0,150})?\busage:/i.test(textForUsage);
     var environment = hardEnvironment || (usageSignal && !substantiveProof);
     var hasPositiveAuthOrLoot = nonAmbientProof.some(function (f) {
       return /^(?:[a-z0-9_]+\.authenticated$|db\.session$|credential\.(?:validated|available|plaintext|ntlm_hash|ssh_key|certificate)$|hash\.|loot\.|foothold\.|access\.|privesc\.|ad\.(?:acl_lead|attack_paths|control_paths|domain_control|user_list)|smb\.(?:shares|readable_share|writable_share)|web\.(?:cmdi|sqli|lfi|ssrf|ssti|xxe|upload|nosqli)_confirmed$)/.test(f.kind || '');
@@ -391,7 +398,7 @@
     else if (denial && !resultProof && !(hasTerminalAuthFailure && !auth)) set('authorization-denied', auth ? 'Authentication accepted; operation denied' : 'Operation denied; authentication unproven',
       auth ? 'Authentication remains established for this identity and service. The requested operation was denied.' : 'The output establishes a denial for this operation. It does not independently establish successful authentication.',
       'The denial applies to this host, identity, service, and operation. It does not invalidate the credential everywhere or prove administrative access.', 'blocked', 'alternate-context', true);
-    else if (rejected && (!resultProof || (hasTerminalAuthFailure && !hasPositiveAuthOrLoot))) set('rejected', 'Authentication rejected for this context',
+    else if (rejected && (!resultProof || isExplicitHttpPostAuth || (hasTerminalAuthFailure && !hasPositiveAuthOrLoot)) && !(isExplicitHttpPostAuth && hasPositiveAuthOrLoot)) set('rejected', 'Authentication rejected for this context',
       'This authentication attempt was rejected. No access was established by this attempt.',
       'Keep the result attached to the specific host, identity, credential, and service. Other contexts remain untested.', 'blocked', 'alternate-context', true);
     else if (environment) set('environment-error', 'Execution or environment problem',
@@ -409,6 +416,9 @@
     else if (done.negative && !resultProof && !substantiveProof) set('completed-negative', 'Operation completed; no matching results',
       'The supported output family explicitly reports a completed negative result for this operation.',
       'The negative result is limited to this query, endpoint, identity, and service. Other contexts remain available.', 'complete', 'continue', true);
+    else if (helpUsagePrinted && !substantiveProof && !truncated) set('completed', 'Tool completion recognized; objective unresolved',
+      'The tool reported completion, but no supported positive or negative finding was extracted.',
+      'Keep the evidence and review the operation. Tool completion alone does not prove the investigation was answered.', 'unresolved', 'review', false);
     else if (proof.length) {
       var conclusive = done.complete || substantiveProof || (auth && !operation) || /\b(?:id|whoami)\b/.test(command) && kinds.some(function (k) { return /^(?:access\.|foothold\.|host\.user)/.test(k); });
       if (operation && !resultProof && !done.complete) set('partial', 'Authentication observed; operation result unresolved',

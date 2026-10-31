@@ -87,8 +87,9 @@
   // `text  (aside)` line elsewhere never trips it.
   C._JOHN_LOADED_RE = /Loaded\s+\d+\s+password\s+hash/i;
   // john's LIVE cracking output (a normal run, not --show) prints each recovered secret as
-  // `<plaintext>        (<label>)` - e.g. an archive password `codeblue        (backup.zip)`.
-  C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S[^\r\n]{0,120}?)\s{2,}\((?<label>[^)\r\n]+)\)\s*$/;
+  // `<plaintext>        (<label>)` - e.g. an archive password `codeblue        (backup.zip)`,
+  // or single-space `<16+-char-plaintext> (<label>)` when John's `%-16s (%s)` column overflows.
+  C._JOHN_CRACKED_LIVE_RE = /^(?<pw>\S{1,128}(?=[ \t]+\((?:[A-Za-z0-9_.\\/@$:-]{1,96}|\?)\)[ \t]*$)|\S[^\r\n]{0,120}?(?=[ \t]{2,}\([^)\r\n]+\)[ \t]*$))[ \t]+\((?<label>[^)\r\n]+)\)[ \t]*$/;
   C._CPASSWORD_RE = /\bcpassword\s*=\s*["']?([^"'\s<>]+)/i;
   C._GPP_FILE_RE = /\b(?:Groups|ScheduledTasks|Services|DataSources|Printers|Drives)\.xml\b/i;
   // Whitespace is restricted to [ \t] (not \s) so a greedy trailing match cannot eat the line's own
@@ -99,8 +100,8 @@
   // lines WITHOUT it (just indentation) inside the <script output="..."> attribute, so the pipe is optional.
   C._NMAP_DOMAIN_NAME_RE = /^\s*\|?_?\s*(?:Domain name|DNS_Domain_Name|NetBIOS_Domain_Name):\s*(?<domain>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_LDAP_BANNER_DOMAIN_RE = /\bActive Directory LDAP(?:\s*\(|[^\r\n]{0,80}?\bextrainfo=["'])\s*Domain:\s*(?<domain>[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)+\.?)\s*(?:,|;|\)|["'])/im;
-  C._NMAP_FQDN_RE = /^\s*\|?_?\s*FQDN:\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
-  C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
+  C._NMAP_FQDN_RE = /^\s*\|?_?\s*(?:FQDN|DNS_Computer_Name):\s*(?<fqdn>[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+)\s*$/im;
+  C._NMAP_COMPUTER_NAME_RE = /^\s*\|?_?\s*(?:Computer name|NetBIOS computer name|NetBIOS_Computer_Name|DNS_Computer_Name):\s*(?<name>[A-Za-z0-9_.-]+)\s*$/im;
   C._NMAP_SMB_SIGNING_RE = /Message signing enabled(?: and (?<required>required)| but not required)?|message_signing:\s*(?<mode>disabled|required|supported)/i;
   C._NMAP_HTTP_TITLE_RE = /^[ \t]*\|\s*_?http-title:\s*(?<title>.+)$/im;
   C._NMAP_HTTP_SERVER_RE = /^[ \t]*\|\s*_?http-server-header:\s*(?<header>.+)$/im;
@@ -132,7 +133,7 @@
   C._GIT_DUMPER_SUCCESS_RE = /\b(?:fetching|downloading|downloaded|repository|objects|refs\/heads|HEAD)\b/i;
   C._SOURCE_SECRET_RE = /(?:^|[\s"'`$_])(?<key>password|passwd|pwd|secret|api[_-]?key|token|connection(?:string)?|connstr)\b\s*[:=]\s*(?<value>[^\s"']{4,}|"[^"]{4,}"|'[^']{4,}')/i;
   C._LFI_PASSWD_RE = /root:[^:\n]{0,12}:0:0:[^:\n]*:[^:\n]*:/m;
-  C._LFI_PASSWD_SECOND_RE = /^\s*(?:daemon|bin|sys|sync|games|nobody|www-data|sshd|mail|proxy):[^:\n]*:\d+:\d+:/m;
+  C._LFI_PASSWD_SECOND_RE = /(?:^\s*|\/(?:(?:ba|da|a|z|k|c|tc)?sh|nologin|false|sync|halt|shutdown)\s*)(?:daemon|bin|sys|sync|games|nobody|www-data|sshd|mail|proxy):[^:\n]{0,16}:\d+:\d+:/m;
   C._LFI_WIN_INI_RE = /\[(?:extensions|fonts|mci extensions|files|mail)\]|;\s*for 16-bit app support|\[boot loader\]/i;
   C._LFI_FILE_PARAM_RE = /(?:resource=|file:\/\/|=)(?<path>\/[A-Za-z0-9_./-]+|[A-Za-z]:\\[^\s'"&]+)/;
   C._B64_TOKEN_RE = /[A-Za-z0-9+/]{40,}={0,2}/;
@@ -260,7 +261,7 @@
   C._KERNEL_EXPLOIT_NAMES = ['pwnkit', 'dirtycow', 'dirty cow', 'dirtypipe', 'dirty pipe', 'polkit', 'pkexec', 'baron samedit', 'overlayfs', 'af_packet', 'ptrace', 'netfilter', 'sequoia', 'looney tunables', 'gameoverlay', 'nftables', 'sudoedit', 'snapd', 'dirtysock'];
   C._USERSPACE_EXPLOIT_NAMES = ['pwnkit', 'polkit', 'pkexec', 'baron samedit', 'sudoedit', 'looney tunables', 'snapd', 'dirtysock'];
   C._USERSPACE_EXPLOIT_CVES_OR_NAMES_RE = /\b(?:CVE-2021-3156|baron\s+samedit|sudoedit|CVE-2021-4034|pwnkit|polkit|pkexec|CVE-2023-4911|looney\s+tunables|CVE-2019-7304|snapd|dirtysock)\b/i;
-  C._KERNEL_EXPLOIT_NEGATION_RE = /\bnot\s+(?:vulnerable|exploitable|affected|applicable)\b|\bpatched\b|\bnot\s+a\s+match\b|\bn\/a\b/i;
+  C._KERNEL_EXPLOIT_NEGATION_RE = /^\s*\[-\]|\b(?:not|(?:is|are|was|were)n['\u2019]t)\s+(?:vulnerable|exploitable|affected|applicable)\b|\bno\s+(?:known\s+)?vulnerabilit(?:y|ies)\b|\bpatched\b|\bnot\s+a\s+match\b|\bn\/a\b/im;
   C._NXC_AUTH_RE = /^\s*(?<proto>SMB|LDAP|WINRM|RDP|SSH|FTP|MSSQL|WMI)\s+(?<host>\S+)\s+\d+\s+\S+\s+\[\+\]\s+(?<auth>.+)$/im;
   C._AUTH_MATERIAL_RE = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$-]{2,}):(?<secret>[^\s()]+)/;
   C._NT_HASH_RE = /^(?:[0-9a-fA-F]{32}:)?[0-9a-fA-F]{32}$/;
@@ -278,7 +279,7 @@
   C._NOISE_USERS = new Set(['badpwdcount', 'description', 'distinguishedname', 'dn', 'lastlogon', 'name', 'pwdlastset', 'samaccountname', 'useraccountcontrol', 'username']);
   C._SHARE_HEADER_WORDS = new Set(['share', 'sharename', '-----', '---------', 'name']);
   C._SHARE_PERMISSION_WORDS = new Set(['READ', 'WRITE', 'READ,WRITE', 'WRITE,READ', 'NO ACCESS', 'NONE']);
-  C._JOHN_NOISE_PREFIXES = ['loaded ', 'session.', 'cost ', 'will run ', 'press ', 'use the ', 'warning:', 'no password hashes', 'password hash', 'password hashes'];
+  C._JOHN_NOISE_PREFIXES = ['loaded ', 'session.', 'session ', 'cost ', 'will run ', 'press ', 'use the ', 'warning:', 'no password hashes', 'password hash', 'password hashes', 'using default ', 'proceeding ', 'almost done', 'wait...', 'remaining ', 'note:', 'rules:', 'invalid ', 'unknown ', 'usage:', 'fopen:', 'stat:'];
   C._INTERACTIVE_WIN_TOOLS = new Set(['evil-winrm', 'evil-winrm-py', 'wmiexec', 'psexec', 'atexec', 'smbexec', 'winrs']);
   C._INTERACTIVE_RE = /(?:\*Evil-WinRM\*|evil-winrm(?:-py)?)\s+PS|semi-interactive shell|Launching semi-interactive|^\[[^\]]+\]:\s*PS[> ]/im;
   C._WPSCAN_USER_SECTION_RE = /User\(s\) Identified[\s\S]*/i;
@@ -546,7 +547,8 @@
       .replace(/^\s*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*[$#]\s*[^\r\n]*)$/gim, '')
       .replace(/[ \t]*(?:┌──\([^\r\n]*|└─[$#]\s*[^\r\n]*|\b(?:kali|parrot|root)@(?:kali|parrot)[^\r\n]*)/gi, '')
       .replace(/^\s*(?:Remote system type is [^\r\n]*|215[ \t]+UNIX(?:\s+Type:\s*L8|\s+emulated by FileZilla)\b[^\r\n]*)$/gim, '')
-      .replace(/^(\s*Name\s*\([^:\r\n)]+):(?:kali|parrot|ubuntu|debian|arch)(\)\s*:)/gim, '$1$2');
+      .replace(/^(\s*Name\s*\([^:\r\n)]+):(?:kali|parrot|ubuntu|debian|arch)(\)\s*:)/gim, '$1$2')
+      .replace(/([%(])P=[A-Za-z0-9._-]+/g, '$1');
     var matches = {};
     Object.keys(C._OS_SIGNATURES).forEach(function (family) {
       var pats = C._OS_SIGNATURES[family];

@@ -1654,6 +1654,381 @@ function runSmokeSuite() {
     );
   });
 
+  // =========================================================================
+  // Super-Wave 3A (PG-4 / PG-5 / PG-6 + Cross-Operator Alternates) Slice 4
+  // =========================================================================
+
+  test('PG456-B4-1: normalizeOcrSidecarEntries propagates parsedPrompt.kind over terminal and seeds pre-command foothold', () => {
+    const mdDoc = [
+      '# Recon & Foothold',
+      '',
+      '![shell-1](img1.png)',
+      '',
+      '![shell-2](img2.png)',
+      '',
+      '![shell-3](img3.png)'
+    ].join('\n');
+
+    const extracted = extractor.extractWalkthroughTurns(mdDoc, {
+      ocrEntries: [
+        {
+          kind: 'terminal',
+          anchor_line: 3,
+          prompt_line: 'C:\\Windows\\system32> whoami /priv',
+          command: 'whoami /priv',
+          stdout: 'SeImpersonatePrivilege   Impersonate a client after authentication   Enabled'
+        },
+        {
+          kind: 'terminal',
+          anchor_line: 5,
+          prompt_line: 'PS C:\\Users\\acct_alpha\\Documents> Get-ChildItem',
+          command: 'Get-ChildItem',
+          stdout: 'Directory: C:\\Users\\acct_alpha\\Documents'
+        },
+        {
+          kind: 'terminal',
+          anchor_line: 7,
+          prompt_line: 'op_reader@node-alpha:/var/www$ id',
+          command: 'id',
+          stdout: 'uid=1001(op_reader) gid=1001(op_reader) groups=1001(op_reader)'
+        }
+      ]
+    });
+
+    assert.strictEqual(extracted.turns.length, 3);
+    assert.strictEqual(extracted.turns[0].kind, 'cmd');
+    assert.strictEqual(extracted.turns[0].ocrKind, 'terminal');
+    assert.strictEqual(extracted.turns[1].kind, 'powershell');
+    assert.strictEqual(extracted.turns[1].ocrKind, 'terminal');
+    assert.strictEqual(extracted.turns[2].kind, 'unix');
+    assert.strictEqual(extracted.turns[2].ocrKind, 'terminal');
+    assert.strictEqual(extracted.turns[2].user, 'op_reader');
+    assert.strictEqual(extracted.turns[2].host, 'node-alpha');
+
+    const winReplay = trajectories.replayWalkthrough(OBOL, {
+      slug: 'synth-ocr-cmd-foothold',
+      markdown: '# Foothold\n\n![shot](s1.png)\n',
+      ocrEntries: [
+        {
+          kind: 'terminal',
+          anchor_line: 3,
+          prompt_line: 'C:\\Users\\acct_alpha> type C:\\Users\\acct_alpha\\settings.ini',
+          command: 'type C:\\Users\\acct_alpha\\settings.ini',
+          stdout: 'svc_pass=SynthOcrValue701!'
+        }
+      ]
+    }, {
+      target: '198.51.100.81',
+      lhost: '10.10.14.5'
+    });
+    assert.strictEqual(winReplay.steps.length, 1);
+    assert.ok(
+      winReplay.steps[0].matched_moves.indexOf('windows-loot-hunt') >= 0
+      || winReplay.steps[0].matched_moves.indexOf('stored-credentials') >= 0,
+      'Expected OCR cmd prompt to seed Windows target shell state before matching'
+    );
+  });
+
+  test('PG456-B4-2: Zero-space Unix prompts, Python REPL >>> assignment guard, bare grep fences, and pre-prompt HTTP JSON captures', () => {
+    const md = [
+      '```console',
+      'op_reader@node-alpha:$cat /etc/hostname',
+      'node-alpha',
+      'root@node-alpha:~#id',
+      'uid=0(root) gid=0(root) groups=0(root)',
+      '```',
+      '',
+      '```text',
+      '>>> import ldap3',
+      ">>> server = ldap3.Server('198.51.100.82', get_info=ldap3.ALL)",
+      '>>> conn = ldap3.Connection(server)',
+      '>>> conn.bind()',
+      'True',
+      '>> print(server.info)',
+      'DSA info (from DSE):',
+      '  Naming contexts:',
+      '    DC=synthcorp,DC=internal',
+      '```',
+      '',
+      '```',
+      "/var/www/app/config/db.php: 'db_pass' => 'SynthGrepSecret88!'",
+      "/etc/apache2/sites-enabled/000-default.conf: DocumentRoot /var/www/app",
+      '```',
+      '',
+      '```console',
+      'http://198.51.100.82:8080/api/v1/accounts',
+      '{"username":"svc_api","secret":"SynthApiToken2026!"}',
+      'kali@kali:~$ id',
+      'uid=1000(kali) gid=1000(kali)',
+      '```'
+    ].join('\n');
+
+    const res = extractor.extractWalkthroughTurns(md);
+    const zeroSpaceCat = res.turns.find(t => t.command === 'cat /etc/hostname');
+    const zeroSpaceId = res.turns.find(t => t.command === 'id' && t.user === 'root');
+    assert.ok(zeroSpaceCat && zeroSpaceCat.user === 'op_reader' && zeroSpaceCat.host === 'node-alpha');
+    assert.ok(zeroSpaceId && zeroSpaceId.host === 'node-alpha');
+
+    const pyAssignTurn = res.turns.find(t => /^server\s*=\s*ldap3\.Server/.test(t.command));
+    const pyTwoChevron = res.turns.find(t => t.command === 'print(server.info)');
+    assert.ok(pyAssignTurn && pyAssignTurn.tool === 'python' && pyAssignTurn.kind === 'repl');
+    assert.ok(pyTwoChevron && pyTwoChevron.tool === 'python' && /Naming contexts:/.test(pyTwoChevron.output));
+    assert.strictEqual(extractor.isCommandLikeLine("server = ldap3.Server('198.51.100.82')"), false);
+    assert.strictEqual(trajectories.extractPrimaryTool("server = ldap3.Server('198.51.100.82')"), '');
+
+    const pyAssignHk = trajectories.isHousekeepingTurn(pyAssignTurn, {});
+    assert.strictEqual(pyAssignHk.housekeeping, true);
+    assert.strictEqual(pyAssignHk.reason, 'repl_setup');
+    const pyDsaMoves = trajectories.matchTurnToCatalogMoves(OBOL, pyTwoChevron, {});
+    assert.ok(pyDsaMoves.length > 0 && pyDsaMoves[0].id === 'ad-anon-ldap-enum');
+
+    const grepTurn = res.turns.find(t => /\/var\/www\/app\/config\/db\.php:/.test(t.output));
+    assert.ok(grepTurn && /\/etc\/apache2\/sites-enabled\/000-default\.conf:/.test(grepTurn.output));
+
+    const preHttpTurn = res.turns.find(t => /http:\/\/198\.51\.100\.82:8080\/api\/v1\/accounts/.test(t.output));
+    assert.ok(preHttpTurn && /SynthApiToken2026!/.test(preHttpTurn.output));
+  });
+
+  test('PG456-B4-3: Quote-aware shell pipeline splitting preserves pipes inside quotes', () => {
+    const cmd = "curl -sI http://198.51.100.83 | grep -iE 'Via|X-Cache|Server'";
+    const clauses = trajectories.splitShellClausesQuoteAware(cmd);
+    assert.deepStrictEqual(clauses, [
+      'curl -sI http://198.51.100.83',
+      "grep -iE 'Via|X-Cache|Server'"
+    ]);
+    assert.ok(!clauses.some(c => trajectories.extractPrimaryTool(c) === 'server'));
+
+    const matched = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: cmd,
+      promptLine: 'kali@kali:~$ ' + cmd,
+      host: 'kali',
+      kind: 'unix'
+    }, {});
+    assert.ok(matched.length > 0 && matched[0].id === 'recon-web-triage');
+    assert.ok(!matched.some(m => m.id === 'pivot-chisel-socks'));
+  });
+
+  test('PG456-B4-4: Protocol-specific brute-force disambiguation and <proto>:// URI flag extraction', () => {
+    const sshFlags = trajectories.extractCommandFlags('hydra -L users.txt -P rockyou.txt ssh://198.51.100.84');
+    const ftpFlags = trajectories.extractCommandFlags('hydra -L users.txt -P rockyou.txt ftp://198.51.100.84');
+    const rdpFlags = trajectories.extractCommandFlags('hydra -L users.txt -P rockyou.txt rdp://198.51.100.84');
+    assert.ok(sshFlags.indexOf('ssh') >= 0);
+    assert.ok(ftpFlags.indexOf('ftp') >= 0);
+    assert.ok(rdpFlags.indexOf('rdp') >= 0);
+
+    const sshMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt ssh://198.51.100.84'
+    }, {});
+    assert.ok(sshMoves.length > 0 && sshMoves[0].id === 'online-brute-ssh');
+    assert.ok(!sshMoves.some(m => m.id === 'web-login-brute' || m.id === 'online-brute-ftp' || m.id === 'online-brute-rdp'));
+
+    const ftpMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt ftp://198.51.100.84'
+    }, {});
+    assert.ok(ftpMoves.length > 0 && ftpMoves[0].id === 'online-brute-ftp');
+    assert.ok(!ftpMoves.some(m => m.id === 'web-login-brute' || m.id === 'online-brute-ssh'));
+
+    const rdpMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'hydra -L users.txt -P /usr/share/wordlists/rockyou.txt rdp://198.51.100.84'
+    }, {});
+    assert.ok(rdpMoves.length > 0 && rdpMoves[0].id === 'online-brute-rdp');
+    assert.ok(!rdpMoves.some(m => m.id === 'web-login-brute' || m.id === 'online-brute-ssh'));
+
+    const httpFormMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: "hydra -L users.txt -P rockyou.txt 198.51.100.84 http-post-form '/ portal/login.php:user=^USER^&pass=^PASS^:Invalid'"
+    }, {});
+    assert.ok(httpFormMoves.length > 0 && httpFormMoves[0].id === 'web-login-brute');
+    assert.ok(!httpFormMoves.some(m => m.id === 'online-brute-ssh'));
+
+    const nxcSshSpray = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'nxc ssh 198.51.100.84 -u users.txt -p passwords.txt'
+    }, {});
+    assert.ok(nxcSshSpray.length > 0 && nxcSshSpray[0].id === 'online-brute-ssh');
+  });
+
+  test('PG456-B4-5: Explicit empty-string bind flags on ldapsearch route to ad-anon-ldap-enum', () => {
+    const singleEmpty = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: "ldapsearch -x -H ldap://198.51.100.85 -D '' -w '' -b 'DC=synthcorp,DC=internal'"
+    }, {});
+    assert.ok(singleEmpty.length > 0 && singleEmpty[0].id === 'ad-anon-ldap-enum');
+    assert.ok(!singleEmpty.some(m => m.id === 'ldap-deep-enum'));
+
+    const doubleEmpty = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'ldapsearch -x -H ldap://198.51.100.85 -D "" -w "" -s base namingcontexts'
+    }, {});
+    assert.ok(doubleEmpty.length > 0 && doubleEmpty[0].id === 'ad-anon-ldap-enum');
+    assert.ok(!doubleEmpty.some(m => m.id === 'ldap-deep-enum'));
+
+    const authBind = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: "ldapsearch -x -H ldap://198.51.100.85 -D 'synthcorp\\svc_directory' -w 'SynthLdapKey55!' -b 'DC=synthcorp,DC=internal'"
+    }, {});
+    assert.ok(authBind.length > 0 && authBind[0].id === 'ldap-deep-enum');
+    assert.ok(!authBind.some(m => m.id === 'ad-anon-ldap-enum'));
+  });
+
+  test('PG456-B4-6: Arithmetic SSTI probes route to ssti while RCE template payloads route to ssti-to-rce', () => {
+    const sess = newSession('198.51.100.86', '10.10.14.5');
+    OBOL.store.addFacts([
+      OBOL.facts.makeFact({ kind: 'http.reachable', scope: 'host:198.51.100.86', value: { port: 80 }, source: 'test' }),
+      OBOL.facts.makeFact({ kind: 'web.ssti_confirmed', scope: 'host:198.51.100.86', value: { param: 'name' }, source: 'test' })
+    ], 'test', '198.51.100.86');
+    const preFacts = sess.factSetForTarget('198.51.100.86');
+
+    const arithMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: "curl -s 'http://198.51.100.86/greet?name={{4*4}}'"
+    }, { facts: preFacts });
+    assert.ok(arithMoves.length > 0 && arithMoves[0].id === 'ssti');
+    assert.ok(!arithMoves.some(m => m.id === 'ssti-to-rce'));
+
+    const rceMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: "curl -s 'http://198.51.100.86/greet?name={{cycler.__init__.__globals__.os.popen(\"id\").read()}}'"
+    }, { facts: preFacts });
+    assert.ok(rceMoves.length > 0 && rceMoves[0].id === 'ssti-to-rce');
+  });
+
+  test('PG456-B4-7: Attacker-prompt locus F exclusion and attacker-local compiler housekeeping', () => {
+    const bareDollarHtpasswd = {
+      command: 'cat .htpasswd',
+      rawCommand: 'cat .htpasswd',
+      promptLine: '$ cat .htpasswd',
+      kind: 'bare',
+      isDollar: true,
+      stdout: 'svc_portal:$apr1$9zSynthetic$AbCdEfGhIjKlMnOpQrStU0'
+    };
+    const bareMatched = trajectories.matchTurnToCatalogMoves(OBOL, bareDollarHtpasswd, {});
+    assert.ok(!bareMatched.some(m => m.id === 'stored-credentials' || (m.move && m.move.locus === 'F')));
+
+    const kaliHtpasswd = {
+      command: 'cat .htpasswd',
+      rawCommand: 'cat .htpasswd',
+      promptLine: 'kali@kali:~/loot$ cat .htpasswd',
+      user: 'kali',
+      host: 'kali',
+      kind: 'unix'
+    };
+    const kaliMatched = trajectories.matchTurnToCatalogMoves(OBOL, kaliHtpasswd, {});
+    assert.ok(!kaliMatched.some(m => m.id === 'stored-credentials' || (m.move && m.move.locus === 'F')));
+
+    const kaliGccTurn = {
+      command: 'gcc -shared -fPIC -o libmod.so libmod.c',
+      rawCommand: 'gcc -shared -fPIC -o libmod.so libmod.c',
+      promptLine: 'kali@kali:~/work$ gcc -shared -fPIC -o libmod.so libmod.c',
+      user: 'kali',
+      host: 'kali',
+      kind: 'unix'
+    };
+    const gccHk = trajectories.isHousekeepingTurn(kaliGccTurn, {});
+    assert.strictEqual(gccHk.housekeeping, true);
+    assert.strictEqual(gccHk.reason, 'attacker_workspace_prep');
+    const gccDirect = trajectories.matchTurnToCatalogMoves(OBOL, kaliGccTurn, {});
+    assert.ok(!gccDirect.some(m => m.id === 'linux-shared-library-hijack' || (m.move && m.move.locus === 'F')));
+
+    const mingwHk = trajectories.isHousekeepingTurn({
+      command: 'x86_64-w64-mingw32-gcc helper.c -o helper.exe -lws2_32',
+      promptLine: 'kali@kali:~/work$ x86_64-w64-mingw32-gcc helper.c -o helper.exe -lws2_32',
+      user: 'kali',
+      host: 'kali',
+      kind: 'unix'
+    }, {});
+    assert.strictEqual(mingwHk.housekeeping, true);
+    assert.strictEqual(mingwHk.reason, 'attacker_workspace_prep');
+  });
+
+  test('PG456-B4-8: Archive crack disambiguation, combined -sVC/-sCV Nmap flags, rsync, and davtest routing', () => {
+    const johnExtlessRar = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'john rar --wordlist=/usr/share/wordlists/rockyou.txt',
+      stdout: 'Loaded 1 password hash (RAR5 [PBKDF2-SHA256 256/256 AVX2 8x])'
+    }, {});
+    assert.ok(johnExtlessRar.length > 0 && johnExtlessRar[0].id === 'crack-archive');
+    assert.ok(!johnExtlessRar.some(m => m.id === 'crack-modular-hash'));
+
+    const johnGenericNameRarStdout = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'john extracted_hashes.txt --wordlist=/usr/share/wordlists/rockyou.txt',
+      stdout: 'Loaded 1 password hash (PKZIP [32/64])'
+    }, {});
+    assert.ok(johnGenericNameRarStdout.length > 0 && johnGenericNameRarStdout[0].id === 'crack-archive');
+    assert.ok(!johnGenericNameRarStdout.some(m => m.id === 'crack-modular-hash'));
+
+    const johnLibraryNotRar = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'john library.txt --wordlist=/usr/share/wordlists/rockyou.txt',
+      stdout: 'Loaded 1 password hash (sha512crypt, crypt(3) $6$ [SHA512 256/256 AVX2 4x])'
+    }, {});
+    assert.ok(johnLibraryNotRar.length > 0 && johnLibraryNotRar[0].id === 'crack-modular-hash');
+
+    const sess = newSession('198.51.100.87', '10.10.14.5');
+    OBOL.store.addFacts([
+      OBOL.facts.makeFact({ kind: 'ports.open', scope: 'host:198.51.100.87', value: { ports: [22, 80, 873] }, source: 'test' })
+    ], 'test', '198.51.100.87');
+    const openFacts = sess.factSetForTarget('198.51.100.87');
+
+    const nmapSvc = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'nmap -sVC -p 22,80,873 198.51.100.87'
+    }, { facts: openFacts });
+    assert.ok(nmapSvc.length > 0 && nmapSvc[0].id === 'nmap-version-scripts');
+
+    const rustscanPlain = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'rustscan -a 198.51.100.87'
+    }, { facts: openFacts });
+    assert.ok(rustscanPlain.length > 0 && rustscanPlain[0].id === 'nmap-fast-open-ports');
+
+    const rsyncList = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'rsync --list-only rsync://198.51.100.87/'
+    }, {});
+    assert.ok(rsyncList.length > 0 && rsyncList[0].id === 'recon-rsync');
+
+    const rsyncPushKey = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'rsync -av ./authorized_keys rsync://198.51.100.87/home_op/.ssh/authorized_keys'
+    }, {});
+    assert.ok(rsyncPushKey.length > 0 && rsyncPushKey[0].id === 'rsync-write-shell');
+
+    const davtestMoves = trajectories.matchTurnToCatalogMoves(OBOL, {
+      command: 'davtest -url http://198.51.100.87/webdav'
+    }, {});
+    assert.ok(davtestMoves.length > 0 && davtestMoves[0].id === 'http-put-webshell');
+  });
+
+  test('PG456-B4-9: Pack JSON gates, PARSER_SIGNATURES coverage, and merged 387-case pg-practice-facts.json contract', () => {
+    const qaRoot = path.resolve(__dirname, '..', '..');
+    const crackingPack = JSON.parse(fs.readFileSync(path.join(qaRoot, 'data', 'packs', 'cracking_2026_09.json'), 'utf8'));
+    for (const moveId of ['online-brute-ssh', 'online-brute-ftp', 'online-brute-rdp']) {
+      const mv = (crackingPack.actions || []).find(a => a && a.id === moveId);
+      assert.ok(mv, 'Expected ' + moveId + ' in cracking_2026_09.json');
+      assert.ok(Array.isArray(mv.requires_any) && mv.requires_any.indexOf('host.users') >= 0, moveId + ' missing host.users');
+      assert.ok(Array.isArray(mv.requires_any) && mv.requires_any.indexOf('smtp.users') >= 0, moveId + ' missing smtp.users');
+    }
+
+    const reconPack = JSON.parse(fs.readFileSync(path.join(qaRoot, 'data', 'packs', 'recon_2026_09.json'), 'utf8'));
+    const reconRsync = (reconPack.actions || []).find(a => a && a.id === 'recon-rsync');
+    const rsyncWrite = (reconPack.actions || []).find(a => a && a.id === 'rsync-write-shell');
+    assert.ok(reconRsync && reconRsync.produces.indexOf('rsync.modules') >= 0);
+    assert.ok(rsyncWrite && rsyncWrite.requires_any.indexOf('rsync.modules') >= 0);
+
+    require(path.join(qaRoot, 'data', 'parser-signatures.js'));
+    const sigs = globalThis.OBOL && globalThis.OBOL.PARSER_SIGNATURES;
+    assert.ok(sigs, 'Expected OBOL.PARSER_SIGNATURES to load');
+    const allEmits = new Set();
+    for (const k of Object.keys(sigs)) {
+      for (const e of (sigs[k].emits || [])) allEmits.add(e);
+    }
+    for (const expectedKind of ['rsync.modules', 'rsync.reachable', 'postgres.reachable', 'db.reachable', 'redis.reachable']) {
+      assert.ok(allEmits.has(expectedKind), 'Expected PARSER_SIGNATURES to include ' + expectedKind);
+    }
+
+    const rawLabels = fs.readFileSync(path.join(qaRoot, 'tools', 'corpus', 'labels', 'pg-practice-facts.json'), 'utf8');
+    assert.ok(!/[\u2013\u2014]/.test(rawLabels), 'Expected zero en/em dashes in pg-practice-facts.json');
+    const labelDoc = JSON.parse(rawLabels);
+    assert.strictEqual(labelDoc.schema_version, 2);
+    assert.strictEqual(labelDoc.cases.length, 387);
+    const seenIds = new Set();
+    const seenFiles = new Set();
+    for (const c of labelDoc.cases) {
+      assert.ok(c.id && !seenIds.has(c.id), 'Duplicate or empty label id: ' + c.id);
+      seenIds.add(c.id);
+      seenFiles.add(c.file);
+    }
+    assert.strictEqual(seenFiles.size, 120);
+  });
+
   if (failures.length > 0) {
     console.error('\nPG-1 smoke suite FAILED: ' + failures.length + ' failed, ' + passed + ' passed.');
     process.exit(1);

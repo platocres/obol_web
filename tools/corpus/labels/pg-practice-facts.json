@@ -1,7 +1,7 @@
 {
   "version": 2,
   "schema_version": 2,
-  "description": "Schema v2 FACTS, OUTCOME, and TIER-ATTRIBUTION ground-truth labels for OffSec Proving Grounds Practice cohorts PG-1, PG-2, and PG-3 (62 machines, 201 cases). Stores zero verbatim corpus output and sanitizes all target identifiers per CORPUS-MINING.md Principles 5 and 7.",
+  "description": "Schema v2 FACTS, OUTCOME, and TIER-ATTRIBUTION ground-truth labels for OffSec Proving Grounds Practice cohorts PG-1 through PG-6 (120 machines, 387 cases). Stores zero verbatim corpus output and sanitizes all target identifiers per CORPUS-MINING.md Principles 5 and 7.",
   "cases": [
     {
       "id": "021bcbda1665",
@@ -3910,6 +3910,3602 @@
         "credential.candidate": "tier2_shape",
         "foothold.linux": "tier3_inference"
       }
+    },
+    {
+      "id": "c938178ba5ff",
+      "file": "bottleneck.md",
+      "command": "gobuster dir -u http://<target> -w /usr/share/wordlists/dirb/big.txt -t 100 -x php,txt,html",
+      "note": "Gobuster directory and extension brute-force discovering PHP application endpoints must mint HTTP reachability and web content mapping facts without hallucinating LFI confirmation or shell foothold.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.content_map",
+        "web.paths"
+      ],
+      "forbidden_kinds": [
+        "web.lfi_confirmed",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "2ff7484a88f6",
+      "file": "bottleneck.md",
+      "command": "python3 <path>",
+      "note": "Custom Python LFI script blocked by an application filter returning decoy prose and ASCII art instead of /etc/passwd entries must classify as unknown and never hallucinate web.lfi_confirmed, loot.files, or host.users.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "web.lfi_confirmed",
+        "loot.files",
+        "host.users",
+        "foothold.linux"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "9032ba4d0cf6",
+      "file": "bottleneck.md",
+      "command": "whoami;id;hostname",
+      "note": "Post-pivot user shell identity check showing membership in group 4(adm) must mint Linux user foothold and privileged group escalation lead facts while withholding access.admin.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "privesc.privileged_group",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "44653bb4cb43",
+      "file": "clyde.md",
+      "command": "nmap",
+      "note": "Multi-service Linux Nmap scan exposing anonymous FTP, OpenSSH, Apache HTTP, Erlang Port Mapper Daemon (4369), and RabbitMQ management HTTP (15672) must mint service reachability, anonymous FTP, EPMD service, and versioned banner facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "ssh.reachable",
+        "http.reachable",
+        "service.epmd",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "7271b18e6383",
+      "file": "clyde.md",
+      "command": "cat .erlang.cookie",
+      "note": "Reading an Erlang cluster authentication cookie file (.erlang.cookie) containing a single high-entropy uppercase token must mint credential.candidate without claiming validated service authentication or administrative access.",
+      "expected_kinds": [
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "31e5e758ea54",
+      "file": "clyde.md",
+      "command": "cat /etc/shadow",
+      "note": "Reading /etc/shadow from an elevated root shell prompt must extract crackable shadow password hashes via Tier-1 parsing and infer Linux administrative access from the root prompt context via Tier-3 inference.",
+      "expected_kinds": [
+        "loot.shadow",
+        "hash.crackable",
+        "credential.candidate",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "loot.shadow": "tier1",
+        "access.admin": "tier3_inference"
+      }
+    },
+    {
+      "id": "60e8d8e4901a",
+      "file": "craft-2.md",
+      "command": "sudo responder -I tun0",
+      "note": "Responder capturing an outbound SMBv2 NTLMv2-SSP challenge-response hash must mint crackable NetNTLM credential facts without prematurely asserting validated plaintext authentication.",
+      "expected_kinds": [
+        "credential.netntlm",
+        "credential.candidate",
+        "hash.crackable"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "smb.authenticated",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "5451769add4a",
+      "file": "craft-2.md",
+      "command": "john <path> --wordlist=/usr/share/wordlists/rockyou.txt",
+      "note": "John the Ripper CLI invocation printing a cracked plaintext-and-principal line (<secret> (<user>)) when banner and footer lines are omitted from the snippet must still mint plaintext password and credential.available facts.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "857d974a2819",
+      "file": "craft-2.md",
+      "command": "crackmapexec smb <target> -u <user> -p '<secret>' --shares",
+      "note": "Authenticated CrackMapExec SMB share enumeration returning READ permissions on non-admin shares must mint validated SMB authentication, share inventory, and readable share facts without claiming administrative Pwn3d access.",
+      "expected_kinds": [
+        "smb.reachable",
+        "smb.authenticated",
+        "credential.validated",
+        "smb.shares",
+        "smb.readable_share"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "smb.null_session"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "e2a5e1043bfe",
+      "file": "craft-2.md",
+      "command": "./agent -connect <target>:11601 -ignore-cert",
+      "note": "Ligolo-ng agent connecting back to the operator relay listener to bridge an internal loopback or secondary interface must mint tunnel.route and pivot.active facts without claiming administrative escalation.",
+      "expected_kinds": [
+        "tunnel.route",
+        "pivot.active"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "tunnel.socks"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "5520a6cfb289",
+      "file": "fish.md",
+      "command": "nmap -p- -sC -sV <target> -T4 -oA <path> --open",
+      "note": "Full-port Windows Nmap scan exposing SMB, RDP, GlassFish 4.1 administration HTTP on 4848, and SynaMan 5.1 HTTP on 6060 must mint Windows host/service reachability and non-stock versioned banner facts without misclassifying as an AD domain controller.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "host.os_family",
+        "smb.reachable",
+        "rdp.reachable",
+        "http.reachable",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "db8723512fab",
+      "file": "fish.md",
+      "command": "rpcclient -U \"\" -N <target>",
+      "note": "Anonymous rpcclient session rejected with NT_STATUS_ACCESS_DENIED on enumdomusers and querydispinfo must record SAMR null-session denial blockers and classify outcome as authorization-denied.",
+      "expected_kinds": [
+        "blocker.samr_null_denied",
+        "blocker.access_denied"
+      ],
+      "forbidden_kinds": [
+        "ad.user_list",
+        "smb.authenticated"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "fd901b2f2da2",
+      "file": "fish.md",
+      "command": "curl \"http://<target>:4848/theme/com%c0%af..%c0%af..%c0%af..%c0%af..%c0%af..%c0%af..%c0%af..%c0%af..%c0%af..%c0%afwindows/win.ini\"",
+      "note": "UTF-8 overlong slash (%c0%af) directory traversal against a Java application server returning Windows win.ini sections ([fonts], [extensions]) must confirm LFI, file loot, and Windows OS family without claiming command execution or shell foothold.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.lfi_confirmed",
+        "loot.files",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "web.cmdi_confirmed",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "317a3624f2dc",
+      "file": "g00g.md",
+      "command": "(commandless LFI passwd and apr1 hash notes)",
+      "note": "Command-less paste combining /etc/passwd entries, Apache configuration text, and an $apr1$ MD5-crypt htpasswd hash must engage Tier-1 passwd/LFI extraction, Tier-2 config.review shape recognition, and Tier-3 crackable hash inference.",
+      "expected_kinds": [
+        "web.lfi_confirmed",
+        "loot.files",
+        "config.review",
+        "host.users",
+        "hash.crackable",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "config.review": "tier2_shape",
+        "hash.crackable": "tier3_inference"
+      }
+    },
+    {
+      "id": "6efb9fa6e3af",
+      "file": "g00g.md",
+      "command": "(commandless find SUID output)",
+      "note": "Command-less SUID binary listing containing non-default /usr/bin/arj alongside stock system SUID binaries must surface privesc.suid_candidate, privesc.suid, and privesc.leads without claiming root access.",
+      "expected_kinds": [
+        "privesc.suid_candidate",
+        "privesc.suid",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a0992530e053",
+      "file": "g00g.md",
+      "command": "(commandless LinPEAS excerpt)",
+      "note": "LinPEAS uncommon passwd files check header mentioning '(splunk)' in its section banner while only listing /usr/share/lintian/overrides/passwd must NOT false-positive vuln.splunk.",
+      "expected_kinds": [
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "vuln.splunk",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "4ecdaec8dafe",
+      "file": "hutch.md",
+      "command": "ldapsearch -x -h <target> -D '' -w '' -b \"DC=<domain>,DC=<tld>\"",
+      "note": "Null-credential LDAP subtree dump (-D '' -w '') exposing Active Directory user objects and a cleartext password stored inside a user description attribute must mint anonymous bind, AD user list, and available credential facts without claiming authenticated bind.",
+      "expected_kinds": [
+        "ldap.reachable",
+        "ad.anonymous_bind",
+        "ad.domain_known",
+        "ad.base_dn",
+        "ad.user_list",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "ldap.authenticated",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0087d6ec620c",
+      "file": "hutch.md",
+      "command": "psexec.py <user>:'<secret>'@<target>",
+      "note": "Impacket psexec.py authenticating with valid low-privilege domain credentials but finding zero writable administrative shares must classify as authorization-denied and never mint Windows foothold or SYSTEM access.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "086e69098fd9",
+      "file": "hutch.md",
+      "command": "davtest -url http://<target> -auth <user>:<secret> -uploadfile ./shell.aspx -uploadloc shell.aspx",
+      "note": "Authenticated davtest uploading a custom ASPX web shell and reporting Upload succeeded with the target URL must mint HTTP reachability, validated credential, and confirmed web upload facts without prematurely asserting SYSTEM privileges.",
+      "expected_kinds": [
+        "http.reachable",
+        "credential.validated",
+        "web.upload_confirmed"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "06e000bb526a",
+      "file": "hutch.md",
+      "command": "ldapsearch -x -D <user>@<fqdn> -w <secret> -b 'DC=<domain>,DC=<tld>' '(ms-MCS-AdmPwd=*)' ms-MCS-AdmPwd",
+      "note": "Authenticated LDAP query reading a populated ms-MCS-AdmPwd attribute on a Domain Controller computer object must mint LAPS password retrieval and available credential facts.",
+      "expected_kinds": [
+        "ldap.reachable",
+        "ad.laps",
+        "ad.laps_lead",
+        "credential.candidate",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "3c8baadb3398",
+      "file": "illusion.md",
+      "command": "curl -s http://<target>/vendor/composer/installed.json",
+      "note": "Fetching an exposed Composer installed.json dependency lock manifest disclosing an outdated server-side template engine version (twig/twig v1.19.0) must mint web.manifest_disclosed and exploit.versioned_banner without claiming confirmed SSTI.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.manifest_disclosed",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "web.ssti_confirmed",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "0c96ca447a97",
+      "file": "illusion.md",
+      "command": "curl -i -G -b 'PHPSESSID=<secret>' -d 'order=Order+Now' --data-urlencode 'name={{4*4}}' http://<target>/dashboard.php",
+      "note": "Server-side template injection arithmetic probe using a non-7x7 multiplication payload ({{4*4}}) whose evaluated product ('16') renders in the HTTP response body without echoing the raw template tag must mint web.ssti_confirmed.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.ssti_confirmed"
+      ],
+      "forbidden_kinds": [
+        "web.cmdi_confirmed",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ae62e97222dc",
+      "file": "illusion.md",
+      "command": "./chisel_<arch> client <target>:8081 R:6379:127.0.0.1:6379",
+      "note": "Chisel client invoked via an OS/architecture-suffixed binary name forwarding loopback port 6379 back to the operator must mint pivot.active, pivot.ports, port:6379, and service.redis without claiming unauthenticated Redis access.",
+      "expected_kinds": [
+        "pivot.active",
+        "pivot.ports",
+        "port:6379",
+        "service.redis"
+      ],
+      "forbidden_kinds": [
+        "tunnel.socks",
+        "redis.unauth"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "033817a120d2",
+      "file": "illusion.md",
+      "command": "ssh -i id_rsa root@<target>",
+      "note": "Root SSH login using an authorized RSA key followed by reading /root/proof.txt and running ip a must mint authenticated SSH shell, Linux administrative access, root flag capture, and local interface facts.",
+      "expected_kinds": [
+        "ssh.authenticated",
+        "access.shell",
+        "foothold.linux",
+        "access.admin",
+        "objective.root_flag",
+        "proof.captured",
+        "scan.local.interfaces"
+      ],
+      "forbidden_kinds": [
+        "ssh.key_rejected",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "92f3f132c3d9",
+      "file": "interface.md",
+      "command": "nmap",
+      "note": "Command-less Nmap version and NSE scan of a Linux web host exposing OpenSSH on port 22 and an HTTP single-page application on port 80 must mint reachability, OS family, and web title facts without claiming shell access.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "web.title"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "0d5ffa5afce3",
+      "file": "interface.md",
+      "command": "gobuster dir -u http://<target> -w /usr/share/wordlists/dirb/common.txt -x php,txt,html -t 80",
+      "note": "Gobuster directory brute-force discovering /assets (301) and /index.html (200) on an HTTP service must mint web.content_map, web.paths, and http.reachable without hallucinating authentication bypass or command injection.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.content_map",
+        "web.paths"
+      ],
+      "forbidden_kinds": [
+        "web.authz_bypass",
+        "web.cmdi_confirmed",
+        "access.shell"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "eae78dbdb471",
+      "file": "interface.md",
+      "command": "nc -lvnp 6969",
+      "note": "Netcat listener catching a reverse shell callback that presents an interactive root prompt on a Linux host must establish listener.open, access.shell, foothold.linux, access.admin, and access.root.",
+      "expected_kinds": [
+        "listener.open",
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "318361bb5d67",
+      "file": "meathead.md",
+      "command": "nmap",
+      "note": "Command-less Nmap scan of a multi-service standalone Windows host exposing IIS HTTP (80), SMB (139/445), anonymous FTP (1221), MSSQL (1435), RDP (3389), and WinRM (5985) must mint all service reachabilities without promoting to ad.dc_candidate.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "ports.open",
+        "http.reachable",
+        "smb.reachable",
+        "ftp.reachable",
+        "ftp.anonymous_login",
+        "mssql.reachable",
+        "db.reachable",
+        "rdp.reachable",
+        "winrm.reachable",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "6a011be8b4c5",
+      "file": "meathead.md",
+      "command": "ftp dir",
+      "note": "Interactive IIS FTP directory listing disclosing a readable .rar backup archive must mint ftp.reachable, loot.files, and loot.material so offline archive-hash extraction moves unlock without requiring a separate transfer transcript block.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "loot.files",
+        "loot.material"
+      ],
+      "forbidden_kinds": [
+        "ftp.anon_write",
+        "foothold.windows",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "55d571f60a0a",
+      "file": "meathead.md",
+      "command": "john --wordlist=/usr/share/wordlists/rockyou.txt <hashfile>",
+      "note": "John the Ripper live RAR5 PBKDF2-SHA256 crack recovering an archive passphrase must mint credential.candidate, credential.password, credential.plaintext, and credential.available without claiming service validation.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.password",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "mssql.authenticated",
+        "access.shell"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "0a529bd054d3",
+      "file": "meathead.md",
+      "command": "whoami /priv",
+      "note": "Windows service-account privilege enumeration disclosing SeImpersonatePrivilege and SeManageVolumePrivilege must mint privesc.windows_privilege, privesc.seimpersonate, privesc.semanagevolume, and privesc.leads without claiming SYSTEM access.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "privesc.windows_privilege",
+        "privesc.seimpersonate",
+        "privesc.semanagevolume",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.system",
+        "access.admin",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "294e1b95c418",
+      "file": "metallus.md",
+      "command": "nmap",
+      "note": "Command-less Nmap scan of a Windows host with OpenSSH on port 22222, SMB on 139/445, Java RMI on 49693, and an unknown service on port 40443 returning HTTP/1.1 200 in fingerprint-strings must promote port 40443 to http.reachable and extract web.server.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "ports.open",
+        "ssh.reachable",
+        "smb.reachable",
+        "http.reachable",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.windows",
+        "access.shell"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a3984abd8b7a",
+      "file": "metallus.md",
+      "command": "python3 exploit.py http://<target>:40443 <user> <secret> <lhost> 443",
+      "note": "Authenticated exploit script printing status banners and telling the operator to check a listener without showing an established reverse shell session must classify as unknown and mint zero shell or foothold facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.shell",
+        "foothold.windows",
+        "access.system",
+        "credential.validated"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "3cf6a0839998",
+      "file": "metallus.md",
+      "command": "whoami",
+      "note": "Windows command shell executing whoami and returning nt authority\\system must establish foothold.windows, access.system, access.admin, and host.os_family without Linux foothold or root false positives.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "access.system",
+        "access.admin"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "e83e8e9720a5",
+      "file": "my-cmsms.md",
+      "command": "nmap",
+      "note": "Command-less Nmap scan of a Linux host exposing SSH (22), Apache 2.4.38 HTTP (80) with http-enum paths and CMS generator metadata, and MySQL (3306/33060) must mint service reachability, web.paths, and web.server facts.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "mysql.reachable",
+        "db.reachable",
+        "web.paths",
+        "web.server",
+        "web.title"
+      ],
+      "forbidden_kinds": [
+        "db.session",
+        "foothold.linux",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "92108f712f3c",
+      "file": "my-cmsms.md",
+      "command": "cat <path>",
+      "note": "Passive cat inspection of a local bash script containing an echoed Usage banner and unquoted backtick substitution must not trigger CLI usageSignal environment-error classification.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "5d6a39f6b602",
+      "file": "my-cmsms.md",
+      "command": "(commandless linpeas output)",
+      "note": "Command-less privilege-escalation enumeration snippet disclosing /etc/apache2/.htpasswd and an Apache $apr1$ MD5 hash must mint loot.files, credential.candidate, hash.crackable, and hash.candidate via Tier-2 shape extraction.",
+      "expected_kinds": [
+        "loot.files",
+        "credential.candidate",
+        "hash.crackable",
+        "hash.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "db3bb8d5219f",
+      "file": "my-cmsms.md",
+      "command": "echo \"<encoded>\" | base64 -d | base32 -d",
+      "note": "Chained Base64-to-Base32 decode pipeline outputting a single colon-delimited user:password line followed by operator shell comments must mint plaintext credential facts rather than failing whole-buffer anchor checks.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "ssh.authenticated",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "0b7f180fd61f",
+      "file": "nappa.md",
+      "command": "whoami;id;hostname;uname -a",
+      "note": "Compound post-foothold Linux shell command where whoami, id, and uname -a disclose kernel 5.9.3 (DirtyPipe CVE-2022-0847 range) while hostname fails with command not found must classify as partial and mint kernel escalation leads.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "host.kernel",
+        "vuln.dirtypipe",
+        "privesc.kernel_exploit",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "partial",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ad832710d98c",
+      "file": "nappa.md",
+      "command": "find / -name <keyfile> -type f 2>/dev/null",
+      "note": "Targeted find -name search returning an application master.key file path must mint loot.files and classify as success rather than falling into stock-SUID completed-negative retirement.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family",
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "privesc.suid",
+        "access.root",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "187f9b1c65f9",
+      "file": "nappa.md",
+      "command": "ssh -i <keyfile> root@<target> -p 60022",
+      "note": "SSH public-key authentication as root on non-standard port 60022 landing an interactive root shell prompt must establish ssh.authenticated, access.shell, foothold.linux, access.admin, and access.root.",
+      "expected_kinds": [
+        "ssh.authenticated",
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "6e18d680c409",
+      "file": "osaka.md",
+      "command": "sudo nmap -sCV <target> -vvv -p- -oN <path>",
+      "note": "Command-only Nmap invocation redirecting scan output to -oN with omitted stdout must classify as unknown and never hallucinate host reachability or open ports from CLI arguments.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "smb.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "11ac302369f7",
+      "file": "osaka.md",
+      "command": "(commandless nmap output)",
+      "note": "Command-less Nmap -vvv scan of a Windows host containing SF-Port21-TCP %P=x86_64-pc-linux-gnu scanner metadata, a 220 FTP fingerprint banner, SMB 139/445, and rdp-ntlm-info NetBIOS_Computer_Name must strip %P= before OS detection and extract host.os_family, host.hostname, and ftp.banner.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "host.hostname",
+        "ports.open",
+        "ftp.reachable",
+        "ftp.banner",
+        "smb.reachable",
+        "rdp.reachable"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "foothold.windows",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "1fa6483527c1",
+      "file": "symbolic.md",
+      "command": "nmap",
+      "note": "Command-less Nmap version scan of a Windows host exposing OpenSSH for_Windows_7.7 on port 22 and Apache httpd 2.4.48 ((Win64) OpenSSL/1.1.1k PHP/8.0.7) on port 80 must establish Windows OS family, reachability, web.server, and web.title.",
+      "expected_kinds": [
+        "host.up",
+        "host.os_family",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "service.version",
+        "web.server",
+        "web.title"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "foothold.linux",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "2acb3eef0b39",
+      "file": "symbolic.md",
+      "command": "exiftool <file>.pdf",
+      "note": "OCR-spliced exiftool PDF metadata table disclosing Creator wkhtmltopdf 0.12.3 and Producer Qt 4.8.7 must extract web.tech and exploit.versioned_banner via Tier-2 shape recognition while keeping software generator strings out of web.users.",
+      "expected_kinds": [
+        "web.tech",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "web.users",
+        "foothold.windows",
+        "credential.candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "4fc6cf8f959f",
+      "file": "symbolic.md",
+      "command": "ssh -i id_rsa <user>@<target>",
+      "note": "OCR-spliced SSH private-key login landing an interactive Windows OpenSSH cmd.exe prompt (Microsoft Windows [Version 10.0.17763.2300]) must establish ssh.authenticated, foothold.windows, host.os_family, and host.kernel without claiming administrative access.",
+      "expected_kinds": [
+        "ssh.authenticated",
+        "foothold.windows",
+        "host.os_family",
+        "host.kernel"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "934e58dd134b",
+      "file": "symbolic.md",
+      "command": ".\\CreateSymlink.exe \"<path>\" \"<target_path>\"",
+      "note": "Command-only Windows junction and symlink creation command with empty stdout must classify as unknown and never hallucinate administrative privileges or SSH key disclosure prior to downstream file read evidence.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "loot.ssh_key",
+        "credential.ssh_key"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "a7a58a062d6e",
+      "file": "tre.md",
+      "command": "nmap",
+      "note": "Nmap TCP service scan of a Linux host exposing OpenSSH and dual HTTP listeners on ports 80 and 8082 must mint host reachability, open ports, SSH/HTTP reachability, service version, and Linux OS family without AD promotion or foothold claims.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ff96fb5c18c9",
+      "file": "tre.md",
+      "command": "cat <path>",
+      "note": "Reading a PHP application database configuration file from an interactive Linux shell prompt must extract Tier-1 web.source_disclosed and plaintext database credentials alongside Tier-3 prompt-inferred foothold.linux without claiming credential validation or root access.",
+      "expected_kinds": [
+        "web.source_disclosed",
+        "credential.plaintext",
+        "credential.available",
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "web.source_disclosed": "tier1",
+        "credential.plaintext": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "b32841e027fe",
+      "file": "tre.md",
+      "command": "sudo -l",
+      "note": "Sudoers NOPASSWD rule output paired with a UID=0 process-monitor line executing a non-standard script under /usr/bin must mint privesc.sudo_rights, privesc.process_lead, privesc.custom_binary, and privesc.leads without claiming realized root execution.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.process_lead",
+        "privesc.custom_binary",
+        "privesc.leads",
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.sudo_rights": "tier1",
+        "privesc.process_lead": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "cb4a680c0c6f",
+      "file": "tre.md",
+      "command": "/tmp/<bin> -p",
+      "note": "Executing a staged setuid-root shell copy with -p whose follow prompt transitions to a root # prompt must establish access.shell, access.admin, and access.root on Linux.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "94c7707cc487",
+      "file": "uc404.md",
+      "command": "nmap",
+      "note": "Nmap version and NSE scan of a Linux host exposing SSH, HTTP with http-git repository disclosure, rpcbind, and NFS must mint ssh.reachable, http.reachable, nfs.reachable, and web.paths without SMB or Active Directory false positives.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "nfs.reachable",
+        "web.paths",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "smb.reachable",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "44d8e7103b56",
+      "file": "uc404.md",
+      "command": "gobuster dir -u http://<target>/ -w <path>",
+      "note": "Gobuster directory enumeration discovering an exposed /.git/HEAD repository endpoint alongside web paths must mint http.reachable, web.content_map, web.paths, and web.exposed_artifact without claiming shell access.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.content_map",
+        "web.paths",
+        "web.exposed_artifact"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "d389415dad07",
+      "file": "uc404.md",
+      "command": "sudo -l",
+      "note": "Sudoers listing granting (ALL) NOPASSWD on /usr/bin/git must mint privesc.sudo_rights, privesc.sudo_binary, and privesc.leads while keeping access.admin and access.root unproven until escalation executes.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads",
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.sudo_rights": "tier1",
+        "privesc.sudo_binary": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "24dc5ced8cec",
+      "file": "uc404.md",
+      "command": "cat /etc/shadow",
+      "note": "Dumping /etc/shadow from a root shell prompt must mint Tier-1 loot.shadow and hash.crackable facts alongside Tier-3 prompt-inferred access.admin and access.root without claiming plaintext passwords.",
+      "expected_kinds": [
+        "loot.shadow",
+        "hash.crackable",
+        "credential.candidate",
+        "foothold.linux",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "loot.shadow": "tier1",
+        "hash.crackable": "tier1",
+        "access.admin": "tier3_inference",
+        "access.root": "tier3_inference"
+      }
+    },
+    {
+      "id": "cc67a448ca5c",
+      "file": "ut99.md",
+      "command": "perl <path> <target> <port> <lhost> <lport>",
+      "note": "Command-only remote exploit invocation with empty stdout must classify as unknown and emit zero foothold or shell facts until listener or session output confirms execution.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "foothold.linux",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "2797a11cfeea",
+      "file": "ut99.md",
+      "command": "whoami /priv",
+      "note": "Windows whoami /priv table containing only baseline unprivileged token entries (SeShutdownPrivilege, SeChangeNotifyPrivilege, SeUndockPrivilege) must classify as completed-negative and mint zero token-impersonation escalation leads.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "privesc.windows_privilege",
+        "privesc.leads",
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "completed-negative",
+      "tier_attribution": {
+        "foothold.windows": "tier3_inference",
+        "host.os_family": "tier1"
+      }
+    },
+    {
+      "id": "09fba773069f",
+      "file": "ut99.md",
+      "command": "dir",
+      "note": "Low-privilege Windows user profile directory listing with an inline PEM certificate/keypair and an operator comment mentioning a failed remote-exec tool must mint loot.files and credential.certificate without false-positiving access.admin from prose tool mentions.",
+      "expected_kinds": [
+        "foothold.windows",
+        "loot.files",
+        "credential.certificate",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system",
+        "smb.authenticated"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "466f1fd3f2f8",
+      "file": "ut99.md",
+      "command": "accesschk.exe /accepteula -uqvwd <path>",
+      "note": "Sysinternals accesschk -uqvwd directory ACL output on a Program Files application folder granting RW and FILE_ADD_FILE to a non-administrative local user account must mint privesc.weak_service_permission and privesc.leads.",
+      "expected_kinds": [
+        "foothold.windows",
+        "host.os_family",
+        "privesc.weak_service_permission",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "3b701a9fba64",
+      "file": "vector.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC scan of a standalone Windows host exposing FTP, IIS HTTP, high-port HTTP, MSRPC, SMB, RDP, and WinRM without Kerberos or LDAP must mint service reachability and Windows OS family without promoting to ad.dc_candidate.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "http.reachable",
+        "smb.reachable",
+        "rdp.reachable",
+        "winrm.reachable",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "ldap.reachable",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "087195bb3c81",
+      "file": "vector.md",
+      "command": "xfreerdp /u:<user> /p:<secret> /cert-ignore /size:smart-sizing /v:<target>",
+      "note": "Command-only xfreerdp invocation with omitted stdout must classify as unknown and never claim rdp.authenticated, credential.validated, or foothold.windows from CLI arguments alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "rdp.authenticated",
+        "credential.validated",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "8c785266f093",
+      "file": "vector.md",
+      "command": "base64 -d <path>",
+      "note": "Decoding a base64 file into a user:password cleartext pair must mint plaintext credential facts and must never misparse the base64 -d decode flag argument as an Active Directory domain name.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_known",
+        "host.domain",
+        "ad.base_dn",
+        "ad.dc_candidate",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "34a30fec114f",
+      "file": "vector.md",
+      "command": "type <path>",
+      "note": "Windows C:\\Users\\Administrator\\Desktop> prompt telemetry with omitted file body must infer foothold.windows and access.admin via Tier-3 prompt telemetry without Linux false positives.",
+      "expected_kinds": [
+        "foothold.windows",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "foothold.windows": "tier3_inference",
+        "access.admin": "tier3_inference",
+        "host.os_family": "tier1"
+      }
+    },
+    {
+      "id": "39c3036f8cad",
+      "file": "voip.md",
+      "command": "hash lookup <hash>",
+      "note": "Three-column online hash-crack lookup result table (Hash | Type | Result) mapping a hex digest and hash algorithm to a recovered plaintext secret must mint Tier-2 shape credential facts without claiming service validation.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.password",
+        "credential.plaintext"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "128965e51de0",
+      "file": "voip.md",
+      "command": "GET http://<target>:8000/",
+      "note": "Web administration panel user-directory view listing a REGISTERED USERS heading followed by username and account-ID or status rows must mint web.users and http.reachable without Active Directory domain claims.",
+      "expected_kinds": [
+        "web.users",
+        "http.reachable"
+      ],
+      "forbidden_kinds": [
+        "ad.user_list",
+        "ad.dc_candidate",
+        "credential.available"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "5e938f406b89",
+      "file": "voip.md",
+      "command": "hydra -L <path> -p <secret> ssh://<target> -t 4",
+      "note": "Hydra SSH password spray reporting a valid [22][ssh] host, login, and password hit must mint credential.available, credential.plaintext, and credential.validated without claiming an interactive shell.",
+      "expected_kinds": [
+        "credential.available",
+        "credential.plaintext",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a14aeffd4d78",
+      "file": "voip.md",
+      "command": "ssh <user>@<target>",
+      "note": "Combined SSH session transcript containing sudo -l enumeration followed by sudo su transition to a root# prompt, uid=0(root) id output, and captured local and root proof hashes must mint access.admin and access.root alongside privesc.sudo_rights and objective flag facts.",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.sudo_rights",
+        "access.admin",
+        "access.root",
+        "objective.local_flag",
+        "objective.root_flag"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "c0c5767d555a",
+      "file": "webcal.md",
+      "command": "ftp <target>",
+      "note": "Interactive FTP probe returning a private-system banner and 530 Login authentication failed for anonymous login must mint ftp.reachable and ftp.banner while classifying outcome as rejected.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "credential.validated",
+        "foothold.linux"
+      ],
+      "outcome_expected": "rejected",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "b18bf2746bab",
+      "file": "webcal.md",
+      "command": "whoami;id;hostname;uname -a",
+      "note": "Web-exploit pseudo-shell prompt ending in # whose id and uname -a output confirm uid=33(www-data) on a vulnerable 3.0.0 Linux kernel must mint foothold.linux, host.kernel, and privesc.kernel_exploit while refusing to mint access.root or access.admin.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.kernel",
+        "host.arch",
+        "privesc.kernel_exploit",
+        "privesc.leads"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "14b05357c3fe",
+      "file": "webcal.md",
+      "command": "mysql select <cols> from <table>;",
+      "note": "Interactive MySQL SELECT query dumping application user login and 32-hex MD5 hash columns must mint db.session, db.hashes, hash.crackable, credential.candidate, and loot.material without claiming plaintext recovery.",
+      "expected_kinds": [
+        "db.session",
+        "db.reachable",
+        "db.hashes",
+        "hash.crackable",
+        "credential.candidate",
+        "loot.material"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "6e9361e42bac",
+      "file": "webcal.md",
+      "command": "gcc <path> -o <bin>",
+      "note": "On-target gcc invocation failing with error trying to exec cc1: No such file or directory must classify outcome as environment-error while preserving Tier-3 prompt-inferred foothold.linux.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin"
+      ],
+      "outcome_expected": "environment-error",
+      "tier_attribution": {
+        "foothold.linux": "tier3_inference",
+        "host.os_family": "tier1"
+      }
+    },
+    {
+      "id": "01bc9e98e966",
+      "file": "assignment.md",
+      "command": "(commandless nmap output)",
+      "note": "Command-less Nmap version and NSE scan of a Linux server exposing SSH (22), HTTP (80), and an alternate web Git service on TCP port 8000 must mint reachability, port, title, SSH hostkey, and Linux OS family facts without promoting to an Active Directory role.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:80",
+        "http.reachable",
+        "port:8000",
+        "web.title",
+        "ssh.hostkey",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "access.shell"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a19911a06f8c",
+      "file": "assignment.md",
+      "command": "GET http://<target>/<path>",
+      "note": "Web note capture displaying an HTTP URL header and a prose-prefixed colon-delimited credential pair (<user>:<secret>) must extract http.reachable and plaintext credential possession facts without claiming service authentication or shell access.",
+      "expected_kinds": [
+        "http.reachable",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "563fa044968c",
+      "file": "assignment.md",
+      "command": "python <path> -s <target>:8000 -u <user> -p '<secret>' -t false -r <target>:80",
+      "note": "Authenticated Python web exploit script that logs a successful login, receives an inbound reverse callback, switches to interactive shell mode, and executes whoami and id (uid=1000) must mint credential.validated, web.cmdi_confirmed, access.shell, foothold.linux, and host.os_family without promoting to access.admin or access.root.",
+      "expected_kinds": [
+        "credential.validated",
+        "web.cmdi_confirmed",
+        "http.reachable",
+        "access.shell",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "3387dc896b9f",
+      "file": "banzai.md",
+      "command": "ftp <target>",
+      "note": "Interactive FTP session authenticating as a non-anonymous user (Name prompt followed by 331 password prompt and 230 Login successful) must mint ftp.reachable, ftp.banner, ftp.authenticated, and credential.validated while forbidding ftp.anonymous_login.",
+      "expected_kinds": [
+        "ftp.reachable",
+        "ftp.banner",
+        "ftp.authenticated",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "811de3893f92",
+      "file": "banzai.md",
+      "command": "psql -h <target> -p 5432 -U postgres",
+      "note": "PostgreSQL client rejected by host-based access control (FATAL: no pg_hba.conf entry for host) must prove postgres.reachable, db.reachable, and blocker.access_denied with authorization-denied outcome while forbidding db.session and credential.validated.",
+      "expected_kinds": [
+        "postgres.reachable",
+        "db.reachable",
+        "blocker.access_denied"
+      ],
+      "forbidden_kinds": [
+        "db.session",
+        "credential.validated",
+        "postgres.unauth"
+      ],
+      "outcome_expected": "authorization-denied"
+    },
+    {
+      "id": "752ce603e6f3",
+      "file": "banzai.md",
+      "command": "cat config.php",
+      "note": "Reading a PHP configuration file containing define('DBUSER', ...) and define('DBPASS', ...) inside a Linux shell must extract database and plaintext credential facts alongside web.source_disclosed and foothold.linux without claiming an authenticated database session or root privilege.",
+      "expected_kinds": [
+        "db.creds",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available",
+        "web.source_disclosed",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "db.session",
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "1022e4c38ba5",
+      "file": "blackgate.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version scan exposing SSH (22) and a versioned Redis server on TCP port 6379 must mint service reachability, versioned banner, and Linux OS family facts without assuming unauthenticated Redis command execution.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:6379",
+        "service.redis",
+        "redis.reachable",
+        "db.reachable",
+        "service.version",
+        "exploit.versioned_banner",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "redis.unauth",
+        "access.shell",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "54c057c10558",
+      "file": "blackgate.md",
+      "command": "python3 <path> -f module.so -r <target> -p 6379 -L <target> -P 6379",
+      "note": "Rogue-server replication exploit script logging an accepted inbound callback from the target and selecting interactive shell mode must mint listener.open and access.shell without assuming administrative or root privilege.",
+      "expected_kinds": [
+        "listener.open",
+        "access.shell"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "35fa583c5c91",
+      "file": "blackgate.md",
+      "command": "./linpeas.sh",
+      "note": "LinPEAS output flagging Polkit local privilege escalation (CVE-2021-4034) on a Linux foothold must mint exploit.candidate, vuln.polkit, and privesc.leads without prematurely claiming access.admin or access.root.",
+      "expected_kinds": [
+        "exploit.candidate",
+        "vuln.polkit",
+        "privesc.leads",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ae0585887f05",
+      "file": "cassios.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version scan of a Linux Samba and multi-port HTTP server (ports 22, 80, 139, 445, 8080) must mint SSH, HTTP, and SMB reachability alongside web metadata and Linux OS family without false-positiving Active Directory domain controller status.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:80",
+        "port:8080",
+        "http.reachable",
+        "smb.reachable",
+        "web.title",
+        "web.server",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "ldap.reachable"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ba379165472d",
+      "file": "cassios.md",
+      "command": "ls",
+      "note": "Interactive smbclient share directory listing returning serialized Java and Maven backup files must mint loot.files and smb.reachable via Tier-1 share inventory parsing without claiming write access or a shell.",
+      "expected_kinds": [
+        "loot.files",
+        "smb.reachable"
+      ],
+      "forbidden_kinds": [
+        "smb.writable_share",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "loot.files": "tier1",
+        "smb.reachable": "tier1"
+      }
+    },
+    {
+      "id": "d083e07a59ec",
+      "file": "cassios.md",
+      "command": "python <path>",
+      "note": "Local Polkit privilege-escalation exploit printing whoami and root inside an interactive Linux session must mint access.shell, foothold.linux, host.os_family, access.admin, and access.root.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "24d16dc8cbd5",
+      "file": "catto.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version scan exposing distro-bannerless OpenSSH 8.0 on non-standard TCP port 42022 alongside multiple high-port HTTP services (8080, 18080, 30330, 42247, 50400) must mint port:42022, service.ssh, ssh.reachable, http.reachable, web.title, and web.server without fabricating port:22.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:42022",
+        "service.ssh",
+        "ssh.reachable",
+        "http.reachable",
+        "web.title",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "port:22",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "4670693bea3e",
+      "file": "catto.md",
+      "command": "cat <path>",
+      "note": "Reading a harvested local username list file containing one valid account token per line must mint host.users so downstream SSH password-spray moves can satisfy their user-list prerequisite and materialize the userlist token.",
+      "expected_kinds": [
+        "host.users"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "access.shell"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "828a68aa7f9e",
+      "file": "catto.md",
+      "command": "python3 <path>",
+      "note": "Silent local privilege-escalation script executed from an unprivileged Linux user prompt that emits empty stdout and immediately transitions followPrompt on the same host to a root# prompt must mint foothold.linux, host.os_family, access.admin, and access.root.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "4da309eb8e87",
+      "file": "codo.md",
+      "command": "sudo nmap -sC -p- -n -Pn -sV --min-rate=9362 <target> -oN <path>",
+      "note": "Command-only Nmap code fence with omitted terminal output must classify as unknown and never fabricate host reachability or open ports from CLI arguments alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "http.reachable",
+        "ssh.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "23cb97894fc9",
+      "file": "codo.md",
+      "command": "su root",
+      "note": "An su root code fence containing only an inline comment (# Password: <secret>) and no resulting root# prompt or uid=0 output must extract at most credential.candidate and never fabricate access.root or access.admin.",
+      "expected_kinds": [
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "credential.candidate": "tier3_inference"
+      }
+    },
+    {
+      "id": "64e913e11808",
+      "file": "crane.md",
+      "command": "sudo -l",
+      "note": "Command-only sudo -l code fence with empty stdout and no shell prompt context must classify as unknown and never fabricate privesc.sudo, privesc.leads, or foothold.linux from the command string alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "privesc.sudo",
+        "privesc.leads",
+        "foothold.linux",
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "050d83fcc91a",
+      "file": "crane.md",
+      "command": "sudo service ../../bin/sh",
+      "note": "Command-only sudo shell-escape invocation with empty stdout and no resulting root# prompt must classify as unknown and never hallucinate access.root, access.admin, or access.shell without execution evidence.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.root",
+        "access.admin",
+        "access.shell",
+        "foothold.linux"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "ef0b275bebdc",
+      "file": "cve-2023-33831.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version scan exposing SSH (22) and a Node.js Express web application on TCP port 1881 must mint port:22, ssh.reachable, port:1881, service.http, http.reachable, web.title, and Linux OS family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:1881",
+        "service.http",
+        "http.reachable",
+        "web.title",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.shell",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "139a4bc6bd10",
+      "file": "cve-2023-33831.md",
+      "command": "python3 <path> --rhost <target> --rport 1881 --lhost <target> --lport 9001",
+      "note": "Remote command-injection exploit script producing an interactive # whoami -> root exchange and transitioning followPrompt to root@<host>:<path># must co-mint web.cmdi_confirmed, access.shell, foothold.linux, host.os_family, access.admin, and access.root.",
+      "expected_kinds": [
+        "web.cmdi_confirmed",
+        "http.reachable",
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "408f641ebd8e",
+      "file": "cve-2023-33831.md",
+      "command": "python3 -c 'import pty; pty.spawn(\"/bin/bash\")'",
+      "note": "Python PTY shell upgrade run from a root# prompt and landing on root@<host>:<path># must mint access.shell, foothold.linux, host.os_family, access.admin, and access.root.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "6b1e1f4471bc",
+      "file": "cve-2023-40582.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version scan exposing SSH (22) and a Node.js Express web application on TCP port 3000 must mint port:22, ssh.reachable, port:3000, service.http, http.reachable, web.title, and Linux OS family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:3000",
+        "service.http",
+        "http.reachable",
+        "web.title",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.shell",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "20588cf4d308",
+      "file": "cve-2023-40582.md",
+      "command": "rlwrap -cAr nc -nvlp9001",
+      "note": "Netcat listener invocation accompanied only by an unexecuted mkfifo reverse-shell payload string and zero inbound connection or listening lines must classify as unknown and mint zero listener or shell facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "listener.open",
+        "access.shell",
+        "foothold.linux",
+        "access.root"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "a7ce1bf86b4a",
+      "file": "cve-2023-40582.md",
+      "command": "whoami",
+      "note": "Interactive whoami command executed from a # prompt returning root must mint foothold.linux, access.shell, host.os_family, access.admin, and access.root.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "host.os_family",
+        "access.admin",
+        "access.root"
+      ],
+      "forbidden_kinds": [
+        "ad.domain_admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "7f3d8e58268a",
+      "file": "cve-2023-46818.md",
+      "command": "sudo nmap -sCV <target> -vvv -p- -oN <path>",
+      "note": "Command-only Nmap block whose scan output is placed in a subsequent command-less fence must classify as unknown and mint zero reachability or port facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "http.reachable",
+        "ssh.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "070b6a14ecd0",
+      "file": "cve-2023-46818.md",
+      "command": "(commandless nmap output)",
+      "note": "Command-less Nmap output of a Linux hosting control panel server exposing SSH (22) and Apache HTTP/HTTPS endpoints on TCP ports 80, 8080, and 8081 must mint port, reachability, web title, web server, SSH hostkey, and Linux OS family facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:80",
+        "http.reachable",
+        "port:8080",
+        "port:8081",
+        "web.title",
+        "web.server",
+        "ssh.hostkey",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.shell",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "b7ca25cd634c",
+      "file": "cve-2023-6019.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap service scan detecting SSH on port 22 and an aiohttp HTTP dashboard on port 9000 must mint host reachability, open ports, SSH and HTTP service reachability, web title, and versioned banner facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:9000",
+        "http.reachable",
+        "web.title",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "bef3cefb9336",
+      "file": "cve-2023-6019.md",
+      "command": "curl 'http://<target>:9000/worker/cpu_profile?pid=<pid>&ip=<target>&duration=5&native=0&format=`<base64_shell_payload>`'",
+      "note": "Silent HTTP command-injection request delivering a backtick and pipe-to-shell reverse-shell payload with empty stdout must classify as unknown pending listener callback rather than completed-negative, and must not claim shell execution without stdout evidence.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "web.cmdi_confirmed"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "e516e56ebd53",
+      "file": "cve-2023-6019.md",
+      "command": "whoami",
+      "note": "Post-callback POSIX whoami returning root must mint Linux foothold, shell access, and administrative privilege without fabricating Windows foothold facts.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "feb447fcd2af",
+      "file": "depreciated.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap scan exposing SSH on 22, Nginx HTTP on 80, a custom TCP service on 5132, and a Werkzeug Python HTTP API on 8433 must mint host reachability, open port facts, SSH and HTTP reachability, and server version metadata.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:80",
+        "port:5132",
+        "port:8433",
+        "http.reachable",
+        "web.server",
+        "service.version"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a4dca7047db1",
+      "file": "depreciated.md",
+      "command": "read <msg_id>",
+      "note": "Interactive mail or message body containing an explicit password-policy warning that quotes a weak cleartext password token must mint candidate and available plaintext credential facts without claiming service validation or shell access.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a2790f8a0c5d",
+      "file": "depreciated.md",
+      "command": "./linpeas.sh",
+      "note": "On-host LinPEAS execution flagging Polkit vulnerability CVE-2021-4034 from a non-root Linux shell prompt must mint vuln.polkit, exploit.candidate, privesc.leads, and Tier-3 prompt-inferred foothold.linux without claiming access.admin.",
+      "expected_kinds": [
+        "vuln.polkit",
+        "exploit.candidate",
+        "privesc.leads",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "vuln.polkit": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "3c4e6c52bdc1",
+      "file": "dibble.md",
+      "command": "nmap",
+      "note": "Command-less Nmap aggressive scan output reporting anonymous FTP on 21, SSH on 22, CMS HTTP on 80, Node.js HTTP on 3000, and unauthenticated MongoDB database enumeration on 27017 must mint service reachability, ftp.anonymous_login, web.cms, mongo.unauth, and db.tables.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:21",
+        "ftp.anonymous_login",
+        "port:22",
+        "ssh.reachable",
+        "port:80",
+        "port:3000",
+        "http.reachable",
+        "web.cms",
+        "port:27017",
+        "mongo.reachable",
+        "mongo.unauth",
+        "db.tables"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "0dda4e98b6cc",
+      "file": "dibble.md",
+      "command": "mongo --version",
+      "note": "Local MongoDB client version check printing shell build metadata without connecting to a remote server must classify as unknown and never fabricate unauthenticated MongoDB access or an active database session.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "mongo.unauth",
+        "db.session",
+        "db.reachable",
+        "credential.validated"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "bdcfa8f9709f",
+      "file": "dibble.md",
+      "command": "mongosh --host <target>",
+      "note": "Unauthenticated mongosh session listing databases and dumping user collection documents containing modular password hashes must mint mongo.unauth, db.session, db.reachable, and crackable hash facts without claiming cleartext password recovery.",
+      "expected_kinds": [
+        "mongo.unauth",
+        "db.session",
+        "db.reachable",
+        "credential.candidate",
+        "hash.candidate",
+        "hash.crackable"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "27f951055534",
+      "file": "educated.md",
+      "command": "ffuf -u http://<target>/<app_dir>/FUZZ -w <path>",
+      "note": "Directory fuzzing output discovering HTTP 200 and 301 application subpaths including login and uploads endpoints must mint http.reachable, web.content_map, web.paths, web.login_form, and web.upload_form.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.content_map",
+        "web.paths",
+        "web.login_form",
+        "web.upload_form"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "87540da0c345",
+      "file": "educated.md",
+      "command": "cat <path>/database.php",
+      "note": "Reading a PHP framework database configuration file with cleartext username and password assignments from a web-service Linux shell prompt must mint db.creds, plaintext credential facts, and prompt-inferred foothold.linux.",
+      "expected_kinds": [
+        "db.creds",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "db.session"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "ddd9499ca539",
+      "file": "educated.md",
+      "command": "mysql select * from <table_name>;",
+      "note": "Interactive MySQL table query returning account rows with 40-character hexadecimal SHA-1 password digests must mint db.session, db.hashes, loot.material, and crackable hash facts without treating raw hex digests as cleartext passwords.",
+      "expected_kinds": [
+        "db.session",
+        "db.reachable",
+        "db.hashes",
+        "loot.material",
+        "credential.candidate",
+        "hash.candidate",
+        "hash.crackable"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "3259ff869cea",
+      "file": "exghost.md",
+      "command": "feroxbuster -u http://<target> -q -w <path> -x php,html,txt,bak",
+      "note": "Feroxbuster recursive web content scan returning live directories and PHP endpoints including an uploads path must mint http.reachable, web.content_map, web.paths, and web.upload_form.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.content_map",
+        "web.paths",
+        "web.upload_form"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "web.upload_confirmed",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "32d0be2748bc",
+      "file": "exghost.md",
+      "command": "hydra -C <path> ftp://<target>",
+      "note": "Hydra colon-separated credential-list attack against FTP reporting a valid login and password pair must mint credential.plaintext, credential.available, and credential.validated without claiming an OS shell foothold.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "746d1ee94592",
+      "file": "exghost.md",
+      "command": "python3 <exploit>.py",
+      "note": "Local Polkit privilege-escalation exploit landing a root shell prompt and uid=0 identity output must mint foothold.linux, access.shell, access.admin, and host.os_family.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "9f738cef39e6",
+      "file": "fail.md",
+      "command": "nmap -sV --script \"rsync-list-modules\" -p 873 <target>",
+      "note": "Nmap rsync-list-modules script scan enumerating an exposed user-home rsync module on port 873 must mint host.up, port:873, service.rsync, rsync.reachable, rsync.modules, and host.users.",
+      "expected_kinds": [
+        "host.up",
+        "port:873",
+        "service.rsync",
+        "rsync.reachable",
+        "rsync.modules",
+        "host.users"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "9e891ac0f7ca",
+      "file": "fail.md",
+      "command": "(commandless linpeas output)",
+      "note": "Command-less LinPEAS excerpt listing group-writable /etc/fail2ban/action.d and printing the static section header 'Searching uncommon passwd files (splunk)' must mint privesc.writable_etc, privesc.leads, and loot.files while suppressing false-positive vuln.splunk.",
+      "expected_kinds": [
+        "privesc.writable_etc",
+        "privesc.leads",
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "vuln.splunk",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "24ecdf4dbcfe",
+      "file": "fail.md",
+      "command": "ls -la /usr/bin/find",
+      "note": "Directory listing showing SUID bit set on /usr/bin/find from an unprivileged Linux prompt must mint privesc.suid, privesc.suid_candidate, privesc.leads, and foothold.linux without claiming access.admin before exploitation.",
+      "expected_kinds": [
+        "privesc.suid",
+        "privesc.suid_candidate",
+        "privesc.leads",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "413f95a3b437",
+      "file": "fired.md",
+      "command": "sudo nmap -sCV <target> -vvv -p- -oN <path>",
+      "note": "Command-only Nmap code block with omitted stdout must classify as unknown and never fabricate host reachability or open port facts from CLI arguments alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "d9cfd4fa481f",
+      "file": "fired.md",
+      "command": "nmap",
+      "note": "Command-less Nmap scan output showing open SSH on 22 and admin console ports 9090 and 9091 must mint host.up, ports.open, port:22, ssh.reachable, port:9090, port:9091, and host.os_family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:9090",
+        "port:9091",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a8d20ebd703d",
+      "file": "fired.md",
+      "command": "python3 <exploit>.py -u http://<target>:9090",
+      "note": "OCR-transcribed web authentication-bypass exploit output reporting newly created administrative Username and Password lines must mint credential.plaintext, credential.password, and credential.available without claiming OS shell access.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "b45d4cf870ac",
+      "file": "flasky.md",
+      "command": "python3 ciscot7.py -p \"<hex_secret>\"",
+      "note": "Cisco Type 7 decryption script output printing a recovered cleartext password must mint credential.plaintext, credential.password, and credential.available without claiming service authentication.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "9cd1c11552cb",
+      "file": "flasky.md",
+      "command": "crackmapexec ssh -u <path> -p <path> --port 22 <target>",
+      "note": "CrackMapExec SSH credential spray reporting failed combinations followed by a valid [+] user:password login without command execution must mint ssh.reachable, ssh.authenticated, credential.available, and credential.validated.",
+      "expected_kinds": [
+        "ssh.reachable",
+        "ssh.authenticated",
+        "credential.available",
+        "credential.validated"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "747f838eb1a9",
+      "file": "flasky.md",
+      "command": "ssh <user>@<target>",
+      "note": "Interactive SSH login echoing a password at the prompt and landing an unprivileged Linux welcome banner and user@host:$ shell prompt must mint ssh.authenticated, foothold.linux, access.shell, host.os_family, and plaintext credential facts without claiming access.admin.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available",
+        "ssh.authenticated",
+        "foothold.linux",
+        "access.shell",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "e800634f7bdd",
+      "file": "flimsy.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap scan identifying SSH on 22, MySQL on 3306, HTTPS on 9443, and an Apache APISIX HTTP gateway on 43500 must mint host reachability, open ports, SSH/MySQL/HTTP reachability, web.server, and exploit.versioned_banner.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "ssh.reachable",
+        "port:3306",
+        "mysql.reachable",
+        "db.reachable",
+        "port:43500",
+        "http.reachable",
+        "web.server",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "db.session",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "d3c45020171c",
+      "file": "flimsy.md",
+      "command": "python3 <exploit>.py http://<target>:43500/ <lhost> <lport>",
+      "note": "HTTP gateway remote code execution exploit script output yielding an unprivileged Linux shell session must mint foothold.linux, access.shell, and host.os_family without claiming access.admin.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "9abe33b9fd53",
+      "file": "flimsy.md",
+      "command": "./linpeas.sh",
+      "note": "LinPEAS output containing a root cron job running apt-get update alongside a writable /etc/apt/apt.conf.d directory must mint privesc.cron, privesc.cron_writable, privesc.writable_etc, privesc.leads, and foothold.linux without claiming access.admin.",
+      "expected_kinds": [
+        "privesc.cron",
+        "privesc.cron_writable",
+        "privesc.writable_etc",
+        "privesc.leads",
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "fce8eb9b6aff",
+      "file": "fractal.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap version/NSE output exposing FTP 21, OpenSSH 22, and Apache HTTP 80 with robots.txt path entries must establish host reachability, service reachability, web.paths, and Linux OS family without claiming anonymous FTP login.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ftp.reachable",
+        "ssh.reachable",
+        "http.reachable",
+        "web.paths",
+        "web.server",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ftp.anonymous_login",
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "f47f1383860f",
+      "file": "fractal.md",
+      "command": "GET http://<target>/_fragment?_path=<signed_payload>",
+      "note": "OCR-transcribed HTTP GET request to a signed framework fragment endpoint returning POSIX id output (uid=33(www-data)) must establish http.reachable, web.parameterized, and web.cmdi_confirmed without claiming administrative privilege.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.parameterized",
+        "web.cmdi_confirmed"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "ssh.authenticated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "25ef2f1bac1e",
+      "file": "fractal.md",
+      "command": "cat <config>.conf",
+      "note": "On-host daemon SQL configuration file containing an SQLConnectInfo <db>@localhost <user> <secret> directive must mint db.creds and plaintext credential facts alongside prompt-inferred Linux foothold so localhost database login moves unlock.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family",
+        "db.creds",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "db.session",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "a4fc1aca877b",
+      "file": "glpi.md",
+      "command": "nmap",
+      "note": "Command-less Nmap version and NSE port table for a Linux web server on ports 22 and 80 must extract SSH/HTTP reachability, web.server, web.title, ssh.hostkey, and Linux OS family without Active Directory false positives.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "web.server",
+        "web.title",
+        "ssh.hostkey",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "kerberos.reachable",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a67a4c3b856d",
+      "file": "glpi.md",
+      "command": "mysql -u <user> --password='<secret>' -D <db> -e 'select name, password from <users_table>;'",
+      "note": "Authenticated MySQL CLI query dumping user account rows with modular $2y$ bcrypt digests must establish db.session, credential.validated, db.hashes, and hash.crackable without misclassifying bcrypt hashes as plaintext passwords.",
+      "expected_kinds": [
+        "db.reachable",
+        "db.session",
+        "credential.validated",
+        "db.hashes",
+        "hash.crackable",
+        "hash.candidate",
+        "credential.candidate",
+        "loot.material"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "aad986c25738",
+      "file": "glpi.md",
+      "command": "wget http://localhost:8080/ -S",
+      "note": "On-host wget --server-response (-S) probe returning two-space-indented HTTP/1.1 404 status and Server: Jetty(<version>) response headers must mint http.reachable and web.server alongside the Linux foothold.",
+      "expected_kinds": [
+        "foothold.linux",
+        "host.os_family",
+        "http.reachable",
+        "web.server"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "web.cmdi_confirmed"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "fe4ce6a2b2c7",
+      "file": "hub.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC scan discovering SSH 22, HTTP 80, secondary HTTP 8082, and TLS HTTP 9999 must record all four open ports, service.https, web.server, and Linux OS family without promoting to foothold.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:80",
+        "port:8082",
+        "port:9999",
+        "ssh.reachable",
+        "http.reachable",
+        "service.https",
+        "web.server",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "263cf436447f",
+      "file": "hub.md",
+      "command": "python3 <exploit>.py -r <target> -rp 8082 -l <lhost> -p 9001",
+      "note": "Command-only Python exploit invocation with omitted terminal output must classify as unknown and mint zero foothold, shell, or command-injection facts from CLI flags alone.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "web.cmdi_confirmed"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "30dd5bd1b17b",
+      "file": "hub.md",
+      "command": "cat proof.txt",
+      "note": "Reading proof.txt from an elevated root@<host>:/root# prompt returning a 32-hex flag digest must infer foothold.linux and access.admin via Tier-3 contextual prompt inference without Windows false positives.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "foothold.linux": "tier3_inference",
+        "access.admin": "tier3_inference"
+      }
+    },
+    {
+      "id": "758e8af8f72c",
+      "file": "image.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC scan of a Linux web host on ports 22 and 80 must extract host.up, ports.open, ssh.reachable, http.reachable, web.server, web.title, and Linux OS family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "web.server",
+        "web.title",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "76010e493cd8",
+      "file": "image.md",
+      "command": "find / -perm -u=s -type f 2>/dev/null",
+      "note": "POSIX SUID enumeration listing non-stock /usr/bin/strace alongside baseline OS binaries must mint privesc.suid, privesc.suid_candidate, and privesc.leads via Tier-1 and foothold.linux via Tier-3.",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.suid",
+        "privesc.suid_candidate",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "privesc.sudo_rights"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.suid_candidate": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "cb57f9691b64",
+      "file": "image.md",
+      "command": "ls",
+      "note": "Directory listing outputting proof.txt must trigger Tier-2 shape recognition for objective.flag_located and loot.files without fabricating credentials or hashes.",
+      "expected_kinds": [
+        "objective.flag_located",
+        "loot.files"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "hash.crackable"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "1362b1f042be",
+      "file": "jordak.md",
+      "command": "nmap",
+      "note": "Command-less Nmap version and NSE scan output for a Linux host exposing OpenSSH 22 and Apache HTTP 80 must extract service reachability, web.server, web.title, ssh.hostkey, and Linux OS family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "web.server",
+        "web.title",
+        "ssh.hostkey",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "e3ff5e8946be",
+      "file": "jordak.md",
+      "command": "python <exploit>.py http://<target>",
+      "note": "Remote web exploit script logging its own injected PHP payload string before opening a pseudo-terminal REPL that runs whoami as a non-stock POSIX user must mint http.reachable and web.cmdi_confirmed without false-positive web.source_disclosed or web.vuln_sink.",
+      "expected_kinds": [
+        "http.reachable",
+        "web.cmdi_confirmed"
+      ],
+      "forbidden_kinds": [
+        "web.source_disclosed",
+        "web.vuln_sink",
+        "vuln.web_sink",
+        "access.admin"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "125f38410f84",
+      "file": "jordak.md",
+      "command": "sudo -l",
+      "note": "OCR-transcribed sudo -l output granting (ALL) NOPASSWD: /usr/bin/env must mint privesc.sudo_rights, privesc.sudo_binary, and privesc.leads via Tier-1 alongside Tier-3 Linux foothold inference.",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "privesc.suid_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.sudo_rights": "tier1",
+        "foothold.linux": "tier3_inference"
+      }
+    },
+    {
+      "id": "8a59724f6011",
+      "file": "law.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan and Nmap -sVC scan of a Linux web host exposing OpenSSH 22 and Apache HTTP 80 with an application version title must mint service reachability, web.title, web.server, and Linux OS family.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "web.server",
+        "web.title",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "c93d07f98a45",
+      "file": "law.md",
+      "command": "python <exploit>.py -u http://<target> -c \"<cmd>\"",
+      "note": "Remote web exploit execution followed by an interactive Linux shell prompt upgrade must establish foothold.linux, access.shell, and Linux OS family without claiming administrative access.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "9c4f6c7f7bef",
+      "file": "muddy.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "Combined RustScan and Nmap output where RustScan pre-scan lines mention ports 443, 808, and 908 but the authoritative Nmap table marks them closed (conn-refused) must mint only confirmed open ports (22, 25, 80, 111, 8888) and forbid closed port facts.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:25",
+        "port:80",
+        "port:111",
+        "port:8888",
+        "ssh.reachable",
+        "smtp.reachable",
+        "http.reachable",
+        "host.fqdn",
+        "http.redirect",
+        "web.server",
+        "exploit.versioned_banner",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "port:443",
+        "port:808",
+        "port:908",
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "773200a7aca2",
+      "file": "muddy.md",
+      "command": "curl -s -X $'POST' http://<fqdn>:8888/<endpoint>",
+      "note": "HTTP POST XML external entity payload returning an Apache $apr1$ MD5-crypt htpasswd line inside an XML element must mint http.reachable via Tier-1 and hash.crackable plus credential.candidate via Tier-3 inference.",
+      "expected_kinds": [
+        "http.reachable",
+        "hash.crackable",
+        "hash.candidate",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "http.reachable": "tier1",
+        "hash.crackable": "tier3_inference",
+        "credential.candidate": "tier3_inference"
+      }
+    },
+    {
+      "id": "b25b4654dae3",
+      "file": "muddy.md",
+      "command": "john <hashfile> --wordlist=<wordlist>",
+      "note": "Abbreviated John the Ripper live cracking output showing the recovered secret followed by two-or-more spaces and (?) without the Loaded 1 password hash banner must still mint plaintext credential facts when invoked by a john command.",
+      "expected_kinds": [
+        "credential.plaintext",
+        "credential.password",
+        "credential.available",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "67bade289dbd",
+      "file": "planet-express.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan + Nmap NSE scan discovering SSH on 22, Apache HTTP with CMS generator metadata on 80, and PHP-FPM cslistener on 9000 must mint host.up, ports.open, port:22, port:80, port:9000, service.cslistener, http.reachable, web.tech, and Tier-2 shape vuln.pico_cms.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:80",
+        "port:9000",
+        "service.cslistener",
+        "http.reachable",
+        "web.tech",
+        "vuln.pico_cms"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "ports.open": "tier1",
+        "vuln.pico_cms": "tier2_shape"
+      }
+    },
+    {
+      "id": "0a33e0cef604",
+      "file": "planet-express.md",
+      "command": "cat /etc/shadow",
+      "note": "Reading /etc/shadow containing sha512crypt ($6$) password entries from an unprivileged Linux shell must mint loot.shadow, hash.crackable, hash.candidate, and credential.candidate without falsely claiming access.admin or access.root.",
+      "expected_kinds": [
+        "loot.shadow",
+        "hash.crackable",
+        "hash.candidate",
+        "credential.candidate",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "15df8047e85a",
+      "file": "planet-express.md",
+      "command": "/usr/sbin/<binary> -h",
+      "note": "Invoking a binary with an explicit -h help flag that prints Usage and Options documentation must classify as completed rather than environment-error and must not mint credential or privilege-escalation facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.candidate",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "completed"
+    },
+    {
+      "id": "587183f9df1c",
+      "file": "planet-express.md",
+      "command": "john <path> --wordlist=<wordlist>",
+      "note": "John the Ripper live sha512crypt cracking session recovering a space-free password of 16 or more characters separated by a single space from the (?) label must mint credential.candidate, credential.plaintext, credential.password, and credential.available.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "blocker.cracking_exhausted",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "5f4781bf9586",
+      "file": "plum.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan + Nmap scan identifying OpenSSH on port 22 and Apache httpd 2.4.38 on port 80 with an XML-powered CMS page title must mint host.up, ports.open, port:22, port:80, ssh.reachable, http.reachable, web.title, web.server, and service.version.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:80",
+        "ssh.reachable",
+        "http.reachable",
+        "web.title",
+        "web.server",
+        "service.version"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "foothold.windows",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "727d3cabadcb",
+      "file": "plum.md",
+      "command": "rlwrap -cAr nc -nvlp9001",
+      "note": "Netcat listener receiving an inbound TCP reverse shell connection that lands on an unprivileged www-data target prompt must mint access.shell, foothold.linux, and host.os_family without minting access.admin or access.root.",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "a0be8106ecb3",
+      "file": "plum.md",
+      "command": "cat <user>",
+      "note": "Reading a local RFC-822 mail spool file containing an explicit credential disclosure sentence followed by a colon-delimited <user>:<secret> line must mint credential.candidate, credential.plaintext, and credential.available alongside the unprivileged Linux shell context.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.validated"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "cb4bcc73ba71",
+      "file": "press.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan + Nmap scan discovering SSH on 22, Apache default page on 80, and a secondary HTTP server on non-standard port 8089 reporting a CMS http-generator version header must mint host.up, ports.open, port:22, port:80, port:8089, http.reachable, and web.tech.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:80",
+        "port:8089",
+        "http.reachable",
+        "web.server",
+        "web.tech"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "92b65c909fed",
+      "file": "press.md",
+      "command": "sudo -l",
+      "note": "Unprivileged sudo -l listing (ALL) NOPASSWD: /usr/bin/apt-get must mint privesc.sudo_rights, privesc.sudo_binary, and privesc.leads without claiming access.admin or access.root before escalation.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.leads",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "470a867280da",
+      "file": "press.md",
+      "command": "sudo /usr/bin/apt-get changelog apt",
+      "note": "Interactive pager shell escape (!/bin/sh) under sudo apt-get changelog followed by # whoami returning root must mint foothold.linux, access.shell, access.admin, and access.root.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "access.root",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "f3f7b472276e",
+      "file": "rookie-mistake.md",
+      "command": "gobuster dir -u http://<target>:8080 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -t 50",
+      "note": "Gobuster directory enumeration returning HTTP 308 redirect routes for /edit, /login, and /signup must mint web.content_map, web.paths, http.reachable, and web.login_form.",
+      "expected_kinds": [
+        "web.content_map",
+        "web.paths",
+        "http.reachable",
+        "web.login_form"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "web.cmdi_confirmed",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "b9a115fff562",
+      "file": "rookie-mistake.md",
+      "command": "curl 127.0.0.1:9123/pid/1%20-e%20id",
+      "note": "Loopback HTTP request injecting an argument (-e id) that returns a Python byte-string containing uname output and uid=0(root) gid=0(root) must mint web.cmdi_confirmed, http.reachable, foothold.linux, and host.os_family.",
+      "expected_kinds": [
+        "web.cmdi_confirmed",
+        "http.reachable",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "web.sqli_confirmed"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "92f280ee80b9",
+      "file": "rookie-mistake.md",
+      "command": "cat proof.txt",
+      "note": "Executing cat proof.txt from a privileged root@<target>:~# prompt where stdout omits the flag digest must infer foothold.linux, access.admin, and access.root via Tier-3 prompt telemetry while refusing to mint proof.captured or objective.root_flag.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "access.root",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "proof.captured",
+        "objective.root_flag",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "foothold.linux": "tier3_inference",
+        "access.admin": "tier3_inference",
+        "access.root": "tier3_inference"
+      }
+    },
+    {
+      "id": "90f83d3fad02",
+      "file": "rubydome.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "note": "RustScan + Nmap scan reporting OpenSSH on port 22 and WEBrick httpd 1.7.0 (Ruby 3.0.2) on port 3000 must mint host.up, ports.open, port:22, port:3000, http.reachable, service.version, and exploit.versioned_banner.",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "port:22",
+        "port:3000",
+        "http.reachable",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "access.admin",
+        "ad.dc_candidate"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "86531a3dc355",
+      "file": "rubydome.md",
+      "command": "sudo -l",
+      "note": "Unprivileged sudo -l output granting (ALL) NOPASSWD: /usr/bin/ruby /home/<user>/app/app.rb must mint privesc.sudo_rights, privesc.sudo_binary, privesc.custom_binary, and privesc.leads without claiming access.admin.",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.custom_binary",
+        "privesc.leads",
+        "foothold.linux"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "ac9c9154c92c",
+      "file": "rubydome.md",
+      "command": "whoami",
+      "note": "Running whoami at a bare # root shell prompt returning root must mint foothold.linux, access.shell, access.admin, access.root, and host.os_family.",
+      "expected_kinds": [
+        "foothold.linux",
+        "access.shell",
+        "access.admin",
+        "access.root",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "2317f5bac771",
+      "file": "scrutiny.md",
+      "command": "sudo nmap -sCV <target> -vvv -p- -oN enum/full",
+      "note": "Command-only nmap invocation fence with empty stdout must remain conservatively empty (outcome unknown) and must not hallucinate host.up or open port facts.",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "foothold.linux"
+      ],
+      "outcome_expected": "unknown"
+    },
+    {
+      "id": "8d01b9792299",
+      "file": "scrutiny.md",
+      "command": "cat <path>",
+      "note": "Dumping a comma-delimited user table containing modular bcrypt ($2a$07$) password hashes must mint hash.candidate, hash.crackable, and credential.candidate via Tier-2 shape recognition.",
+      "expected_kinds": [
+        "hash.candidate",
+        "hash.crackable",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "credential.validated",
+        "access.admin"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier2_shape"
+    },
+    {
+      "id": "ea7077203054",
+      "file": "scrutiny.md",
+      "command": "ssh <user>@<target> -i id_rsa",
+      "note": "Chained SSH publickey authentication attempts across multiple usernames where every attempt fails with Permission denied (publickey) must mint ssh.key_rejected, classify as rejected, and never mint ssh.authenticated or foothold.linux.",
+      "expected_kinds": [
+        "ssh.key_rejected"
+      ],
+      "forbidden_kinds": [
+        "ssh.authenticated",
+        "foothold.linux",
+        "access.shell",
+        "credential.validated"
+      ],
+      "outcome_expected": "rejected",
+      "tier_attribution": "tier1"
+    },
+    {
+      "id": "99882ff777c8",
+      "file": "scrutiny.md",
+      "command": "grep -rnw '/var/' -ie 'PASSWORD' 2>/dev/null",
+      "note": "Recursive grep match against /var/mail/<user> disclosing a quoted natural-language secret (The password is \"<secret>\") must bind the mailbox recipient user and mint credential.candidate, credential.plaintext, and credential.available.",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success"
+    },
+    {
+      "id": "833c893fd434",
+      "file": "sirol.md",
+      "command": "(commandless nmap output)",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "mysql.reachable",
+        "port:5601",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Commandless Nmap service scan table disclosing OpenSSH, Apache httpd, unauthorized MariaDB, HTTP analytics redirect on TCP 5601, and rpcbind."
+    },
+    {
+      "id": "a35248985467",
+      "file": "sirol.md",
+      "command": "nc -lvnp 3306",
+      "expected_kinds": [
+        "listener.open",
+        "access.shell",
+        "foothold.linux",
+        "access.admin",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "foothold.windows",
+        "access.system"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Netcat reverse shell callback landing an interactive root prompt inside a Linux container."
+    },
+    {
+      "id": "78176f7b2a39",
+      "file": "sirol.md",
+      "command": "cat /etc/shadow",
+      "expected_kinds": [
+        "loot.shadow",
+        "hash.crackable",
+        "hash.candidate",
+        "credential.candidate",
+        "foothold.linux",
+        "access.admin"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "loot.shadow": "tier1",
+        "hash.crackable": "tier1",
+        "foothold.linux": "tier3_inference",
+        "access.admin": "tier3_inference"
+      },
+      "note": "Privileged shell reading /etc/shadow with multiple sha512crypt password hashes."
+    },
+    {
+      "id": "1e6ed1f21665",
+      "file": "spx.md",
+      "command": "sudo nmap -sCV <target> -vvv -p- -oN <path>",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable"
+      ],
+      "outcome_expected": "unknown",
+      "note": "Negative boundary: Nmap invocation block with empty stdout must not fabricate host reachability or open port facts."
+    },
+    {
+      "id": "dca4c8d9a5ba",
+      "file": "spx.md",
+      "command": "go run exploit.go -t http://<target>/ -f /etc/passwd",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "privesc.kernel_exploit",
+        "privesc.leads",
+        "exploit.candidate",
+        "web.lfi_confirmed",
+        "foothold.linux"
+      ],
+      "outcome_expected": "completed-negative",
+      "note": "Negative boundary (Wave-B-dependent): remote HTTP CVE check printing '[-] The target isn't vulnerable to CVE-...' must classify as completed-negative and must not mint kernel privesc or exploit candidate facts."
+    },
+    {
+      "id": "8dbce8b5f5b8",
+      "file": "spx.md",
+      "command": "cat <path>",
+      "expected_kinds": [
+        "credential.candidate",
+        "hash.crackable",
+        "hash.candidate"
+      ],
+      "forbidden_kinds": [
+        "credential.plaintext",
+        "credential.available",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier3_inference",
+      "note": "Disclosed PHP web application configuration containing an authentication map of usernames to bcrypt ($2y$) password hashes."
+    },
+    {
+      "id": "1ba8d7b98fa0",
+      "file": "spx.md",
+      "command": "sudo -l",
+      "expected_kinds": [
+        "privesc.sudo_rights",
+        "privesc.sudo_binary",
+        "privesc.custom_binary",
+        "privesc.leads",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.sudo_rights": "tier1",
+        "privesc.sudo_binary": "tier1",
+        "foothold.linux": "tier3_inference"
+      },
+      "note": "Unprivileged Linux sudo -l listing permitting /usr/bin/make install against a user-owned build directory."
+    },
+    {
+      "id": "eaec316447cf",
+      "file": "twiggy.md",
+      "command": "(commandless nmap output)",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "dns.reachable",
+        "http.reachable",
+        "port:4505",
+        "port:4506",
+        "service.zmtp",
+        "service.version",
+        "exploit.versioned_banner"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Commandless Nmap service scan exposing SSH, DNS, dual Nginx HTTP listeners, and ZeroMQ ZMTP 2.0 management ports 4505 and 4506."
+    },
+    {
+      "id": "215bc6cd0634",
+      "file": "twiggy.md",
+      "command": "gobuster dir -u http://<target>:8000/ -w <path> --wildcard",
+      "expected_kinds": [
+        "web.content_map",
+        "web.paths",
+        "http.reachable",
+        "web.login_form",
+        "service.version"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Gobuster directory scan against REST API port discovering /login (200) alongside HTTP 401 endpoints and server version header."
+    },
+    {
+      "id": "8b6674d90712",
+      "file": "twiggy.md",
+      "command": "python3 exploit.py --master <target>",
+      "expected_kinds": [
+        "exploit.candidate",
+        "credential.candidate"
+      ],
+      "forbidden_kinds": [
+        "privesc.kernel_exploit",
+        "privesc.leads",
+        "foothold.linux",
+        "access.admin",
+        "access.root"
+      ],
+      "outcome_expected": "success",
+      "note": "Remote exploit PoC verification (Wave-B-dependent) confirming '[+] Checking if vulnerable to CVE-... YES' and extracting '[*] root key obtained: <token>' without establishing an interactive shell yet."
+    },
+    {
+      "id": "a1b3dfdda14b",
+      "file": "vanity.md",
+      "command": "rustscan -a <target> -u 5000 -t 8000 --scripts -- -n -Pn -sVC",
+      "expected_kinds": [
+        "host.up",
+        "ports.open",
+        "ssh.reachable",
+        "http.reachable",
+        "rsync.reachable",
+        "port:873",
+        "service.rsync",
+        "service.version",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "RustScan + Nmap syn-ack table exposing OpenSSH, Apache httpd 2.4.41, and rsync daemon on TCP 873."
+    },
+    {
+      "id": "0f74611e588e",
+      "file": "vanity.md",
+      "command": "(commandless HTTP multipart upload RCE response)",
+      "expected_kinds": [
+        "access.shell",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Raw HTTP multipart POST upload injecting a shell command inside filename parameter and returning uid=33(www-data) command execution output."
+    },
+    {
+      "id": "874be6bde58c",
+      "file": "vanity.md",
+      "command": "cat <path>",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.cron_writable",
+        "privesc.cron_wildcard",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.cron_wildcard": "tier1",
+        "privesc.cron_writable": "tier1",
+        "foothold.linux": "tier3_inference"
+      },
+      "note": "Unprivileged shell inspecting a root backup script that cd's into a web-writable uploads directory and invokes rsync -a * with an unquoted wildcard."
+    },
+    {
+      "id": "74358ba7b638",
+      "file": "wheels.md",
+      "command": "ffuf -u http://<target>/FUZZ.php -w <path>",
+      "expected_kinds": [
+        "web.content_map",
+        "web.paths",
+        "http.reachable",
+        "web.login_form",
+        "web.exposed_artifact"
+      ],
+      "forbidden_kinds": [
+        "foothold.linux",
+        "credential.available"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "ffuf PHP endpoint discovery surfacing login, register, portal, and config endpoints."
+    },
+    {
+      "id": "92e31549b8a3",
+      "file": "wheels.md",
+      "command": "find / -perm -u=s -type f 2>/dev/null",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.suid",
+        "privesc.suid_candidate",
+        "privesc.custom_binary",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "foothold.windows"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.suid": "tier1",
+        "privesc.custom_binary": "tier1",
+        "foothold.linux": "tier3_inference"
+      },
+      "note": "Linux SUID binary enumeration discovering a non-standard SUID executable under /opt."
+    },
+    {
+      "id": "2403e5017b96",
+      "file": "wheels.md",
+      "command": "./<binary>",
+      "expected_kinds": [
+        "loot.shadow",
+        "hash.crackable",
+        "hash.candidate",
+        "credential.candidate",
+        "foothold.linux",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "credential.plaintext"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "loot.shadow": "tier1",
+        "hash.crackable": "tier1",
+        "foothold.linux": "tier3_inference"
+      },
+      "note": "Path traversal via custom SUID binary dumping /etc/shadow sha512crypt hashes while remaining in an unprivileged user shell."
+    },
+    {
+      "id": "ea9be93201aa",
+      "file": "wheels.md",
+      "command": "john <path> --wordlist=<path>",
+      "expected_kinds": [
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "blocker.cracking_exhausted",
+        "credential.validated"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "John the Ripper live sha512crypt crack (Wave-B-dependent) where a >= 16-character plaintext password overflows John's %-16s column width and leaves a single space before (?)."
+    },
+    {
+      "id": "104199ec1738",
+      "file": "zino.md",
+      "command": "smbclient -N -L <target>",
+      "expected_kinds": [
+        "smb.shares",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "ad.dc_candidate",
+        "foothold.linux",
+        "smb.writable_share"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": "tier1",
+      "note": "Anonymous smbclient share listing against a Samba server exposing a custom Disk share alongside print$ and IPC$."
+    },
+    {
+      "id": "fb50a9d57af0",
+      "file": "zino.md",
+      "command": "smbclient get <path>",
+      "expected_kinds": [
+        "smb.reachable",
+        "credential.candidate",
+        "credential.plaintext",
+        "credential.password",
+        "credential.available"
+      ],
+      "forbidden_kinds": [
+        "credential.validated",
+        "access.admin",
+        "foothold.linux"
+      ],
+      "outcome_expected": "success",
+      "note": "Interactive smbclient log retrieval (Wave-B-dependent) disclosing paired daemon audit log lines setting an application username and cleartext password in quotes."
+    },
+    {
+      "id": "06fca35a8551",
+      "file": "zino.md",
+      "command": "rlwrap -cAr nc -nvlp445",
+      "expected_kinds": [],
+      "forbidden_kinds": [
+        "listener.open",
+        "access.shell",
+        "foothold.linux"
+      ],
+      "outcome_expected": "unknown",
+      "note": "Negative boundary: attacker listener command block with empty stdout and no callback must not mint listener or shell foothold facts."
+    },
+    {
+      "id": "276d3ddfdd32",
+      "file": "zino.md",
+      "command": "./linpeas.sh",
+      "expected_kinds": [
+        "foothold.linux",
+        "privesc.cron",
+        "privesc.custom_binary",
+        "privesc.leads",
+        "host.os_family"
+      ],
+      "forbidden_kinds": [
+        "access.admin",
+        "access.root",
+        "privesc.suid"
+      ],
+      "outcome_expected": "success",
+      "tier_attribution": {
+        "privesc.cron": "tier1",
+        "privesc.custom_binary": "tier1",
+        "foothold.linux": "tier3_inference"
+      },
+      "note": "LinPEAS crontab section from an unprivileged web shell surfacing a root cron job executing a Python script inside /var/www/html."
     }
   ]
 }

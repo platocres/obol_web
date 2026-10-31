@@ -24,7 +24,7 @@
       regex: 'N/tcp|udp open <service>',
       emits: ['ports.open', 'scan.nmap.quick', 'scan.nmap.version', 'scan.nmap.udp', 'scan.nmap.vuln', 'host.up',
         'service.', 'ftp.reachable', 'ssh.reachable', 'smb.reachable', 'ldap.reachable', 'kerberos.reachable',
-        'rdp.reachable', 'winrm.reachable', 'snmp.reachable', 'dns.reachable', 'http.reachable', 'ad.dc_candidate'],
+        'rdp.reachable', 'winrm.reachable', 'snmp.reachable', 'dns.reachable', 'http.reachable', 'rsync.reachable', 'postgres.reachable', 'redis.reachable', 'db.reachable', 'ad.dc_candidate'],
     },
     'vulnmatch': {
       looksFor: 'a product and version in a scan or banner (nmap -sV, whatweb, a CHANGELOG) or a CVE / nmap vuln verdict that matches a known-exploit module, for example "vsftpd 2.3.4", "ProFTPD 1.3.5", "Drupal 7.57", or "VULNERABLE: CVE-2019-0708".',
@@ -37,7 +37,7 @@
       emits: ['host.hostname', 'host.fqdn', 'host.domain', 'host.os_family', 'host.os_hint', 'smb.signing', 'smb.smbv1',
         'smb.ms17_010', 'ssh.hostkey', 'ssh.banner', 'ftp.anonymous_login', 'ftp.banner', 'web.title', 'web.server',
         'web.tech', 'http.redirect', 'ad.domain_known', 'ad.base_dn', 'redis.unauth', 'mongo.unauth', 'memcached.open',
-        'x11.unauth', 'smtp.banner', 'smtp.open_relay', 'smtp.users', 'exploit.candidate'],
+        'x11.unauth', 'rsync.modules', 'smtp.banner', 'smtp.open_relay', 'smtp.users', 'exploit.candidate'],
     },
     'http-metadata': {
       looksFor: 'an HTTP response or a whatweb/curl banner - the status line, the Server header, the tech it reveals, and a product fingerprint (a Jenkins X-Jenkins header or chrome, an NVMS-1000 login page) that gates a specific exploit move.',
@@ -153,7 +153,7 @@
     'database': {
       looksFor: "a database session's output - a version/current-user banner or engine prompt that proves the login (db.session), listed databases and tables, and dumped credential rows.",
       regex: 'mysql>, SQL>, List of databases, Server version:',
-      emits: ['db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.authenticated', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'credential.validated', 'hash.candidate', 'hash.crackable', 'foothold.windows'],
+      emits: ['db.reachable', 'postgres.reachable', 'redis.reachable', 'db.session', 'db.admin', 'db.creds', 'db.databases', 'db.tables', 'db.hashes', 'db.linked_server', 'mssql.authenticated', 'mssql.linked_servers', 'mssql.sysadmin', 'oracle.sid', 'loot.material', 'credential.candidate', 'credential.validated', 'hash.candidate', 'hash.crackable', 'foothold.windows'],
     },
     'snmp': {
       looksFor: 'snmpwalk / snmp-check output - the community string that worked, running processes and users, and any credentials in the MIB.',
@@ -193,7 +193,7 @@
     'files': {
       looksFor: 'a file or directory listing - an FTP/rsync/SMB-spider listing, a native on-host cmd "dir" or PowerShell Get-ChildItem/Invoke-Command listing, or a loot hunt, naming files worth taking (configs, backups, keys), including a KeePass database or dump (.kdbx / $keepass$ hash); also a confirmed file transfer that staged a tool onto the host (certutil URLCache completed, wget "... saved [n/n]", scp "name  100% ...", bitsadmin "Transfer complete", or a Windows "N file(s) copied").',
       regex: '-rw-r--r-- … file, drwxr-xr-x … dir, "Directory of C:\\…", "Mode  LastWriteTime  Length Name" + "-a---  … name", *.kdbx, $keepass$*, "CertUtil: -URLCache command completed successfully", "\'x.sh\' saved [n/n]", "x.sh  100%  1.8MB/s"',
-      emits: ['loot.files', 'loot.material', 'loot.keepass_dump', 'host.tool_staged'],
+      emits: ['loot.files', 'loot.material', 'loot.keepass_dump', 'host.tool_staged', 'rsync.reachable', 'rsync.modules'],
     },
     'klist': {
       looksFor: 'klist ticket-cache output - the Kerberos tickets currently held, for pass-the-ticket / reuse.',

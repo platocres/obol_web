@@ -38,8 +38,32 @@
       _add(facts, mkFact('service.dns', 'host:' + ws.target, { port: 53, protocol: 'tcp', service: 'dns', version: msVer }, S, source));
       if (C._add_os_observation) C._add_os_observation(facts, ws, source, 'windows', msVer, 'high', 'dns', true);
     }
+    var bindTxtM = /^\s*(?!;)(?:version\.bind|bind\.version)\.?\s+(?:\d+\s+)?(?:CH|CHAOS|IN)\s+TXT\s+"([^"\r\n]{1,80})"/im.exec(t);
+    if (!bindTxtM && /\b(?:version\.bind|bind\.version)\b/i.test(String(command || '') + '\n' + t)) {
+      bindTxtM = /^\s*"([A-Za-z0-9][A-Za-z0-9._+:~ -]{1,78})"\s*$/m.exec(t);
+    }
+    if (bindTxtM) {
+      var bindRaw = bindTxtM[1].trim();
+      if (bindRaw && !/^(?:currently\s+unavailable|not\s+currently\s+available|none|redacted|hidden|unknown)$/i.test(bindRaw)) {
+        var dnsProd = '', dnsVerNum = '';
+        var pvM = /^(?:(ISC\s+BIND|BIND|dnsmasq|Unbound)[-\s]+v?)?(\d+\.\d+(?:\.\d+)?[A-Za-z0-9._+:~-]*)/i.exec(bindRaw);
+        if (pvM) {
+          dnsProd = pvM[1] ? pvM[1].replace(/\s+/g, ' ') : (/^9\.\d+/.test(pvM[2]) ? 'ISC BIND' : 'DNS');
+          dnsVerNum = pvM[2];
+        }
+        var fullDnsVer = (dnsProd && bindRaw.toLowerCase().indexOf(dnsProd.toLowerCase().replace(/^isc\s+/, '')) < 0)
+          ? (dnsProd + ' ' + bindRaw)
+          : bindRaw;
+        _add(facts, mkFact('dns.reachable', 'host:' + ws.target, { port: 53, version: fullDnsVer, tool: 'dig' }, S, source));
+        _add(facts, mkFact('service.dns', 'host:' + ws.target, { port: 53, protocol: 'udp', service: 'dns', version: fullDnsVer }, S, source));
+        if (dnsProd && dnsVerNum) {
+          _add(facts, mkFact('service.version', 'host:' + ws.target, { port: 53, service: 'dns', product: dnsProd, version: dnsVerNum, raw: bindRaw }, S, source));
+        }
+        if (C._add_os_from_text) C._add_os_from_text(bindRaw, ws, source, facts, 'dns', 'high', true);
+      }
+    }
     // nothing to read: an error / empty answer alone mints no fact
-    if (/\b(NXDOMAIN|SERVFAIL|REFUSED|connection timed out|Transfer failed|communications error)\b/i.test(t) && !/\bIN\s+(?:A|SRV|SOA|NS)\b/i.test(t) && !/service\s*=/.test(t)) return;
+    if (/\b(NXDOMAIN|SERVFAIL|REFUSED|connection timed out|Transfer failed|communications error)\b/i.test(t) && !/\bIN\s+(?:A|SRV|SOA|NS)\b/i.test(t) && !/\b(?:CH|CHAOS|IN)\s+TXT\b/i.test(t) && !/service\s*=/.test(t)) return;
 
     var aRec = {};      // fqdn -> ip  (from A records across dig / nslookup / host / AXFR)
     var names = {};      // every fqdn seen (for the zone receipt)

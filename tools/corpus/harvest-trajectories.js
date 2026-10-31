@@ -171,6 +171,7 @@ function canonicalTool(rawToken) {
 function extractPrimaryTool(cmd) {
   const clean = stripCommandWrappers(cmd);
   if (!clean) return '';
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s+=\s*(?!=)\S/.test(clean)) return '';
   const toks = clean.split(/\s+/);
   const first = canonicalTool(toks[0]);
   if (first === 'python' && toks.length > 1) {
@@ -179,6 +180,53 @@ function extractPrimaryTool(cmd) {
     if (scriptTool && !scriptTool.startsWith('-')) return scriptTool;
   }
   return first;
+}
+
+function splitShellClausesQuoteAware(cmdStr) {
+  const s = String(cmdStr || '');
+  const out = [];
+  let cur = '';
+  let quote = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      cur += ch;
+      if (ch === '\\' && quote === '"' && i + 1 < s.length) {
+        cur += s[++i];
+      } else if (ch === quote) {
+        quote = '';
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === '\\' && i + 1 < s.length) {
+      cur += ch + s[++i];
+      continue;
+    }
+    if (ch === ';') {
+      if (cur.trim()) out.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    if ((ch === '&' && s[i + 1] === '&') || (ch === '|' && s[i + 1] === '|')) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = '';
+      i++;
+      continue;
+    }
+    if (ch === '|') {
+      if (cur.trim()) out.push(cur.trim());
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
 }
 
 function applyIpAliases(text, ipAliasMap) {
@@ -673,7 +721,7 @@ function inspectPreCommandTargetPrompt(turn, prePl, currentFacts, extraCtx) {
 
   if (turn.kind === 'powershell' || turn.kind === 'cmd') {
     const pfx = stripPromptPrefixFromPreLine(pl, turn.rawCommand);
-    if (!pfx || !/(?:PS\s+(?:[A-Za-z]:\\|[A-Za-z0-9_.\\-]+\s*::\\\\|[A-Za-z]{2,12}:\\)|Evil-WinRM|evil-winrm(?:-py)?|[A-Za-z]:\\(?:Users|Windows|Program|inetpub|Temp|tmp)|@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\)/i.test(pfx)) {
+    if (!pfx || !/(?:PS\s*(?:>|\s+(?:[A-Za-z]:\\|[A-Za-z0-9_.\\-]+\s*::\\\\|[A-Za-z]{2,12}:\\))|Evil-WinRM|evil-winrm(?:-py)?|[A-Za-z]:\\(?:Users|Windows|Program|inetpub|Temp|tmp)|@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\)/i.test(pfx)) {
       return null;
     }
     const priv = /^administrator$/i.test(turn.user || '')
@@ -809,6 +857,11 @@ function isHousekeepingTurn(turn, ctx) {
       }
     } else if (/^(?:mkdir|rmdir|touch|cp|mv|rm|chmod|chown|tar|unzip|zip|gunzip|wget\s+https?:\/\/(?:github\.com|raw\.githubusercontent\.com))\b/i.test(clean)) {
       return { housekeeping: true, reason: 'attacker_workspace_prep' };
+    } else if (/^(?:(?:[a-z0-9_]+-[a-z0-9_.-]+-)?(?:gcc|g\+\+|cc|clang|clang\+\+|mcs|csc|javac|nasm|ld)(?:-\d+(?:\.\d+)*)?|go\s+build|cargo\s+build|dotnet\s+(?:build|publish)|msbuild)\b/i.test(clean)) {
+      return { housekeeping: true, reason: 'attacker_workspace_prep' };
+    }
+    if (turn && turn.tool === 'python' && !out && !/\bpty\.spawn\b/i.test(rawCmd) && /^(?:import\s+\S+|from\s+\S+\s+import\s+\S+|[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s*=\s*(?!=)\S)/.test(rawCmd)) {
+      return { housekeeping: true, reason: 'repl_setup' };
     }
     if (/^(?:ls|ll|la|dir|cat|head|tail|echo|printf|tee|sed|awk|cut|sort|uniq|wc|tr|file|md5sum|sha256sum)\b/i.test(clean)) {
       const hasTargetFoothold = Boolean(
@@ -863,6 +916,9 @@ function isFlagCollectionMove(a) {
 
 const STANDALONE_SUBCMD_KEYWORDS = new Set([
   'smb', 'ldap', 'winrm', 'mssql', 'ssh', 'ftp', 'rdp', 'vnc', 'wmi', 'dir', 'vhost', 'dns', 'fuzz',
+  'http', 'https', 'http-get', 'http-post', 'http-head', 'http-get-form', 'http-post-form',
+  'https-get', 'https-post', 'https-head', 'https-get-form', 'https-post-form',
+  'telnet', 'mysql', 'postgres', 'redis', 'rsync', 'smtp', 'pop3', 'imap',
   'req', 'auth', 'shadow', 'account', 'dump', 'shares', 'users', 'groups', 'pass-pol',
   'rid-brute', 'kerberoasting', 'asreproast', 'bloodhound', 'spider_plus', 'just-dc',
   'just-dc-ntlm', 'request', 'getcap', 'linpeas', 'winpeas', 'systeminfo', 'cmdkey',
@@ -946,6 +1002,18 @@ function extractCommandFlags(cmdStr) {
       pushTok(raw.split(':')[0].toLowerCase());
       continue;
     }
+    const protoUriM = /^([a-zA-Z][a-zA-Z0-9+.-]{1,15}):\/\//.exec(raw);
+    if (protoUriM) {
+      let scheme = protoUriM[1].toLowerCase();
+      if (scheme === 'ftps') scheme = 'ftp';
+      else if (scheme === 'ldaps') scheme = 'ldap';
+      else if (scheme === 'postgresql') scheme = 'postgres';
+      else if (scheme === 'smtps') scheme = 'smtp';
+      else if (scheme === 'imaps') scheme = 'imap';
+      else if (scheme === 'pop3s') scheme = 'pop3';
+      if (STANDALONE_SUBCMD_KEYWORDS.has(scheme)) pushTok(scheme);
+      continue;
+    }
     // Only treat standalone bare words (never filenames/paths containing '.', '/', '\\', ':') as subcommand tokens
     if (/^[a-zA-Z0-9_-]+$/.test(raw)) {
       const low = raw.toLowerCase();
@@ -1009,8 +1077,18 @@ function hasExplicitAuthenticatedCreds(cleanCmd, facts, rawTurnOut) {
   return false;
 }
 
-function hasRequiredMoveSemantics(moveId, cleanCmd, facts, turn) {
-  const raw = String(cleanCmd || '');
+const SSTI_TEMPLATE_EXPR_RE = /(?:\{\{[\s\S]+?\}\}|\$\{[^}]+\}|<%[\s\S]+?%>|\{%[\s\S]+?%\}|#\{[^}]+\})/;
+const SSTI_TEMPLATE_EXPR_GLOBAL_RE = /(?:\{\{[\s\S]+?\}\}|\$\{[^}]+\}|<%[\s\S]+?%>|\{%[\s\S]+?%\}|#\{[^}]+\})/g;
+const SSTI_RCE_PRIMITIVE_RE = /(?:\b(?:exec|system|popen|passthru|shell_exec|proc_open|eval|spawn|fork|Runtime|getRuntime|ProcessBuilder|Execute|ObjectInputStream|child_process|mainModule|require|__import__|__class__|__mro__|__subclasses__|__globals__|__builtins__|__init__|cycler|joiner|namespace|lipsum|from_object|registerUndefinedFilterCallback|getFilter|subprocess|whoami|uname|mkfifo|ncat)\b|\bos\.[A-Za-z_]+|\/bin\/(?:ba)?sh\b|\b(?:sh|bash)\s+-c\b|\bcat\s+\/|\b(?:id|nc|curl|wget)\b(?=[\s'"`()]))/i;
+
+function hasSstiRceTemplatePayload(probeStr) {
+  const spans = String(probeStr || '').match(SSTI_TEMPLATE_EXPR_GLOBAL_RE);
+  if (!spans || !spans.length) return false;
+  return spans.some(sp => SSTI_RCE_PRIMITIVE_RE.test(sp));
+}
+
+function decodeUrlProbeText(rawStr) {
+  const raw = String(rawStr || '');
   let decoded = raw;
   try {
     decoded = decodeURIComponent(raw.replace(/\+/g, ' '));
@@ -1021,9 +1099,17 @@ function hasRequiredMoveSemantics(moveId, cleanCmd, facts, turn) {
       .replace(/%22/gi, '"')
       .replace(/%28/gi, '(')
       .replace(/%29/gi, ')')
-      .replace(/%3d/gi, '=');
+      .replace(/%3d/gi, '=')
+      .replace(/%7b/gi, '{')
+      .replace(/%7d/gi, '}')
+      .replace(/%2a/gi, '*');
   }
-  const probe = raw + '\n' + decoded;
+  return raw + '\n' + decoded;
+}
+
+function hasRequiredMoveSemantics(moveId, cleanCmd, facts, turn) {
+  const raw = String(cleanCmd || '');
+  const probe = decodeUrlProbeText(raw);
   if (moveId === 'laps-read') {
     return /(?:ms-mcs-admpwd|mslaps-(?:encrypted)?password|\blaps\b|pylaps|get-laps|lapstoolkit|laps\.py)/i.test(probe);
   }
@@ -1054,7 +1140,7 @@ function hasRequiredMoveSemantics(moveId, cleanCmd, facts, turn) {
   }
   if (moveId === 'ssti-to-rce') {
     if (facts && typeof facts.has === 'function' && facts.has('web.ssti_confirmed')) return true;
-    return /(?:\{\{[\s\S]+?\}\}|\$\{[^}]+\}|<%[\s\S]+?%>|\{%[\s\S]+?%\}|#\{[^}]+\})/.test(probe);
+    return SSTI_TEMPLATE_EXPR_RE.test(probe);
   }
   return true;
 }
@@ -1077,7 +1163,7 @@ function scoreCommandAgainstVariant(action, cObj, cleanCmd, scoreCtx) {
   }
 
   let bestVariantScore = 0;
-  const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
+  const clauses = splitShellClausesQuoteAware(cObj.run);
   for (const clause of clauses) {
     const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
     if (!cleanClause) continue;
@@ -1149,6 +1235,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const cmdTool = extractPrimaryTool(cleanCmd);
   const cmdFlags = extractCommandFlags(cleanCmd);
   const isUnambiguousWinLocalEnum = /^(?:whoami(?:\.exe)?\s+\/(?:priv|groups|all)\b|cmdkey(?:\.exe)?\s+\/list\b|systeminfo(?:\.exe)?\b)/i.test(cleanCmd);
+  const isUnambiguousLinuxLocalEnum = /^(?:sudo\s+(?:-[A-Za-z]*l\b|--list\b)|getcap\s+-r\s+\/|find\s+\/\s+[^\r\n]*-perm\b|(?:sh|bash|\.)\s+\S*linpeas|\.?\/?linpeas\.sh\b)/i.test(cleanCmd);
   const prePlForLocus = getPreCommandPromptLine(turn);
   const hasExplicitAttackerLocus = Boolean(
     (turn && turn.host && ATTACKER_HOST.test(turn.host)) ||
@@ -1160,6 +1247,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const onTarget = !hasExplicitAttackerLocus && (
     !isAttackerTurn(turn, ctx) ||
     isUnambiguousWinLocalEnum ||
+    isUnambiguousLinuxLocalEnum ||
     !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd))
   );
   const hasAdminOrSystem = !!(facts && (facts.has('access.admin') || facts.has('access.system')));
@@ -1185,12 +1273,16 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   const hasHashAuth = (!/^(?:smbmap|ldapsearch)$/.test(cmdTool) && /(?:^|\s)-H(?:\s|$)/.test(cleanCmd))
     || /(?:^|\s)(?:--hashes|-hashes|\/pth:)(?:\s|=|$)/i.test(cleanCmd);
   const isRemoteSessionTool = /^(?:evil-winrm|xfreerdp|psexec|wmiexec|smbexec|atexec|dcomexec)$/.test(cmdTool);
-  if (hasExplicitAttackerLocus && !isRemoteSessionTool && !/^(?:ssh|sshpass|scp|nxc|curl|wget|evil-winrm)\b/.test(cmdTool)) {
-    for (const tid of [
-      'flag-hunt-root-linux', 'flag-hunt-linux', 'flag-hunt-root-windows', 'flag-hunt-windows',
-      'linux-enum', 'windows-enum', 'suid-gtfobins', 'sudo-abuse', 'docker-socket',
-      'linux-loot-hunt', 'windows-loot-hunt'
-    ]) {
+  const isAttackerSideFootholdBridgeTool = Boolean(
+    isRemoteSessionTool ||
+    (turn && turn.tool === 'powerview') ||
+    /^(?:ssh|sshpass|scp|sftp|rsync|nxc|curl|wget|evil-winrm|chisel|ligolo[-\w]*|sshuttle|vncviewer|xtightvncviewer|tigervnc|dpapi|wesng|git|msfvenom)\b/i.test(cmdTool)
+  );
+  if ((hasExplicitAttackerLocus || !onTarget) && !isAttackerSideFootholdBridgeTool) {
+    for (const a of actionableMoves) {
+      if (a.locus === 'F') excludedIds.add(a.id);
+    }
+    for (const tid of ['linux-enum', 'windows-enum']) {
       excludedIds.add(tid);
     }
   }
@@ -1354,9 +1446,31 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   }
 
   // B2.4: Archive & KeePass cracking (zip2john/rar2john/7z2john, keepass2john, hashcat -m <mode>)
-  if (/\b(?:zip|rar|7z)2john\b/i.test(cleanCmd) || (cmdTool === 'john' && /(?:--format=(?:zip|pkzip|rar|rar5|7z)\b|\b[^\s/\\]*(?:zip|rar|7z)[^\s/\\]*\.hash\b)/i.test(cleanCmd))) {
+  const johnPositionalArgs = (cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd))
+    ? cleanCmd
+        .replace(/^(?:sudo\s+)?\S*john(?:\.exe)?\b/i, ' ')
+        .replace(/(?:^|\s)--(?:wordlist|rules|pot|session|config|encoding|fork|max-run-time|min-length|max-length)(?:=\S+|\s+\S+)?/gi, ' ')
+        .replace(/(?:^|\s)-[A-Za-z0-9-]+(?:\s|$)/g, ' ')
+    : '';
+  const HASHCAT_ARCHIVE_MODES = new Set([
+    '-m:11600', '-m:12500', '-m:13000', '-m:17200', '-m:17210',
+    '-m:17220', '-m:17225', '-m:17230', '-m:23700', '-m:23800'
+  ]);
+  const isArchiveCrack = /\b(?:zip|rar|7z)2john\b/i.test(cleanCmd)
+    || ((cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd)) && (
+      /--format=(?:zip|pkzip|rar|rar5|7z)\b/i.test(cleanCmd) ||
+      /(?:^|\s)[^\s/\\]*(?:^|[._-])(?:rar5?|pkzip|zip|7z)(?:$|[._-]|\.|hash)[^\s/\\]*/i.test(johnPositionalArgs) ||
+      /Loaded\s+\d+\s+password\s+hash(?:es)?\s+\([^)\r\n]*\b(?:RAR5?|PKZIP|WinZip|ZIP|7z|7-Zip)\b/i.test(rawTurnOut) ||
+      /\$(?:rar[35]|pkzip2?|zip2?|7z)\$/i.test(rawTurnOut)
+    ))
+    || ((cmdTool === 'hashcat' || /^(?:sudo\s+)?hashcat\b/i.test(cleanCmd)) && (
+      cmdFlags.some(f => HASHCAT_ARCHIVE_MODES.has(f)) ||
+      /\$(?:rar[35]|pkzip2?|zip2?|7z)\$/i.test(cleanCmd + '\n' + rawTurnOut)
+    ));
+  if (isArchiveCrack) {
     excludedIds.add('cisco-decrypt');
-    bump('crack-archive', 25);
+    excludedIds.add('crack-modular-hash');
+    bump('crack-archive', 26);
   }
 
   const cmdHashcatModes = cmdTool === 'hashcat'
@@ -1371,7 +1485,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     bump('crack-kerberoast', 26);
     bump('crack-tgs', 25);
   }
-  if ((cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd)) && !/keepass|\.kdbx\b|krb5|netntlm/i.test(cleanCmd)) {
+  if (!isArchiveCrack && (cmdTool === 'john' || /^(?:sudo\s+)?john\b/i.test(cleanCmd)) && !/keepass|\.kdbx\b|krb5|netntlm/i.test(cleanCmd)) {
     bump('crack-modular-hash', 22);
   }
   if (cmdTool === 'keepass2john' || (cmdTool === 'hashcat' && cmdHashcatModes.indexOf('-m:13400') >= 0)) {
@@ -1382,7 +1496,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       const actionModes = [];
       for (const cObj of (a.commands || [])) {
         if (!cObj || !cObj.run) continue;
-        const clauses = String(cObj.run).split(/\s*(?:&&|\|\||;|\|)\s*/);
+        const clauses = splitShellClausesQuoteAware(cObj.run);
         for (const clause of clauses) {
           const cleanClause = stripCommandWrappers(clause.replace(/\{\{[^}]+\}\}/g, 'TOKEN'));
           if (extractPrimaryTool(cleanClause) !== 'hashcat') continue;
@@ -1404,10 +1518,11 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       bump('nmap-vuln-scripts', 24);
     } else {
       const hasOpenPorts = !!(facts && (facts.has('ports.open') || facts.has('scan.nmap.quick')));
+      const hasNmapVersionOrScriptsFlag = /(?:^|\s)-(?:s[A-Za-z]*[VC][A-Za-z]*|A)\b/.test(cleanCmd);
       if (!hasOpenPorts) {
         bump('nmap-fast-open-ports', 24);
-        if (/\s-(?:sV|sC|A)\b/.test(cleanCmd)) bump('nmap-version-scripts', 18);
-      } else if (/\s-(?:sV|sC|A)\b/.test(cleanCmd)) {
+        if (hasNmapVersionOrScriptsFlag) bump('nmap-version-scripts', 18);
+      } else if (hasNmapVersionOrScriptsFlag) {
         bump('nmap-version-scripts', 24);
         bump('nmap-fast-open-ports', 14);
       } else {
@@ -1422,6 +1537,21 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       bump('vhost-discovery', 25);
     } else {
       bump('content-discovery', 24);
+    }
+  }
+
+  if (/^(?:curl|wget|http|httpie)$/.test(cmdTool)) {
+    const sstiProbe = decodeUrlProbeText(cleanCmd);
+    if (SSTI_TEMPLATE_EXPR_RE.test(sstiProbe)) {
+      if (hasSstiRceTemplatePayload(sstiProbe)) {
+        bump('ssti-to-rce', 26);
+        bump('ssti', 21);
+      } else {
+        excludedIds.add('ssti-to-rce');
+        bump('ssti', 25);
+      }
+    } else {
+      excludedIds.add('ssti-to-rce');
     }
   }
 
@@ -1542,8 +1672,11 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
       } else if (nxcProto === 'ldap' && /--bloodhound\b/i.test(cleanCmd)) {
         bump('bloodhound-collect', 25);
       } else if (hasNxcSprayList) {
-        if (nxcProto === 'ssh') bump('online-brute-ssh', 24);
-        if (nxcProto === 'ftp') bump('online-brute-ftp', 24);
+        if (nxcProto === 'ssh') {
+          bump('online-brute-ssh', 26);
+          bump('blind-brute-ssh', 21);
+        }
+        if (nxcProto === 'ftp') bump('online-brute-ftp', 26);
         bump('password-spray', 25);
         bump('cred-reuse-sweep', 23);
         bump('validate-credential', 21);
@@ -1612,9 +1745,91 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     excludedIds.add('jenkins-access');
     bump('jenkins-cli-fileread', 26);
   }
-  if (cmdTool === 'ldapsearch' && !/\s-(?:D|w|W|Y)\b/.test(cleanCmd)) {
-    excludedIds.add('ad-path-manual');
-    bump('ad-anon-ldap-enum', 25);
+  if (/^(?:hydra|medusa|ncrack|crowbar|patator)$/.test(cmdTool)) {
+    const uriProtoM = /\b(ssh|ftps?|rdp|smb|https?|telnet|mysql|mssql|postgres(?:ql)?|vnc|redis|ldaps?|smtps?|pop3s?|imaps?):\/\//i.exec(cleanCmd);
+    const medusaModM = cmdTool === 'medusa' ? /(?:^|\s)-M\s+(ssh|ftp|rdp|smbnt|http|web-form|telnet|mysql|mssql|postgres|vnc)\b/i.exec(cleanCmd) : null;
+    const modProtoM = (!uriProtoM && !medusaModM)
+      ? /(?:^|\s)(ssh|ftps?|rdp|smb2?|https?-(?:get|post|head)(?:-form)?|telnet|mysql|mssql|postgres|vnc|redis|smtp|pop3|imap)(?=\s|$|:)/i.exec(cleanCmd)
+      : null;
+    const rawProto = (uriProtoM && uriProtoM[1]) || (medusaModM && medusaModM[1]) || (modProtoM && modProtoM[1]) || '';
+    const bruteProto = rawProto.toLowerCase();
+    if (bruteProto === 'ssh') {
+      excludedIds.add('web-login-brute');
+      excludedIds.add('online-brute-ftp');
+      excludedIds.add('online-brute-rdp');
+      bump('online-brute-ssh', 26);
+      bump('blind-brute-ssh', 22);
+    } else if (bruteProto === 'ftp' || bruteProto === 'ftps') {
+      excludedIds.add('web-login-brute');
+      excludedIds.add('online-brute-ssh');
+      excludedIds.add('blind-brute-ssh');
+      excludedIds.add('online-brute-rdp');
+      bump('online-brute-ftp', 26);
+    } else if (bruteProto === 'rdp') {
+      excludedIds.add('web-login-brute');
+      excludedIds.add('online-brute-ssh');
+      excludedIds.add('blind-brute-ssh');
+      excludedIds.add('online-brute-ftp');
+      bump('online-brute-rdp', 26);
+    } else if (/^(?:https?|web-form|https?-(?:get|post|head)(?:-form)?)$/.test(bruteProto)) {
+      excludedIds.add('online-brute-ssh');
+      excludedIds.add('blind-brute-ssh');
+      excludedIds.add('online-brute-ftp');
+      excludedIds.add('online-brute-rdp');
+      bump('web-login-brute', 26);
+    } else if (/^smb(?:2|nt)?$/.test(bruteProto)) {
+      excludedIds.add('web-login-brute');
+      excludedIds.add('online-brute-ssh');
+      excludedIds.add('blind-brute-ssh');
+      excludedIds.add('online-brute-ftp');
+      excludedIds.add('online-brute-rdp');
+      bump('password-spray', 25);
+      bump('cred-reuse-sweep', 23);
+    }
+  }
+
+  if (cmdTool === 'ldapsearch') {
+    const hasInteractiveOrSaslBind = /\s-(?:W|Y)\b/.test(cleanCmd);
+    const dM = /\s-D\s*(?:'([^']*)'|"([^"]*)"|(\S+))/.exec(cleanCmd);
+    const wM = /\s-w\s*(?:'([^']*)'|"([^"]*)"|(\S+))/.exec(cleanCmd);
+    const dVal = dM ? (dM[1] !== undefined ? dM[1] : (dM[2] !== undefined ? dM[2] : dM[3])).trim() : '';
+    const wVal = wM ? (wM[1] !== undefined ? wM[1] : (wM[2] !== undefined ? wM[2] : wM[3])).trim() : '';
+    if (!hasInteractiveOrSaslBind && !dVal && !wVal) {
+      excludedIds.add('ad-path-manual');
+      excludedIds.add('ldap-deep-enum');
+      bump('ad-anon-ldap-enum', 25);
+    } else if (!/ms-mcs-admpwd|mslaps/i.test(cleanCmd)) {
+      excludedIds.add('ad-anon-ldap-enum');
+      excludedIds.add('ldap-anon-bind');
+      bump('ldap-deep-enum', 25);
+    }
+  }
+  if (turn && turn.tool === 'python' && (/\bldap3\b/i.test(cleanCmd) || /DSA info \(from DSE\):|Naming contexts:/i.test(rawTurnOut))) {
+    if (!/\buser\s*=\s*['"][^'"]+['"]/i.test(cleanCmd)) {
+      excludedIds.add('ldap-deep-enum');
+      excludedIds.add('ad-path-manual');
+      bump('ad-anon-ldap-enum', 25);
+    } else {
+      bump('ldap-deep-enum', 25);
+    }
+  }
+  if (cmdTool === 'rsync') {
+    const rsyncArgs = cleanCmd.replace(/^rsync\b/i, '').trim().split(/\s+/).filter(t => t && !t.startsWith('-'));
+    const lastArg = rsyncArgs.length > 0 ? rsyncArgs[rsyncArgs.length - 1] : '';
+    const destIsRemote = /^rsync:\/\//i.test(lastArg) || /^[A-Za-z0-9_.@-]+::?\S*/.test(lastArg);
+    const isShellWritePayload = /(?:authorized_keys|\.ssh\b|\.(?:php[0-9]?|phtml|jsp|jspx|asp|aspx|war|sh)\b)/i.test(cleanCmd);
+    if (rsyncArgs.length >= 2 && destIsRemote && isShellWritePayload) {
+      bump('rsync-write-shell', 26);
+      bump('recon-rsync', 21);
+    } else {
+      bump('recon-rsync', 25);
+      if (destIsRemote && rsyncArgs.length >= 2) bump('rsync-write-shell', 22);
+    }
+  }
+  if (cmdTool === 'davtest' || cmdTool === 'cadaver') {
+    bump('http-put-webshell', 25);
+    bump('file-upload', 23);
+    bump('recon-web-triage', 21);
   }
   if (cmdTool === 'git-dumper') {
     bump('git-exposed', 25);
@@ -3281,6 +3496,8 @@ if (require.main === module) {
 module.exports = {
   STALL_BUCKETS: STALL_BUCKETS,
   stripCommandWrappers: stripCommandWrappers,
+  extractPrimaryTool: extractPrimaryTool,
+  splitShellClausesQuoteAware: splitShellClausesQuoteAware,
   extractCommandFlags: extractCommandFlags,
   detectSequentialRevertAliases: detectSequentialRevertAliases,
   applyIpAliases: applyIpAliases,

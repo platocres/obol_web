@@ -20,7 +20,7 @@
 
   // Stock OS, runtime, web server, database, frontend library, and scanner baselines.
   // Subtracted in Stage 0 so routine infrastructure headers never spam searchsploit lookups.
-  var _STOCK_BANNER_PRODUCT_RE = /^(?:apache(?: httpd| tomcat| coyote)?|tomcat|httpd|nginx|openresty|microsoft[- ]iis|iis|microsoft[- ]httpapi|microsoft[- ]windows(?:[- ]rpc)?|microsoft|windows(?: server| nt| rpc)?|lighttpd|caddy|gunicorn|uvicorn|werkzeug(?:\s+httpd)?|waitress|tornado|jetty|glassfish|kestrel|node(?:\.js)?|express|phusion passenger|passenger|cloudflare|varnish|squid|haproxy|traefik|php|asp\.net|python|python2|python3|cpython|ruby|perl|java|openjdk|openssl|libssh2?|mod_[a-z0-9_]+|openssh|dropbear|postfix|dovecot|exim|sendmail|isc bind|bind|named|dnsmasq|unbound|msrpc|microsoft-ds|netbios-ssn|kerberos(?:-sec)?|ms-wbt-server|winrm|mysql|mariadb|postgresql|postgres|microsoft sql server|mssql|sql server|redis|memcached|mongodb|sqlite3?|openldap|ldap|wordpress|drupal|joomla|phpmyadmin|bootstrap|jquery(?: ui| migrate)?|modernizr|fontawesome|font awesome|tailwind(?:css)?|react|vue(?:\.js)?|angular(?:\.js)?|popper(?:\.js)?|lodash|moment(?:\.js)?|axios|hugo|jekyll|gatsby|next(?:\.js)?|nuxt(?:\.js)?|ubuntu|debian|centos|redhat|rhel|fedora|alpine|freebsd|openbsd|netbsd|linux(?: kernel)?|gnu|samba(?: smbd)?|smbd|nmbd|rpcbind|nfs|nmap|masscan|rustscan|nikto|whatweb|gobuster|ffuf|feroxbuster|wpscan|sqlmap|curl|wget|httpie|python-requests|python-urllib3?|mozilla|chrome|chromium|safari|gecko|applewebkit|edge|opera|http|https|ssl|tls|tlsv1|ssh|ftp|smtp|pop3|imap|tcp|udp|ip|ipv4|ipv6|version|build|release|server|client|daemon|service|welcome|copyright|powered|generator)$/i;
+  var _STOCK_BANNER_PRODUCT_RE = /^(?:apache(?: httpd| tomcat| coyote)?|tomcat|httpd|nginx|openresty|microsoft[- ]iis|iis|microsoft[- ]httpapi|microsoft[- ]windows(?:[- ]rpc)?|microsoft|windows(?: server| nt| rpc)?|lighttpd|caddy|gunicorn|uvicorn|werkzeug(?:\s+httpd)?|waitress|tornado|jetty|kestrel|node(?:\.js)?|express|phusion passenger|passenger|cloudflare|varnish|squid|haproxy|traefik|php|asp\.net|python|python2|python3|cpython|ruby|perl|java|openjdk|openssl|libssh2?|mod_[a-z0-9_]+|openssh|dropbear|postfix|dovecot|exim|sendmail|isc bind|bind|named|dnsmasq|unbound|msrpc|microsoft-ds|netbios-ssn|kerberos(?:-sec)?|ms-wbt-server|winrm|mysql|mariadb|postgresql|postgres|microsoft sql server|mssql|sql server|redis|memcached|mongodb|sqlite3?|openldap|ldap|wordpress|drupal|joomla|phpmyadmin|bootstrap|jquery(?: ui| migrate)?|modernizr|fontawesome|font awesome|tailwind(?:css)?|react|vue(?:\.js)?|angular(?:\.js)?|popper(?:\.js)?|lodash|moment(?:\.js)?|axios|hugo|jekyll|gatsby|next(?:\.js)?|nuxt(?:\.js)?|ubuntu|debian|centos|redhat|rhel|fedora|alpine|freebsd|openbsd|netbsd|linux(?: kernel)?|gnu|samba(?: smbd)?|smbd|nmbd|rpcbind|nfs|nmap|masscan|rustscan|nikto|whatweb|gobuster|ffuf|feroxbuster|wpscan|sqlmap|curl|wget|httpie|python-requests|python-urllib3?|mozilla|chrome|chromium|safari|gecko|applewebkit|edge|opera|http|https|ssl|tls|tlsv1|ssh|ftp|smtp|pop3|imap|tcp|udp|ip|ipv4|ipv6|version|build|release|server|client|daemon|service|welcome|copyright|powered|generator)$/i;
 
   function _cleanProductName(raw) {
     var s = String(raw || '')
@@ -30,7 +30,7 @@
       .replace(/\s+/g, ' ')
       .trim();
     s = s.replace(/^(?:Welcome to|Powered by|Running)\s+/i, '').trim();
-    s = s.replace(/\s+(?:v|ver|version|release|build)$/i, '').trim();
+    s = s.replace(/\s+(?:v|ver\.?|version|release|build)$/i, '').trim();
     return s;
   }
 
@@ -314,11 +314,23 @@
 
   // ---- Stage 2: Mirrored Exploit-DB script inspector & pre-flight hazard detector ----
   var _EDB_HEADER_RE = /(?:^|\n)\s*(?:#|\/\/|\/\*+|\*|--|REM\b)\s*(?:Exploit Title|EDB-ID|Exploit-DB|Exploit Author)\s*:/i;
+  var _EDB_CANONICAL_META_RE = /(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*|--|REM\b)[ \t]*(Exploit Title|Exploit Author|Date|Vendor Homepage|Software Link|Version|Tested on|CVE|EDB-ID)[ \t]*:/gi;
   var _LEGACY_POC_META_RE = /(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*|--|REM\b)[ \t]*(?:CVE[ \t]*[:=-]?[ \t]*CVE-\d{4}-\d{4,7}|[^\r\n]*\bCVE-\d{4}-\d{4,7}\b)/i;
   var _LEGACY_POC_AUTHOR_SW_RE = /(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*)[ \t]*Author[ \t]*:[\s\S]{0,240}?(?:^|\n)[ \t]*(?:#|\/\/|\/\*+|\*)[ \t]*(?:Software|Vendor|Affected|Vulnerable|Vulnerability|Advisory|Tested\s+on)[ \t]*:/i;
   var _LEGACY_POC_EXPLOIT_IND_RE = /\b(?:urllib2|requests|httplib|http\.client|cookielib|socket|argparse|optparse|sys\.argv|pwntools|shellcode|payload|exploit)\b/i;
   var _EDB_INSPECT_CMD_RE = /\b(?:head|cat|bat|batcat|less|more|nl|sed|awk|grep|egrep|rg|searchsploit\s+(?:-[a-zA-Z]*x|--examine))\b[^\r\n]*?\b(\d{4,6})\.(py|sh|c|cpp|cc|rb|php|pl|txt|md|ps1|js|java)\b/i;
+  var _EDB_EXAMINE_BARE_CMD_RE = /\bsearchsploit\s+(?:-[a-zA-Z]*x|--examine)\s+(?:\S*\/)?(\d{3,6})(?:\.(py|sh|c|cpp|cc|rb|php|pl|txt|md|ps1|js|java))?\b/i;
   var _SCRIPT_BODY_HINT_RE = /(?:^#!\/|^\s*(?:import|from)\s+[A-Za-z0-9_.]+|^\s*#include\s*[<"]|\bargparse\.ArgumentParser\b|\bsys\.argv\[|\brequests\.(?:get|post|put|Session)\b|\burllib2?\b|\bcurl\s+-|\bjavac\s+|\bint\s+main\s*\(|\bfunction\s+[A-Za-z_])/m;
+
+  function _countEdbCanonicalHeaders(t) {
+    var seen = {}, count = 0;
+    var matches = C.reAll(_EDB_CANONICAL_META_RE, t);
+    for (var i = 0; i < matches.length; i++) {
+      var k = String(matches[i][1] || '').toLowerCase();
+      if (k && !seen[k]) { seen[k] = 1; count++; }
+    }
+    return count;
+  }
 
   function _detectPythonStringSyntaxHazard(text, command) {
     var s = String(text || '').replace(/\r\n/g, '\n');
@@ -392,7 +404,7 @@
     if (!/\S/.test(t)) return false;
     var cmd = String(command || '');
     var hasCmd = /\S/.test(cmd);
-    var cmdIsInspect = hasCmd && _EDB_INSPECT_CMD_RE.test(cmd);
+    var cmdIsInspect = hasCmd && (_EDB_INSPECT_CMD_RE.test(cmd) || _EDB_EXAMINE_BARE_CMD_RE.test(cmd));
     if (!cmdIsInspect) {
       if (_is_scanner_or_nmap_report(t, cmd)) return false;
       if (hasCmd) {
@@ -409,7 +421,7 @@
       return false;
     }
     if (cmdIsInspect) return true;
-    if (_EDB_HEADER_RE.test(t) && (_SCRIPT_BODY_HINT_RE.test(t) || /\bUsage\s*:/i.test(t) || /CVE-\d{4}-\d+/i.test(t))) {
+    if (_EDB_HEADER_RE.test(t) && (_SCRIPT_BODY_HINT_RE.test(t) || /\bUsage\s*:/i.test(t) || /CVE-\d{4}-\d+/i.test(t) || _countEdbCanonicalHeaders(t) >= 2)) {
       // Exclude bare 6-line `searchsploit -m` summary output when no script lines follow
       if (/^\s*Exploit:\s+[^\r\n]+\r?\n\s*URL:\s+https?:\/\/www\.exploit-db\.com\/exploits\/\d+/i.test(t) && !_SCRIPT_BODY_HINT_RE.test(t)) {
         return false;
@@ -454,7 +466,7 @@
     var t = String(text || '');
     var cmd = String(command || '');
     if (!t.trim()) return;
-    if (!(cmd && _EDB_INSPECT_CMD_RE.test(cmd)) && _is_scanner_or_nmap_report(t, cmd)) return;
+    if (!(cmd && (_EDB_INSPECT_CMD_RE.test(cmd) || _EDB_EXAMINE_BARE_CMD_RE.test(cmd))) && _is_scanner_or_nmap_report(t, cmd)) return;
 
     var edbId = '', edbFile = '', ext = '';
     var mCmd = _EDB_INSPECT_CMD_RE.exec(cmd);
@@ -462,6 +474,15 @@
       edbId = mCmd[1];
       ext = mCmd[2].toLowerCase();
       edbFile = edbId + '.' + ext;
+    } else {
+      var mExam = _EDB_EXAMINE_BARE_CMD_RE.exec(cmd);
+      if (mExam) {
+        edbId = mExam[1];
+        if (mExam[2]) {
+          ext = mExam[2].toLowerCase();
+          edbFile = edbId + '.' + ext;
+        }
+      }
     }
     if (!edbFile) {
       var mCopy = /Copied to:\s*(?:\S*\/)?(\d{4,6})\.([a-z0-9]+)/i.exec(t);
@@ -669,7 +690,8 @@
 
   // ---- Stage 0: Versioned non-stock product banner -> dynamic searchsploit trigger ----
   var _PROD_WORD_SRC = '[A-Za-z][A-Za-z0-9_.+-]*(?:\\/(?!v?\\d+\\.\\d+)[A-Za-z0-9_.+-]+)*';
-  var _PROD_VER_STR_RE = new RegExp('^(' + _PROD_WORD_SRC + '(?:[ \\t-]+' + _PROD_WORD_SRC + '){0,3})(?:[ \\t]*\\/[ \\t]*(?=v?\\d+\\.\\d+)|[ \\t]+)v?(\\d+\\.\\d+(?:\\.\\d+)*(?:[-a-zA-Z0-9.]*)?)\\b');
+  var _PROD_VER_SEP_SRC = '(?:[ \\t]*\\/[ \\t]*(?=v?\\d+\\.\\d+)|[ \\t]+(?:(?:Version|ver\\.?)[ \\t:]+)?|[ \\t]*:[ \\t]*(?=v?\\d+\\.\\d+))';
+  var _PROD_VER_STR_RE = new RegExp('^(' + _PROD_WORD_SRC + '(?:[ \\t-]+' + _PROD_WORD_SRC + '){0,5}?)' + _PROD_VER_SEP_SRC + 'v?(\\d+\\.\\d+(?:\\.\\d+)*(?:[-a-zA-Z0-9.]*)?)\\b', 'i');
   var _SLASH_BANNER_TOK_RE = new RegExp('(' + _PROD_WORD_SRC + '(?:[ -]' + _PROD_WORD_SRC + '){0,2})\\/v?(\\d+\\.\\d+(?:\\.\\d+)*(?:[-a-zA-Z0-9.]*)?)\\b', 'g');
 
   function _extractProdVerFromStr(str) {
@@ -733,20 +755,20 @@
       if (!f || !f.value) continue;
       var val = f.value;
       if (f.kind === 'web.tech') {
-        if (val.product && val.version) pushCandidate(val.product, val.version);
-        if (val.name && val.version) pushCandidate(val.name, val.version);
+        if (typeof val.product === 'string' && val.product && val.version) pushCandidate(val.product, val.version);
+        if (typeof val.name === 'string' && val.name && val.version) pushCandidate(val.name, val.version);
         if (Array.isArray(val.items)) {
           for (var ii = 0; ii < val.items.length; ii++) {
             var it = val.items[ii] || {};
             var pv = _extractProdVerFromStr(it.value || '');
             if (pv) pushCandidate(pv.product, pv.version);
-            else if (it.name && it.value && /^\d+\.\d+/.test(String(it.value).trim())) {
+            else if (typeof it.name === 'string' && it.name && it.value && /^\d+\.\d+/.test(String(it.value).trim())) {
               pushCandidate(it.name, String(it.value).trim());
             }
           }
         }
       } else if (f.kind.indexOf('service.') === 0 || f.kind === 'web.server' || f.kind === 'ftp.banner' || f.kind === 'ssh.banner') {
-        if (val.product && val.version) pushCandidate(val.product, val.version);
+        if (typeof val.product === 'string' && val.product && val.version) pushCandidate(val.product, val.version);
         if (Array.isArray(val.headers)) {
           for (var hi = 0; hi < val.headers.length; hi++) {
             pushHeaderCandidates(val.headers[hi]);
@@ -778,14 +800,14 @@
     }
 
     if (/powered by/i.test(t)) {
-      var poweredMatches = C.reAll(/\bPowered by\s+([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/gi, t);
+      var poweredMatches = C.reAll(/\bPowered by\s+([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,4}?)(?:[ \t]+(?:Version|ver\.?))?[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/gi, t);
       for (var pwi = 0; pwi < poweredMatches.length; pwi++) {
         pushCandidate(poweredMatches[pwi][1], poweredMatches[pwi][2]);
       }
     }
 
     if (hasHtmlLt) {
-      var titleMatches = C.reAll(/<title>\s*([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3})[ \t:|/-]+v?(\d+\.\d+(?:\.\d+)*)\s*<\/title>/gi, t);
+      var titleMatches = C.reAll(/<title>\s*([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,4}?)(?:[ \t]+(?:Version|ver\.?))?[ \t:|/-]+v?(\d+\.\d+(?:\.\d+)*)\s*<\/title>/gi, t);
       for (var ti = 0; ti < titleMatches.length; ti++) {
         pushCandidate(titleMatches[ti][1], titleMatches[ti][2]);
       }
@@ -812,7 +834,7 @@
 
         // 220 FTP/SMTP/service greeting banners
         if (docHasGreet220) {
-          var greetM = /^\s*220[- ](?:Welcome to\s+)?([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3}?)(?:[ \t]+(?:FTP|SMTP|Mail|File)[ \t]+(?:Server|Daemon|Service))?[ \t\/]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
+          var greetM = /^\s*220[- ](?:Welcome to\s+)?([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3}?)(?:[ \t]+(?:FTP|SMTP|Mail|File)[ \t]+(?:Server|Daemon|Service))?(?:[ \t]+(?:Version|ver\.?))?[ \t\/]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
           if (greetM) {
             pushCandidate(greetM[1], greetM[2]);
             continue;
@@ -833,7 +855,7 @@
 
         // Explicit app category banner (e.g. "Wing FTP Server 7.2.1", "Fuel CMS 1.4.1", "OpenNetAdmin v18.1.1")
         if (docHasAppCat) {
-          var appCatM = /\b([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,2}[ \t]+(?:CMS|CRM|ERP|LMS|HRM|FMS|Portal|Management System|Manager|Helpdesk|Webmail|FTP Server|Mail Server|File Server))[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
+          var appCatM = /\b([A-Za-z][A-Za-z0-9_.+-]*(?:[ \t]+[A-Za-z][A-Za-z0-9_.+-]*){0,3}?[ \t]+(?:CMS|CRM|ERP|LMS|HRM|FMS|Portal|Management System|Manager|Helpdesk|Webmail|FTP Server|Mail Server|File Server))(?:[ \t]+(?:Version|ver\.?))?[ \t\/:-]+v?(\d+\.\d+(?:\.\d+)*)/i.exec(ln);
           if (appCatM) {
             pushCandidate(appCatM[1], appCatM[2]);
           }

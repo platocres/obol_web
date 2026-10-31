@@ -350,7 +350,9 @@
       ],
       "requires_any": [
         "ad.user_list",
-        "web.users"
+        "web.users",
+        "host.users",
+        "smtp.users"
       ],
       "produces": [
         "credential.available",
@@ -417,7 +419,9 @@
       ],
       "requires_any": [
         "ad.user_list",
-        "web.users"
+        "web.users",
+        "host.users",
+        "smtp.users"
       ],
       "produces": [
         "credential.available",
@@ -455,7 +459,9 @@
       ],
       "requires_any": [
         "ad.user_list",
-        "web.users"
+        "web.users",
+        "host.users",
+        "smtp.users"
       ],
       "produces": [
         "credential.available",

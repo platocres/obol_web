@@ -307,7 +307,7 @@
       || /\bhttps?:\/\/[^\s'"]+/i.test(command)
     );
     var isHttpClientTurn = !isPayloadBuilderCmd && !isPublicRefHttp && !isFtpOnlyUriCmd && (
-      /\b(?:curl|wget|httpie)\b/i.test(lc)
+      /\b(?:curl|wget|httpie|davtest|cadaver)\b/i.test(lc)
       || (/\b(?:http|python3?|ruby|perl|php)\b/i.test(lc) && (isHttpContext || /\b(?:requests|urllib|httpx|aiohttp|http\.client|curl_init)\b/i.test(command)))
       || isHttpContext
     );
@@ -320,11 +320,13 @@
       || /^root:\$(?:1|2[abxy]|5|6|y)\$[^\r\n:]+:/m.test(headTailSample)
       || /(?:^|\r?\n)\s*(?:\[Administrator\][\s\S]{0,240}?\r?\n\s*Password|AdministratorPassword)\s*=\s*[0-9a-fA-F]{32}\b/i.test(headTailSample));
     var isRemoteWebExploitScriptTurn = !isPayloadBuilderCmd && !isSsh && !isFtpOnlyUriCmd
-      && (/\b(?:python3?|ruby|perl|php)\b/i.test(lc) || /\.(?:py|rb|pl|sh)\b/i.test(lc))
+      && (/\b(?:python3?|ruby|perl|php|go\s+run)\b/i.test(lc) || /\.(?:py|rb|pl|sh|go)\b/i.test(lc))
       && (/\bhttps?:\/\/[^\s'"]+/i.test(command) || /(?:^|\s)(?:--?(?:rhost|host|target|url)|-[HhUuTt])\s+\S+/.test(command || ''));
     var hasWebExploitReplOrUploadBody = !isPayloadBuilderCmd && !isSsh && !isFtpOnlyUriCmd && !C._is_web_content_command(command)
       && !!((C._WEBSHELL_UPLOAD_RECEIPT_RE && C._WEBSHELL_UPLOAD_RECEIPT_RE.test(headTailSample))
-        || (C._WEB_EXPLOIT_REPL_WHOAMI_RE && /\bwhoami\b/i.test(headTailSample) && C._WEB_EXPLOIT_REPL_WHOAMI_RE.test(headTailSample) && !/^\s*whoami\s*$/i.test(command || '')));
+        || (/\bwhoami\b/i.test(headTailSample) && !/^\s*whoami\s*$/i.test(command || '')
+          && ((C._WEB_EXPLOIT_REPL_WHOAMI_RE && C._WEB_EXPLOIT_REPL_WHOAMI_RE.test(headTailSample))
+            || /^[ \t]{0,80}(?:(?:cmd|shell|rce|exploit|pwn|webshell|os-shell|pseudo-term)[^>%\r\n]{0,24}[>#$:][ \t]*|command\b[^:\r\n]{0,40}:[ \t]*(?:execute[ \t]+)?|[>#$][ \t]*)whoami[ \t]*\r?\n(?:[ \t]*\r?\n){0,2}[ \t]*[a-z_][a-z0-9_-]{1,31}[ \t]*$/im.test(headTailSample))));
     var callerPromptRaw = String((ws && ws.context && ws.context.promptLine) || '').split(/\r?\n/)[0].trim();
     var callerUnixPromptM = callerPromptRaw
       ? (/^(?:\([^)]+\)\s*)?\[?([a-zA-Z0-9_.-]+)(?:@|\u327f)([a-zA-Z0-9_.-]+)(?:[:\s][^\]]*)?\]?\s*[#$%]/.exec(callerPromptRaw)
@@ -343,7 +345,7 @@
     var isWebExploitCmd = !isPayloadBuilderCmd && !isPublicRefHttp && ((C._WEB_EXPLOIT_ACTION_IDS && C._WEB_EXPLOIT_ACTION_IDS.has(actionId))
       || ((isHttpClientTurn || isRemoteWebExploitScriptTurn) && (hasWebCmdiBody || hasWebLfiBody || hasWebExploitReplOrUploadBody))
       || (hasWebExploitReplOrUploadBody && hasWebExploitHttpSignal && !(hasVerifiedLocalTargetPrompt && !/\bhttps?:\/\/|--url\b|-u\s+\S+|:\d{2,5}\//i.test(command || '')))
-      || (/\b(?:curl|wget|httpie|python3?)\b/.test(lc) && !isFtpOnlyUriCmd && (/cmd=|exec=|shell\.php|cmd\.jsp|cmd\.asp|evil\.|reverse|payload|\.\.\/|%2e%2e|php:\/\/filter|expect:\/\/|data:\/\//i.test(command) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(headTailSample) && /root:x:0:0:/i.test(headTailSample))))
+      || (/\b(?:curl|wget|httpie|python3?)\b/.test(lc) && !isFtpOnlyUriCmd && (/cmd=|exec=|shell\.php|cmd\.jsp|cmd\.asp|evil\.|reverse|payload|\.\.\/|%2e%2e|php:\/\/filter|expect:\/\/|data:\/\/|(?:\{\{|\$\{|<%=|#\{|%7b%7b|%24%7b|%3c%25%3d|%23%7b)\s*(?:\d{1,5}\s*(?:\*|%2a)\s*\d{1,5}|\d{1,2}\s*(?:\*|%2a)\s*(?:['"]|%27|%22)[A-Za-z0-9])/i.test(command) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(headTailSample) && /root:x:0:0:/i.test(headTailSample))))
       || (!command && (/^root:x:0:0:/im.test(headTailSample) || (C._LFI_WIN_INI_RE && C._LFI_WIN_INI_RE.test(headTailSample)) || (/^(?:<\s*)?HTTP\/[0-9.]+\s+\d{3}\b/im.test(headTailSample) && hasWebCmdiBody))));
 
     // Service login / DB-RCE / bare `id` output that lands a *nix shell (telnet, rlogin/rsh, psql/odat/sqlplus
@@ -373,7 +375,9 @@
     var isDosEmu = ((lc.indexOf('dosbox') >= 0 || lc.indexOf('mount ') >= 0 || sshExecCtx.indexOf('dosbox') >= 0 || sshExecCtx.indexOf('DOSBox') >= 0 || sshExecCtx.indexOf('MOUNT ') >= 0 || sshExecCtx.indexOf(':\\>') >= 0)
       && _is_dos_emulator_ctx(command, sshExecCtx, ws && ws.context && ws.context.promptLine));
     var isWhoamiId = !isDosEmu && (/\bwhoami\b/i.test(lc) || /\bwhoami\b|Windows IP Configuration/i.test(execTextSample) || (execTextSample.indexOf(':\\') >= 0 && /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/im.test(execTextSample))) && C._WHOAMI_ID_RE && C._WHOAMI_ID_RE.test(execTextSample);
-    var isWinInteractivePaste = !isDosEmu && ((C._INTERACTIVE_RE && C._INTERACTIVE_RE.test(execTextSample)) || /\b(?:impacket-)?(?:wmiexec|psexec|smbexec|atexec|dcomexec)(?:\.py)?\b/i.test(execTextSample)
+    var isWinInteractivePaste = !isDosEmu && ((C._INTERACTIVE_RE && C._INTERACTIVE_RE.test(execTextSample))
+      || (/\bPsExec\s+v\d+\.\d+\b|Launching semi-interactive shell|Requesting shares on\s+\S+\.\.\./i.test(execTextSample)
+        || /(?:^|\r?\n)[ \t]*(?:(?:\([^)\r\n]+\)[ \t]*)?(?:[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+[^$#\r\n]*[$#]|\u2514\u2500[$#]|[>$#])[ \t]+)(?:sudo[ \t]+)?(?:python[23]?[ \t]+\S*?)?\b(?:impacket-)?(?:wmiexec|psexec|smbexec|atexec|dcomexec)(?:\.py)?[ \t]+\S/i.test(execTextSample))
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(lc)
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(execTextSample));
     var hasSshAuthFail = isSsh && /\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Host key verification failed|No route to host|Could not resolve hostname)\b/i.test(execTextSample);
@@ -397,10 +401,10 @@
     if ((/\b(?:certutil|wget|scp|bitsadmin|xcopy|smbclient|upload)\b/i.test(lc) || /\bcopy\b/i.test(lc) || /putting file\s+\S+\s+as\s+\\|CertUtil:\s*-\w[\w-]*\s*command completed successfully|\bsaved\s+\[\d|\b\d+\s+file\(s\)\s+copied\b/i.test(execTextSample)) && has('_parse_transfer_success')) guarded._parse_transfer_success(text, ws, command, source, facts);
 
     if (lc.indexOf('penelope') >= 0 || (C._PENELOPE_GOT_RE && C._PENELOPE_GOT_RE.test(execTextSample)) || (C._PENELOPE_UPGRADE_RE && C._PENELOPE_UPGRADE_RE.test(execTextSample))) guarded._parse_penelope(text, ws, source, facts);
-    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || lc.indexOf('pty.spawn') >= 0 || (execTextSample.indexOf('pty.spawn') >= 0 && /\bpty\.spawn\s*\(/i.test(execTextSample)) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from/i.test(execTextSample) || /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\s*$/im.test(execTextSample)) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
+    if ((/\b(?:nc|ncat|netcat|penelope|socat|pwncat)\b/i.test(lc) || lc.indexOf('pty.spawn') >= 0 || (execTextSample.indexOf('pty.spawn') >= 0 && /\bpty\.spawn\s*\(/i.test(execTextSample)) || /\bListening on\s+|connect to \[[^\]]+\] from|Connection received on\s+\S+|Ncat:\s*Connection from|\[\+\]\s*(?:Got|Accepted)\s+connection\s+from\s+\S+|\[\*\]\s*Switching to interactive mode\b/i.test(execTextSample) || /\b(?:ba|da|z|k|a)?sh:\s*(?:cannot set terminal process group|no job control in this shell|can't access tty;\s*job control turned off)\b/i.test(execTextSample) || /^\(UNKNOWN\)\s+\[\d{1,3}(?:\.\d{1,3}){3}\]\s+\d{1,5}\s+\([^)]*\)\s+open\s*$/im.test(execTextSample) || (!isSsh && Boolean(ws && ws.context && ws.context.followPrompt) && /\S/.test(execTextSample) && /\b(?:python[23]?|ruby|perl|php|node|go\s+run|java|curl|wget|nc|ncat|netcat|socat)\b|--?(?:rhost|lhost|lport|target|url)\b/i.test(command || ''))) && has('_parse_listener_output')) guarded._parse_listener_output(text, ws, command, source, facts);
     if (has('_looks_like_meterpreter') && guarded._looks_like_meterpreter(execTextSample, command) && has('_parse_meterpreter')) guarded._parse_meterpreter(text, ws, command, source, facts);
     var whoamiEscSample = (command || '') + '\n' + execTextSample;
-    if (has('_parse_posix_whoami_escalation') && (/\b(?:whoami|doas|sudo|su|pkexec)\b/i.test(whoamiEscSample) || /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i.test(whoamiEscSample))) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
+    if (has('_parse_posix_whoami_escalation') && (Boolean(ws && ws.context && ws.context.followPrompt) || /\b(?:whoami|doas|sudo|su|pkexec)\b/i.test(whoamiEscSample) || /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i.test(whoamiEscSample))) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
     if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|reg(?:\.py|\.exe)?\s+[^\r\n]*\bbackup\b|Saved\s+HKLM\\(?:SAM|SYSTEM|SECURITY)\s+to\b|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && has('_parse_host_auxiliary')) guarded._parse_host_auxiliary(text, ws, command, source, facts);
 
@@ -411,8 +415,8 @@
       var looksLinEnumPaste = !isHttpRespBody && has('_looks_like_linux_enum') && guarded._looks_like_linux_enum(text);
       var isRemoteScanner = hasFtpOwnerListing || isHttpRespBody
         || /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc)
-        || (!looksLinEnumPaste && /\b(?:curl|wget)\b/i.test(lc));
-      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-perm\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b|\b(?:magick|convert)\s+-version\b|\bsudo\s+(?:--version|-v)\b/i.test(lc) || /Version:\s+ImageMagick\s+\d/i.test(bigProbeSample) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
+        || (!looksLinEnumPaste && (/\b(?:curl|wget)\b/i.test(lc) || /\bhttps?:\/\/|(?:^|\s)(?:--?(?:target|rhost|url|master)|-t)\s+(?:https?:\/\/|\d{1,3}(?:\.\d{1,3}){3})\b/i.test(command || '')));
+      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-(?:perm|writable)\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b|\b(?:magick|convert)\s+-version\b|\bsudo\s+(?:--version|-v)\b/i.test(lc) || /Version:\s+ImageMagick\s+\d/i.test(bigProbeSample) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
       if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b/i.test(lc))) {
@@ -441,7 +445,7 @@
     if ((lc.indexOf('schtasks') >= 0 || (has('_looks_like_schtasks') && guarded._looks_like_schtasks(text))) && has('_parse_schtasks')) guarded._parse_schtasks(text, ws, command, source, facts);
     if ((lc.indexOf('reg query') >= 0 || (has('_looks_like_reg_query') && guarded._looks_like_reg_query(text))) && has('_parse_reg_query')) guarded._parse_reg_query(text, ws, command, source, facts);
     if ((lc.indexOf('klist') >= 0 || (has('_looks_like_klist') && guarded._looks_like_klist(text))) && has('_parse_klist')) guarded._parse_klist(text, ws, command, source, facts);
-    if ((lc.indexOf('icacls') >= 0 || lc.indexOf('accesschk') >= 0 || /\bget-acl\b/i.test(lc) || (has('_looks_like_icacls_accesschk') && guarded._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) guarded._parse_icacls_accesschk(text, ws, command, source, facts);
+    if ((/\bi?cacls(?:\.exe)?\b/i.test(lc) || lc.indexOf('accesschk') >= 0 || /\bget-acl\b/i.test(lc) || (has('_looks_like_icacls_accesschk') && guarded._looks_like_icacls_accesschk(text))) && has('_parse_icacls_accesschk')) guarded._parse_icacls_accesschk(text, ws, command, source, facts);
 
     // endpoint defensive posture (read-only): languagemode / Get-MpComputerStatus / Get-MpPreference /
     // Get-AppLockerPolicy -> defense.control, so the coach can prefer remote-first and warn before on-host runs.
@@ -496,8 +500,10 @@
     var isOutboundHttpReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(bigProbeSample));
     var isNonHttpAccountOrOutbound = !!(C._is_unix_account_dump && C._is_unix_account_dump(bigProbeSample)) || isOutboundHttpReqOnly;
     if (isWebExploitCmd && !isPayloadBuilderCmd && !isOutboundHttpReqOnly) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && has('_parse_webdav_output') && (/\b(?:davtest|cadaver)\b/i.test(lc) || /\bTesting DAV connection\b|\bOPEN\s+SUCCEED:\s*https?:\/\/|^dav:\/[^>]*>/im.test(bigProbeSample))) guarded._parse_webdav_output(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isOutboundHttpReqOnly && has('_parse_exploit_poc_verdicts') && /\[[*+]\]/.test(bigProbeSample)) guarded._parse_exploit_poc_verdicts(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && /\bICMP\s+echo\s+request\b/i.test(bigProbeSample) && has('_parse_web_cmdi')) guarded._parse_web_cmdi(actionId || 'operator-ingest', text, ws, command, source, facts);
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(bigProbeSample))) guarded._parse_http_metadata(text, ws, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && !isNonHttpAccountOrOutbound && (lc.indexOf('whatweb') >= 0 || lc.indexOf('curl') >= 0 || (lc.indexOf('wget') >= 0 && (/(?:\s-[A-Za-z]*S\b|\s--(?:server-response|save-headers)\b)/.test(' ' + command) || /^\s*HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(bigProbeSample))) || /HTTPServer\[|Country\[[^\]]+\]\[[^\]]+\]/i.test(bigProbeSample))) guarded._parse_http_metadata(text, ws, source, facts);
     // Product fingerprints (Jenkins, NVMS-1000) run content-first on any web-ish
     // paste (nmap http-* scripts, curl -I, whatweb, a pasted page/headers). The
     // parser self-gates on a definitive signature, so an unrelated paste mints
@@ -512,7 +518,7 @@
     if (has('_parse_nsclient_ini') && (lc.indexOf('nsclient') >= 0 || /nsclient|\[\/settings\//i.test(bigProbeSample))) guarded._parse_nsclient_ini(text, ws, command, source, facts);
     // KeePass database/dump in hand (.kdbx, $keepass$ hash, master-key dump).
     if (has('_parse_keepass_dump') && (/keepass|\.kdbx/i.test(lc) || /\$keepass\$|\.kdbx/i.test(bigProbeSample))) guarded._parse_keepass_dump(text, ws, command, source, facts);
-    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler', 'httpie'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(bigProbeSample) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+|Set-Cookie:\s*laravel_session=|actuator\/sessions|"sessions"\s*:\s*\[|"(?:[0-9a-fA-F]{24,64}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"\s*:\s*"[A-Za-z0-9_.@-]{2,64}"|"__(?:schema|type)"\s*:|Cannot query field\b|<bind-dn>\s*CN=/im.test(bigProbeSample))) guarded._parse_web_surface(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler', 'httpie'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^\s*(?:GET|POST|HEAD)\s+https?:\/\/\S+/i.test(command || '') || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(bigProbeSample) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+|Set-Cookie:\s*laravel_session=|actuator\/sessions|"sessions"\s*:\s*\[|"(?:[0-9a-fA-F]{24,64}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"\s*:\s*"[A-Za-z0-9_.@-]{2,64}"|"__(?:schema|type)"\s*:|Cannot query field\b|<bind-dn>\s*CN=/im.test(bigProbeSample))) guarded._parse_web_surface(text, ws, command, source, facts);
     if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(bigProbeSample)) guarded._parse_snmp_output(text, ws, command, source, facts);
     var isBinaryLocatorOrDirCmd = /^\s*(?:sudo\s+)?(?:where(?:\.exe)?|which|whereis|type\s+-a|command\s+-v|get-command|gcm|dir|ls|gci|get-childitem|find)\b/i.test(command || '');
     var dbSessionCheckText = [bigProbeSample, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
@@ -619,7 +625,12 @@
     // Known-exploit fingerprint recognizer: when pasted service/version output names a product+version
     // (or a CVE / nmap vuln verdict) that a promoted known-exploit module targets, mint a vuln.<name>
     // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
-    if (!isPayloadBuilderCmd && has('_parse_vulnmatch')) guarded._parse_vulnmatch(text, ws, source, facts, command);
+    if (!isPayloadBuilderCmd && has('_parse_vulnmatch')) {
+      var vulnMatchText = (text.indexOf('\u2563') >= 0 || text.indexOf('\u2524') >= 0)
+        ? text.replace(/^[ \t]*(?:[\u2554\u2560\u250c\u251c]?[\u2550\u2500=]*[\u2563\u2524])[ \t]*(?:Analyzing|Searching|Checking)\b[^\r\n]*$/gim, '')
+        : text;
+      guarded._parse_vulnmatch(vulnMatchText, ws, source, facts, command);
+    }
 
     // Exploit-DB (searchsploit) Stage 1 table/JSON parser and Stage 2 mirrored script inspector.
     if (has('_looks_like_searchsploit') && guarded._looks_like_searchsploit(text, command) && has('_parse_searchsploit')) {

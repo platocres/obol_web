@@ -625,11 +625,11 @@
     var sensitive = C.uniqueSortedCI(names.filter(_looks_sensitive));
     _add(facts, mkFact('loot.files', h, { files: names, count: names.length, tool: tool, entries: files, sensitive: sensitive, via: via }, S, source));
 
-    var isTransferred = via === 'ftp-download'
+    var isTransferred = via === 'ftp-download' || via === 'ftp-list' || via === 'ftp-listing'
       || /(?:getting file\s+|Downloading\s+|\[\+\]\s*File\s+[^\r\n]*downloaded|--get-file\b|\bscp\b)/i.test(String(text || '') + ' ' + String(source || ''));
     if (isTransferred) {
       names.forEach(function (n) {
-        if (/\.(?:zip|7z|rar|pfx|p12|kdbx|psafe3|bak|ezip)$/i.test(n)) {
+        if (/\.(?:zip|7z|rar|tar|gz|tgz|bz2|xz|pfx|p12|kdbx|psafe3|bak|ezip)$/i.test(n)) {
           _add(facts, mkFact('loot.material', h, { kind: 'archive_loot', file: n.split('/').pop(), path: n, tool: tool, via: via }, S, source));
         }
       });
@@ -1116,15 +1116,24 @@
     });
   }
 
-  function _parse_ldapsearch(text, ws, source, facts) {
+  function _parse_ldapsearch(text, ws, source, facts, command) {
     if (!facts.some(function (f) { return f.kind === 'host.os_family'; })) C._add_os_from_text(text, ws, source, facts, 'smb', 'medium', true);
-    var dns = C.uniqueSortedCI(reAll(C._BASE_DN_RE, text).map(function (m) { return m[1]; }));
+    var isDsaInfo = /\bDSA info \(from DSE\):/i.test(text);
+    var rawDns = reAll(C._BASE_DN_RE, text).map(function (m) { return m[1]; });
+    if (isDsaInfo || /^\s*(?:Naming contexts|defaultNamingContext|rootDomainNamingContext)\s*:/im.test(text)) {
+      reAll(/^\s*(?:Naming contexts|defaultNamingContext|rootDomainNamingContext)\s*:\s*((?:\r?\n[ \t]+[^\r\n]+)+)/gim, text).forEach(function (bm) {
+        reAll(/\b(DC=[A-Za-z0-9_-]+(?:\s*,\s*DC=[A-Za-z0-9_-]+)+)\b/gi, bm[1]).forEach(function (dm) {
+          rawDns.push(dm[1].replace(/\s+/g, ''));
+        });
+      });
+    }
+    var dns = C.uniqueSortedCI(rawDns);
     if (!dns.length) {
       var dnMatches = reAll(/^\s*(?:distinguishedName|dn)\s*:\s*.*?\b(DC=[A-Za-z0-9_-]+(?:\s*,\s*DC=[A-Za-z0-9_-]+)+)\s*$/im, text);
       dns = C.uniqueSortedCI(dnMatches.map(function (m) { return m[1].replace(/\s+/g, ''); }));
     }
     var normalizedDns = C.uniqueSortedCI(dns.map(function (d) {
-      return String(d || '').replace(/^(?:DC=(?:DomainDnsZones|ForestDnsZones)\s*,\s*)+/i, '');
+      return String(d || '').replace(/^(?:DC=(?:DomainDnsZones|ForestDnsZones)|CN=(?:Configuration|Schema))\s*,\s*/i, '').replace(/^(?:CN=(?:Configuration|Schema)\s*,\s*)+/i, '');
     }).filter(Boolean));
     var firstDom = '';
     normalizedDns.forEach(function (baseDn) {
@@ -1138,11 +1147,54 @@
         _add(facts, mkFact('host.domain', 'host:' + ws.target, { domain: domain }, S, source));
       }
       _add(facts, mkFact('ad.base_dn', scope, value, S, source));
-      _add(facts, mkFact('ldap.reachable', 'host:' + ws.target, { tool: 'ldapsearch' }, S, source));
+      _add(facts, mkFact('ldap.reachable', 'host:' + ws.target, { tool: isDsaInfo ? 'ldap3' : 'ldapsearch' }, S, source));
     });
+    var dseHostM = /^\s*dnsHostName\s*:\s*(?:([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)|\r?\n[ \t]+([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+))\s*$/im.exec(text);
+    if (dseHostM) {
+      var dseFqdn = (dseHostM[1] || dseHostM[2] || '').trim().replace(/\.$/, '').toLowerCase();
+      if (dseFqdn && dseFqdn.indexOf('.') >= 0) {
+        _add(facts, mkFact('host.fqdn', 'host:' + ws.target, { fqdn: dseFqdn }, S, source));
+        _add(facts, mkFact('host.hostname', 'host:' + ws.target, { name: dseFqdn.split('.')[0] }, S, source));
+      }
+    }
+    if (isDsaInfo) {
+      _add(facts, mkFact('ldap.reachable', 'host:' + ws.target, { tool: 'ldap3' }, S, source));
+      var dsaCmdHay = String(command || source || '') + '\n' + text.slice(0, 400);
+      if (!/\buser\s*=\s*['"][^'"]+['"]|\s-(?:D|W|u)\s+\S/i.test(dsaCmdHay)) {
+        _add(facts, mkFact('ad.anonymous_bind', firstDom ? ('domain:' + firstDom) : C._scope_for_domain(ws), { tool: 'ldap3' }, S, source));
+      }
+    }
     _parse_ldif_custom_pwd_attrs(text, ws, source, facts, firstDom);
   }
   C._parse_ldapsearch = _parse_ldapsearch;
+
+  function _parse_ldapdomaindump(text, ws, command, source, facts) {
+    if (!text) return;
+    var cmdHay = String(command || source || '') + '\n' + text;
+    if (!/\bldapdomaindump\b/i.test(cmdHay) && !(/\[\*\]\s*Connecting to host\.\.\./i.test(text) && /\[\+\]\s*Bind OK\b/i.test(text))) return;
+    if (!/\[\+\]\s*Bind OK\b/i.test(text) || /\b(?:invalidCredentials|Bind failed|LDAPBindError)\b/i.test(text)) return;
+    var h = 'host:' + ws.target;
+    _add(facts, mkFact('ldap.reachable', h, { tool: 'ldapdomaindump' }, S, source));
+    var uM = /(?:^|\s)(?:-u|--user)\s+(?:(['"])([^'"\r\n]*)\1|([^\s'"]+))/i.exec(cmdHay);
+    var pM = /(?:^|\s)(?:-p|--password)\s+(?:(['"])([^'"\r\n]*)\1|([^\s'"]+))/i.exec(cmdHay);
+    var rawUser = uM ? (uM[2] !== undefined ? uM[2] : (uM[3] || '')).trim().replace(/\\\\/g, '\\') : '';
+    var rawSec = pM ? (pM[2] !== undefined ? pM[2] : (pM[3] || '')).trim() : '';
+    var dom = '', user = rawUser;
+    if (user.indexOf('\\') >= 0) {
+      dom = user.split('\\')[0].trim();
+      user = user.split('\\').slice(1).join('\\');
+    } else if (user.indexOf('@') >= 0) {
+      dom = user.split('@')[1].trim();
+      user = user.split('@')[0];
+    }
+    user = C._clean_username(user);
+    if (user && !/^(?:anonymous|guest)$/i.test(user) && C._valid_username(user, true)) {
+      _add_authenticated_service(facts, ws, source, 'ldap', user, rawSec, dom || C._domain_from_facts(ws), false, 'ldapdomaindump');
+    } else if (!rawUser) {
+      _add(facts, mkFact('ad.anonymous_bind', C._scope_for_domain(ws, dom), { tool: 'ldapdomaindump' }, S, source));
+    }
+  }
+  C._parse_ldapdomaindump = _parse_ldapdomaindump;
 
   function _parse_smb_shares(text, ws, source, facts, command) {
     var cmdStr = String(command || (ws && ws._lastNxcCmd) || source || '');
@@ -1281,6 +1333,35 @@
             return (n === 'ADMIN$' || n === 'C$') && sh.readable === true;
           });
           _add_authenticated_service(facts, ws, source, 'smb', smUser, smSecret, smDom, smHasAdmin, 'smbmap');
+        }
+      }
+    }
+    var scFollowPr = String((ws && ws.context && ws.context.followPrompt) || '');
+    if (/\bsmbclient\b/i.test(cmdStr) && !/\bNT_STATUS_/i.test(text) &&
+        /Try "help" to get a list of possible commands\.|^\s*smb:\s*\\[^>]*>/im.test(text + '\n' + scFollowPr)) {
+      _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbclient' }, S, source));
+      var scShareM = /(?:\/\/|\\\\)[^/\\\s'"]+[/\\]([^/\\\s'"]+)/.exec(cmdStr);
+      var scShareName = scShareM ? scShareM[1].replace(/['"]+$/g, '').trim() : '';
+      if (scShareName && !shares.some(function (sh) { return (sh.name || '').toLowerCase() === scShareName.toLowerCase(); })) {
+        addShare(scShareName, 'READ', /^IPC\$$/i.test(scShareName) ? 'IPC' : (/^PRINT\$$/i.test(scShareName) ? 'Printer' : 'Disk'));
+      }
+      var scUArg = C._command_arg(cmdStr, ['-U', '--user']);
+      if (scUArg && !/(?:^|\s)-N(?:\s|$)/.test(cmdStr)) {
+        var scRawU = scUArg, scPass = '', scDom = '';
+        if (scRawU.indexOf('%') >= 0) {
+          scPass = scRawU.split('%').slice(1).join('%');
+          scRawU = scRawU.split('%')[0];
+        }
+        if (scRawU.indexOf('\\') >= 0) {
+          scDom = scRawU.split('\\')[0];
+          scRawU = scRawU.split('\\').slice(1).join('\\');
+        } else if (scRawU.indexOf('/') >= 0) {
+          scDom = scRawU.split('/')[0];
+          scRawU = scRawU.split('/').slice(1).join('/');
+        }
+        var scCleanU = C._clean_username(scRawU);
+        if (scCleanU && !/^(?:guest|anonymous|null|''|"")$/i.test(scCleanU) && C._valid_username(scCleanU, true)) {
+          _add_authenticated_service(facts, ws, source, 'smb', scCleanU, scPass, scDom || C._domain_from_facts(ws), /^(?:ADMIN\$|C\$)$/i.test(scShareName), 'smbclient');
         }
       }
     }
@@ -3044,19 +3125,48 @@
   var _LAPS_NXC_RE = /^.*?Computer:\s*(?<comp>\S+)\s+User:\s*(?<user>\S*)\s+Password:\s*(?<pw>\S.*?)\s*$/im;
   var _LAPS_ATTR_RE = /\bms-?MCS-AdmPwd\b\s*:{1,2}\s*(?<pw>\S[^\r\n]*)/i;
   var _LAPS_V2_RE = /msLAPS-Password\b[\s\S]{0,240}?"p"\s*:\s*"(?<pw>[^"]+)"/i;
+  var _LAPS_DUMPER_RE = /^[ \t]*(?:\[\+\]\s*(?:Found\s+LAPS\s+password\s+for\s+)?)?(?<comp>[A-Za-z0-9_.-]{2,32})\$[ \t]*(?::[ \t]*|[ \t]{2,})(?<pw>[^\s\r\n]{4,128})[ \t]*$/gim;
 
-  function _parse_laps(text, ws, source, facts) {
+  function _parse_laps(text, ws, source, facts, command) {
     if (!text) return;
     var h = 'host:' + ws.target, hit = null;
     var m = reSearch(_LAPS_NXC_RE, text);
     if (m && m.groups.pw) hit = { computer: (m.groups.comp || '').replace(/\$$/, ''), user: m.groups.user || '', password: m.groups.pw.trim(), via: 'nxc-laps' };
     if (!hit) { m = reSearch(_LAPS_V2_RE, text); if (m && m.groups.pw) hit = { password: m.groups.pw.trim(), via: 'mslaps-v2' }; }
     if (!hit) { m = reSearch(_LAPS_ATTR_RE, text); if (m && m.groups.pw && !/^\s*or\b/i.test(m.groups.pw)) hit = { password: m.groups.pw.trim(), via: 'ms-mcs-admpwd' }; }
+    var hasLapsDumperCtx = /\blaps(?:dumper)?(?:\.py)?\b/i.test(String(command || '') + ' ' + String(source || '') + '\n' + text)
+      || /^\s*\[\+\]\s*Found\s+LAPS\s+password\b/im.test(text);
+    var dumperHits = [];
+    if (hasLapsDumperCtx || /^[ \t]*[A-Za-z0-9_.-]{2,32}\$[ \t]{2,}[^\s\r\n]{4,128}[ \t]*$/m.test(text)) {
+      reAll(_LAPS_DUMPER_RE, text).forEach(function (dm) {
+        var dComp = (dm.groups.comp || '').trim();
+        var dPw = (dm.groups.pw || '').trim();
+        if (!dComp || !dPw) return;
+        if (/^\d+:[0-9a-fA-F*]{16,}:[0-9a-fA-F]{32}:/.test(dPw) || /^(?:STATUS_|NT_STATUS_|\(null\)|none|not\s+set)/i.test(dPw)) return;
+        if (!C._valid_password(dPw)) return;
+        dumperHits.push({ computer: dComp, user: 'Administrator', password: dPw, via: 'lapsdumper' });
+      });
+    }
+    if (!hit && dumperHits.length) hit = dumperHits[0];
     if (!hit) return;
     _add(facts, mkFact('ad.laps_lead', h, hit, S, source));
     _add(facts, mkFact('ad.laps', h, hit, S, source));
     // A found cleartext is a candidate, not auto-validated (same rule as any dumped plaintext).
     _add(facts, mkFact('credential.candidate', h, { kind: 'laps_local_admin', user: hit.user || 'Administrator', password: hit.password, computer: hit.computer, via: 'laps' }, S, source));
+    dumperHits.forEach(function (dh) {
+      var compHost = dh.computer || ws.target;
+      var compScope = 'host:' + ws.target;
+      _add(facts, mkFact('credential.available', compScope, {
+        user: 'Administrator',
+        password: dh.password,
+        method: 'laps',
+        computer: compHost + '$',
+        targetBinding: compHost,
+        accountType: 'local',
+        realm: compHost,
+        domain: ''
+      }, S, source));
+    });
   }
   C._parse_laps = _parse_laps;
 

@@ -40,6 +40,8 @@
     ['jamovi', /\bjamovi\b/i, /jamovi\s+(\d+\.\d+(?:\.\d+)?)/i, 'Rj-editor / compute-module RCE'],
     ['splunk', /Splunk\s+(?:Enterprise|Inc)|\/en-US\/account\/login/i, /Splunk[^\d]{0,20}(\d+\.\d+\.\d+)/i, 'custom-app scripted-input RCE; splunk.secret -> $7$ decrypt'],
     ['powershell-web-access', /PowerShell Web Access|\/pswa\//i, null, 'gateway to any Windows host, try captured/guessed domain creds'],
+    ['teamcity', /(?:JetBrains\s+TeamCity|Log in to TeamCity|<title>[^<]*TeamCity|<meta[^>]+content=["'][^"']*TeamCity|TeamCity\s+(?:Enterprise|Professional|Server|Version|\d{4}\.\d+)|^TeamCity-Node-Id:)/im, /TeamCity(?:\s+(?:Enterprise|Professional))?(?:\s+Version)?\s+(\d{4}\.\d+(?:\.\d+)?|\d+\.\d+(?:\.\d+)?)/i, 'CVE-2023-42793 / CVE-2024-27198 unauth admin token creation and RCE'],
+    ['pluxml', /Powered by\s+PluXml|<meta[^>]+generator[^>]+PluXml|\bPluXml\b/i, /PluXml(?:\s+version)?\s+v?(\d+\.\d+(?:\.\d+)?)/i, 'authenticated theme/article PHP code execution and file-upload CVEs'],
   ];
 
   var _ANY_PRODUCT_SIG_RE = new RegExp(_PRODUCT_SIGS.map(function (r) { return '(?:' + r[1].source + ')'; }).join('|'), 'i');
@@ -300,7 +302,7 @@
 
   var _ASSOC_ARRAY_SECRET_HINT_RE = /['"](?:[A-Za-z0-9_.-]+_)?(?:pass(?:word|wd)?|pwd|dbpass|secret|api[_-]?key|token)['"]\s*=>\s*['"][^'"\r\n]{1,128}['"]/i;
   var _XML_ATTR_SECRET_HINT_RE = /<(?:[A-Za-z0-9_.-]+:)?(?:param|property|add|setting|item|entry|var|option|user|account|login|member|admin|server|resource)\b[^>\r\n]{0,1024}?\b(?:(?:name|key|id)\s*=\s*["'][^"'\r\n]{0,128}(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)["']|(?:password|passwd|pwd|secret)\s*=\s*["'][^"'\r\n]{1,256}["'])[^>\r\n]{0,1024}\/?>/i;
-  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle|h2|sqlite):|\bspring\.datasource\.(?:username|password|url)\b|^\s*datasource:\s*\r?\n[\s\S]{1,240}?\busername:\s*\S+|define\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]|\$(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:user(?:name)?|pass(?:word|wd)?|pwd)\s*=|\$\w{1,48}(?:\[[^\]]+\])*?\[\s*['"](?:(?:db|database|mysql|pg|postgres|mssql|sql)_?)?(?:user(?:name)?|pass(?:word|wd)?|pwd)['"]\s*\]\s*=|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>/im;
+  var _DB_CONNECTOR_HINT_RE = /\b(?:mysqli_connect|new\s+mysqli|new\s+PDO|pg_p?connect|SqlConnection|DriverManager\.getConnection)\b|\.(?:put|setProperty)\s*\(\s*"(?:password|pass|pwd)"|\bjdbc:(?:mysql|mariadb|postgresql|sqlserver|oracle|h2|sqlite):|\bspring\.datasource\.(?:username|password|url)\b|^\s*datasource:\s*\r?\n[\s\S]{1,240}?\busername:\s*\S+|define\s*\(\s*['"](?:(?:DB|MYSQL|PG|MSSQL|SQL)_?[A-Z0-9_]*USER(?:NAME)?|[A-Z0-9_]*(?:DB|MYSQL|PG|MSSQL|SQL)_?USER(?:NAME)?)['"]|\$(?:db|database|mysql|pg|postgres|mssql|sql)_?(?:user(?:name)?|pass(?:word|wd)?|pwd)\s*=|\$\w{1,48}(?:\[[^\]]+\])*?\[\s*['"](?:(?:db|database|mysql|pg|postgres|mssql|sql)_?)?(?:user(?:name)?|pass(?:word|wd)?|pwd)['"]\s*\]\s*=|(?:User\s*Id|UID)\s*=[^\r\n;]+;[^\r\n]*(?:Password|PWD)\s*=|(?:Password|PWD)\s*=[^\r\n;]+;[^\r\n]*(?:User\s*Id|UID)\s*=|['"](?:db(?:name|_name|_user|_pass)?|database)['"]\s*=>|^[ \t]*SQLConnectInfo[ \t]+[^\s@#]+@[^\s:#]+(?::\d+)?[ \t]+\S+[ \t]+\S+/im;
 
   function _has_source_secret(text) {
     var t = text || '';
@@ -1022,6 +1024,23 @@
       }
       _emitConcreteSourceCred(facts, scope, source, seen, sdUser, sdPass, sdSvc, 'spring-datasource', true, sdExtra);
     }
+
+    // 8. ProFTPD mod_sql SQLConnectInfo <db>@<host>[:<port>] <user> <pass>
+    if (/SQLConnectInfo/i.test(t)) {
+      var sqlBackendM = /^[ \t]*SQLBackend[ \t]+(postgres(?:ql)?|mysql|mariadb|sqlite3?|odbc)\b/im.exec(t);
+      var sqlBackendSvc = 'mysql';
+      if (sqlBackendM) {
+        var sb = sqlBackendM[1].toLowerCase();
+        sqlBackendSvc = sb.indexOf('postgres') === 0 ? 'postgresql' : (sb === 'mariadb' ? 'mysql' : sb);
+      }
+      reAll(/^[ \t]*SQLConnectInfo[ \t]+([^\s@#]+)@([^\s:#]+)(?::(\d+))?[ \t]+([^\s#"']+)[ \t]+(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s#"'\r\n]+))/gim, t).forEach(function (m) {
+        var sciDb = m[1], sciHost = m[2], sciPort = m[3], sciUser = m[4];
+        var sciPass = m[5] || m[6] || m[7] || '';
+        var sciExtra = { dbname: sciDb, host: sciHost };
+        if (sciPort) sciExtra.port = parseInt(sciPort, 10);
+        _emitConcreteSourceCred(facts, scope, source, seen, sciUser, sciPass, sqlBackendSvc, 'sqlconnectinfo', true, sciExtra);
+      });
+    }
   }
   C._parse_source_db_connectors = _parse_source_db_connectors;
 
@@ -1037,13 +1056,22 @@
 
   // ---- Step 1A: Disclosed web source, HTTP 500 stack traces, and phpinfo() tables ---- //
   var _LOCAL_TOOL_CMD_RE = /^\s*(?:sudo\s+)?(?:python[23]?|pip[23]?|2to3|gcc|g\+\+|impacket-[\w-]+|bloodyad|certipy(?:-ad)?|nxc|netexec|crackmapexec|sqlmap|searchsploit)\b/i;
+  var _SQL_CLIENT_CMD_RE = /^\s*(?:sudo\s+)?(?:mysql|mariadb|psql|sqlcmd|sqlite3?|(?:impacket-)?mssqlclient(?:\.py)?)\b/i;
+  var _INLINE_PHP_PAYLOAD_LOG_RE = /^[^\r\n]*(?:['"]<\?php\b[^\r\n]*\?>['"]|\bINTO\s+(?:OUTFILE|DUMPFILE)\b[^\r\n]*<\?php\b)[^\r\n]*$/gim;
   var _CONFIG_SYNTAX_ERR_LINE_RE = /^\s*(?:Error|Fatal|Warning):\s*invalid line \d+ in \S+:[^\r\n]*$/gim;
+
+  function _strip_operator_php_payload_lines(t, cmdStr) {
+    if (!t || /^\s*(?:<\s*)?HTTP\/[12]/im.test(t)) return t;
+    if (t.indexOf('<?php') < 0 && t.indexOf('<?PHP') < 0) return t;
+    if (_SQL_CLIENT_CMD_RE.test(cmdStr || '')) return '';
+    return t.replace(_INLINE_PHP_PAYLOAD_LOG_RE, '');
+  }
 
   function _has_web_disclosure(text, command) {
     var cmdStr = String(command || '');
     if (/\b(?:swaks|sendmail|smtp-user-enum)\b|\b(?:nc|ncat|netcat|telnet|openssl\s+s_client)\b[^\r\n]*\s(?:25|110|143|465|587|993|995)\b/i.test(cmdStr)) return false;
     if (/^\s*(?:(?:<-|<--|S:)?\s*220[\s-][^\r\n]*\bE?SMTP\b|(?:<-|<--|S:)?\s*\+OK\b[^\r\n]*(?:POP3|Dovecot)|\* OK\b[^\r\n]*IMAP4|(?:->|-->|C:)?\s*(?:EHLO|HELO|MAIL\s+FROM:|RCPT\s+TO:)\s+\S)/im.test(text || '')) return false;
-    var t = _inbound_http_segment(text);
+    var t = _strip_operator_php_payload_lines(_inbound_http_segment(text), cmdStr);
     if (!/\S/.test(t)) return false;
     if (!/php|Fatal error|Parse error|Warning:|Traceback|500\b|Werkzeug|Server Error|Error:|flask|django|fastapi|express|<configuration/i.test(t)) return false;
     if (_is_outbound_http_request_only(t)) return false;
@@ -1070,7 +1098,7 @@
   C._has_web_disclosure = _has_web_disclosure;
 
   function _parse_web_disclosure(text, ws, command, source, facts) {
-    var t = _inbound_http_segment(text);
+    var t = _strip_operator_php_payload_lines(_inbound_http_segment(text), String(command || ''));
     if (!_has_web_disclosure(t, command)) return;
     var scope = _scope(ws);
     var kind = 'source_code';
@@ -1127,6 +1155,7 @@
     if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
     if (hasQuote && /"(?:dependencies|devDependencies)"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t)) return true;
     if (hasQuote && /"require(?:-dev)?"\s*:\s*\{[\s\S]{2,2000}?\}/.test(t) && (/"php"\s*:/.test(t) || /"[a-z0-9_.-]+\/[a-z0-9_.-]+"\s*:/.test(t))) return true;
+    if (hasQuote && (/"packages"\s*:\s*\[/.test(t) || /^\s*\[\s*\{/.test(t)) && /"name"\s*:\s*"[a-z0-9_.-]+\/[a-z0-9_.-]+"/i.test(t) && /"version(?:_normalized)?"\s*:\s*"v?\d+\.\d+/i.test(t)) return true;
     if (hasLt && /<dependencies\b[^>]*>[\s\S]{10,4000}?<artifactId>[^<]+<\/artifactId>[\s\S]{1,400}?<version>[^<]+<\/version>/i.test(t)) return true;
     if (hasQuote && /\b(?:implementation|api|compile(?:Only)?|runtimeOnly)\s*\(?\s*['"][A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+:[0-9][A-Za-z0-9_.-]*['"]/.test(t)) return true;
     if (_COMMONS_TEXT_VULN_RE.test(t)) return true;
@@ -1143,6 +1172,25 @@
   }
   C._has_web_manifest = _has_web_manifest;
 
+  var _COMPOSER_PLUMBING_PKG_RE = /^(?:psr\/|composer\/|symfony\/(?:polyfill-|contracts\b|[a-z0-9-]+-contracts\b|console\b|finder\b|process\b|var-dumper\b|filesystem\b|yaml\b|routing\b|http-foundation\b|http-kernel\b|debug\b|error-handler\b|event-dispatcher\b|translation\b|css-selector\b|dom-crawler\b|mime\b)|doctrine\/(?:annotations|cache|collections|common|deprecations|event-manager|inflector|instantiator|lexer|persistence)|ralouphie\/getallheaders|guzzlehttp\/(?:promises|psr7)|paragonie\/|myclabs\/|nikic\/|sebastian\/|phpunit\/|phpdocumentor\/|phpspec\/|theseer\/|webmozart\/|egulias\/|voku\/|brick\/|ramsey\/|monolog\/monolog|vlucas\/phpdotenv| psr\/)/i;
+  var _COMPOSER_NOTABLE_PKG_RE = /^(?:twig\/twig|smarty\/smarty|dompdf\/dompdf|mpdf\/mpdf|tecnickcom\/tcpdf|phpmailer\/phpmailer|swiftmailer\/swiftmailer|laravel\/framework|livewire\/livewire|filp\/whoops|barryvdh\/[a-z0-9_-]+|phpoffice\/[a-z0-9_-]+|intervention\/image|guzzlehttp\/guzzle|firebase\/php-jwt|erusev\/parsedown|league\/commonmark|wikimedia\/less\.php)$/i;
+
+  function _composerPkgToProduct(pkgName) {
+    var parts = String(pkgName || '').split('/');
+    var stem = parts.length === 2 ? parts[1] : parts[0];
+    var low = stem.toLowerCase();
+    var canon = {
+      twig: 'Twig', smarty: 'Smarty', dompdf: 'dompdf', mpdf: 'mPDF',
+      tcpdf: 'TCPDF', phpmailer: 'PHPMailer', swiftmailer: 'SwiftMailer',
+      livewire: 'Livewire', parsedown: 'Parsedown'
+    };
+    if (canon[low]) return canon[low];
+    if (parts.length === 2 && parts[0].toLowerCase() !== low && low === 'framework') {
+      return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    }
+    return stem.charAt(0).toUpperCase() + stem.slice(1);
+  }
+
   function _parse_web_manifest(text, ws, command, source, facts) {
     var t = String(text || '');
     if (!_has_web_manifest(t, command)) return;
@@ -1152,13 +1200,14 @@
     function addPkg(name, ver) {
       var n = String(name || '').trim();
       var v = String(ver || '').trim().replace(/^[\^~>=<v\s]+/, '');
-      if (!n || !v || n === 'php' || seenPkg[n.toLowerCase()]) return;
+      if (!n || !v || n === 'php' || /^ext-/i.test(n) || seenPkg[n.toLowerCase()]) return;
       seenPkg[n.toLowerCase()] = 1;
       packages.push({ name: n, version: v });
     }
 
     // 1. JSON manifests: package.json / composer.json
-    if (t.indexOf('{') >= 0 && /"(?:dependencies|devDependencies|require|require-dev)"\s*:/.test(t)) {
+    if (t.indexOf('{') >= 0 && /"(?:dependencies|devDependencies|require|require-dev)"\s*:/.test(t)
+        && !(/"packages"\s*:\s*\[/.test(t) && /"name"\s*:\s*"[a-z0-9_.-]+\/[a-z0-9_.-]+"/i.test(t) && /"version(?:_normalized)?"\s*:\s*"v?\d+\.\d+/i.test(t))) {
       var blockRe = /"(dependencies|devDependencies|require|require-dev)"\s*:\s*\{([^}]*)\}/g;
       reAll(blockRe, t).forEach(function (bm) {
         var sec = bm[1];
@@ -1167,6 +1216,47 @@
           addPkg(kv[1], kv[2]);
         });
       });
+    }
+
+    // 1b. Composer lockfile / vendor/composer/installed.json package objects
+    if (!packages.length && (/"packages"\s*:\s*\[/.test(t) || /^\s*\[\s*\{/.test(t)) && /"name"\s*:\s*"[a-z0-9_.-]+\/[a-z0-9_.-]+"/i.test(t)) {
+      var parsedJson = null;
+      try {
+        parsedJson = JSON.parse(t.trim());
+      } catch (_e1) {
+        var jStart = t.search(/[\[{]/);
+        var jEndBrace = t.lastIndexOf('}');
+        var jEndBracket = t.lastIndexOf(']');
+        var jEnd = Math.max(jEndBrace, jEndBracket);
+        if (jStart >= 0 && jEnd > jStart) {
+          try { parsedJson = JSON.parse(t.slice(jStart, jEnd + 1)); } catch (_e2) { parsedJson = null; }
+        }
+      }
+      if (parsedJson && typeof parsedJson === 'object') {
+        var pkgArrays = [];
+        if (Array.isArray(parsedJson)) pkgArrays.push(parsedJson);
+        if (Array.isArray(parsedJson.packages)) pkgArrays.push(parsedJson.packages);
+        if (Array.isArray(parsedJson['packages-dev'])) pkgArrays.push(parsedJson['packages-dev']);
+        pkgArrays.forEach(function (arr) {
+          arr.forEach(function (entry) {
+            if (!entry || typeof entry !== 'object') return;
+            var enm = typeof entry.name === 'string' ? entry.name.trim() : '';
+            var evr = typeof entry.version === 'string' ? entry.version.trim()
+              : (typeof entry.version_normalized === 'string' ? entry.version_normalized.trim() : '');
+            if (/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(enm) && /^v?\d+\.\d+/i.test(evr)) {
+              addPkg(enm, evr);
+            }
+          });
+        });
+      }
+      if (!packages.length) {
+        reAll(/"name"\s*:\s*"([a-z0-9_.-]+\/[a-z0-9_.-]+)"[\s\S]{0,640}?"version(?:_normalized)?"\s*:\s*"(v?\d+\.\d+(?:\.\d+)*(?:-[A-Za-z0-9._-]+)?)"/gi, t).forEach(function (im) {
+          addPkg(im[1], im[2]);
+        });
+      }
+      if (packages.length) {
+        manifestType = /composer\.lock\b/i.test(command || '') ? 'composer.lock' : 'installed.json';
+      }
     }
 
     // 2. Maven pom.xml
@@ -1223,8 +1313,8 @@
     if (!packages.length) return;
     var manifestPath = '';
     if (command) {
-      var mpM = /(?:https?|ftp):\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.json|requirements[^\s"'?#]*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"'?#]*))/i.exec(command)
-        || /(\/[^\s"']*(?:package\.json|composer\.json|requirements[^\s"']*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"']*))/i.exec(command);
+      var mpM = /(?:https?|ftp):\/\/[^/\s"']+(\/[^\s"'?#]*(?:package\.json|composer\.(?:json|lock)|installed\.json|requirements[^\s"'?#]*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"'?#]*))/i.exec(command)
+        || /(\/[^\s"']*(?:package\.json|composer\.(?:json|lock)|installed\.json|requirements[^\s"']*\.txt|pom\.xml|build\.gradle|Gemfile(?:\.lock)?|changelog[^\s"']*))/i.exec(command);
       if (mpM) manifestPath = mpM[1];
     }
     var mVal = {
@@ -1235,9 +1325,11 @@
     if (manifestPath) mVal.manifest_path = manifestPath;
     _add(facts, mkFact('web.manifest_disclosed', scope, mVal, S, source));
 
+    var emittedManifestBanner = false;
     packages.forEach(function (pkg) {
       var pLow = pkg.name.toLowerCase();
       if ((pLow === 'commons-text' || pLow === 'org.apache.commons:commons-text' || pLow === 'apache commons text') && /^1\.[5-9](?:\.\d+)?$/.test(pkg.version)) {
+        emittedManifestBanner = true;
         _add(facts, mkFact('exploit.versioned_banner', scope, {
           product: 'Apache Commons Text',
           version: pkg.version,
@@ -1254,6 +1346,43 @@
         }, S, source));
       }
     });
+
+    if (!emittedManifestBanner && (manifestType === 'installed.json' || manifestType === 'composer.lock')) {
+      var notable = [], fallback = [];
+      for (var cpi = 0; cpi < packages.length; cpi++) {
+        var cp = packages[cpi];
+        if (!/^\d+\.\d+/.test(cp.version)) continue;
+        if (_COMPOSER_PLUMBING_PKG_RE.test(cp.name)) continue;
+        var prodName = _composerPkgToProduct(cp.name);
+        var majMinM = /^(\d+\.\d+)/.exec(cp.version);
+        var entry = {
+          product: prodName,
+          package: cp.name,
+          version: cp.version,
+          search_query: prodName + ' ' + (majMinM ? majMinM[1] : cp.version)
+        };
+        if (_COMPOSER_NOTABLE_PKG_RE.test(cp.name)) notable.push(entry);
+        else fallback.push(entry);
+      }
+      var bannerPool = notable.concat(fallback);
+      if (bannerPool.length) {
+        var bestPkg = bannerPool[0];
+        _add(facts, mkFact('service.version', scope, {
+          product: bestPkg.product,
+          version: bestPkg.version,
+          search_query: bestPkg.search_query,
+          via: 'web-manifest',
+          all: bannerPool.slice(0, 5)
+        }, S, source));
+        _add(facts, mkFact('exploit.versioned_banner', scope, {
+          product: bestPkg.product,
+          version: bestPkg.version,
+          search_query: bestPkg.search_query,
+          via: 'web-manifest',
+          all: bannerPool.slice(0, 5)
+        }, S, source));
+      }
+    }
   }
   C._parse_web_manifest = _parse_web_manifest;
 
@@ -1275,9 +1404,9 @@
   var _WEB_SOURCE_CONTEXT_RE = /(?:<\?php\b|\$_(?:GET|POST|REQUEST|COOKIE|SERVER)\b|\breq\.(?:body|query|params|cookies|headers)\b|\brequest\.(?:args|form|json|cookies|values|GET|POST)\b|\brequire\s*\(\s*['"](?:express|child_process|node-serialize|js-yaml)['"]|\bfrom\s+(?:flask|django|fastapi)\s+import\b|@app\.(?:route|get|post)\b|\brouter\.(?:get|post|put|use)\b)/i;
 
   function _has_web_vuln_sinks(text, command) {
-    var t = _inbound_http_segment(text);
-    if (!/\S/.test(t)) return false;
     var cmdStr = String(command || '');
+    var t = _strip_operator_php_payload_lines(_inbound_http_segment(text), cmdStr);
+    if (!/\S/.test(t)) return false;
     if (!/^\s*(?:<\s*)?HTTP\/[12]/im.test(t)) {
       if (/^\s*(?:sudo\s+)?(?:echo|printf|cat\s*(?:<<|>)|tee|exiftool|convert|magick|msfvenom)\b/i.test(cmdStr)) return false;
       if (/[12]?>>?\s*['"]?[^\s'"]+\.(?:php[0-9]?|phtml|phar|inc|jsp|jspx|asp|aspx|png|jpe?g|gif)\b/i.test(cmdStr)) return false;
@@ -1293,7 +1422,8 @@
   C._has_web_vuln_sinks = _has_web_vuln_sinks;
 
   function _parse_web_vuln_sinks(text, ws, command, source, facts) {
-    var t = _inbound_http_segment(text);
+    var cmdStr = String(command || '');
+    var t = _strip_operator_php_payload_lines(_inbound_http_segment(text), cmdStr);
     if (!/^\s*(?:<\s*)?HTTP\/[12]/im.test(t) && C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text)) return;
     if (!_has_web_vuln_sinks(t, command)) return;
     var scope = _scope(ws);

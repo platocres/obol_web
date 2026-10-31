@@ -351,7 +351,11 @@
       _add(facts, mkFact('host.domain', h, { domain: domain }, S, source));
     }
     var names = {};
-    reAll(C._NMAP_COMPUTER_NAME_RE, text).forEach(function (m) { names[m.groups.name.trim()] = true; });
+    reAll(C._NMAP_COMPUTER_NAME_RE, text).forEach(function (m) {
+      var rawN = m.groups.name.trim();
+      if (rawN.indexOf('.') >= 0) rawN = rawN.split('.')[0];
+      if (rawN) names[rawN] = true;
+    });
     var nameKeys = C.uniqueSortedCI(Object.keys(names));
     if (nameKeys.length) {
       context.name = nameKeys[0];
@@ -461,6 +465,60 @@
       var tFiles = [];
       reAll(/^\|\s*_?([^\s|][^\r\n]*)$/gim, tBlk).forEach(function (m) { tFiles.push(m[1].trim()); });
       if (tFiles.length) _add(facts, mkFact('loot.files', h, { files: tFiles, tool: 'nmap-tftp' }, S, source));
+    }
+    if (/rsync-list-modules:/i.test(text)) {
+      var rBlk = (/rsync-list-modules:([\s\S]*?)(?:\n\d+\/|\nService Info:|\nOS details:|\nNmap done|$)/i.exec(text) || [])[1] || '';
+      var rMods = [], rEntries = [], rUsers = [], rSeen = {};
+      var rGenericModRe = /^(?:files?|data|pub|public|shared?|shares?|backups?|bak|www|web|webroot|html|htdocs|docs?|documents?|media|images?|img|static|assets?|uploads?|downloads?|ftp|rsync|src|source|code|git|repos?|svn|logs?|tmp|temp|var|opt|etc|usr|srv|mnt|home|users?|root|admin|administrator|guest|anonymous|test|testing|dev|prod|staging|archive|archives|packages?|pkg|dist|mirror|mirrors|ubuntu|debian|centos|fedora|alpine|kali|kernel|cpan|cran|ctan|gnu)$/i;
+      reAll(/^\s*\|[_\s]+(?!rsync-list-modules:)([A-Za-z0-9_.-]{1,64})(?:(?:\t+|\s+)([^\r\n]*))?$/gim, rBlk).forEach(function (m) {
+        var modName = m[1].trim(), modComment = (m[2] || '').trim();
+        if (!modName || /^(?:ERROR|WARNING|@RSYNCD)/i.test(modName)) return;
+        var mk = modName.toLowerCase();
+        if (!rSeen[mk]) {
+          rSeen[mk] = true;
+          rMods.push(modName);
+          rEntries.push({ name: modName, comment: modComment });
+        }
+        if (/^[A-Za-z_][A-Za-z0-9_-]{1,31}$/.test(modName) && !rGenericModRe.test(modName) && /\bhome\b/i.test(modComment)) {
+          rUsers.push(modName);
+        }
+      });
+      if (rMods.length) {
+        _add(facts, mkFact('host.up', h, { target: ws.target }, S, source));
+        if (!facts.some(function (f) { return f && /^port:/.test(f.kind) && f.value && f.value.service === 'rsync'; }) && !facts.some(function (f) { return f && f.kind === 'port:873'; })) {
+          var rsPortM = /(?:^|\s)-p\s*(\d{1,5})\b/.exec(String(source || ''));
+          var rsPort = rsPortM ? parseInt(rsPortM[1], 10) : 873;
+          if (!(rsPort >= 1 && rsPort <= 65535)) rsPort = 873;
+          _add(facts, mkFact('port:' + rsPort, h, { port: rsPort, protocol: 'tcp', service: 'rsync' }, S, source));
+        }
+        _add(facts, mkFact('service.rsync', h, { port: 873, protocol: 'tcp', service: 'rsync' }, S, source));
+        _add(facts, mkFact('rsync.reachable', h, { port: 873, tool: 'nmap' }, S, source));
+        _add(facts, mkFact('rsync.modules', h, { modules: rMods, entries: rEntries, count: rMods.length, tool: 'nmap' }, S, source));
+        if (rUsers.length) {
+          _add(facts, mkFact('host.users', h, { users: C.uniqueSortedCI(rUsers), via: 'rsync-modules' }, S, source));
+        }
+      }
+    }
+    if (/redis-info:/i.test(text) || (/^\s*\|\s*Version:\s*\d+\.\d+/im.test(text) && /^\s*\|_?\s*Role:\s*(?:master|slave|replica)\b/im.test(text))) {
+      var rdBlkM = /redis-info:([\s\S]*?)(?:\n\d+\/|\nService Info:|\nOS details:|\nNmap done|$)/i.exec(text);
+      var rdBlk = rdBlkM ? rdBlkM[1] : text;
+      var rdVerM = /^\s*\|_?\s*Version:\s*([0-9][0-9A-Za-z._-]*)/im.exec(rdBlk);
+      var rdOsM = /^\s*\|_?\s*OS:\s*([^\r\n]+)/im.exec(rdBlk);
+      var rdPortM = /^(\d{1,5})\/tcp\s+open\s+redis\b/im.exec(text) || /(?:^|\s)-p\s*(\d{1,5})\b/.exec(String(source || ''));
+      var rdPort = rdPortM ? parseInt(rdPortM[1], 10) : 6379;
+      if (!(rdPort >= 1 && rdPort <= 65535)) rdPort = 6379;
+      _add(facts, mkFact('host.up', h, { target: ws.target }, S, source));
+      _add(facts, mkFact('port:' + rdPort, h, { port: rdPort, protocol: 'tcp', service: 'redis', version: rdVerM ? ('Redis key-value store ' + rdVerM[1]) : undefined }, S, source));
+      _add(facts, mkFact('service.redis', h, { port: rdPort, protocol: 'tcp', service: 'redis', version: rdVerM ? ('Redis key-value store ' + rdVerM[1]) : undefined }, S, source));
+      _add(facts, mkFact('redis.reachable', h, { port: rdPort, tool: 'nmap' }, S, source));
+      _add(facts, mkFact('db.reachable', h, { service: 'redis', port: rdPort, tool: 'nmap' }, S, source));
+      _add(facts, mkFact('redis.unauth', h, { port: rdPort, tool: 'nmap' }, S, source));
+      if (rdVerM) {
+        _add(facts, mkFact('service.version', h, { port: rdPort, service: 'redis', product: 'Redis', version: rdVerM[1], raw: 'Redis ' + rdVerM[1] }, S, source));
+      }
+      if (rdOsM && C._add_os_from_text) {
+        C._add_os_from_text(rdOsM[1].trim(), ws, source, facts, 'nmap-redis', 'high', true);
+      }
     }
     if (/http-(?:ls|enum|robots\.txt):/i.test(text) && !facts.some(function (f) { return f && f.kind === 'web.paths'; })) {
       var scriptPathsVal = _collect_nmap_http_paths(text);
@@ -665,11 +723,24 @@
     if (snmpOs) C._add_os_observation(facts, ws, source, 'linux', snmpOs[1], 'high', 'nmap-snmp', true);
     var osText = text
       .replace(/^\s*\d+\/(?:tcp|udp)\s+(?:closed|filtered|unfiltered|open\|filtered)\b[^\r\n]*$/gim, '')
-      .replace(/^\s*(?:\|[_ ]?\s*)?215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
+      .replace(/^\s*(?:\|[_ ]?\s*)?215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '')
+      .replace(/([%(])P=[A-Za-z0-9._-]+/g, '$1');
     C._add_os_from_text(osText, ws, source, facts, 'nmap', 'high', true);
+
+    var explicitOpenSet = {}, explicitNonOpenSet = {};
+    reAll(C._NMAP_OPEN_RE, text).forEach(function (m) {
+      var pText = m.groups.port, ln = m[0];
+      var pr = ln.toLowerCase().indexOf(pText + '/udp') >= 0 ? 'udp' : 'tcp';
+      explicitOpenSet[parseInt(pText, 10) + '/' + pr] = true;
+    });
+    reAll(/^[ \t]*(?<port>\d{1,5})\/(?<proto>tcp|udp)[ \t]+(?:closed|filtered|unfiltered)\b/gim, text).forEach(function (m) {
+      var key = parseInt(m.groups.port, 10) + '/' + m.groups.proto.toLowerCase();
+      if (!explicitOpenSet[key]) explicitNonOpenSet[key] = true;
+    });
 
     reAll(C._NMAP_DISCOVERED_RE, text).forEach(function (m) {
       var port = parseInt(m.groups.port, 10), proto = m.groups.proto.toLowerCase();
+      if (explicitNonOpenSet[port + '/' + proto]) return;
       openPorts[port + '/' + proto] = { port: port, protocol: proto };
     });
     reAll(C._NMAP_OPEN_RE, text).forEach(function (m) {
@@ -716,7 +787,7 @@
     var rustRe = /^\s*Open\s+(?:\d{1,3}(?:\.\d{1,3}){3}|\[?[0-9a-fA-F:]+\]?):(\d{1,5})\s*$/gim, rm;
     while ((rm = rustRe.exec(text)) !== null) {
       var rPort = parseInt(rm[1], 10);
-      if (rPort > 0 && rPort <= 65535 && !openPorts[rPort + '/tcp']) {
+      if (rPort > 0 && rPort <= 65535 && !openPorts[rPort + '/tcp'] && !explicitNonOpenSet[rPort + '/tcp']) {
         openPorts[rPort + '/tcp'] = { port: rPort, protocol: 'tcp' };
       }
     }
@@ -854,6 +925,14 @@
           _add(facts, mkFact('service.vnc', h, { port: value.port, protocol: 'tcp', service: 'vnc', version: rfbVer }, S, source));
           _add(facts, mkFact('vnc.reachable', h, { port: value.port, protocol: 'tcp', service: 'vnc' }, S, source));
           promotedNonHttpProto = true;
+        }
+      } else if (value.protocol === 'tcp' && pBlkDec && (/^ftp(?:-data)?$/i.test(rawSvcClean) || normSvc === 'ftp')) {
+        var knownFtpGreetM = /(?:^|[\r\n"|\s])220[- ]([^\r\n"\\]{2,160})/i.exec(pBlkDec);
+        if (knownFtpGreetM && !/\bE?SMTP\b/i.test(knownFtpGreetM[1])) {
+          var knownFtpLine = knownFtpGreetM[1].trim();
+          if (knownFtpLine) {
+            _add(facts, mkFact('ftp.banner', h, { port: value.port, banner: knownFtpLine, banners: [knownFtpLine] }, S, source));
+          }
         }
       }
 

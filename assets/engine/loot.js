@@ -55,18 +55,19 @@
   // Feeding these to kerbrute / spraying / AS-REP roasting wastes requests and, for a bad list, trips
   // KDC_ERR_C_PRINCIPAL_UNKNOWN. Mirrors the pack's awk HANDOFF filter so the one-command heredoc and the
   // hand-rolled pipeline agree. Real accounts (Administrator, krbtgt, svc-*, people) are kept.
+  var _POSIX_DAEMON_PSEUDO_USER_RE = /^(?:daemon|bin|sys|sync|games|man|lp|mail|news|uucp|proxy|backup|list|irc|gnats|nobody|systemd-[\w-]+|messagebus|tss|uuidd|tcpdump|landscape|pollinate|fwupd-refresh|usbmux|avahi|colord|geoclue|pulse|rtkit|saned|hplip|gdm|_[\w-]+)$/i;
   function isNoiseUser(u) {
     return /\$$/.test(u) || /^\$/.test(u) || /^SM_/.test(u) || /^HealthMailbox/i.test(u) || u === '-Username-';
   }
   function usernames(facts) {
     if (!facts || !facts.values) return [];
     var seen = {}, out = [];
-    var lists = facts.values('ad.user_list').concat(facts.values('web.users'));
+    var lists = facts.values('ad.user_list').concat(facts.values('web.users')).concat(facts.values('smtp.users').map(function (sv) { return Object.assign({}, sv || {}, { _filterPosixPseudo: true }); })).concat(facts.values('host.users').map(function (hv) { return Object.assign({}, hv || {}, { _filterPosixPseudo: true }); }));
     lists.forEach(function (v) {
       ((v && v.users) || []).forEach(function (u) {
-        u = String(u == null ? '' : u).trim();
+        u = String((u && typeof u === 'object') ? (u.user || u.username || u.name || '') : (u == null ? '' : u)).trim();
         var key = u.toLowerCase();
-        if (u && !isNoiseUser(u) && !seen[key]) { seen[key] = true; out.push(u); }
+        if (u && !isNoiseUser(u) && !(v && v._filterPosixPseudo && _POSIX_DAEMON_PSEUDO_USER_RE.test(u)) && !seen[key]) { seen[key] = true; out.push(u); }
       });
     });
     out.sort(function (a, b) { var la = a.toLowerCase(), lb = b.toLowerCase(); return la < lb ? -1 : (la > lb ? 1 : 0); });
@@ -116,7 +117,7 @@
   // list is materialized; a discovery move seeds a default names list so it is runnable from the start.
   function spraysUserList(action) {
     var g = [].concat((action && action.requires_all) || [], (action && action.requires_any) || []);
-    return g.indexOf('ad.user_list') >= 0 || g.indexOf('web.users') >= 0;
+    return g.indexOf('ad.user_list') >= 0 || g.indexOf('web.users') >= 0 || g.indexOf('host.users') >= 0 || g.indexOf('smtp.users') >= 0;
   }
 
   function cracksHashFile(action) {

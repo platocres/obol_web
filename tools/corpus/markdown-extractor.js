@@ -204,6 +204,7 @@ const PROMPTS = [
   { kind: 'cmd', hostHint: 'windows', isWinOpenSsh: true, re: /^\s*(?:([A-Za-z0-9_.-]+)\\)?([A-Za-z0-9_.$-]+)@([A-Za-z0-9_.-]+)\s+([A-Za-z]:\\[^*?<>|\r\n]*)>\s?(.*)$/ },
   { kind: 'unix', isBracketUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?\[([\w.-]+)@([\w.-]+)(?:[:\s][^\]]*)?\]\s*[#$%]\s?(.*)$/ },
   { kind: 'unix', isAtUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?([\w.-]+)@([\w.-]+)(?::(?:~(?:\/(?!.*(?:  |:\/\/))[^$#%\t\r\n]{0,96})?|\/(?!.*(?:  |:\/\/))[^$#%\t\r\n]{0,96}|[^\s#$%]*)|\s+(?:~(?:\/[^\s#$%]*)?|\/[^\s#$%]*))?\s*[#$%](?:\s+(.*)|\s*)$/ },
+  { kind: 'unix', isAtUnix: true, re: /^\s*(?:\([^)\r\n]+\)\s*)?([\w.-]+)@([\w.-]+)(?::(?:~(?:\/(?!.*(?:  |:\/\/))[^$#%\t\r\n]{0,96})?|\/(?!.*(?:  |:\/\/))[^$#%\t\r\n]{0,96}|[^\s#$%]*)|\s+(?:~(?:\/[^\s#$%]*)?|\/[^\s#$%]*))\s*[#$]((?:(?:sudo|su|id|whoami|pwd|uname|hostname|cat|ls|cd|find|grep|egrep|fgrep|head|tail|more|less|strings|file|stat|chmod|chown|cp|mv|rm|mkdir|touch|echo|printf|env|export|ps|netstat|ss|ip|ifconfig|arp|route|crontab|python3?|perl|php|ruby|bash|sh|nc|ncat|netcat|socat|wget|curl|ssh|scp|ftp|mysql|psql|redis-cli|git|tar|unzip|zip|base64|xxd|awk|sed|cut|sort|uniq|wc|which|whereis|getcap)(?=\s|[;|&><]|$)|\.\/[A-Za-z0-9_.-]+|\/(?:bin|sbin|usr|opt|tmp|var|etc|home|root)\/[A-Za-z0-9_./-]+).*)$/ },
   { kind: 'unix', re: /^\s*(?:sh|bash|zsh|dash|ksh)-[\d.]+\s*[#$]\s?(.*)$/ },
   { kind: 'unix', hostHint: 'remote-linux', isCustomSuidBash: true, re: /^\s*([A-Za-z0-9_.-]{2,32}-[3-6]\.\d+)([#$])(?:\s+(.*)|\s*)$/ },
   { kind: 'unix', hostHint: 'remote-linux', isPseudoShell: true, re: /^\s*([A-Za-z0-9_.-]{2,32}-shell)\s*[#$]\s+(\S.*)$/ },
@@ -353,6 +354,24 @@ function peelNestedPrompts(res, opts) {
 
 function matchPromptLine(rawLine, opts) {
   const line = stripAnsi(rawLine);
+  if (opts && opts.inPythonRepl) {
+    const pyTwoM = line.match(/^\s*>>\s+((?:print|import|from|[A-Za-z_][A-Za-z0-9_]*\s*(?:=|\(|\.))[^\r\n]*)$/);
+    if (pyTwoM) {
+      const raw = (pyTwoM[1] || '').trim();
+      return {
+        tool: 'python',
+        rawCommand: raw,
+        command: raw,
+        kind: 'repl',
+        user: '',
+        host: '',
+        hostHint: '',
+        isHash: false,
+        isDollar: false,
+        promptLine: rawLine
+      };
+    }
+  }
   for (const p of PROMPTS) {
     const m = line.match(p.re);
     if (!m) continue;
@@ -775,6 +794,7 @@ function isCommandLikeLine(line) {
   if (LINUX_CAPABILITY_LINE_RE.test(trimmed)) return false;
   let s = trimmed.replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '').trim();
   if (!s) return false;
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s+=\s*(?!=)\S/.test(s)) return false;
   const first = s.split(/[\s|;&><]+/)[0].replace(/^["']|["']$/g, '');
   if (!first) return false;
   if (first.indexOf(':') >= 0 && !/^[A-Za-z]:[\\/]/.test(first)) return false;
@@ -814,6 +834,7 @@ function isStrictBareCliCommandLine(rawLine) {
     .replace(/^(?:sudo(?:\s+-\S+)*|proxychains4?(?:\s+-\S+)*|time|rlwrap(?:\s+-\S+)*|&)\s+/i, '')
     .trim();
   if (!s) return false;
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s+=\s*(?!=)\S/.test(s)) return false;
   const firstRaw = (s.split(/[\s|;&><]+/)[0] || '').replace(/^["']|["']$/g, '');
   if (!firstRaw || firstRaw.endsWith(':')) return false;
   if (firstRaw.indexOf(':') >= 0 && !/^[A-Za-z]:[\\/]/.test(firstRaw)) return false;
@@ -1038,6 +1059,9 @@ function classifyFenceBlock(lang, text, contextOpts) {
   }
   if (nonEmptyLines.length >= 2 && CONFIG_PATH_SECTION_HEADER_RE.test(body)) {
     return { include: true, reason: 'bare-config-dump', lang: normLang };
+  }
+  if (nonEmptyLines.length >= 1 && nonEmptyLines.every(l => /^\/(?:var|etc|opt|home|root|usr|srv|tmp|mnt|app|data|www)\/[A-Za-z0-9_./-]+(?::\d+)?:\s*\S/.test(l))) {
+    return { include: true, reason: 'bare-grep-matches', lang: normLang };
   }
   if (nonEmptyLines.length >= 2 && /^https?:\/\/[^\s"'<>]+$/i.test(firstNonEmpty) && !isExternalReferenceUrlOrCommand(firstNonEmpty)) {
     return { include: true, reason: 'bare-http-capture', lang: normLang };
@@ -1434,17 +1458,31 @@ function segmentBlock(blockOrText, opts) {
     const nonEmptyPre = prePromptLines.map(l => l.trim()).filter(l => l && !l.startsWith('#'));
     if (nonEmptyPre.length >= 2) {
       const preText = prePromptLines.join('\n');
+      const hasPreHttpCapture = (
+        /^https?:\/\/[^\s"'<>]+$/i.test(nonEmptyPre[0])
+        && !isExternalReferenceUrlOrCommand(nonEmptyPre[0])
+        && (
+          /^[\[{]/.test(nonEmptyPre[1]) ||
+          /^HTTP\/\d(?:\.\d)?\s+\d{3}\b/i.test(nonEmptyPre[1]) ||
+          /"[A-Za-z0-9_.-]+"\s*:/.test(preText) ||
+          /<(?:!DOCTYPE|html|body|pre|table|form|input|script|div)\b/i.test(preText)
+        )
+      ) || (
+        /^[\[{]/.test(nonEmptyPre[0])
+        && /"(?:user(?:name)?|login|email|pass(?:word|wd)?|secret|token|api[_-]?key|hash|cred)"\s*:/i.test(preText)
+      );
       const hasPreArtifactSig = prePromptLines.some(l => RAW_ARTIFACT_HEADER_RE.test(l.trim()))
         || isSqlmapDumpArtifact(nonEmptyPre)
         || TERMINAL_CONTENT_SIG_RE.test(preText)
-        || /\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{50,}|\$(?:1|5|6|y|apr1)\$[^\s:]{12,}/i.test(preText);
+        || /\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{50,}|\$(?:1|5|6|y|apr1)\$[^\s:]{12,}/i.test(preText)
+        || hasPreHttpCapture;
       if (hasPreArtifactSig) {
         rawUnits.push({
           promptLine: '',
           followPrompt: '',
-          tool: '',
+          tool: hasPreHttpCapture ? 'curl' : '',
           rawCommand: '',
-          command: '',
+          command: hasPreHttpCapture ? 'curl' : '',
           kind: 'unprompted',
           user: '',
           host: '',
@@ -1547,7 +1585,8 @@ function segmentBlock(blockOrText, opts) {
     );
     const matchOpts = Object.assign({}, opts, {
       afterPrompt: sawPrompt,
-      suppressBareHash: suppressBareHash
+      suppressBareHash: suppressBareHash,
+      inPythonRepl: Boolean(cur && cur.tool === 'python')
     });
     const p = matchPromptLine(ln, matchOpts);
     if (p) {
@@ -1751,7 +1790,7 @@ function segmentBlock(blockOrText, opts) {
       const origRestOut = lines.slice(origFirstIdx + 1).join('\n');
 
       const nonEmptyBlockLines = lines.map(l => l.trim()).filter(Boolean);
-      if (classificationReason === 'config-credential-artifact' || RAW_ARTIFACT_HEADER_RE.test(origFirstLine) || isSqlmapDumpArtifact(nonEmptyBlockLines) || (!isCommandLikeLine(origFirstLine) && hasEarlyPemRawArtifact(text, nonEmptyBlockLines))) {
+      if (classificationReason === 'config-credential-artifact' || classificationReason === 'bare-grep-matches' || RAW_ARTIFACT_HEADER_RE.test(origFirstLine) || isSqlmapDumpArtifact(nonEmptyBlockLines) || (!isCommandLikeLine(origFirstLine) && hasEarlyPemRawArtifact(text, nonEmptyBlockLines))) {
         const fullOut = lines.join('\n');
         recordLegacyLeadBridge('', fullOut, origFirstLine, origRestOut);
         rawUnits.push({
@@ -2005,6 +2044,12 @@ function normalizeOcrSidecarEntries(entries, headings) {
       : '';
     const entryKindLow = String(entry.kind || '').trim().toLowerCase();
     const isBrowserKind = entryKindLow === 'browser';
+    const isGenericOcrShellKind = !entryKindLow || entryKindLow === 'terminal' || entryKindLow === 'screenshot' || entryKindLow === 'ocr' || entryKindLow === 'shell' || entryKindLow === 'console';
+    const resolvedOcrTurnKind = isBrowserKind
+      ? 'browser'
+      : ((isGenericOcrShellKind && parsedPrompt && parsedPrompt.kind && parsedPrompt.kind !== 'bare')
+          ? parsedPrompt.kind
+          : (entry.kind || (parsedPrompt && parsedPrompt.kind ? parsedPrompt.kind : 'ocr')));
     const isExternalRef = Boolean(
       entry.externalReference ||
       entry.external_reference ||
@@ -2022,10 +2067,13 @@ function normalizeOcrSidecarEntries(entries, headings) {
       command: cmd,
       stdout: out,
       output: out,
-      kind: isBrowserKind ? 'browser' : (entry.kind || (parsedPrompt && (parsedPrompt.kind === 'powershell' || parsedPrompt.kind === 'cmd') ? parsedPrompt.kind : 'ocr')),
+      kind: resolvedOcrTurnKind,
       user: entry.user || (parsedPrompt && parsedPrompt.user) || '',
       host: entry.host || (parsedPrompt && parsedPrompt.host) || '',
       hostHint: entry.host_hint || derivedHostHint,
+      isRelCwdUnix: Boolean(parsedPrompt && parsedPrompt.isRelCwdUnix),
+      isCustomSuidBash: Boolean(parsedPrompt && parsedPrompt.isCustomSuidBash),
+      isAbsCwdUnix: Boolean(parsedPrompt && parsedPrompt.isAbsCwdUnix),
       externalReference: isExternalRef,
       lineStart: line,
       heading: h
@@ -2217,6 +2265,7 @@ function detectTool(u) {
   if (u && typeof u === 'object' && u.tool) return u.tool;
   const hay = (typeof u === 'string' ? u : ((u && u.command) || '')).trim();
   if (!hay) return 'other';
+  if (/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*\s+=\s*(?!=)\S/.test(hay)) return 'other';
   if (/\bsudo\s+(?:-[A-Za-z]*l\b|--list\b)/i.test(hay)) return 'sudo-l';
   let stripped = hay.replace(WRAPPER_PREFIX_RE, '').trim();
   if (/^(?:echo|printf|cat)\b/i.test(stripped) && stripped.indexOf('|') >= 0) {

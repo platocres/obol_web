@@ -43,7 +43,8 @@
     ['smb.null_session', 'enum'], ['smb.guest_session', 'enum'], ['smb.shares', 'enum'],
     ['enum.deep', 'enum'],
     ['web.content_map', 'enum'], ['web.vhost', 'enum'], ['web.source', 'enum'],
-    ['web.users', 'enum'], ['web.parameterized', 'enum'], ['web.graphql_schema', 'enum'],
+    ['web.users', 'enum'], ['host.users', 'enum'], ['smtp.users', 'enum'], ['rsync.modules', 'enum'],
+    ['web.parameterized', 'enum'], ['web.graphql_schema', 'enum'],
     ['hash.', 'creds'], ['kerberos.tickets', 'creds'], ['credential.', 'creds'],
     ['access.root', 'escalate'], ['access.system', 'escalate'],
     ['access.admin', 'escalate'], ['mssql.sysadmin', 'escalate'],
@@ -174,7 +175,7 @@
       var hasCredOrHashReq = reqs.some(function (k) { return /^(?:credential\.|hash\.)/.test(k || ''); });
       if (!hasCredOrHashReq && Array.isArray(factset.facts) && factset.facts.some(function (f) {
         return f && f.state === ProofState.SUPPORTED
-          && /^(?:web\.fingerprint\.|vuln\.|exploit\.versioned_banner$|service\.(?:web_terminal|ajp13|java-rmi|jenkins)$|web\.upload_form$)/.test(f.kind || '');
+          && /^(?:web\.fingerprint\.|vuln\.|exploit\.versioned_banner$|service\.(?:web_terminal|ajp13|java-rmi|jenkins)$|web\.upload_form$|rsync\.modules$|ftp\.anon_write$)/.test(f.kind || '');
       })) {
         return 0;
       }

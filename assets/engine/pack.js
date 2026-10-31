@@ -1102,7 +1102,7 @@
           }
         }
       }
-      if (allFhCount >= 2 && lastLeadsIdx >= 0) {
+      if (allFhCount >= 1 && lastLeadsIdx >= 0) {
         var beforeLeadsUsers = Object.create(null);
         for (var bfi = 0; bfi <= lastLeadsIdx; bfi++) {
           var bf = enumFactList[bfi];
