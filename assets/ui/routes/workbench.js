@@ -57,6 +57,7 @@
         { id: 'codec',     label: 'Encode & Decode', sub: 'Decode blobs, encode strings & filter bypasses', icon: 'code', aliases: ['encoder', 'decoder'] },
         { id: 'sqli',      label: 'Manual SQLi', sub: 'UNION, auth bypass, blind & file/RCE', icon: 'database' },
         { id: 'wordlists', label: 'Wordlists & Fuzzing', sub: 'SecLists picker, ffuf/ferox/gobuster & CeWL', icon: 'list' },
+        { id: 'burp',      label: 'Burp Co-Pilot', sub: 'Glowing Repeater guide, live mutator & 1-click curl', icon: 'layers', aliases: ['repeater', 'burpsuite'] },
       ]
     },
     {
@@ -1628,6 +1629,18 @@
       + '</div>';
   }
 
+  function burpPanel() {
+    var p = engParams();
+    var inner = (OBOL.burpCopilot && typeof OBOL.burpCopilot.renderPanel === 'function')
+      ? OBOL.burpCopilot.renderPanel({ mode: 'workbench', targetIp: p.target })
+      : '<p class="wb-lead">Burp Co-Pilot module is unavailable.</p>';
+    return '<div class="wb-panel wb-accent-violet">'
+      + '<h2>Burp Repeater Co-Pilot</h2>'
+      + '<p class="wb-lead">Guided 3-step Repeater loop shared with your Cockpit: capture a raw HTTP request once, toggle filter-bypass and injection mutations with live token highlights, copy straight to Burp Repeater or 1-click CLI <code>curl</code>, and verify the response for proof.</p>'
+      + '<div id="wb-burp-host">' + inner + '</div>'
+      + '</div>';
+  }
+
   function panelForTab(active) {
     if (active === 'revshell') return revshellPanel();
     if (active === 'transfer') return transferPanel();
@@ -1638,6 +1651,7 @@
     if (active === 'codec') return codecPanel();
     if (active === 'sqli') return sqliPanel();
     if (active === 'wordlists') return wordlistsPanel();
+    if (active === 'burp') return burpPanel();
     if (active === 'gtfobins') return gtfoPanel();
     if (active === 'explain') return explainPanel();
     return revshellPanel();
@@ -1657,7 +1671,7 @@
     var heroHtml = '<header class="wb-hero">'
       + '<div class="wb-hero-top">'
       + '<div>'
-      + '<div class="wb-kicker">' + (OBOL.ic ? OBOL.ic('terminal') : '') + ' OPERATOR WORKBENCH &middot; 11 OFFLINE BUILDERS &amp; DIAGNOSTIC TOOLS</div>'
+      + '<div class="wb-kicker">' + (OBOL.ic ? OBOL.ic('terminal') : '') + ' OPERATOR WORKBENCH &middot; ' + TABS.length + ' OFFLINE BUILDERS &amp; DIAGNOSTIC TOOLS</div>'
       + '<h1 class="wb-h1">Workbench</h1>'
       + '<p class="wb-sub">Build reverse shells, stage files, configure pivots, forge JWTs, clean hashes, and diagnose errors. Every command auto-fills from your live engagement telemetry below.</p>'
       + '</div>'
@@ -1706,6 +1720,7 @@
     else if (active === 'wordlists') { var wl = mount.querySelector('#wb-wl-out'); if (wl) wl.innerHTML = renderWordlistItems(); }
     else if (active === 'gtfobins') { var gt = mount.querySelector('#wb-gtfo-out'); if (gt) gt.innerHTML = renderGtfoResults(state.gtfoQuery); }
     else if (active === 'jwt') { var jw = mount.querySelector('#wb-jwt-out'); if (jw) jw.innerHTML = renderJwtStudio(); }
+    else if (active === 'burp') { var bp = mount.querySelector('#wb-burp-host'); if (bp && OBOL.burpCopilot) bp.innerHTML = OBOL.burpCopilot.renderPanel({ mode: 'workbench', targetIp: engParams().target }); }
     else if (active === 'explain') { var ex = mount.querySelector('#wb-ex-out'); if (ex) ex.innerHTML = renderExplainResults(state.explainInput); }
   }
 
@@ -1713,7 +1728,7 @@
     if (mount.querySelector('#wb-enc-in')) {
       paintCodecOutputs(mount, state.codecInput);
     }
-    if (mount.querySelector('#wb-ex-out') && !OBOL.parsers && OBOL.lazy && OBOL.lazy.loadGroup) {
+    if ((mount.querySelector('#wb-ex-out') || mount.querySelector('#wb-burp-host')) && !OBOL.parsers && OBOL.lazy && OBOL.lazy.loadGroup) {
       OBOL.lazy.loadGroup('parsers').then(function () {
         var out = mount.querySelector('#wb-ex-out');
         if (out) out.innerHTML = renderExplainResults(state.explainInput);
@@ -1725,6 +1740,14 @@
     var mount = ctx.mount.querySelector('.wb') || ctx.mount;
 
     initActivePanelEffects(mount);
+    if (OBOL.burpCopilot && typeof OBOL.burpCopilot.bindEvents === 'function') {
+      OBOL.burpCopilot.bindEvents(mount, {
+        onRepaint: function () {
+          var bp = mount.querySelector('#wb-burp-host');
+          if (bp) bp.innerHTML = OBOL.burpCopilot.renderPanel({ mode: 'workbench', targetIp: engParams().target });
+        }
+      });
+    }
 
     // Direct tool-card selection (switches in-place immediately and syncs URL hash)
     U.on(mount, 'click', '[data-wb-tab]', function (e, t) {

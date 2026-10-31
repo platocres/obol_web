@@ -187,8 +187,8 @@
         },
         {
           "tool": "curl",
-          "run": "curl -sSI http://{{target}}",
-          "note": "Raw response headers, server banner, powered-by, redirects, and cookies at a glance."
+          "run": "curl -skL -i -c {{lootdir}}/cookies.txt -b {{lootdir}}/cookies.txt {{web_origin}}/",
+          "note": "Fetches response headers, redirects, session cookies, and HTML forms/links in one pass."
         }
       ],
       "requires_all": []

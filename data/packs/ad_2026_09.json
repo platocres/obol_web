@@ -41,11 +41,13 @@
         },
         {
           "tool": "rustscan",
+          "alt": true,
           "run": "rustscan -a {{target}} --ulimit 5000 -- -sV -oN {{scandir}}/nmap-allports.txt",
           "note": "OPTIONAL ACCELERANT: rustscan finds the open ports fast, then (after `--`) hands them to nmap for the version scan, the output is ordinary nmap output that obol parses exactly as above, so nmap stays the source of truth. Use it when a full -p- nmap is too slow; nmap is the fallback when rustscan isn't installed."
         },
         {
           "tool": "masscan",
+          "alt": true,
           "run": "masscan {{target}} -p1-65535 --rate 1000 --open -oG {{scandir}}/masscan.gnmap",
           "note": "OPTIONAL ACCELERANT: masscan sweeps the whole TCP range at a high packet rate, so it is the fastest way to find open ports on a slow target or a wide range. Keep the rate modest on a shared lab. Follow up with nmap -sV on whatever it reports, nmap stays the source of truth for services."
         },

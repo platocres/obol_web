@@ -1574,4 +1574,191 @@
   }
   C._parse_web_vuln_sinks = _parse_web_vuln_sinks;
 
+  // ---- Step 2C: Tier A HTML <form>, CSRF token, and parameterized query-link discovery ---- //
+  var _CSRF_FIELD_NAME_RE = /(?:csrf|xsrf|token|nonce|authenticity|__requestverificationtoken|_token|viewstate|__eventvalidation|form_key)/i;
+  var _PUBLIC_LINK_HOST_RE = /(?:^|\.)(?:github\.com|gitlab\.com|wordpress\.org|w3\.org|schema\.org|googleapis\.com|gstatic\.com|cloudflare\.com|jsdelivr\.net|unpkg\.com|bootstrapcdn\.com|jquery\.com|mozilla\.org|apache\.org|php\.net|portswigger\.net|exploit-db\.com)$/i;
+
+  function _decodeHtmlAttr(s) {
+    return String(s || '')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#0*39;|&apos;/gi, "'")
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&amp;/gi, '&');
+  }
+
+  function _extractAttr(tag, attrName) {
+    var re = new RegExp('\\b' + attrName + '\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\'|([^\\s"\'>/]+))', 'i');
+    var m = re.exec(tag);
+    if (!m) return '';
+    return _decodeHtmlAttr(m[1] !== undefined ? m[1] : (m[2] !== undefined ? m[2] : m[3]));
+  }
+
+  function _resolveFormPath(rawAction, baseDir, baseHost) {
+    var a = String(rawAction || '').trim();
+    if (!a || a === '#' || /^javascript:/i.test(a)) return baseDir || '/';
+    var fullM = /^https?:\/\/([^\/\s?#]+)(\/[^?#]*)?(\?[^#]*)?/i.exec(a);
+    if (fullM) {
+      var h = fullM[1].replace(/:\d+$/, '').toLowerCase();
+      if (_PUBLIC_LINK_HOST_RE.test(h) && (!baseHost || h !== baseHost.toLowerCase())) return '';
+      return (fullM[2] || '/') + (fullM[3] || '');
+    }
+    if (a.charAt(0) === '?') return (baseDir || '/') + a.replace(/#.*$/, '');
+    if (a.charAt(0) === '/') return a.replace(/#.*$/, '');
+    var dir = (baseDir || '/').replace(/\/[^\/]*$/, '/');
+    if (dir.charAt(0) !== '/') dir = '/' + dir;
+    if (dir.slice(-1) !== '/') dir += '/';
+    return (dir + a.replace(/^\.\//, '')).replace(/#.*$/, '');
+  }
+
+  function _has_html_forms(text, command) {
+    var cmdStr = String(command || '');
+    if (/^\s*(?:sudo\s+)?(?:echo|printf|cat\s*(?:<<|>)|tee|msfvenom)\b/i.test(cmdStr)) return false;
+    var t = _inbound_http_segment(text);
+    if (!/\S/.test(t)) return false;
+    if (_is_outbound_http_request_only(t) || _is_unix_account_dump(t)) return false;
+    if (C._looks_like_edb_script && C._looks_like_edb_script(t, command)) return false;
+    if (/<form\b[^>]*>/i.test(t)) return true;
+    if (/<(?:!doctype\s+html|html|body)\b/i.test(t) && /<a\b[^>]*\bhref\s*=\s*["'][^"'#]*\?[A-Za-z0-9_.-]+=/i.test(t)) return true;
+    return false;
+  }
+  C._has_html_forms = _has_html_forms;
+
+  function _parse_html_forms(text, ws, command, source, facts) {
+    var cmdStr = String(command || '');
+    var t = _inbound_http_segment(text);
+    if (!/^\s*(?:<\s*)?HTTP\/[12]/im.test(t) && !/\b(?:curl|wget|httpie)\b/i.test(cmdStr) && C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text)) return;
+    if (_is_sql_session_paste(t, ws, command)) return;
+    if (!_has_html_forms(t, command)) return;
+    var scope = _scope(ws);
+    if (!scope) return;
+
+    var baseOrigin = '';
+    var baseDir = '/';
+    var baseHost = normalizeTarget(ws && ws.target);
+    var cmdUrlM = /\bhttps?:\/\/([^\/\s'"]+)(\/[^\s'"]*?)?(?:['"\s]|$)/i.exec(cmdStr);
+    if (cmdUrlM) {
+      var protoM = /^(https?):\/\//i.exec(cmdUrlM[0]);
+      baseOrigin = (protoM ? protoM[1].toLowerCase() : 'http') + '://' + cmdUrlM[1];
+      baseHost = cmdUrlM[1].replace(/:\d+$/, '');
+      baseDir = (cmdUrlM[2] || '/').replace(/\?.*$/, '') || '/';
+    }
+    var locMatches = reAll(/^[ \t]*(?:<[ \t]*)?Location:[ \t]*(\S+)/gim, t);
+    if (locMatches.length) {
+      var lastLoc = locMatches[locMatches.length - 1][1];
+      var locFullM = /^(https?:\/\/([^\/\s?#]+))(\/[^?#]*)?/i.exec(lastLoc);
+      if (locFullM) {
+        baseOrigin = locFullM[1];
+        baseHost = locFullM[2].replace(/:\d+$/, '');
+        baseDir = locFullM[3] || '/';
+      } else if (lastLoc.charAt(0) === '/') {
+        baseDir = lastLoc.replace(/[?#].*$/, '') || '/';
+      }
+    }
+
+    var forms = [];
+    var formRe = /<form\b([^>]*)>([\s\S]*?)(?:<\/form>|(?=<form\b)|<\/body>|$)/gi;
+    var fm;
+    while ((fm = formRe.exec(t)) !== null && forms.length < 10) {
+      var fAttrs = fm[1] || '';
+      var fBody = (fm[2] || '').slice(0, 32768);
+      var rawAction = _extractAttr(fAttrs, 'action');
+      var resolvedAction = _resolveFormPath(rawAction, baseDir, baseHost);
+      if (!resolvedAction) continue;
+      var method = (_extractAttr(fAttrs, 'method') || 'GET').toUpperCase();
+      if (!/^(?:GET|POST|PUT|DELETE|PATCH)$/.test(method)) method = 'GET';
+      var enctype = (_extractAttr(fAttrs, 'enctype') || '').toLowerCase();
+      var fields = [], userFields = [], csrfFields = [], fileFields = [];
+      var seenField = Object.create(null);
+
+      var ctrlRe = /<(input|textarea|select)\b([^>]*)>([\s\S]*?<\/\1>)?/gi;
+      var cm;
+      while ((cm = ctrlRe.exec(fBody)) !== null && fields.length < 30) {
+        var tagKind = cm[1].toLowerCase();
+        var cAttrs = cm[2] || '';
+        var inner = cm[3] || '';
+        var fName = _extractAttr(cAttrs, 'name').trim();
+        if (!fName) continue;
+        var fType = tagKind === 'input' ? (_extractAttr(cAttrs, 'type') || 'text').toLowerCase() : tagKind;
+        if (fType === 'submit' || fType === 'button' || fType === 'reset' || fType === 'image') continue;
+        var fVal = _extractAttr(cAttrs, 'value');
+        if (!fVal && tagKind === 'select' && inner) {
+          var optM = /<option\b[^>]*\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(inner);
+          if (optM) fVal = _decodeHtmlAttr(optM[1] !== undefined ? optM[1] : optM[2]);
+        }
+        var dedupKey = fName + '::' + fType;
+        if (seenField[dedupKey]) continue;
+        seenField[dedupKey] = 1;
+        var isCsrf = (fType === 'hidden' && _CSRF_FIELD_NAME_RE.test(fName)) || _CSRF_FIELD_NAME_RE.test(fName) && fType === 'hidden';
+        var isFile = fType === 'file';
+        var fieldObj = { name: fName, type: fType, value: String(fVal || '').slice(0, 256), isCsrf: !!isCsrf, isFile: !!isFile };
+        fields.push(fieldObj);
+        if (isCsrf) csrfFields.push(fieldObj);
+        else if (isFile) fileFields.push(fieldObj);
+        else userFields.push(fieldObj);
+      }
+
+      var isMultipart = enctype.indexOf('multipart/form-data') >= 0 || fileFields.length > 0;
+      if (isMultipart && method === 'GET') method = 'POST';
+      var fId = _extractAttr(fAttrs, 'id') || _extractAttr(fAttrs, 'name') || '';
+      var label = method + ' ' + resolvedAction + (fId ? ' (#' + fId + ')' : '');
+      forms.push({
+        index: forms.length,
+        id: fId,
+        label: label,
+        action: resolvedAction,
+        rawAction: rawAction,
+        method: method,
+        enctype: enctype || (isMultipart ? 'multipart/form-data' : 'application/x-www-form-urlencoded'),
+        isMultipart: isMultipart,
+        hasFile: fileFields.length > 0,
+        hasCsrf: csrfFields.length > 0,
+        fields: fields,
+        userFields: userFields,
+        csrfFields: csrfFields,
+        fileFields: fileFields
+      });
+    }
+
+    var paramLinks = [];
+    var seenLink = Object.create(null);
+    var linkRe = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+    var lm;
+    while ((lm = linkRe.exec(t)) !== null && paramLinks.length < 12) {
+      var rawHref = _decodeHtmlAttr(lm[1] !== undefined ? lm[1] : lm[2]).trim();
+      if (!rawHref || rawHref.indexOf('?') < 0 || /^(?:mailto:|tel:|javascript:)/i.test(rawHref)) continue;
+      var resolvedHref = _resolveFormPath(rawHref, baseDir, baseHost);
+      if (!resolvedHref || resolvedHref.indexOf('?') < 0) continue;
+      var qIdx = resolvedHref.indexOf('?');
+      var pathname = resolvedHref.slice(0, qIdx) || '/';
+      var qs = resolvedHref.slice(qIdx + 1);
+      var pairs = qs.split('&');
+      var lParams = [];
+      for (var pi = 0; pi < pairs.length; pi++) {
+        var eq = pairs[pi].indexOf('=');
+        if (eq <= 0) continue;
+        var pk = pairs[pi].slice(0, eq).trim();
+        var pv = pairs[pi].slice(eq + 1).trim();
+        if (!/^[A-Za-z0-9_.\[\]-]{1,48}$/.test(pk)) continue;
+        lParams.push({ name: pk, value: pv.slice(0, 120) });
+      }
+      if (!lParams.length) continue;
+      var sigKey = pathname + '?' + lParams.map(function (p) { return p.name; }).join('&');
+      if (seenLink[sigKey]) continue;
+      seenLink[sigKey] = 1;
+      paramLinks.push({ path: resolvedHref, pathname: pathname, params: lParams });
+    }
+
+    if (!forms.length && !paramLinks.length) return;
+    _add(facts, mkFact('web.forms_discovered', scope, {
+      forms: forms,
+      links: paramLinks,
+      count: forms.length,
+      linkCount: paramLinks.length,
+      baseOrigin: baseOrigin,
+      baseDir: baseDir
+    }, S, source));
+  }
+  C._parse_html_forms = _parse_html_forms;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

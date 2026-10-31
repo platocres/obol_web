@@ -188,8 +188,10 @@
           }).join('') + (produced.length > 12 ? '<span class="hl-fact hl-more">+' + (produced.length - 12) + '</span>' : '')
         : '<span class="hl-nofact">no new facts</span>';
       var out = a.stdout || a.sample || '';
+      var isHtmlBody = /<(?:!doctype\s+html|html|form)\b/i.test(out);
+      var lineCount = String(out).split(/\r?\n/).length;
       var body = out
-        ? '<details class="hl-out"><summary>output (' + (String(out).split(/\r?\n/).length) + ' lines)</summary><pre class="hl-pre">' + esc(out) + '</pre></details>'
+        ? '<details class="hl-out' + (isHtmlBody ? ' html-collapse' : '') + '"><summary>' + (isHtmlBody ? 'HTML response body - collapsed (' : 'output (') + lineCount + ' lines)</summary><pre class="hl-pre" tabindex="0"><code>' + esc(out) + '</code></pre></details>'
         : '';
       var tgt = activityTarget(a);
       var stepBadge = _mode === 'replay'
@@ -206,9 +208,9 @@
         + (tgt ? '<span class="pill hl-tgt">' + esc(tgt) + '</span>' : '')
         + (a.action_id ? '<span class="hl-move" title="move">' + esc(a.action_id) + '</span>' : '')
         + reIpBadge
-        + '<button class="btn-copy hl-copy" data-copy="' + U.attr(a.command || cmd) + '" title="Copy command">copy</button>'
+        + '<button type="button" class="btn-copy hl-copy" data-copy="' + U.attr(a.command || cmd) + '" title="Copy command">copy</button>'
         + '</div>'
-        + '<pre class="hl-cmd"><code>' + esc(cmd) + '</code></pre>'
+        + '<pre class="hl-cmd" tabindex="0"><code>' + esc(cmd) + '</code></pre>'
         + (_mode === 'replay' ? '' : (a.outcome && OBOL.ingest ? OBOL.ingest.renderOutcome(a.outcome, { noPrompt: true }) : ''))
         + '<div class="hl-facts">' + chips + '</div>'
         + body

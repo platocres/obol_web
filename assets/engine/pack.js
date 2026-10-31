@@ -589,6 +589,7 @@
       OBOL.FIELD_NOTES[this.id] = this.field_notes.slice();
     }
     this.sequence = !!d.sequence;
+    this.stepper = !!d.stepper;
     // Explore-vs-Exploit: a DIAGNOSTIC move is a high-information opener that
     // collapses the search tree (a service scan, an AD orient, an SMB-anon or
     // web-stack probe). In the opening (explore mode) these lead, as data rather
@@ -618,6 +619,18 @@
   }
 
   Action.prototype.producedKinds = function () { return new Set(this.produces); };
+
+  var GUIDED_SEQUENCE_IDS = {
+    'pivot-ligolo': 1,
+    'pivot-chisel-socks': 1,
+    'dns-tunnel': 1,
+    'jdwp-local-privesc': 1
+  };
+  function isGuidedSequenceMove(action) {
+    if (!action) return false;
+    if (action.stepper) return true;
+    return !!(action.sequence && GUIDED_SEQUENCE_IDS[action.id]);
+  }
 
   var AUX_PRODUCED_RE = /^advice\.|^persistence\.|^listener\.|^tunnel\.|^enum\.deep$|^kerberos\.tickets$|^host\.kernel$|^host\.arch$|^host\.multihomed$/;
   var GENERIC_MULTI_KINDS = {
@@ -938,7 +951,8 @@
       });
       return applicable;
     }
-    var allApplicableCompleted = false, someApplicableCompleted = false, someCleanCompleted = false;
+    var isGuidedSeq = isGuidedSequenceMove(this);
+    var allApplicableCompleted = false, someApplicableCompleted = false, someCleanCompleted = false, allRequiredSeqCleanCompleted = false;
     var appList = [];
     if (facts.context && facts.commandCompleted) {
       if (this.id === 'validate-credential' || actionMayMatchCompletedActivity(action, facts)) {
@@ -948,6 +962,11 @@
         if (someApplicableCompleted) {
           someCleanCompleted = cleanFn === facts.commandCompleted ? true : appList.some(function (entry) { return cleanFn(action, entry.cmd, entry.index); });
           allApplicableCompleted = appList.length > 0 && appList.every(function (entry) { return facts.commandCompleted(action, entry.cmd, entry.index); });
+          if (isGuidedSeq) {
+            var reqSeq = appList.filter(function (entry) { return !(entry.cmd && entry.cmd.alt); });
+            if (!reqSeq.length) reqSeq = appList;
+            allRequiredSeqCleanCompleted = reqSeq.length > 0 && reqSeq.every(function (entry) { return cleanFn(action, entry.cmd, entry.index); });
+          }
         }
       }
     }
@@ -1084,7 +1103,7 @@
     if (!rawPk.length) return false;
     var pk = sMeta.settledPk;
     if (!sMeta.hasPrimaryPk && facts.commandCompleted) {
-      if (someCleanCompleted) return true;
+      if (isGuidedSeq ? allRequiredSeqCleanCompleted : someCleanCompleted) return true;
     }
     if (this.id === 'ad-path-manual' && ((have['ad.attack_paths'] && have['ad.acl_lead']) || have['ad.control_paths'])) return true;
     if (this.id === 'bloodyad-acl' || this.id === 'ad-acl-abuse') {
@@ -1629,6 +1648,8 @@
     'file.nsclient_ini': 'an exposed NSClient++ nsclient.ini config',
     'web.fingerprint.jenkins': 'a detected Jenkins server',
     'web.fingerprint.nvms': 'a detected TVT NVMS-1000 web server',
+    'web.forms_discovered': 'discovered HTML forms and parameters',
+    'web.http_request_captured': 'a captured raw HTTP request',
     'blocker.certutil_usage': 'a certutil download syntax or AV block',
     'advice.kerberos': 'Kerberos troubleshooting guidance',
     'advice.relay': 'NTLM relay target guidance',
@@ -3035,6 +3056,24 @@
       }
       if (hasWinShellSurface && (st.credTier === 'domain_user' || (!onlySpeculativeCrossDomainCred && haveObj['credential.available'])) && !haveObj['access.shell'] && !haveObj['foothold.windows'] && a.transition === 'foothold_win') {
         promote(3, 1);
+      }
+      // Dual-homed pivot promotion: once a host is proven multihomed (especially after local root/system or fresh NIC discovery)
+      // and no pivot tunnel is active yet, surface tunnel establishment ahead of generic post-compromise sweeps.
+      var isPrimaryPivotMove = (a.id === 'pivot-ligolo' || a.id === 'pivot-sshuttle' || a.id === 'pivot-chisel-socks');
+      if (isPrimaryPivotMove && haveObj['host.multihomed'] && !haveObj['tunnel.route'] && !haveObj['tunnel.socks']) {
+        if (haveObj['access.system'] || haveObj['access.root'] || haveObj['access.admin'] || (rec && rec.recent && (rec.recent['host.multihomed'] || rec.recent['pivot.active']))) {
+          promote(3, 3);
+        } else {
+          promote(2, 2);
+        }
+      }
+      // Transparent SSH subnet pivot outranks ligolo/chisel whenever a Linux foothold + SSH + valid credentials or key exist.
+      if (a.id === 'pivot-sshuttle' && !haveObj['tunnel.route'] && !haveObj['pivot.active']
+          && (haveObj['foothold.linux'] || haveObj['ssh.authenticated'])
+          && (haveObj['port:22'] || haveObj['port:2222'] || haveObj['ssh.reachable'] || haveObj['ssh.authenticated'])
+          && (haveObj['ssh.authenticated'] || (!onlySpeculativeCrossDomainCred && (haveObj['credential.available'] || haveObj['credential.plaintext'])) || haveObj['loot.ssh_key'] || haveObj['credential.ssh_key'] || haveObj['ssh.private_key'])) {
+        if (tier < 1) promote(1, 0);
+        score += 2.5;
       }
 
       // ---- Tier 2: Pre-Auth Surface Discovery & Fresh Recon Frontier ----
@@ -6543,6 +6582,7 @@
     buildDeck: buildDeck,
     getOperatorDeck: buildDeck,
     isFlagHuntAction: isFlagHuntAction,
+    isGuidedSequenceMove: isGuidedSequenceMove,
     deriveLocus: deriveLocus,
     deriveScope: deriveScope,
     locusRank: locusRank,

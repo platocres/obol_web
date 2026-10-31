@@ -255,7 +255,8 @@
 
   // Which card is open, which command inside it, which locus tab. Module-level so it survives the route's
   // full re-renders (a fact change re-renders the whole coach); validated against the live set each render.
-  var nsSel = { id: null, idx: 0, locus: null };
+  var nsSel = { id: null, idx: 0, locus: null, userLocus: false, userCmd: false };
+  var _manualPillarMoveId = null;
   // Multi-open (owner-requested, default OFF): when on, clicking a card toggles it and leaves the others
   // open, so you can read several side by side; nsSel stays the FOCUSED card that drives the field-notes
   // canvas. nsOpen is the set of expanded card ids (it always contains nsSel.id). The default single-focus
@@ -314,29 +315,201 @@
     return false;
   }
 
+  function fillOptsForTarget(eng, params, targetIp) {
+    var e = eng || (OBOL.store && OBOL.store.active && OBOL.store.active()) || {};
+    var ui = e.ui || {};
+    var p = params || e.params || {};
+    var tIp = String(targetIp || p.target || (e.params && e.params.target) || '').trim();
+    var formMap = ui.selectedFormByTarget || {};
+    var socksMap = ui.unwrapSocksByTarget || {};
+    return {
+      params: p,
+      profile: e.profile,
+      workspace: OBOL.workspace ? OBOL.workspace.tokens(e) : {},
+      unwrapSocks: !!(tIp && socksMap[tIp]),
+      selectedFormIdx: (tIp && typeof formMap[tIp] === 'number') ? formMap[tIp] : undefined
+    };
+  }
+
+  function pasteHintForCommand(v, cmdObj) {
+    var s = String((v && v.filled) || (cmdObj && cmdObj.run) || '').trim();
+    if (!s) return '';
+    if (/\bligolo-proxy\b|\bproxy\s+-selfcert\b/i.test(s)) {
+      return 'Paste the ligolo-ng startup banner or "Agent joined" session line once the target connects.';
+    }
+    if (/\bchisel\s+server\b/i.test(s)) {
+      return 'Paste the chisel server "Listening on ..." or "session#1: tun: proxy#..." line once connected.';
+    }
+    if (/\bsshuttle\b|\bssh\s+-(?:[fNT]+\s+)*[DLR]\s/i.test(s)) {
+      return 'Paste the "Connected to server" line (or a quick curl / proxychains check through the tunnel).';
+    }
+    if (/\b(?:rlwrap\s+)?nc(?:\.traditional)?\s+-[a-z]*l[a-z]*p?\b|\bsocat\s+TCP-LISTEN\b|\bpwncat(?:-cs)?\b/i.test(s)) {
+      return 'Leave this listener running in Terminal 1; once your shell catches, run id or whoami and paste that back.';
+    }
+    if (/\bpython3?\s+-m\s+http\.server\b|\bupdog\b|\bimpacket-smbserver\b/i.test(s)) {
+      return 'Leave this file server running in Terminal 1 while the target fetches the staged file, then paste the transfer log or target output.';
+    }
+    return '';
+  }
+
+  function _scopedFactValues(facts, kind, targetIp) {
+    if (!facts) return [];
+    var scope = targetIp ? ('host:' + targetIp) : '';
+    if (Array.isArray(facts.facts)) {
+      var out = [];
+      for (var i = 0; i < facts.facts.length; i++) {
+        var f = facts.facts[i];
+        if (!f || f.state !== 'supported' || f.kind !== kind) continue;
+        if (scope && f.scope && f.scope !== scope && f.scope !== 'host:target') continue;
+        if (f.value && typeof f.value === 'object') out.push(f.value);
+      }
+      return out;
+    }
+    if (typeof facts.values === 'function') return facts.values(kind) || [];
+    return [];
+  }
+
+  function renderWebSurfaceStrip(action, facts, eng, targetIp) {
+    if (!action) return '';
+    var BC = OBOL.burpCopilot || null;
+    var eligibleBurp = !!(BC && BC.isEligibleMove(action));
+    var phase = (OBOL.phases && OBOL.phases.phaseOfAction) ? OBOL.phases.phaseOfAction(action) : '';
+    if (!eligibleBurp && phase !== 'web' && action.id !== 'recon-web-triage') return '';
+
+    var formFacts = _scopedFactValues(facts, 'web.forms_discovered', targetIp);
+    var forms = [];
+    var seenForms = {};
+    var links = [];
+    var seenLinks = {};
+    formFacts.forEach(function (fv) {
+      (fv.forms || []).forEach(function (fm) {
+        var k = (fm.method || 'GET') + ' ' + (fm.action || '/');
+        if (!seenForms[k]) { seenForms[k] = 1; forms.push(fm); }
+      });
+      (fv.links || []).forEach(function (lk) {
+        var lkKey = lk.pathname || lk.href || '';
+        if (lkKey && !seenLinks[lkKey]) { seenLinks[lkKey] = 1; links.push(lk); }
+      });
+    });
+
+    if (!forms.length && !links.length && !eligibleBurp) return '';
+
+    var ui = (eng && eng.ui) || {};
+    var tKey = String(targetIp || (eng && eng.params && eng.params.target) || '').trim();
+    var selFormIdx = (tKey && ui.selectedFormByTarget && typeof ui.selectedFormByTarget[tKey] === 'number') ? ui.selectedFormByTarget[tKey] : 0;
+    if (selFormIdx < 0 || selFormIdx >= forms.length) selFormIdx = 0;
+
+    var html = '<div class="ns-web-strip">';
+    if (forms.length || links.length) {
+      html += '<div class="ns-web-strip-main">'
+        + '<span class="ns-web-strip-k">Discovered Forms &amp; Parameters:</span>';
+      if (forms.length > 1) {
+        html += '<div class="ns-form-picker" role="group" aria-label="Select discovered HTML form">'
+          + forms.map(function (fm, idx) {
+            var on = idx === selFormIdx;
+            return '<button type="button" class="ns-form-pill' + (on ? ' on' : '') + '" data-select-form="' + idx + '" data-target-ip="' + U.attr(tKey) + '" aria-pressed="' + (on ? 'true' : 'false') + '">'
+              + esc((fm.method || 'GET') + ' ' + (fm.action || '/')) + '</button>';
+          }).join('')
+          + '</div>';
+      }
+      if (forms.length) {
+        var activeFm = forms[selFormIdx];
+        var fChips = (activeFm.fields || []).slice(0, 6).map(function (fl) {
+          return '<code class="ns-web-field-chip">' + esc(fl.name + (fl.type && fl.type !== 'text' ? (':' + fl.type) : '')) + '</code>';
+        }).join(' ');
+        html += '<span class="ns-web-form-summary"><code>' + esc((activeFm.method || 'GET') + ' ' + (activeFm.action || '/')) + '</code>'
+          + (fChips ? (' ' + fChips) : '')
+          + (activeFm.hasCsrf ? ' <span class="ns-csrf-badge">CSRF token auto-wired</span>' : '')
+          + ((activeFm.isMultipart || activeFm.hasFile) ? ' <span class="ns-csrf-badge">Multipart upload</span>' : '')
+          + '</span>';
+      } else if (links.length) {
+        var lChips = links.slice(0, 4).map(function (lk) {
+          var pNames = (lk.params || []).map(function (p) { return p.name; }).join(',');
+          return '<code class="ns-web-field-chip">' + esc('GET ' + (lk.pathname || '/') + (pNames ? ('?' + pNames) : '')) + '</code>';
+        }).join(' ');
+        html += '<span class="ns-web-form-summary">' + lChips + '</span>';
+      }
+      html += '</div>';
+    }
+
+    if (eligibleBurp) {
+      var curMode = BC.shouldAutoOpen(action, facts, eng, tKey) ? 'burp' : 'cli';
+      html += '<div class="ns-web-mode-toggle" role="group" aria-label="Web execution mode">'
+        + '<button type="button" class="ns-web-mode-btn' + (curMode === 'cli' ? ' on' : '') + '" data-web-mode="cli" data-action="' + esc(action.id) + '" aria-pressed="' + (curMode === 'cli' ? 'true' : 'false') + '">1-Click CLI (curl)</button>'
+        + '<button type="button" class="ns-web-mode-btn' + (curMode === 'burp' ? ' on' : '') + '" data-web-mode="burp" data-action="' + esc(action.id) + '" aria-pressed="' + (curMode === 'burp' ? 'true' : 'false') + '">Burp Guide</button>'
+        + '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
   // The default command for a move at a locus: the house-toolkit (nxc) pick, a switchless probe first, never
   // a command already settled by a held fact, never one still gated on an unearned fact, and preferring
   // untried commands over those already run in the current access epoch.
+  function isGuidedStepperMove(move) {
+    if (!move) return false;
+    if (OBOL.pack && typeof OBOL.pack.isGuidedSequenceMove === 'function') {
+      return OBOL.pack.isGuidedSequenceMove(move);
+    }
+    return !!(move.stepper || (move.sequence && (move.id === 'pivot-ligolo' || move.id === 'pivot-chisel-socks' || move.id === 'dns-tunnel' || move.id === 'jdwp-local-privesc')));
+  }
+
   function firstCmdIndexForLocus(move, locus, facts, variants) {
     if (!move) return 0;
+    var isStepper = isGuidedStepperMove(move);
     var eng = OBOL.store.active() || {};
     var commandParams = move.resolvedContext ? move.resolvedContext.params : Object.assign({}, eng.params || {}, facts && facts.context ? {target:facts.context.target} : {});
-    var filled = variants || OBOL.command.fillAll(move, facts, { params: commandParams, profile: eng.profile, workspace: OBOL.workspace.tokens(eng) });
+    var targetIp = move.contextTarget || (commandParams && commandParams.target) || '';
+    var filled = variants || OBOL.command.fillAll(move, facts, fillOptsForTarget(eng, commandParams, targetIp));
     var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
+    function isGatedCmd(cmd, i) {
+      var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
+      return (move.eligible && commandFacts && !move.eligible(commandFacts))
+        || OBOL.pack.commandSettled(cmd, commandFacts)
+        || (OBOL.pack.commandIsEligible && !OBOL.pack.commandIsEligible(cmd, commandFacts, move))
+        || cmdGated(filled[i]);
+    }
+    function isTriedCmd(cmd, i) {
+      var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
+      var ctx = (commandFacts && commandFacts._resolvedContext) || move.resolvedContext || (facts && facts._resolvedContext);
+      var tgt = move.contextTarget || (ctx && ctx.target) || (commandParams && commandParams.target) || '';
+      var v = filled[i] || {};
+      var checkFn = (isStepper && OBOL.command && OBOL.command.commandRanExactOrSig)
+        ? OBOL.command.commandRanExactOrSig
+        : (OBOL.command && OBOL.command.commandWasRun);
+      var wasRun = checkFn
+        ? checkFn(v.filled || v.run || '', eng.activities || [], commandParams, tgt)
+        : false;
+      return wasRun || cmdWasTriedInEpoch(move, cmd, v, eng, curEpoch, tgt, ctx);
+    }
+    if (isStepper && Array.isArray(move.commands) && move.commands.length) {
+      var seqMap = (eng.ui && eng.ui.seqStepByAction) || {};
+      var validSeq = [];
+      for (var si = 0; si < move.commands.length; si++) {
+        var sc = move.commands[si];
+        if (sc && !sc.alt && !isGatedCmd(sc, si)) validSeq.push(si);
+      }
+      if (!validSeq.length) {
+        for (var sj = 0; sj < move.commands.length; sj++) {
+          if (!isGatedCmd(move.commands[sj], sj)) validSeq.push(sj);
+        }
+      }
+      if (typeof seqMap[move.id] === 'number' && validSeq.indexOf(seqMap[move.id]) >= 0) {
+        return seqMap[move.id];
+      }
+      for (var sk = 0; sk < validSeq.length; sk++) {
+        var idxCand = validSeq[sk];
+        if (!isTriedCmd(move.commands[idxCand], idxCand)) return idxCand;
+      }
+      return validSeq.length ? validSeq[0] : 0;
+    }
     return OBOL.pack.preferredCommandIndex(
       move,
       locus,
       facts || null,
-      function (cmd, i) {
-        var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
-        return (move.eligible && commandFacts && !move.eligible(commandFacts)) || cmdGated(filled[i]);
-      },
-      function (cmd, i) {
-        var commandFacts = facts && facts.forAction ? facts.forAction(move, cmd) : facts;
-        var ctx = (commandFacts && commandFacts._resolvedContext) || move.resolvedContext || (facts && facts._resolvedContext);
-        var tgt = move.contextTarget || (ctx && ctx.target) || (commandParams && commandParams.target) || '';
-        return cmdWasTriedInEpoch(move, cmd, filled[i], eng, curEpoch, tgt, ctx);
-      }
+      isGatedCmd,
+      isTriedCmd
     );
   }
   // "Because <held gate> → expect <first payoff>" - the attack-graph cause/effect in one plain line.
@@ -356,7 +529,7 @@
   // The command rows inside an expanded card: flush-left commands (no tool badge), each selectable and
   // tagged with its own locus + original index so the canvas and the toggle can address it. Reuses the
   // token-fill / "Needs:" / missing-tool logic from commandsBlock.
-  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts, focusMode) {
+  function nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts, focusMode, cardTargetIp) {
     var eng = OBOL.store.active() || {}, acts = eng.activities || [], params = eng.params || {};
     var gatedNeeds = {};   // earned-token -> 1, union across all hidden (gated) commands, for the affordance
     var unavailableVariants = {};
@@ -397,8 +570,10 @@
           + '</div>';
       }
     }
+    var isStepper = isGuidedStepperMove(action);
     var seenCmdKeys = {};
     var locusStep = {};
+    var seqGlobalStep = 0;
     (action.commands || []).forEach(function (cmdObj, i) {
       var commandFacts = facts && facts.forAction ? facts.forAction(action, cmdObj) : facts;
       if (action.eligible && commandFacts && !action.eligible(commandFacts)) {
@@ -442,9 +617,14 @@
           return;
         }
       }
-      var stepNum = (locusStep[locus] = (locusStep[locus] || 0) + 1);
+      var stepNum = isStepper
+        ? (!cmdObj.alt ? (++seqGlobalStep) : '+')
+        : (locusStep[locus] = (locusStep[locus] || 0) + 1);
       var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
-      var ran = OBOL.command.commandWasRun(v.run || v.filled, acts, params) || cmdWasTriedInEpoch(action, cmdObj, v, eng, curEpoch);
+      var rowCheckFn = (isStepper && OBOL.command && OBOL.command.commandRanExactOrSig)
+        ? OBOL.command.commandRanExactOrSig
+        : OBOL.command.commandWasRun;
+      var ran = rowCheckFn(v.filled || v.run, acts, params, cardTargetIp) || cmdWasTriedInEpoch(action, cmdObj, v, eng, curEpoch, cardTargetIp);
       var unfilled = OBOL.command.unfilledTokens(v.filled || '');
       var fillable = unfilled.filter(function (t) { return !DERIVED_TOKENS[t]; });
       var fillRow = fillable.length
@@ -459,16 +639,30 @@
       var webNoteText = (v && v.webNote) || (cmdObj && cmdObj.web_note) || '';
       var noteText = webNoteText || (cmdObj && cmdObj.note) || (fn && fn.what) || (fn && fn.land && fn.land[0]) || '';
       var noteHtml = (webNoteText || (focusMode && isLead && noteText)) ? ('<div class="ns-cmd-note">' + fmtNote(noteText) + '</div>') : '';
+      var socksHtml = v.socksAvailable
+        ? ('<div class="ns-socks-bar">'
+          + '<span class="ns-socks-badge' + (v.socksWrapped ? ' is-on' : ' is-off') + '">'
+          + (v.socksWrapped ? 'Via SOCKS (proxychains4 auto-applied)' : 'SOCKS tunnel active (showing unwrapped command)')
+          + '</span>'
+          + '<button type="button" class="ns-socks-toggle" data-toggle-socks="' + U.attr(cardTargetIp || params.target || '') + '" aria-pressed="' + (v.socksWrapped ? 'false' : 'true') + '">'
+          + (v.socksWrapped ? 'Show Unwrapped' : 'Apply proxychains4')
+          + '</button></div>')
+        : '';
+      var edbHtml = v.edbPatchSummary ? ('<div class="ns-edb-patch-badge">' + esc(v.edbPatchSummary) + '</div>') : '';
+      var webTgtHtml = v.webTargetSummary ? ('<div class="ns-web-target-badge">Auto-wired target: <code>' + esc(v.webTargetSummary) + '</code></div>') : '';
+      var pHintText = isLead ? pasteHintForCommand(v, cmdObj) : '';
+      var pasteHintHtml = pHintText ? ('<div class="ns-paste-hint"><strong>What to paste back:</strong> ' + esc(pHintText) + '</div>') : '';
 
       var rowHtml = '<div class="ns-cmd' + (isLead ? ' active' : '') + (fillable.length ? ' cmd-fillable' : '') + '"'
         + ' tabindex="0" role="group" aria-label="' + U.attr('Command ' + (i + 1) + ', ' + locus) + '"'
         + ' data-cmd-index="' + i + '" data-locus="' + locus + '"' + (hidden ? ' hidden' : '')
         + ' data-cmd="' + U.attr(v.filled || '') + '"'
         + (fillable.length ? ' data-tmpl="' + U.attr(v.filled || '') + '"' : '') + '>'
+        + socksHtml + edbHtml + webTgtHtml
         + '<div class="ns-cmd-line">' + step
         + '<code class="cmd-run-code">' + esc(v.filled || '') + '</code>' + ranTag
-        + '<button class="btn-copy ns-cmd-copy" data-copy="' + U.attr(v.filled || '') + '" title="Copy command" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
-        + noteHtml
+        + '<button type="button" class="btn-copy ns-cmd-copy" data-copy="' + U.attr(v.filled || '') + '" title="Copy command" aria-label="Copy command">' + OBOL.ic('clip') + '</button></div>'
+        + noteHtml + pasteHintHtml
         + fillRow + missingToolHint(action, v) + '</div>';
 
       var itemObj = { index: i, locus: locus, hidden: hidden, isLead: isLead, ran: ran, alt: !!cmdObj.alt, html: rowHtml };
@@ -477,7 +671,49 @@
     });
 
     var rows = '';
-    if (focusMode) {
+    if (isStepper && items.length) {
+      var seqItems = items.filter(function (it) { return !it.alt; });
+      if (!seqItems.length) seqItems = items.slice();
+      var seqAlts = items.filter(function (it) { return it.alt; });
+      var activeStep = seqItems.filter(function (it) { return it.index === selIdx; })[0]
+        || items.filter(function (it) { return it.index === selIdx; })[0]
+        || seqItems.filter(function (it) { return !it.ran; })[0]
+        || seqItems[0];
+      var activePos = seqItems.indexOf(activeStep);
+      if (activePos < 0) activePos = 0;
+      var totalSteps = seqItems.length;
+      var stepK = activePos + 1;
+      var locusText = activeStep.locus === 'onhost' ? 'ON TARGET SHELL' : 'ON KALI TERMINAL 1';
+      var stepPillsHtml = totalSteps > 1
+        ? ('<div class="ns-seq-pills" role="group" aria-label="Sequence steps">'
+          + seqItems.map(function (it, pos) {
+              var on = it === activeStep;
+              return '<button type="button" class="ns-seq-pill' + (on ? ' on' : '') + (it.ran ? ' is-done' : '') + '" data-seq-goto="' + it.index + '" data-action="' + esc(action.id) + '" aria-pressed="' + (on ? 'true' : 'false') + '">Step ' + (pos + 1) + '</button>';
+            }).join('')
+          + '</div>')
+        : '';
+      var nextStepBtn = (stepK < totalSteps)
+        ? ('<button type="button" class="btn-ghost ns-seq-next-btn" data-seq-next="' + seqItems[activePos + 1].index + '" data-action="' + esc(action.id) + '">Step ' + stepK + ' Running -&gt; Show Step ' + (stepK + 1) + '</button>')
+        : '';
+      rows += '<div class="ns-seq-stepper">'
+        + '<div class="ns-seq-bar">'
+        + '<span class="ns-seq-badge is-' + esc(activeStep.locus) + '">STEP ' + stepK + ' OF ' + totalSteps + ' · ' + locusText + '</span>'
+        + stepPillsHtml
+        + nextStepBtn
+        + '</div>'
+        + activeStep.html;
+      var restSeq = items.filter(function (it) { return it !== activeStep; });
+      if (restSeq.length) {
+        var peekLbl = 'Show all ' + totalSteps + ' steps' + (seqAlts.length ? (' (+ ' + seqAlts.length + ' optional)') : '');
+        rows += '<div class="ns-focus-alts">'
+          + '<details class="ns-more-ways ns-seq-peek">'
+          + '<summary class="ns-chip-more-ways">' + esc(peekLbl) + '</summary>'
+          + '<div class="ns-alt-cmds">' + restSeq.map(function (it) { return it.html; }).join('') + '</div>'
+          + '</details>'
+          + '</div>';
+      }
+      rows += '</div>';
+    } else if (focusMode) {
       var lead = null, alts = [];
       items.forEach(function (it) {
         if (it.isLead && !it.ran) {
@@ -648,33 +884,54 @@
     if (opts.selected) {
     var activeEng = OBOL.store.active() || {};
     var dirs = OBOL.workspace.tokens(activeEng);
-    var filled = opts.filled || OBOL.command.fillAll(action, facts, { params: params, profile: activeEng.profile, workspace: dirs });
+    var cardTargetIp = (opts.targetBadge && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(opts.targetBadge))
+      ? opts.targetBadge
+      : (action.contextTarget || (OBOL.store.activeTarget && OBOL.store.activeTarget()) || (params && params.target) || '');
+    var filled = opts.filled || OBOL.command.fillAll(action, facts, fillOptsForTarget(activeEng, params, cardTargetIp));
+    var isStepper = isGuidedStepperMove(action);
     var loci = OBOL.pack.moveCommandLoci(action, facts);
+    var spansBoth = loci.both && !isStepper;
     var isFocused = (action.id === nsSel.id);
     var rawLocus = (isFocused && nsSel.userLocus && nsSel.locus) ? nsSel.locus : OBOL.pack.defaultCommandLocus(action, facts);
-    var selLocus = (isFocused && nsSel.userLocus && loci.both) ? rawLocus : effectiveLocus(action, facts, filled, rawLocus);
+    var selLocus = (isFocused && nsSel.userLocus && spansBoth) ? rawLocus : effectiveLocus(action, facts, filled, rawLocus);
     var curSelCmd = isFocused && action.commands ? action.commands[nsSel.idx] : null;
     var curSelFacts = curSelCmd && facts && facts.forAction ? facts.forAction(action, curSelCmd) : facts;
+    var curEpoch = (OBOL.pack && OBOL.pack.accessEpoch && facts) ? OBOL.pack.accessEpoch(facts) : '';
+    var curSelCtx = (curSelFacts && curSelFacts._resolvedContext) || action.resolvedContext || (facts && facts._resolvedContext);
+    var curCheckFn = (isStepper && OBOL.command && OBOL.command.commandRanExactOrSig)
+      ? OBOL.command.commandRanExactOrSig
+      : OBOL.command.commandWasRun;
+    var curSelTried = curSelCmd ? (
+      curCheckFn(((filled[nsSel.idx] && (filled[nsSel.idx].filled || filled[nsSel.idx].run)) || ''), activeEng.activities || [], params, cardTargetIp)
+      || cmdWasTriedInEpoch(action, curSelCmd, filled[nsSel.idx], activeEng, curEpoch, cardTargetIp, curSelCtx)
+    ) : false;
+    var pinnedSeqIdx = (isStepper && activeEng.ui && activeEng.ui.seqStepByAction && typeof activeEng.ui.seqStepByAction[action.id] === 'number')
+      ? activeEng.ui.seqStepByAction[action.id] : -1;
+    var hasPinnedSeqStep = pinnedSeqIdx >= 0;
     var curSelInvalid = !curSelCmd
-      || (loci.both && OBOL.pack.commandLocus(curSelCmd) !== selLocus)
+      || (spansBoth && OBOL.pack.commandLocus(curSelCmd) !== selLocus)
       || OBOL.pack.commandSettled(curSelCmd, curSelFacts)
-      || cmdGated(filled[nsSel.idx]);
+      || cmdGated(filled[nsSel.idx])
+      || (hasPinnedSeqStep && nsSel.idx !== pinnedSeqIdx)
+      || (!nsSel.userCmd && !hasPinnedSeqStep && curSelTried);
     var selIdx = (isFocused && !curSelInvalid) ? nsSel.idx : firstCmdIndexForLocus(action, selLocus, facts, filled);
     if (isFocused && curSelInvalid) {
       nsSel.idx = selIdx;
     }
+    if (isFocused && isStepper && action.commands && action.commands[selIdx]) {
+      selLocus = OBOL.pack.commandLocus(action.commands[selIdx]);
+      nsSel.locus = selLocus;
+    }
     var pc = (OBOL.pathChooser && OBOL.pathChooser.build) ? OBOL.pathChooser.build(action, facts, params, filled, activeEng) : null;
     var hasDeckMap = !!(OBOL.pathChooser && OBOL.pathChooser.ACTION_TO_DECK && OBOL.pathChooser.ACTION_TO_DECK[action.id]);
     var pcHtml = (pc || hasDeckMap) ? renderPathChooserRegion(action, pc, false, selIdx) : '';
-    var cardTargetIp = (opts.targetBadge && /^\d{1,3}(?:\.\d{1,3}){3}$/.test(opts.targetBadge))
-      ? opts.targetBadge
-      : ((OBOL.store.activeTarget && OBOL.store.activeTarget()) || (params && params.target) || '');
-    var toggle = loci.both
+    var toggle = spansBoth
       ? '<div class="ns-toggle" role="group" aria-label="Where to run this">'
         + '<span class="ns-toggle-k">Run from:</span>'
         + '<button type="button" data-locus="remote" class="' + (selLocus === 'remote' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'remote') + '" title="Run remotely from your Kali terminal">Remote (Kali)</button>'
         + '<button type="button" data-locus="onhost" class="' + (selLocus === 'onhost' ? 'on' : '') + '" aria-pressed="' + (selLocus === 'onhost') + '" title="Run inside an interactive shell on the target host">On-Host Shell</button>'
         + '</div>' : '';
+    var webStripHtml = renderWebSurfaceStrip(action, facts, activeEng, cardTargetIp);
     var leadTip = opts.suggested
       ? '<div class="ns-card-tip">After running a command, click <strong>Paste Output</strong> so OBOL reads the result (or click <strong>Ran - Nothing Found</strong> inside Paste Output if it came back empty).</div>'
       : '';
@@ -682,16 +939,17 @@
       + pcHtml
       + toggle
       + prepBlock(action, facts, dirs)
-      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, loci.both, facts, opts.focusMode) + '</div>'
+      + webStripHtml
+      + '<div class="ns-cmds">' + nsCommandRows(action, filled, selLocus, selIdx, spansBoth, facts, opts.focusMode, cardTargetIp) + '</div>'
       + '<div class="ns-card-actions">'
-      + '<button class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
-      + '<button class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
+      + '<button type="button" class="btn-ghost btn-pasteback" data-action="' + esc(action.id) + '" aria-expanded="false">Paste Output</button>'
+      + '<button type="button" class="btn-ghost btn-done" data-action="' + esc(action.id) + '">Mark Done</button>'
       + nsBuildInTools(action)
       + '</div>'
       + leadTip
-      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[selIdx] && filled[selIdx].filled) || (filled[0] && filled[0].filled) || '') + '" hidden>'
+      + '<div class="move-ingest" data-action="' + esc(action.id) + '" data-cmd="' + U.attr((filled[selIdx] && filled[selIdx].filled) || (filled[0] && filled[0].filled) || '') + '" data-locus="' + esc(selLocus || 'remote') + '" hidden>'
       + '<textarea class="mi-text" placeholder="Paste the terminal output from running this command (or paste multiple commands run in sequence). If it ran cleanly with no output, click Ran - Nothing Found below." spellcheck="false"></textarea>'
-      + '<div class="mi-row"><button class="btn-primary mi-go" data-action="' + esc(action.id) + '" data-target-ip="' + esc(cardTargetIp) + '">Ingest to Facts</button>'
+      + '<div class="mi-row"><button type="button" class="btn-primary mi-go" data-action="' + esc(action.id) + '" data-target-ip="' + esc(cardTargetIp) + '">Ingest to Facts</button>'
       + '<button type="button" class="btn-ghost mi-empty" data-action="' + esc(action.id) + '" data-target-ip="' + esc(cardTargetIp) + '" title="Click if this command completed cleanly with empty output or found nothing">Ran - Nothing Found</button>'
       + '<a class="mi-evlink" href="#/evidence/' + esc(action.id) + '">Big output or a screenshot? Full Evidence</a>'
       + '<span class="mi-result" role="status"></span></div></div>'
@@ -1197,7 +1455,9 @@
     if (!move) return '<div class="ns-canvas-head"><span class="ns-canvas-kick">Field Notes</span></div>'
       + '<div class="ns-canvas-empty">Pick a move on the left to see how to land it, step by step.</div>';
     if (move.resolvedContext) { facts = move.resolvedContext.facts; params = move.resolvedContext.params; }
-    var filled = OBOL.command.fillAll(move, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+    var activeEng = OBOL.store.active() || {};
+    var canvasTargetIp = move.contextTarget || (params && params.target) || (OBOL.store.activeTarget && OBOL.store.activeTarget()) || '';
+    var filled = OBOL.command.fillAll(move, facts, fillOptsForTarget(activeEng, params, canvasTargetIp));
     var cmdText = (filled[idx] && filled[idx].filled) || '';
     var note = OBOL.fieldNote ? OBOL.fieldNote(move, idx) : null;
     var live = nsLiveDoctors(facts);
@@ -1224,14 +1484,25 @@
     var lookSignals = (note && note.look) || [];
     var hasDoctor = (note && note.doctor) || (live && live.length > 0);
 
-    // Active tab preference (default: p1 for zero-scroll focused view)
+    var BC = OBOL.burpCopilot || null;
+    var hasBurpTab = !!(BC && BC.isEligibleMove(move));
+    var allowedTabs = hasBurpTab ? ['p1', 'p2', 'p3', 'p4', 'burp', 'all'] : ['p1', 'p2', 'p3', 'p4', 'all'];
+
+    // Active tab preference (default: p1 for zero-scroll focused view, or burp via Smart Auto-Open)
     var activeTab = 'p1';
     try {
       var savedTab = sessionStorage.getItem('obol.pillar-tab');
-      if (savedTab && ['p1', 'p2', 'p3', 'p4', 'all'].indexOf(savedTab) >= 0) {
+      if (savedTab && allowedTabs.indexOf(savedTab) >= 0) {
         activeTab = savedTab;
       }
     } catch (e) {}
+    if (hasBurpTab && _manualPillarMoveId !== move.id) {
+      if (BC.shouldAutoOpen(move, facts, activeEng, canvasTargetIp)) {
+        activeTab = 'burp';
+      } else if (activeTab === 'burp') {
+        activeTab = 'p1';
+      }
+    }
 
     // Segmented Pillar Tab Bar (keyboard navigable, zero-scroll)
     html += '<div class="anatomy-tabs" role="tablist" aria-label="Anatomy Pillars">'
@@ -1239,6 +1510,7 @@
       + '<button type="button" role="tab" class="anatomy-tab-btn' + (activeTab === 'p2' ? ' on' : '') + '" data-pillar-tab="p2" aria-selected="' + (activeTab === 'p2' ? 'true' : 'false') + '"><span class="tab-badge badge-p2">2</span> Syntax' + (flagsExpl.length ? ' <span class="tab-count">' + flagsExpl.length + '</span>' : '') + '</button>'
       + '<button type="button" role="tab" class="anatomy-tab-btn' + (activeTab === 'p3' ? ' on' : '') + '" data-pillar-tab="p3" aria-selected="' + (activeTab === 'p3' ? 'true' : 'false') + '"><span class="tab-badge badge-p3">3</span> Gotchas' + (mistakes.length || hasDoctor ? ' <span class="tab-warn-dot" title="Gotchas or diagnostic tips available">!</span>' : '') + '</button>'
       + '<button type="button" role="tab" class="anatomy-tab-btn' + (activeTab === 'p4' ? ' on' : '') + '" data-pillar-tab="p4" aria-selected="' + (activeTab === 'p4' ? 'true' : 'false') + '"><span class="tab-badge badge-p4">4</span> Pivot</button>'
+      + (hasBurpTab ? ('<button type="button" role="tab" class="anatomy-tab-btn anatomy-tab-burp' + (activeTab === 'burp' ? ' on' : '') + '" data-pillar-tab="burp" aria-selected="' + (activeTab === 'burp' ? 'true' : 'false') + '"><span class="tab-badge badge-burp">B</span> Burp Co-Pilot</button>') : '')
       + '<button type="button" role="tab" class="anatomy-tab-btn anatomy-tab-all' + (activeTab === 'all' ? ' on' : '') + '" data-pillar-tab="all" aria-selected="' + (activeTab === 'all' ? 'true' : 'false') + '">Show All</button>'
       + '</div>';
 
@@ -1388,6 +1660,17 @@
       + '<button type="button" class="anatomy-next-pill-btn" data-pillar-tab="all">Show All 4 Pillars ≡</button>'
       + '</div>'
       + '</div></section>';
+
+    if (hasBurpTab) {
+      html += '<section class="anatomy-pillar pillar-burp" data-pillar-section="burp"' + (activeTab !== 'all' && activeTab !== 'burp' ? ' hidden' : '') + '>'
+        + '<div class="pillar-header">'
+        + '<span class="pillar-badge badge-burp">Burp Co-Pilot</span>'
+        + '<h4 class="pillar-title">Interactive Repeater Instrument</h4>'
+        + '</div>'
+        + '<div class="pillar-content">'
+        + BC.renderPanel({ targetIp: canvasTargetIp, move: move, facts: facts })
+        + '</div></section>';
+    }
 
     html += '</div>';
     return html;
@@ -2506,12 +2789,19 @@
       selMove = onFlow[0] || selectable[0] || null;
       nsSel.id = selMove ? selMove.id : null;
       nsSel.userLocus = false;
-      var initFilled = selMove ? OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) }) : [];
+      nsSel.userCmd = false;
+      var initTgt = (selMove && selMove.contextTarget) || (params && params.target) || '';
+      var initFilled = selMove ? OBOL.command.fillAll(selMove, facts, fillOptsForTarget(eng, params, initTgt)) : [];
       nsSel.locus = selMove ? effectiveLocus(selMove, facts, initFilled, OBOL.pack.defaultCommandLocus(selMove, facts)) : null;
       nsSel.idx = selMove ? firstCmdIndexForLocus(selMove, nsSel.locus, facts, initFilled) : 0;
+      if (selMove && isGuidedStepperMove(selMove) && selMove.commands && selMove.commands[nsSel.idx]) {
+        nsSel.locus = OBOL.pack.commandLocus(selMove.commands[nsSel.idx]);
+      }
     } else {
+      var selIsStepper = isGuidedStepperMove(selMove);
       var selCmds = selMove.commands || [];
-      var selFilled = OBOL.command.fillAll(selMove, facts, { params: params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+      var selTargetForFill = selMove.contextTarget || (params && params.target) || '';
+      var selFilled = OBOL.command.fillAll(selMove, facts, fillOptsForTarget(eng, params, selTargetForFill));
       if (!nsSel.locus || !nsSel.userLocus) nsSel.locus = OBOL.pack.defaultCommandLocus(selMove, facts);
       if (!nsSel.userLocus) nsSel.locus = effectiveLocus(selMove, facts, selFilled, nsSel.locus);
       // Re-point a stale selection: out of range, OR a command that has since settled (a run-once probe now
@@ -2523,8 +2813,26 @@
       var selCmdFacts = (selCur && facts && facts.forAction) ? facts.forAction(selMove, selCur) : facts;
       var selCtx = (selCmdFacts && selCmdFacts._resolvedContext) || selMove.resolvedContext || (facts && facts._resolvedContext);
       var selTgt = selMove.contextTarget || (selCtx && selCtx.target) || (params && params.target) || '';
-      if (nsSel.idx >= selCmds.length || OBOL.pack.commandSettled(selCur, facts) || cmdGated(selFilled[nsSel.idx]) || OBOL.pack.commandLocus(selCur) !== nsSel.locus || cmdWasTriedInEpoch(selMove, selCur, selFilled[nsSel.idx], eng, selEpoch, selTgt, selCtx)) {
+      var selPinnedIdx = (selIsStepper && eng.ui && eng.ui.seqStepByAction && typeof eng.ui.seqStepByAction[selMove.id] === 'number')
+        ? eng.ui.seqStepByAction[selMove.id] : -1;
+      var selPinnedSeq = selPinnedIdx >= 0;
+      var selCheckFn = (selIsStepper && OBOL.command && OBOL.command.commandRanExactOrSig)
+        ? OBOL.command.commandRanExactOrSig
+        : OBOL.command.commandWasRun;
+      var selWasTried = selCur ? (
+        selCheckFn(((selFilled[nsSel.idx] && (selFilled[nsSel.idx].filled || selFilled[nsSel.idx].run)) || ''), eng.activities || [], params, selTgt)
+        || cmdWasTriedInEpoch(selMove, selCur, selFilled[nsSel.idx], eng, selEpoch, selTgt, selCtx)
+      ) : false;
+      if (nsSel.idx >= selCmds.length
+        || OBOL.pack.commandSettled(selCur, selCmdFacts)
+        || cmdGated(selFilled[nsSel.idx])
+        || (!selIsStepper && OBOL.pack.commandLocus(selCur) !== nsSel.locus)
+        || (selPinnedSeq && nsSel.idx !== selPinnedIdx)
+        || (!nsSel.userCmd && !selPinnedSeq && selWasTried)) {
         nsSel.idx = firstCmdIndexForLocus(selMove, nsSel.locus, facts, selFilled);
+      }
+      if (selIsStepper && selCmds[nsSel.idx]) {
+        nsSel.locus = OBOL.pack.commandLocus(selCmds[nsSel.idx]);
       }
     }
     if (mOpen && nsSel.id) nsOpen[nsSel.id] = true;   // the focused card is always one of the open set
@@ -2672,11 +2980,16 @@
       var id = card.getAttribute('data-action'); if (!id) return;
       nsSel.target = card.getAttribute('data-context-target') || null;
       var fx = freshCtx(); var m = moveById(fx.pack, id, fx); if (!m) return;
+      if (nsSel.id !== id) _manualPillarMoveId = null;
       nsSel.id = id;
       nsSel.userLocus = false;
-      var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+      nsSel.userCmd = false;
+      var mFilled = OBOL.command.fillAll(m, fx.facts, fillOptsForTarget(OBOL.store.active(), fx.params, fx.targetIp));
       nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m, fx.facts));
       nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts, mFilled);
+      if (isGuidedStepperMove(m) && m.commands && m.commands[nsSel.idx]) {
+        nsSel.locus = OBOL.pack.commandLocus(m.commands[nsSel.idx]);
+      }
       hydrateCard(card, m, fx, mFilled);
       // glow + expand follow the selection
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) {
@@ -2775,10 +3088,14 @@
       var id = card.getAttribute('data-action'); if (!id) return;
       nsSel.target = card.getAttribute('data-context-target') || null;
       var fx = freshCtx(); var m = moveById(fx.pack, id, fx); if (!m) return;
-      nsOpen[id] = true; nsSel.id = id; nsSel.userLocus = false;
-      var mFilled = OBOL.command.fillAll(m, fx.facts, { params: fx.params, profile: (OBOL.store.active() || {}).profile, workspace: OBOL.workspace.tokens(OBOL.store.active()) });
+      if (nsSel.id !== id) _manualPillarMoveId = null;
+      nsOpen[id] = true; nsSel.id = id; nsSel.userLocus = false; nsSel.userCmd = false;
+      var mFilled = OBOL.command.fillAll(m, fx.facts, fillOptsForTarget(OBOL.store.active(), fx.params, fx.targetIp));
       nsSel.locus = effectiveLocus(m, fx.facts, mFilled, OBOL.pack.defaultCommandLocus(m, fx.facts));
       nsSel.idx = firstCmdIndexForLocus(m, nsSel.locus, fx.facts, mFilled);
+      if (isGuidedStepperMove(m) && m.commands && m.commands[nsSel.idx]) {
+        nsSel.locus = OBOL.pack.commandLocus(m.commands[nsSel.idx]);
+      }
       hydrateCard(card, m, fx, mFilled);
       Array.prototype.forEach.call(mount.querySelectorAll('.ns-card.selected'), function (o) { o.classList.remove('is-glow'); });
       card.classList.add('selected', 'is-glow'); card.setAttribute('aria-expanded', 'true');
@@ -3254,13 +3571,19 @@
       Array.prototype.forEach.call(card.querySelectorAll('.ns-cmd'), function (x) { x.classList.remove('active'); });
       t.classList.add('active');
       nsSel.idx = parseInt(t.getAttribute('data-cmd-index'), 10) || 0;
+      nsSel.userCmd = true;
+      var rowLoc = t.getAttribute('data-locus');
+      if (rowLoc) nsSel.locus = rowLoc;
       var lead = t;
       var mi = card.querySelector('.move-ingest');
-      if (mi && lead) mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
+      if (mi && lead) {
+        mi.setAttribute('data-cmd', lead.getAttribute('data-cmd') || (lead.querySelector('[data-copy]') && lead.querySelector('[data-copy]').getAttribute('data-copy')) || '');
+        if (rowLoc) mi.setAttribute('data-locus', rowLoc);
+      }
       repaintCanvas();
     }
     U.on(mount, 'click', '.ns-cmd', function (e, t) {
-      if (e.target.closest('.cmd-fill')) return;
+      if (e.target.closest('.cmd-fill') || e.target.closest('[data-toggle-socks]')) return;
       pickCmd(t);
     });
     U.on(mount, 'keydown', '.ns-cmd', function (e, t) {
@@ -3409,6 +3732,7 @@
     U.on(mount, 'click', '[data-pillar-tab]', function (e, t) {
       var tabKey = t.getAttribute('data-pillar-tab');
       if (!tabKey) return;
+      _manualPillarMoveId = nsSel.id;
       try { sessionStorage.setItem('obol.pillar-tab', tabKey); } catch (x) {}
       var canvas = mount.querySelector('#ns-canvas');
       if (!canvas) return;
@@ -3428,6 +3752,72 @@
       var body = canvas.querySelector('.ns-canvas-body');
       if (body) body.scrollTop = 0;
     });
+
+    // Pillar 6: Sequence micro-stepper, SOCKS unwrap toggle, HTML form picker, and CLI/Burp mode switcher
+    function setSequenceStep(actionId, stepIdx) {
+      if (!actionId || isNaN(stepIdx)) return;
+      nsSel.id = actionId;
+      nsSel.idx = stepIdx;
+      nsSel.userCmd = true;
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.seqStepByAction = eng.ui.seqStepByAction || {};
+        eng.ui.seqStepByAction[actionId] = stepIdx;
+      }, 'ui');
+      OBOL.router.render();
+    }
+    U.on(mount, 'click', '[data-seq-next]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      setSequenceStep(t.getAttribute('data-action') || nsSel.id, parseInt(t.getAttribute('data-seq-next'), 10));
+    });
+    U.on(mount, 'click', '[data-seq-goto]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      setSequenceStep(t.getAttribute('data-action') || nsSel.id, parseInt(t.getAttribute('data-seq-goto'), 10));
+    });
+    U.on(mount, 'click', '[data-toggle-socks]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var tIp = t.getAttribute('data-toggle-socks') || (((OBOL.store.active() || {}).params || {}).target) || 'default';
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.unwrapSocksByTarget = eng.ui.unwrapSocksByTarget || {};
+        eng.ui.unwrapSocksByTarget[tIp] = !eng.ui.unwrapSocksByTarget[tIp];
+      }, 'ui');
+      OBOL.router.render();
+    });
+    U.on(mount, 'click', '[data-select-form]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var formIdx = parseInt(t.getAttribute('data-select-form'), 10) || 0;
+      var tIp = t.getAttribute('data-target-ip') || (((OBOL.store.active() || {}).params || {}).target) || 'default';
+      OBOL.store.update(function (eng) {
+        eng.ui = eng.ui || {};
+        eng.ui.selectedFormByTarget = eng.ui.selectedFormByTarget || {};
+        eng.ui.selectedFormByTarget[tIp] = formIdx;
+      }, 'ui');
+      OBOL.router.render();
+    });
+    U.on(mount, 'click', '[data-web-mode]', function (e, t) {
+      if (e.stopPropagation) e.stopPropagation();
+      var mode = t.getAttribute('data-web-mode') || 'cli';
+      var actId = t.getAttribute('data-action') || nsSel.id || '';
+      if (actId) {
+        nsSel.id = actId;
+        _manualPillarMoveId = actId;
+        OBOL.store.update(function (eng) {
+          eng.ui = eng.ui || {};
+          eng.ui.burpModeByAction = eng.ui.burpModeByAction || {};
+          eng.ui.burpModeByAction[actId] = mode;
+        }, 'ui');
+      }
+      try { sessionStorage.setItem('obol.pillar-tab', mode === 'burp' ? 'burp' : 'p1'); } catch (_e) {}
+      OBOL.router.render();
+    });
+    if (OBOL.burpCopilot && typeof OBOL.burpCopilot.bindEvents === 'function') {
+      OBOL.burpCopilot.bindEvents(mount, {
+        onRepaint: function () { repaintCanvas(); },
+        onIngested: function () { OBOL.router.render(); },
+        onVerifiedWin: function () { OBOL.router.render(); }
+      });
+    }
     U.on(mount, 'keydown', '.anatomy-tab-btn', function (e, t) {
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
         var tabs = Array.prototype.slice.call(mount.querySelectorAll('.anatomy-tabs .anatomy-tab-btn'));
@@ -3551,6 +3941,13 @@
       }
       // Ingestion owns outcome semantics. Keep unknown, partial, and environment failures
       // available rather than retiring a move from a zero-fact or generic error heuristic.
+      var pastedActId = box.getAttribute('data-action') || '';
+      nsSel.userCmd = false;
+      if (pastedActId) {
+        OBOL.store.update(function (eng) {
+          if (eng.ui && eng.ui.seqStepByAction) delete eng.ui.seqStepByAction[pastedActId];
+        }, 'ui');
+      }
       _pasteFlash = { outcome: r.outcome, target: tIp || ((OBOL.store.active() || {}).params || {}).target || '' };
       U.toast(OBOL.ingest.outcomeMessage(r));
       t.disabled = false;
@@ -3570,6 +3967,13 @@
         var r = OBOL.ingest.run({ text: '[OBOL: completed with no output / nothing found]', command: box.getAttribute('data-cmd') || '',
           actionId: box.getAttribute('data-action') || '', source: 'paste',
           scope: tIp ? ('host:' + tIp) : undefined, locus: box.getAttribute('data-locus') || nsSel.locus || 'remote', commandObj: inputObj || undefined });
+        var emptyActId = box.getAttribute('data-action') || '';
+        nsSel.userCmd = false;
+        if (emptyActId) {
+          OBOL.store.update(function (eng) {
+            if (eng.ui && eng.ui.seqStepByAction) delete eng.ui.seqStepByAction[emptyActId];
+          }, 'ui');
+        }
         _pasteFlash = { outcome: r.outcome, target: tIp || ((OBOL.store.active() || {}).params || {}).target || '' };
         U.toast(OBOL.ingest.outcomeMessage(r));
         t.disabled = false;

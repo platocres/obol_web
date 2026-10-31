@@ -547,15 +547,16 @@
       var trimmed = rawLine.trim();
       if (!trimmed || /^(?:#|\/\/|\*|\/\*|--|REM\b)/i.test(trimmed)) continue;
       uncommentedLines.push(rawLine);
-      var cm = /^\s*(?:\$)?([A-Za-z_][A-Za-z0-9_]{1,24})\s*=\s*(['"][^'"\r\n]{1,120}['"]|\d{2,5})\s*(?:;|#.*|\/\/.*)?$/.exec(rawLine);
+      var cm = /^\s*(\$)?([A-Za-z_][A-Za-z0-9_]{1,24})\s*=\s*(['"][^'"\r\n]{1,120}['"]|\d{2,5})\s*(?:;|#.*|\/\/.*)?$/.exec(rawLine);
       if (cm) {
-        var cname = cm[1];
-        var cval = cm[2];
+        var hasDollar = !!cm[1];
+        var cname = cm[2];
+        var cval = cm[3];
         if (/^(?:target|target_url|target_ip|base_url|url|host|rhost|rport|victim|victim_ip|lhost|lport|attacker|attacker_ip|srvhost|srvport)$/i.test(cname)) {
           var ckey = cname.toLowerCase();
           if (!seenConst[ckey]) {
             seenConst[ckey] = 1;
-            hardcoded.push({ name: cname, value: cval.replace(/^['"]|['"]$/g, '') });
+            hardcoded.push({ name: cname, value: cval.replace(/^['"]|['"]$/g, ''), numeric: /^\d+$/.test(cval), dollar: hasDollar });
           }
         }
       }
@@ -670,6 +671,21 @@
       }, S, source));
     }
 
+    var workingCopy = /\.[A-Za-z0-9]+$/.test(edbFile)
+      ? edbFile.replace(/(\.[A-Za-z0-9]+)$/, '_obol$1')
+      : (edbFile + '_obol');
+    var needsConstPatch = hardcoded.length > 0 && cliFlags.length === 0 && maxArgv === 0 && !isCSource;
+    var stripBurpProxy = hazards.indexOf('burp_proxy') >= 0 && !isCSource;
+    var patchPlan = {
+      needs_patch: !!(needsConstPatch || stripBurpProxy),
+      needs_const_patch: !!needsConstPatch,
+      strip_burp_proxy: !!stripBurpProxy,
+      working_copy: workingCopy,
+      hardcoded: hardcoded,
+      cli_flags: cliFlags,
+      sys_argv_count: maxArgv
+    };
+
     _add(facts, mkFact('exploit.script_inspected', h, {
       edb_id: edbId || null,
       edb_file: edbFile,
@@ -678,7 +694,8 @@
       usage: usageLine,
       sys_argv_count: maxArgv,
       hardcoded_constants: hardcoded,
-      hazards: hazards
+      hazards: hazards,
+      patch_plan: patchPlan
     }, S, source));
     _add(facts, mkFact('vuln.edb_poc_inspected', h, {
       edb_id: edbId || null,

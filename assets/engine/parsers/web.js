@@ -1876,4 +1876,168 @@
   }
   C._parse_exploit_poc_verdicts = _parse_exploit_poc_verdicts;
 
+  // ---- Tier B: Raw Burp Suite / HTTP Request Parser -> web.http_request_captured ---- //
+  var _RAW_HTTP_REQ_START_RE = /^(?:[ \t]*\r?\n)*[ \t]*(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)[ \t]+(\/\S*|https?:\/\/\S+)[ \t]+HTTP\/(?:1\.[01]|2(?:\.0)?)[ \t]*\r?$/im;
+
+  function _looks_like_raw_http_request(text) {
+    var s = String(text || '').trim();
+    if (!s) return false;
+    if (/^(?:[ \t]*\r?\n)*[ \t]*(?:>[ \t]*)?(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)[ \t]+\S+[ \t]+HTTP\/(?:1\.[01]|2(?:\.0)?)[ \t]*\r?$/im.test(s) === false) return false;
+    // Reject curl -v / response transcripts that also carry an inbound HTTP status line
+    if (/^[ \t]*(?:<[ \t]*)?HTTP\/(?:1\.[01]|2(?:\.0)?)[ \t]+\d{3}\b/im.test(s)) return false;
+    // Reject curl -v prefixed request lines (> GET / ...) unless bare HTTP headers with Host: follow
+    if (/^[ \t]*>[ \t]*(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\b/im.test(s)) return false;
+    return /^[ \t]*Host:[ \t]*\S+/im.test(s);
+  }
+  C._looks_like_raw_http_request = _looks_like_raw_http_request;
+
+  function _parse_raw_http_request(text, ws, command, source, facts) {
+    if (!_looks_like_raw_http_request(text)) return;
+    var trimmed = String(text || '').replace(/^(?:[ \t]*\r?\n)+/, '');
+    var splitM = /\r?\n\r?\n/.exec(trimmed);
+    var headBlock = splitM ? trimmed.slice(0, splitM.index) : trimmed;
+    var body = splitM ? trimmed.slice(splitM.index + splitM[0].length) : '';
+    var headLines = headBlock.split(/\r?\n/);
+    if (!headLines.length) return;
+
+    var reqLineM = /^\s*(GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+(\/\S*|https?:\/\/\S+)\s+HTTP\/(?:1\.[01]|2(?:\.0)?)\s*$/i.exec(headLines[0]);
+    if (!reqLineM) return;
+    var method = reqLineM[1].toUpperCase();
+    var rawTarget = reqLineM[2];
+    var scheme = '';
+    var hostFromUrl = '';
+    var path = rawTarget;
+    var fullUrlM = /^(https?):\/\/([^\/\s]+)(\/.*)?$/i.exec(rawTarget);
+    if (fullUrlM) {
+      scheme = fullUrlM[1].toLowerCase();
+      hostFromUrl = fullUrlM[2];
+      path = fullUrlM[3] || '/';
+    }
+
+    var headers = {};
+    var headerList = [];
+    for (var i = 1; i < headLines.length; i++) {
+      var hl = headLines[i];
+      var col = hl.indexOf(':');
+      if (col <= 0) continue;
+      var hName = hl.slice(0, col).trim();
+      var hVal = hl.slice(col + 1).trim();
+      if (!hName) continue;
+      headerList.push({ name: hName, value: hVal });
+      headers[hName.toLowerCase()] = hVal;
+    }
+
+    var host = headers['host'] || hostFromUrl || (ws && ws.target) || '';
+    if (!host) return;
+    if (!scheme) {
+      var origHdr = headers['origin'] || headers['referer'] || '';
+      if (/^https:\/\//i.test(origHdr) || /:443$/.test(host)) scheme = 'https';
+      else scheme = 'http';
+    }
+    var origin = scheme + '://' + host;
+    if (path.charAt(0) !== '/') path = '/' + path;
+    var qIdx = path.indexOf('?');
+    var pathname = qIdx >= 0 ? path.slice(0, qIdx) : path;
+    var query = qIdx >= 0 ? path.slice(qIdx + 1) : '';
+    var contentType = headers['content-type'] || '';
+    var cookies = headers['cookie'] || '';
+
+    var params = [];
+    if (query) {
+      query.split('&').forEach(function (pair) {
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        var k = eq >= 0 ? pair.slice(0, eq) : pair;
+        var v = eq >= 0 ? pair.slice(eq + 1) : '';
+        if (k) {
+          try { k = decodeURIComponent(k); } catch (_e) {}
+          try { v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (_e2) {}
+          params.push({ name: k, value: v.slice(0, 256), loc: 'query' });
+        }
+      });
+    }
+
+    var boundary = '';
+    var bndM = /multipart\/form-data\s*;\s*boundary=(?:"([^"]+)"|([^\s;]+))/i.exec(contentType);
+    if (bndM) {
+      boundary = bndM[1] || bndM[2] || '';
+      if (boundary && body) {
+        var parts = body.split('--' + boundary);
+        for (var pi = 1; pi < parts.length; pi++) {
+          var part = parts[pi];
+          if (!part || /^--/.test(part.trim())) continue;
+          var pSplit = /\r?\n\r?\n/.exec(part);
+          if (!pSplit) continue;
+          var pHead = part.slice(0, pSplit.index);
+          var pVal = part.slice(pSplit.index + pSplit[0].length).replace(/\r?\n$/, '');
+          var nameM = /\bname="([^"]+)"/i.exec(pHead);
+          if (!nameM) continue;
+          var fnM = /\bfilename="([^"]*)"/i.exec(pHead);
+          var ctM = /^Content-Type:\s*([^\r\n]+)/im.exec(pHead);
+          params.push({
+            name: nameM[1],
+            value: pVal.slice(0, 256),
+            filename: fnM ? fnM[1] : '',
+            partContentType: ctM ? ctM[1].trim() : '',
+            loc: 'multipart'
+          });
+        }
+      }
+    } else if (body && (/application\/json/i.test(contentType) || /^\s*\{[\s\S]*\}\s*$/.test(body))) {
+      try {
+        var parsedJson = JSON.parse(body);
+        if (parsedJson && typeof parsedJson === 'object' && !Array.isArray(parsedJson)) {
+          Object.keys(parsedJson).slice(0, 30).forEach(function (jk) {
+            var jv = parsedJson[jk];
+            params.push({
+              name: jk,
+              value: (jv === null || jv === undefined) ? '' : (typeof jv === 'object' ? JSON.stringify(jv) : String(jv)).slice(0, 256),
+              loc: 'json'
+            });
+          });
+        }
+      } catch (_je) {}
+    } else if (body && (/xml/i.test(contentType) || /^\s*<(?:!DOCTYPE|\?xml|[A-Za-z_])/i.test(body))) {
+      var xmlRe = /<([A-Za-z_][A-Za-z0-9_.:-]{0,40})>([^<]{0,200})<\/\1>/g;
+      var xm, seenXml = Object.create(null);
+      while ((xm = xmlRe.exec(body)) !== null && params.length < 30) {
+        if (seenXml[xm[1]]) continue;
+        seenXml[xm[1]] = 1;
+        params.push({ name: xm[1], value: xm[2], loc: 'xml' });
+      }
+    } else if (body && /[A-Za-z0-9_.\[\]-]+=/.test(body)) {
+      body.trim().split('&').slice(0, 30).forEach(function (pair) {
+        if (!pair) return;
+        var eq = pair.indexOf('=');
+        if (eq <= 0) return;
+        var k = pair.slice(0, eq);
+        var v = pair.slice(eq + 1);
+        try { k = decodeURIComponent(k); } catch (_e3) {}
+        try { v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (_e4) {}
+        params.push({ name: k, value: v.slice(0, 256), loc: 'body' });
+      });
+    }
+
+    var hScope = 'host:' + ((ws && ws.target) ? ws.target : host.replace(/:\d+$/, ''));
+    _add(facts, mkFact('web.http_request_captured', hScope, {
+      method: method,
+      path: path,
+      pathname: pathname,
+      query: query,
+      host: host,
+      scheme: scheme,
+      origin: origin,
+      url: origin + path,
+      contentType: contentType,
+      cookies: cookies,
+      headers: headers,
+      headerList: headerList,
+      boundary: boundary,
+      params: params,
+      body: body.slice(0, 8192),
+      raw: trimmed.slice(0, 16384)
+    }, S, source));
+  }
+  C._parse_raw_http_request = _parse_raw_http_request;
+
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -52,7 +52,7 @@
     'web-params': {
       looksFor: "arjun's '[+] Parameter detected: id (GET)' lines, and reflected/dynamic parameters.",
       regex: '[+] Parameter detected: <name>',
-      emits: ['web.param_candidate', 'web.parameterized'],
+      emits: ['web.param_candidate', 'web.parameterized', 'web.http_request_captured'],
     },
     'web-exploit': {
       looksFor: 'a web-bug confirmation - a SQL error or boolean/timing divergence, an LFI file read, a command-injection echo, an SSTI math result, an SSRF/XXE/deserialization callback, a reflected XSS, or an accepted upload.',
@@ -168,7 +168,7 @@
     'websource': {
       looksFor: 'secrets inside a response or source - a config/.env value (including a bare ini/conf field like `password = "..."` or `DBPassword=...` served over HTTP or read on-host), a freeform labeled credential block (a leaked credentials.txt: `[FTP account]` then a bare username line then a bare password line), a PEM private key, a JWT secret, a VCS token or connection URI, an exposed artifact.',
       regex: 'BEGIN PRIVATE KEY, DB_PASSWORD=…, password = "…", DBPassword=…, [... account] + user + pass, ghp_…',
-      emits: ['web.source', 'web.jwt_secret', 'credential.plaintext', 'credential.password', 'credential.available', 'credential.candidate', 'credential.certificate', 'credential.ssh_key', 'loot.ssh_key', 'db.creds', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink', 'exploit.versioned_banner', 'vuln.text4shell'],
+      emits: ['web.source', 'web.forms_discovered', 'web.jwt_secret', 'credential.plaintext', 'credential.password', 'credential.available', 'credential.candidate', 'credential.certificate', 'credential.ssh_key', 'loot.ssh_key', 'db.creds', 'hash.crackable', 'hash.candidate', 'web.exposed_artifact', 'web.source_disclosed', 'web.manifest_disclosed', 'web.vuln_sink', 'vuln.web_sink', 'exploit.versioned_banner', 'vuln.text4shell'],
     },
     'shell-exec': {
       looksFor: "a caught shell or a command's result - an `id`/`whoami`/`uname` that proves you are executing on the box, as a user or as root/SYSTEM.",

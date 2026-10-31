@@ -500,6 +500,7 @@
     if ((lc.indexOf('nikto') >= 0 || /^- Nikto v\d+\.\d+/im.test(bigProbeSample)) && has('_parse_nikto')) guarded._parse_nikto(text, ws, source, facts, command);
     var isSqlClientSession = !!(C._is_sql_client_output && C._is_sql_client_output(bigProbeSample, ws, command));
     var isOutboundHttpReqOnly = !!(C._is_outbound_http_request_only && C._is_outbound_http_request_only(bigProbeSample));
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && has('_looks_like_raw_http_request') && C._looks_like_raw_http_request(bigProbeSample) && has('_parse_raw_http_request')) guarded._parse_raw_http_request(text, ws, command, source, facts);
     var isNonHttpAccountOrOutbound = !!(C._is_unix_account_dump && C._is_unix_account_dump(bigProbeSample)) || isOutboundHttpReqOnly;
     if (isWebExploitCmd && !isPayloadBuilderCmd && !isOutboundHttpReqOnly) guarded._parse_web_exploit_output(actionId || 'operator-ingest', text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && has('_parse_webdav_output') && (/\b(?:davtest|cadaver)\b/i.test(lc) || /\bTesting DAV connection\b|\bOPEN\s+SUCCEED:\s*https?:\/\/|^dav:\/[^>]*>/im.test(bigProbeSample))) guarded._parse_webdav_output(text, ws, command, source, facts);
@@ -606,6 +607,7 @@
     if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_disclosure') && C._has_web_disclosure(text, command) && has('_parse_web_disclosure')) guarded._parse_web_disclosure(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_manifest') && C._has_web_manifest(text, command) && has('_parse_web_manifest')) guarded._parse_web_manifest(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_web_vuln_sinks') && C._has_web_vuln_sinks(text, command) && has('_parse_web_vuln_sinks')) guarded._parse_web_vuln_sinks(text, ws, command, source, facts);
+    if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundHttpReqOnly && has('_has_html_forms') && C._has_html_forms(text, command) && has('_parse_html_forms')) guarded._parse_html_forms(text, ws, command, source, facts);
 
     // findings-lens checks (the "checks" lane + a couple of recon observations): route on the move's
     // action-id, each parser is content-gated so an unrelated paste mints nothing.

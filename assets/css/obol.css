@@ -14137,5 +14137,599 @@ main#view:has(.outcome-receipt) {
   }
 }
 
+/* ==========================================================================
+   Pillar 6: One-Click Command #1 Completion & Guided Burp Suite Co-Pilot
+   ========================================================================== */
+
+/* 6.2 Guided Two-Terminal Sequence Micro-Stepper */
+.ns-seq-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ns-seq-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(56, 139, 253, 0.07);
+  border: 1px solid rgba(56, 139, 253, 0.24);
+}
+.ns-seq-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(56, 139, 253, 0.18);
+  color: #58a6ff;
+  border: 1px solid rgba(56, 139, 253, 0.4);
+}
+.ns-seq-badge.is-onhost {
+  background: rgba(210, 153, 34, 0.18);
+  color: #e3b341;
+  border-color: rgba(210, 153, 34, 0.45);
+}
+.ns-seq-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ns-seq-pill {
+  min-height: 28px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--fg-muted, #8b949e);
+  border: 1px solid rgba(139, 148, 158, 0.28);
+}
+.ns-seq-pill.on {
+  background: rgba(56, 139, 253, 0.2);
+  color: var(--fg, #e6edf3);
+  border-color: rgba(56, 139, 253, 0.55);
+}
+.ns-seq-pill.is-done {
+  border-color: rgba(46, 160, 67, 0.45);
+}
+.ns-seq-next-btn {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 6.1 SOCKS Tunnel Auto-Wrap Bar, 6.4 EDB Patch Badge, 6.5 Calm Listener Hint */
+.ns-socks-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: rgba(46, 160, 67, 0.1);
+  border: 1px solid rgba(46, 160, 67, 0.32);
+  font-size: 11.5px;
+}
+.ns-socks-badge {
+  font-weight: 600;
+  color: #3fb950;
+}
+.ns-socks-badge.is-off {
+  color: var(--fg-muted, #8b949e);
+}
+.ns-socks-toggle {
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(139, 148, 158, 0.15);
+  color: var(--fg, #e6edf3);
+  border: 1px solid rgba(139, 148, 158, 0.35);
+}
+.ns-edb-patch-badge,
+.ns-web-target-badge {
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  background: rgba(210, 153, 34, 0.11);
+  color: #e3b341;
+  border: 1px solid rgba(210, 153, 34, 0.32);
+}
+.ns-web-target-badge {
+  background: rgba(56, 139, 253, 0.1);
+  color: #79c0ff;
+  border-color: rgba(56, 139, 253, 0.3);
+}
+.ns-paste-hint {
+  margin-top: 6px;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: rgba(139, 148, 158, 0.1);
+  color: var(--fg-muted, #9ca3af);
+  border-left: 2px solid rgba(88, 166, 255, 0.55);
+}
+
+/* 6.6 Tier A Discovered Forms & Parameters Strip + CLI/Burp Mode Switcher */
+.ns-web-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px 0;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(56, 139, 253, 0.06);
+  border: 1px solid rgba(56, 139, 253, 0.22);
+  font-size: 12px;
+}
+.ns-web-strip-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ns-web-strip-k {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted, #8b949e);
+}
+.ns-form-picker {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ns-form-pill,
+.ns-web-mode-btn {
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--fg-muted, #8b949e);
+  border: 1px solid rgba(139, 148, 158, 0.28);
+}
+.ns-form-pill.on,
+.ns-web-mode-btn.on {
+  background: rgba(249, 115, 22, 0.18);
+  color: var(--fg, #e6edf3);
+  border-color: rgba(249, 115, 22, 0.55);
+}
+.ns-web-mode-btn[data-web-mode="cli"].on {
+  background: rgba(56, 139, 253, 0.2);
+  border-color: rgba(56, 139, 253, 0.55);
+}
+.ns-web-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.ns-web-field-chip {
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(139, 148, 158, 0.14);
+}
+.ns-csrf-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(46, 160, 67, 0.16);
+  color: #3fb950;
+  border: 1px solid rgba(46, 160, 67, 0.38);
+}
+
+/* History raw HTML collapse */
+details.hl-out.html-collapse > summary {
+  color: #79c0ff;
+  font-weight: 600;
+}
+
+/* 6.6 Tier B Burp Suite Repeater Co-Pilot (Right Canvas & Workbench) */
+.anatomy-tab-burp.on {
+  border-color: rgba(249, 115, 22, 0.6);
+  background: rgba(249, 115, 22, 0.15);
+}
+.badge-burp {
+  background: rgba(249, 115, 22, 0.22);
+  color: #fb923c;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+}
+.burp-copilot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.burp-steps-bar,
+.burp-saved-bar,
+.burp-fam-bar,
+.burp-param-bar,
+.burp-mut-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.burp-step-chip {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--fg-muted, #8b949e);
+  border: 1px solid rgba(139, 148, 158, 0.25);
+}
+.burp-step-chip.is-on {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fdba74;
+  border-color: rgba(249, 115, 22, 0.55);
+}
+.burp-step-chip.is-done {
+  background: rgba(46, 160, 67, 0.16);
+  color: #3fb950;
+  border-color: rgba(46, 160, 67, 0.4);
+}
+.burp-step-sep {
+  font-size: 11px;
+  color: var(--fg-muted, #8b949e);
+}
+.burp-new-req-btn {
+  margin-left: auto;
+  min-height: 28px;
+  padding: 2px 9px;
+  font-size: 11.5px;
+}
+.burp-bar-k {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted, #8b949e);
+}
+.burp-req-pill,
+.burp-fam-pill,
+.burp-param-pill,
+.burp-mut-pill {
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--fg-muted, #8b949e);
+  border: 1px solid rgba(139, 148, 158, 0.28);
+}
+.burp-req-pill.on,
+.burp-fam-pill.on,
+.burp-param-pill.on,
+.burp-mut-pill.on {
+  background: rgba(249, 115, 22, 0.2);
+  color: var(--fg, #e6edf3);
+  border-color: rgba(249, 115, 22, 0.6);
+}
+.burp-mut-pill.is-tried {
+  opacity: 0.72;
+}
+.burp-loc-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.burp-mut-note {
+  font-size: 12px;
+  color: var(--fg-muted, #9ca3af);
+  padding: 4px 8px;
+  border-left: 2px solid rgba(249, 115, 22, 0.55);
+  background: rgba(249, 115, 22, 0.06);
+  border-radius: 0 4px 4px 0;
+}
+
+/* Accessible Inline SVG Burp Repeater Instrument */
+.burp-svg-wrap {
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0d1117;
+  border: 1px solid rgba(249, 115, 22, 0.28);
+}
+.burp-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.burp-svg-frame {
+  fill: #0d1117;
+  stroke: #30363d;
+  stroke-width: 1.5;
+}
+.burp-svg-topbar {
+  fill: #161b22;
+}
+.burp-svg-dot-a { fill: #f85149; }
+.burp-svg-dot-b { fill: #e3b341; }
+.burp-svg-dot-c { fill: #3fb950; }
+.burp-svg-brand {
+  fill: #e6edf3;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-tab,
+.burp-svg-subtab {
+  fill: #161b22;
+  stroke: #30363d;
+  stroke-width: 1;
+}
+.burp-svg-tab.is-active,
+.burp-svg-subtab.is-active {
+  fill: rgba(249, 115, 22, 0.24);
+  stroke: #f97316;
+  stroke-width: 1.5;
+}
+.burp-svg-tab-txt {
+  fill: #8b949e;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-tab-txt.is-active {
+  fill: #fff7ed;
+}
+.burp-svg-pane {
+  fill: #11161d;
+  stroke: #30363d;
+  stroke-width: 1;
+}
+.burp-svg-pane.is-focus {
+  stroke: #f97316;
+  stroke-width: 1.5;
+}
+.burp-svg-pane-h {
+  fill: #fdba74;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-row-hi {
+  fill: rgba(249, 115, 22, 0.18);
+  stroke: #f97316;
+  stroke-width: 1.25;
+}
+.burp-svg-mono {
+  fill: #c9d1d9;
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.burp-svg-menu {
+  fill: #161b22;
+  stroke: #f97316;
+  stroke-width: 1.4;
+}
+.burp-svg-menu-hi {
+  fill: #fed7aa;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-menu-sub {
+  fill: #8b949e;
+  font-size: 10px;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-send {
+  fill: #ea580c;
+  stroke: #fdba74;
+  stroke-width: 1.4;
+}
+.burp-svg-send-txt {
+  fill: #ffffff;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-urlbar {
+  fill: #161b22;
+  stroke: #30363d;
+}
+.burp-svg-pillbar {
+  fill: rgba(56, 139, 253, 0.14);
+  stroke: rgba(56, 139, 253, 0.45);
+}
+.burp-svg-pill-txt {
+  fill: #79c0ff;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+.burp-svg-tok-box {
+  fill: rgba(249, 115, 22, 0.24);
+  stroke: #fb923c;
+  stroke-width: 1.2;
+}
+.burp-svg-tok-txt {
+  fill: #ffedd5;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Compositor-only glow animation (opacity + transform only) */
+@keyframes burpPulseGlow {
+  0%, 100% {
+    opacity: 0.78;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+}
+.burp-svg-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: burpPulseGlow 1.9s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .burp-svg-glow {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+html[data-motion="off"] .burp-svg-glow {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+/* Burp Request / Response Boxes & Highlighted <pre tabindex="0"> Viewer */
+.burp-capture-box,
+.burp-verify-box,
+.burp-req-viewer {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(22, 27, 34, 0.65);
+  border: 1px solid rgba(139, 148, 158, 0.24);
+}
+.burp-box-head,
+.burp-viewer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+}
+.burp-sample-actions,
+.burp-copy-group,
+.burp-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.burp-mini-btn,
+.burp-copy-btn {
+  min-height: 28px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
+.burp-help {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg-muted, #9ca3af);
+}
+.burp-textarea {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid rgba(139, 148, 158, 0.3);
+  resize: vertical;
+}
+.burp-req-pre,
+.burp-curl-pre {
+  margin: 0;
+  padding: 10px;
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 6px;
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid rgba(139, 148, 158, 0.25);
+  font-size: 12px;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.burp-glow-tok {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(249, 115, 22, 0.28);
+  color: #ffedd5;
+  border: 1px solid rgba(251, 146, 60, 0.7);
+  font-weight: 700;
+}
+.burp-curl-details {
+  font-size: 12px;
+}
+.burp-curl-details > summary {
+  cursor: pointer;
+  color: #79c0ff;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.burp-verdict {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.burp-verdict.is-win {
+  background: rgba(46, 160, 67, 0.16);
+  color: #7ee787;
+  border: 1px solid rgba(46, 160, 67, 0.45);
+}
+.burp-verdict.is-rotate {
+  background: rgba(249, 115, 22, 0.14);
+  color: #fdba74;
+  border: 1px solid rgba(249, 115, 22, 0.45);
+}
+.burp-status {
+  font-size: 12px;
+  color: var(--fg-muted, #9ca3af);
+}
+
+/* Keyboard focus-visible rings for all Pillar 6 custom controls & scrollable code blocks */
+.ns-seq-pill:focus-visible,
+.ns-socks-toggle:focus-visible,
+.ns-form-pill:focus-visible,
+.ns-web-mode-btn:focus-visible,
+.burp-req-pill:focus-visible,
+.burp-fam-pill:focus-visible,
+.burp-param-pill:focus-visible,
+.burp-mut-pill:focus-visible,
+.burp-req-pre:focus-visible,
+.burp-curl-pre:focus-visible,
+.hl-pre:focus-visible,
+.hl-cmd:focus-visible {
+  outline: 2px solid var(--accent, #58a6ff);
+  outline-offset: 2px;
+}
+
+
 
 
