@@ -788,7 +788,7 @@
         "loot.files"
       ],
       "priority": 66,
-      "phase": "loot",
+      "phase": "enum",
       "proves": "the readable file inventory of each accessible share, a map of what is there to pull",
       "does_not_prove": "a credential or a foothold, a file name is a lead to pull and inspect, never a proven secret",
       "report": {
@@ -1790,7 +1790,13 @@
       "requires_all": [
         "credential.available"
       ],
-      "requires_any": [],
+      "requires_any": [
+        "ad.domain_known",
+        "ad.dc_candidate",
+        "ldap.reachable",
+        "kerberos.reachable",
+        "adcs.vulnerable"
+      ],
       "obsoleted_by": [
         "loot.ntds"
       ],
@@ -2229,7 +2235,8 @@
       ],
       "produces": [
         "access.system",
-        "persistence.domain"
+        "persistence.domain",
+        "access.admin"
       ],
       "priority": 96,
       "proves": "produces SYSTEM access and domain persistence",
@@ -3174,7 +3181,12 @@
         "credential.available"
       ],
       "requires_any": [
-        "ad.gmsa"
+        "ad.gmsa",
+        "ad.acl_lead",
+        "ad.control_paths",
+        "ad.attack_paths",
+        "ldap.authenticated",
+        "ad.domain_known"
       ],
       "produces": [
         "credential.ntlm_hash",

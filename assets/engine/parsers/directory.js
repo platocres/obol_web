@@ -1164,6 +1164,35 @@
         _add(facts, mkFact('ad.anonymous_bind', firstDom ? ('domain:' + firstDom) : C._scope_for_domain(ws), { tool: 'ldap3' }, S, source));
       }
     }
+    var ldapCmdStr = String(command || source || '');
+    if (/\bldapsearch\b/i.test(ldapCmdStr) && /\s-D\s+\S/i.test(ldapCmdStr)
+        && /\bresult:\s*0\s+Success\b|^#\s*numEntries:\s*\d+|^\s*dn:\s*/im.test(text)
+        && !/\b(?:ldap_bind:|Invalid credentials|insufficientAccessRights|ldap_sasl_bind|Can't contact LDAP server|Operations error|Strong\(er\) authentication required)\b/i.test(text)) {
+      _add(facts, mkFact('ldap.reachable', 'host:' + ws.target, { tool: 'ldapsearch' }, S, source));
+      var bindDnRaw = C._command_arg(ldapCmdStr, ['-D']) || '';
+      var bindPwRaw = C._command_arg(ldapCmdStr, ['-w']) || '';
+      var bindUser = '', bindDom = '';
+      if (bindDnRaw) {
+        var rdnM = /^(?:CN|UID)=([^,]+)/i.exec(bindDnRaw.trim());
+        if (rdnM) {
+          bindUser = rdnM[1].trim();
+          var dnDcs = reAll(/\bDC=([A-Za-z0-9_-]+)/gi, bindDnRaw).map(function (m) { return m[1].toLowerCase(); });
+          if (dnDcs.length) bindDom = dnDcs.join('.');
+        } else if (bindDnRaw.indexOf('\\') >= 0) {
+          bindDom = bindDnRaw.split('\\')[0].trim();
+          bindUser = bindDnRaw.split('\\').slice(1).join('\\').trim();
+        } else if (bindDnRaw.indexOf('@') >= 0) {
+          bindUser = bindDnRaw.split('@')[0].trim();
+          bindDom = bindDnRaw.split('@')[1].trim();
+        } else {
+          bindUser = bindDnRaw.trim();
+        }
+      }
+      var cleanBindU = C._clean_username(bindUser);
+      if (cleanBindU && !/^(?:anonymous|guest|null)$/i.test(cleanBindU) && C._valid_username(cleanBindU, true)) {
+        _add_authenticated_service(facts, ws, source, 'ldap', cleanBindU, bindPwRaw, bindDom || firstDom || C._domain_from_facts(ws), false, 'ldapsearch');
+      }
+    }
     _parse_ldif_custom_pwd_attrs(text, ws, source, facts, firstDom);
   }
   C._parse_ldapsearch = _parse_ldapsearch;
@@ -1337,6 +1366,10 @@
       }
     }
     var scFollowPr = String((ws && ws.context && ws.context.followPrompt) || '');
+    if (/\bprotocol negotiation failed:\s*NT_STATUS_(?:CONNECTION_DISCONNECTED|INVALID_NETWORK_RESPONSE|NOT_SUPPORTED|CONNECTION_RESET|IO_TIMEOUT)\b/i.test(text)) {
+      _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbclient' }, S, source));
+      _add(facts, mkFact('smb.smbv1', 'host:' + ws.target, { enabled: true, legacy_dialect_required: true, tool: 'smbclient' }, S, source));
+    }
     if (/\bsmbclient\b/i.test(cmdStr) && !/\bNT_STATUS_/i.test(text) &&
         /Try "help" to get a list of possible commands\.|^\s*smb:\s*\\[^>]*>/im.test(text + '\n' + scFollowPr)) {
       _add(facts, mkFact('smb.reachable', 'host:' + ws.target, { port: 445, tool: 'smbclient' }, S, source));
@@ -1709,14 +1742,16 @@
       var hostname = /^\s*\S+\s+\S+\s+\d+\s+(\S+)/.exec(m[0]);
       var lineWs = Object.assign({}, ws, { target: lineHost, observedTarget: m.groups && m.groups.host, hostname: hostname ? hostname[1] : '' });
       var linePwned = /\(pwn3d!\)/i.test(auth);
-      var admin = linePwned && (proto === 'smb' || proto === 'wmi' || proto === 'mssql' || proto === 'winrm');
+      var winrmAdminProof = /\bnt authority\\system\b|\bS-1-5-32-544\b[^\r\n]*\bEnabled group\b/i.test(text);
+      var rid500Re = C._RID500_ADMIN_RE || /^(?:administrator|administrador|administrateur|amministratore)$/i;
       var ccacheM = /^(?:(?<domain>[^\\\s:/]+)\\)?(?<user>[A-Za-z0-9._$@-]+)\s+from\s+ccache\b/i.exec(auth);
       if (ccacheM && ccacheM.groups && ccacheM.groups.user) {
         var ccUser = ccacheM.groups.user, ccDom = (ccacheM.groups.domain || '').trim();
         if (ccUser.indexOf('@') >= 0) { ccDom = ccDom || ccUser.split('@')[1]; ccUser = ccUser.split('@')[0]; }
         ccUser = C._clean_username(ccUser);
         if (ccUser && !/^(?:guest|anonymous)$/i.test(ccUser)) {
-          _add_authenticated_service(facts, lineWs, source, proto, ccUser, '', ccDom, admin, 'kerberos-ccache');
+          var ccAdmin = linePwned && (proto === 'smb' || proto === 'wmi' || proto === 'mssql' || (proto === 'winrm' && (rid500Re.test(ccUser) || winrmAdminProof)));
+          _add_authenticated_service(facts, lineWs, source, proto, ccUser, '', ccDom, ccAdmin, 'kerberos-ccache');
         }
         return;
       }
@@ -1728,6 +1763,7 @@
         _add(facts, mkFact('smb.guest_session', 'host:' + lineWs.target, { tool: 'nxc' }, S, source));
         return;
       }
+      var admin = linePwned && (proto === 'smb' || proto === 'wmi' || proto === 'mssql' || (proto === 'winrm' && (rid500Re.test(user) || winrmAdminProof)));
       _add_authenticated_service(facts, lineWs, source, proto, user, secret, domain, admin);
     });
   }
@@ -1881,13 +1917,14 @@
     var password = C._command_arg(command, ['-p', '--password']);
     var nthash = C._nt_hash(C._command_arg(command, ['-H', '--hash']));
     var isKerbWinrm = /(?:^|\s)(?:-k|--kerberos|--no-pass)\b/i.test(command || '');
-    var isAdminPrompt = /(?:(?:\*Evil-WinRM\*|evil-winrm(?:-py)?)\s+PS\s+|^\s*(?:PS\s+)?)[A-Za-z]:\\Users\\Administrator(?:\\|>|\s*$)/im.test(promptCtx);
+    var isAdminPrompt = /(?:(?:\*Evil-WinRM\*|evil-winrm(?:-py)?)\s+PS\s+|^\s*(?:PS\s+)?)[A-Za-z]:\\Users\\(?:Administrator|Administrador|Administrateur|Amministratore)(?:\\|>|\s*$)/im.test(promptCtx);
     var toolName = isEvilWinrmPy ? 'evil-winrm-py' : 'evil-winrm';
     var value = { service: 'winrm', tool: toolName, proof: hasPrompt ? 'interactive-prompt' : 'connection-banner' };
     if (isKerbWinrm && !nthash && !password) value.method = 'kerberos';
     if (user) value.user = C._clean_username(user);
     else if (isAdminPrompt) value.user = 'Administrator';
-    var isAdmin = isAdminPrompt || /^administrator$/i.test(String(value.user || ''));
+    var rid500AdminRe = C._RID500_ADMIN_RE || /^(?:administrator|administrador|administrateur|amministratore)$/i;
+    var isAdmin = isAdminPrompt || rid500AdminRe.test(String(value.user || ''));
     if (isAdmin) value.admin = true;
     if (nthash) value.nthash = nthash; else if (password) value.password = password;
     if (domain) value.domain = domain;
@@ -2106,7 +2143,7 @@
     var netRpcPassM = /(?:^|\n|[>;$#]\s*)net\s+rpc\s+password\s+(?:'([^']+)'|"([^"]+)"|([^\s"'-][^\s"']*))\s+(?:'([^']+)'|"([^"]+)"|([^\s"'-][^\s"']*))/i.exec((command || '') + '\n' + (text || ''));
     var nonCommentText = String(text || '').replace(/^\s*#[^\r\n]*$/gm, '').trim();
     var abuseVerb = ['groupmember', 'set owner', 'writeowner', 'owneredit', 'genericall', 'dacledit', '-action write',
-      'add dcsync', ' dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'add computer', 'net group', 'net rpc',
+      'add dcsync', ' dcsync', '-rights dcsync', 'rights:dcsync', 'add rbcd', 'add uac', 'set password', 'set object', 'add computer', 'net group', 'net rpc',
       'passthecert', 'aclpwn', 'elevate_user', 'add_user_to_group', 'write_rbcd', 'modify_user'
     ].some(function (k) { return lc.indexOf(k) >= 0; }) || (lc.indexOf('net localgroup') >= 0 && lc.indexOf('/domain') >= 0) || !!netUserResetM;
     if (lc.indexOf('get writable') >= 0 && !abuseVerb) return;
@@ -2119,6 +2156,7 @@
     else if (lc.indexOf('set password') >= 0 || /password changed successfully/i.test(text) || (netUserResetM && /The command completed successfully/i.test(text)) || (netRpcPassM && nonCommentText.length > 0)) { operation = 'password_reset'; rightsSet.ForceChangePassword = true; }
     else if (lc.indexOf('rbcd') >= 0 || textLow.indexOf('msds-allowedtoact') >= 0 || /delegation rights modified successfully/i.test(text)) { operation = 'rbcd_write'; rightsSet.RBCD = true; }
     else if (lc.indexOf('genericall') >= 0 || lc.indexOf('dacledit') >= 0 || /dacl (?:modified successfully|modification successful)/i.test(text)) { operation = 'dacl_write'; rightsSet.GenericAll = true; }
+    else if (lc.indexOf('set object') >= 0 || /\[\+\]\s*[^\r\n]+'s\s+[A-Za-z][A-Za-z0-9-]*\s+has been updated\b/i.test(text)) { operation = 'attribute_write'; rightsSet.WriteProperty = true; }
 
     var evidence = [];
     var lines = text.split(/\r?\n/);
@@ -2130,7 +2168,7 @@
       if (reSearch(C._AD_CONTROL_RIGHT_RE, line) || reSearch(C._AD_CONTROL_SUCCESS_RE, line)) evidence.push(line.slice(0, 220));
       if (evidence.length >= 5) break;
     }
-    var explicitAbuseSuccess = /dacl (?:modified successfully|modification successful)|ownersid modified successfully|password changed successfully|successfully (?:updated|changed|reset) password|is now able to dcsync|delegation rights modified successfully|msds-allowedtoactonbehalfofotheridentity modified/i.test(text);
+    var explicitAbuseSuccess = /dacl (?:modified successfully|modification successful)|ownersid modified successfully|password changed successfully|successfully (?:updated|changed|reset) password|is now able to dcsync|delegation rights modified successfully|msds-allowedtoactonbehalfofotheridentity modified|\[\+\]\s*[^\r\n]+'s\s+[A-Za-z][A-Za-z0-9-]*\s+has been updated\b/i.test(text);
     var opError = reSearch(/^\s*\[-\]|\b(error|failed|denied|unauthorized|insufficient|insufficientAccessRights|insufficient_access_rights|INSUFF_ACCESS_RIGHTS|dsid-|traceback|not recognized|access is denied|constraint|cannot|invalid)\b/im, text);
     var alreadyMemberRe = /already a member|entryalreadyexists|member_in_alias/i;
     var hasJoinLine = operation === 'group_member_write' && (/(?:\badded to\b|^\s*\[\+\]\s*joined:|The command completed successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member)/im.test(text) || alreadyMemberRe.test(text));
@@ -2915,7 +2953,7 @@
   }
   C._parse_gp_permission = _parse_gp_permission;
 
-  var _AD_ABUSE_CONTENT_RE = /DACL modified successfully|Dacl modification successful|OwnerSid modified successfully|Password changed successfully!|Delegation rights modified successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member|\[\+\]\s*LDAP operation completed successfully|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|converting\s+kirbi\s+to\s+ccache|DeviceKey\s*:|KeyCredential\s+added|\[\+\]\s*Updated the msDS-KeyCredentialLink attribute|Recovered NT Hash\s*\r?\n\s*[0-9a-fA-F]{32}|msDS-ManagedPassword\.NTLM\s*:|^\s*(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9._-]+\$:::[0-9a-fA-F]{32}\s*$|Users or groups who can read password for\s+[A-Za-z0-9._-]+\$:|Trustee\s*:\s*[^\r\n]+[\s\S]{1,180}?Permission\s*:\s*Gpo(?:EditDeleteModifySecurity|Custom)\b/im;
+  var _AD_ABUSE_CONTENT_RE = /DACL modified successfully|Dacl modification successful|OwnerSid modified successfully|Password changed successfully!|Delegation rights modified successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member|\[\+\]\s*LDAP operation completed successfully|\[\+\]\s+\S+\s+added to\s+\S+|\[\+\]\s*[^\r\n]+'s\s+[A-Za-z][A-Za-z0-9-]*\s+has been updated\b|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|converting\s+kirbi\s+to\s+ccache|DeviceKey\s*:|KeyCredential\s+added|\[\+\]\s*Updated the msDS-KeyCredentialLink attribute|Recovered NT Hash\s*\r?\n\s*[0-9a-fA-F]{32}|msDS-ManagedPassword\.NTLM\s*:|^\s*(?:[A-Za-z0-9._-]+\\)?[A-Za-z0-9._-]+\$:::[0-9a-fA-F]{32}\s*$|Users or groups who can read password for\s+[A-Za-z0-9._-]+\$:|Trustee\s*:\s*[^\r\n]+[\s\S]{1,180}?Permission\s*:\s*Gpo(?:EditDeleteModifySecurity|Custom)\b/im;
   function _parse_ad_abuse_output(actionId, text, ws, command, source, facts) {
     if (!(_is_ad_abuse_command(command) || C._AD_ABUSE_ACTION_IDS.has(actionId) || _AD_ABUSE_CONTENT_RE.test(text || ''))) return;
     _parse_ad_control_paths(text, ws, command, source, facts);
@@ -3041,6 +3079,16 @@
       var upnM = /Got certificate with UPN\s+'([^']+)'/i.exec(text) || /(?:^|\s)-upn\s+['"]?([^\s'"]+)/i.exec(command || '');
       var certFile = upnM ? (upnM[1].split('@')[0].toLowerCase() + '.pfx') : 'requested.pfx';
       _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws), { pfx: certFile, files: [certFile], via: 'adcs' }, S, source));
+    } else if (/\bCertificate retrieved\s*\(Issued\)\s*Issued\b/i.test(text)) {
+      var crOutM = /\b([A-Za-z0-9_./\\-]+\.(?:cer|crt|pfx|pem))['"]?\s*$/i.exec(String(command || '').trim());
+      var crFile = crOutM ? crOutM[1].replace(/\\/g, '/') : 'issued.cer';
+      var crCfgM = /-config\s+['"]?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)\\/i.exec(command || '');
+      var crDom = '';
+      if (crCfgM && crCfgM[1]) {
+        var crParts = crCfgM[1].toLowerCase().split('.');
+        crDom = crParts.length >= 3 ? crParts.slice(1).join('.') : crCfgM[1].toLowerCase();
+      }
+      _add(facts, mkFact('credential.certificate', C._scope_for_domain(ws, crDom), { file: crFile, files: [crFile], via: 'certreq' }, S, source));
     }
     var modM = /\[\*\]\s*Successfully (?:updated|added officer|enabled|issued certificate)(?:\s+for|\s+template)?\s*(?:'([^']+)')?/i.exec(text);
     if (!modM && /\[\*\]\s*Updating certificate template\s*(?:'([^']+)')?/i.test(text) && !/\b(?:error|denied|insufficient|failed)\b/i.test(text)) {

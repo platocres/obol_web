@@ -979,7 +979,8 @@
       ],
       "produces": [
         "access.system",
-        "foothold.windows"
+        "foothold.windows",
+        "access.admin"
       ],
       "priority": 86,
       "phase": "access",

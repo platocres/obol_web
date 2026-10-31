@@ -605,6 +605,7 @@
     {
       "id": "linux-loot-hunt",
       "title": "Loot Hunting (Linux)",
+      "phase": "escalate",
       "hypothesis": "Ahead of the exotic techniques, go looking for loot: shell history, configs containing passwords, other users' readable home directories, backups under /opt and /var, mail spools. Credentials repeatedly turn up in history files and config files, and a .bash_history symlinked to /dev/null is itself a tell that the author stashed something somewhere else.",
       "tool": "sh",
       "tools": [
@@ -1584,6 +1585,7 @@
         "foothold.linux"
       ],
       "requires_any": [
+        "privesc.lxd_group",
         "privesc.group_lxd",
         "privesc.container_group"
       ],

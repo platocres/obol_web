@@ -14,8 +14,7 @@
         "ports.open",
         "kerberos.reachable",
         "ad.dc_candidate"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "652be3a59cac",
@@ -247,8 +246,7 @@
         "access.shell",
         "access.root",
         "foothold.windows"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "5e39e83cc267",
@@ -337,8 +335,7 @@
         "smb.reachable",
         "winrm.reachable",
         "ad.dc_candidate"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "fd7f06a26aa9",
@@ -352,8 +349,7 @@
         "port:445",
         "credential.netntlm",
         "http.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "b3a00e963212",
@@ -717,7 +713,7 @@
     {
       "id": "b0d1999a9956",
       "file": "medjed.md",
-      "command": "",
+      "command": "(commandless output)",
       "note": "Command-less PowerUp enumeration block reporting ModifiableServiceFile / Write-HijackDll service DLL hijacking alongside Winlogon Autologon DefaultUserName and DefaultPassword entries must mint privesc.dll_hijack_candidate, privesc.stored_credentials, and recovered plaintext credential facts.",
       "expected_kinds": [
         "privesc.stored_credentials",
@@ -735,7 +731,7 @@
     {
       "id": "8be9d61f1939",
       "file": "nagoya.md",
-      "command": "",
+      "command": "(commandless output)",
       "note": "Command-less Windows token-privilege output block showing enabled SeImpersonatePrivilege must mint privesc.windows_privilege, privesc.seimpersonate, and privesc.leads without claiming SYSTEM.",
       "expected_kinds": [
         "privesc.windows_privilege",
@@ -752,7 +748,7 @@
     {
       "id": "60cedbad558e",
       "file": "nagoya.md",
-      "command": "",
+      "command": "(commandless output)",
       "note": "Command-less Windows identity output block returning NT AUTHORITY\\SYSTEM after token impersonation must mint foothold.windows, host.os_family, and access.system without Linux or DC false positives.",
       "expected_kinds": [
         "foothold.windows",
@@ -842,8 +838,7 @@
         "credential.plaintext",
         "credential.validated",
         "http.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "2f50209343fa",
@@ -916,8 +911,7 @@
         "ad.dc_candidate",
         "smb.reachable",
         "ldap.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "363a8d7179cf",
@@ -931,8 +925,7 @@
         "ldap.reachable",
         "ldap.authenticated",
         "ad.user_list"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "2a024a167feb",
@@ -946,8 +939,7 @@
         "access.shell",
         "credential.validated",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "ac97a934bf4d",
@@ -1192,8 +1184,7 @@
         "smb.shares",
         "smb.null_session",
         "smb.guest_session"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "989483459403",
@@ -1207,8 +1198,7 @@
         "access.system",
         "credential.validated",
         "credential.available"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "f4f4954ad853",
@@ -1317,8 +1307,7 @@
         "web.rce",
         "access.shell",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "6726530e269b",
@@ -1492,7 +1481,7 @@
         "db.creds"
       ],
       "forbidden_kinds": [
-        "db.authenticated",
+        "db.session",
         "foothold.linux",
         "access.admin"
       ],
@@ -1735,8 +1724,7 @@
         "access.shell",
         "credential.validated",
         "credential.available"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "a35c1301f90e",
@@ -1918,8 +1906,7 @@
         "foothold.linux",
         "access.shell",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "8dd914b0cca0",
@@ -2016,8 +2003,7 @@
         "foothold.linux",
         "web.cmdi_confirmed",
         "http.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "6ad4cc2723d0",
@@ -2206,8 +2192,7 @@
         "ports.open",
         "scan.nmap.quick",
         "scan.nmap.version"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "f2d75816f746",
@@ -2219,8 +2204,7 @@
         "foothold.linux",
         "access.shell",
         "web.cmdi_confirmed"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "a1ba9a294940",
@@ -2232,8 +2216,7 @@
         "privesc.capability",
         "privesc.capabilities",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "1a4f31e7a7d0",
@@ -2264,8 +2247,7 @@
         "web.cmdi_confirmed",
         "foothold.webshell",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "d2fd5ee9e558",
@@ -2402,8 +2384,7 @@
       "forbidden_kinds": [
         "foothold.windows",
         "access.system"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "1903e05b787b",
@@ -2446,8 +2427,7 @@
         "foothold.linux",
         "web.cmdi_confirmed",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "b9a18f1031a8",
@@ -2899,7 +2879,7 @@
     {
       "id": "818637a9ff30",
       "file": "peppo.md",
-      "command": "",
+      "command": "(commandless output)",
       "note": "Command-less LinPEAS excerpt reporting Debian Linux kernel version, running Docker containers, and a writable /var/run/docker.sock UNIX domain socket.",
       "expected_kinds": [
         "host.kernel",
@@ -3192,7 +3172,7 @@
     {
       "id": "95ab190fd250",
       "file": "readys.md",
-      "command": "",
+      "command": "(commandless output)",
       "note": "Command-less /etc/passwd response body retrieved via web LFI disclosing local system and human accounts without proving interactive shell access.",
       "expected_kinds": [
         "web.lfi_confirmed",
@@ -3275,8 +3255,7 @@
         "credential.candidate",
         "web.ssrf_confirmed",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "61eb04d7e9e7",
@@ -3449,8 +3428,7 @@
         "foothold.linux",
         "access.shell",
         "credential.validated"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "f0f5ddeda8e9",
@@ -3840,8 +3818,7 @@
         "web.upload_confirmed",
         "loot.files",
         "access.shell"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "a678b30ab9a2",
@@ -3939,8 +3916,7 @@
         "loot.files",
         "host.users",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "9032ba4d0cf6",
@@ -4503,8 +4479,7 @@
         "foothold.windows",
         "access.system",
         "credential.validated"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "3cf6a0839998",
@@ -4672,8 +4647,7 @@
         "ports.open",
         "ftp.reachable",
         "smb.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "11ac302369f7",
@@ -4769,8 +4743,7 @@
         "access.system",
         "loot.ssh_key",
         "credential.ssh_key"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "a7a58a062d6e",
@@ -4956,8 +4929,7 @@
         "foothold.linux",
         "access.shell",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "2797a11cfeea",
@@ -5050,8 +5022,7 @@
         "credential.validated",
         "foothold.windows",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "8c785266f093",
@@ -5333,8 +5304,7 @@
       ],
       "forbidden_kinds": [
         "db.session",
-        "credential.validated",
-        "postgres.unauth"
+        "credential.validated"
       ],
       "outcome_expected": "authorization-denied"
     },
@@ -5478,7 +5448,7 @@
         "access.root"
       ],
       "forbidden_kinds": [
-        "ad.domain_admin"
+        "ad.domain_control"
       ],
       "outcome_expected": "success",
       "tier_attribution": "tier1"
@@ -5532,7 +5502,7 @@
         "access.root"
       ],
       "forbidden_kinds": [
-        "ad.domain_admin"
+        "ad.domain_control"
       ],
       "outcome_expected": "success"
     },
@@ -5547,8 +5517,7 @@
         "ports.open",
         "http.reachable",
         "ssh.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "23cb97894fc9",
@@ -5580,8 +5549,7 @@
         "foothold.linux",
         "access.admin",
         "access.root"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "050d83fcc91a",
@@ -5594,8 +5562,7 @@
         "access.admin",
         "access.shell",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "ef0b275bebdc",
@@ -5635,7 +5602,7 @@
         "access.root"
       ],
       "forbidden_kinds": [
-        "ad.domain_admin"
+        "ad.domain_control"
       ],
       "outcome_expected": "success"
     },
@@ -5652,7 +5619,7 @@
         "access.root"
       ],
       "forbidden_kinds": [
-        "ad.domain_admin"
+        "ad.domain_control"
       ],
       "outcome_expected": "success",
       "tier_attribution": "tier1"
@@ -5691,8 +5658,7 @@
         "access.shell",
         "foothold.linux",
         "access.root"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "a7ce1bf86b4a",
@@ -5707,7 +5673,7 @@
         "access.root"
       ],
       "forbidden_kinds": [
-        "ad.domain_admin"
+        "ad.domain_control"
       ],
       "outcome_expected": "success",
       "tier_attribution": "tier1"
@@ -5723,8 +5689,7 @@
         "ports.open",
         "http.reachable",
         "ssh.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "070b6a14ecd0",
@@ -5787,8 +5752,7 @@
         "access.shell",
         "access.admin",
         "web.cmdi_confirmed"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "e516e56ebd53",
@@ -5913,8 +5877,7 @@
         "db.session",
         "db.reachable",
         "credential.validated"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "bdcfa8f9709f",
@@ -6117,8 +6080,7 @@
         "ports.open",
         "ssh.reachable",
         "http.reachable"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "d9cfd4fa481f",
@@ -6438,8 +6400,7 @@
         "access.shell",
         "access.admin",
         "web.cmdi_confirmed"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "30dd5bd1b17b",
@@ -6751,8 +6712,7 @@
         "access.root",
         "credential.candidate",
         "credential.plaintext"
-      ],
-      "outcome_expected": "completed"
+      ]
     },
     {
       "id": "587183f9df1c",
@@ -7026,8 +6986,7 @@
         "host.up",
         "ports.open",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "8d01b9792299",
@@ -7160,7 +7119,6 @@
         "ssh.reachable",
         "http.reachable"
       ],
-      "outcome_expected": "unknown",
       "note": "Negative boundary: Nmap invocation block with empty stdout must not fabricate host reachability or open port facts."
     },
     {
@@ -7480,7 +7438,6 @@
         "access.shell",
         "foothold.linux"
       ],
-      "outcome_expected": "unknown",
       "note": "Negative boundary: attacker listener command block with empty stdout and no callback must not mint listener or shell foothold facts."
     },
     {

@@ -1544,8 +1544,7 @@
         "credential.candidate",
         "credential.available",
         "foothold.linux"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "f373a2f39e5b",
@@ -1938,8 +1937,7 @@
         "credential.available",
         "credential.validated",
         "hash.tgs"
-      ],
-      "outcome_expected": "unknown"
+      ]
     },
     {
       "id": "6355987daf2d",
@@ -2218,8 +2216,7 @@
         "credential.validated",
         "credential.available",
         "access.admin"
-      ],
-      "outcome_expected": "unknown"
+      ]
     }
   ]
 }

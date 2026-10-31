@@ -109,7 +109,7 @@
   // of a RETR's "Opening ... for" / "bytes received in". This proves the FTP
   // root is writable (webroot-upload-to-webshell), the precise signal that move
   // wants instead of a bare "port 21 is open" gate.
-  var _FTP_UPLOAD_INIT_RE = /(?:^|\s)STOR\b|\bftp>\s*(?:m?put)\b|^\s*(?:m?put)\s+\S|150\s+Ok to send data/im;
+  var _FTP_UPLOAD_INIT_RE = /(?:^|\s)STOR\b|\bftp>?\s+(?:m?put)\b|^\s*(?:m?put)\s+\S|150\s+Ok to send data|\b\d+\s+bytes\s+sent\s+in\b/im;
   var _FTP_UPLOAD_OK_RE = /226[\s-](?:Transfer complete|Transfer okay)|\bbytes sent in\b|\bUpload(?:ed|\s+complete)\b/i;
   // A directory listing returned over the FTP data channel (interactive `ftp> ls` / `dir`). Two row
   // shapes appear: the Windows IIS line "MM-DD-YY  HH:MMAM/PM  <size|<DIR>>  name" and the Unix long
@@ -174,9 +174,26 @@
       if (m.groups.login) loginSuccess = true;
     });
     var cmdStr = String(command || '');
-    var ftpUriM = /\bftps?:\/\/(?:[^\/\s@'"]+@)?(?:\[[^\]]+\]|[^\/:\s'"]+)(?::(\d{1,5}))?(?=[\/'"\s]|$)/i.exec(cmdStr);
-    var hasFtpUri = !!ftpUriM;
-    var ftpUriPort = (ftpUriM && ftpUriM[1]) ? parseInt(ftpUriM[1], 10) : 0;
+    var ftpUriRawM = /'(ftps?:\/\/[^'\r\n]+)'/i.exec(cmdStr)
+      || /"(ftps?:\/\/[^"\r\n]+)"/i.exec(cmdStr)
+      || /\b(ftps?:\/\/[^\s'"]+)/i.exec(cmdStr);
+    var ftpUriRaw = ftpUriRawM ? ftpUriRawM[1] : '';
+    var hasFtpUri = !!ftpUriRaw;
+    var ftpUriPort = 0, ftpUriUser = '', ftpUriPass = '';
+    if (ftpUriRaw) {
+      var ftpAuthM = /^ftps?:\/\/([^\/?#]+)/i.exec(ftpUriRaw);
+      var ftpAuthPart = ftpAuthM ? ftpAuthM[1] : '';
+      var ftpAtIdx = ftpAuthPart.lastIndexOf('@');
+      var ftpHostPort = ftpAtIdx >= 0 ? ftpAuthPart.slice(ftpAtIdx + 1) : ftpAuthPart;
+      var ftpUserInfo = ftpAtIdx >= 0 ? ftpAuthPart.slice(0, ftpAtIdx) : '';
+      var ftpPortM = /:(\d{1,5})$/.exec(ftpHostPort);
+      if (ftpPortM) ftpUriPort = parseInt(ftpPortM[1], 10);
+      if (ftpUserInfo) {
+        var ftpColonIdx = ftpUserInfo.indexOf(':');
+        ftpUriUser = ftpColonIdx >= 0 ? ftpUserInfo.slice(0, ftpColonIdx) : ftpUserInfo;
+        ftpUriPass = ftpColonIdx >= 0 ? ftpUserInfo.slice(ftpColonIdx + 1) : '';
+      }
+    }
     if (ftpUriPort < 1 || ftpUriPort > 65535) ftpUriPort = 0;
     var isExplicitFtpCmd = hasFtpUri || /(?:^|\s|[\/\\])(?:l?ftp|ncftp(?:ls|get|put)?)\b/i.test(cmdStr);
     var isMailCmd = !isExplicitFtpCmd && (
@@ -209,17 +226,24 @@
 
     var hasFtpListingShape = reAll(/^\s*[-dlbcps][-rwxsStT]{9}[@+.]?\s+\d+\s+ftp\s+ftp\s+\d+\s+\w{3}\s+\d{1,2}\s+(?:\d{4}|\d{1,2}:\d{2})\s+\S/gm, text).length >= 2;
     var mkdirCreatedOk = !isMailCmd && !isSmtpOnlyTranscript && /^\s*257\s+"[^"\r\n]+"[^\r\n]*\bcreated\b/im.test(text);
-    var writeOk = (!isMailCmd && !isSmtpOnlyTranscript && reSearch(_FTP_UPLOAD_INIT_RE, text) && reSearch(_FTP_UPLOAD_OK_RE, text)) || mkdirCreatedOk;
+    var isFtpUploadTurn = !isMailCmd && !isSmtpOnlyTranscript && !!(reSearch(_FTP_UPLOAD_INIT_RE, cmdStr + '\n' + text) && reSearch(_FTP_UPLOAD_OK_RE, text));
+    var writeOk = isFtpUploadTurn || mkdirCreatedOk;
     var hasFtpAnchorLine = !isMailCmd && !isSmtpOnlyTranscript && String(text || '').split(/\r?\n/).some(function (ln) {
       if (/^\s*220[ -]/i.test(ln)) return !_MAIL_220_BANNER_RE.test(ln);
       return /^\s*(?:ftp>|local:\s*\S.*?\s+remote:\s*\S|1(?:25|50)[ -](?:Data connection|Opening|Here comes the directory listing|Ok to send data|Transfer starting)|2(?:00|26|27|29|30|57)[ -]|331[ -]|Connected to\b)/i.test(ln);
     });
     var hasFtpSession = !isMailCmd && !isSmtpOnlyTranscript && !!(banners.length || loginSuccess || writeOk || isExplicitFtpCmd || hasFtpListingShape || hasFtpAnchorLine);
     var ftpFiles = [], ftpDownloaded = [], seenDl = {}, webrootMarkers = [];
-    var hasDownloadComplete = !isMailCmd && !isSmtpOnlyTranscript && /(?:^|\n)\s*226[\s-]|\bTransfer complete\b|\b\d+\s+bytes\s+received\s+in\b/i.test(text);
+    var wgetFtpFailed = /\b(?:Login incorrect|530\s|failed:\s*(?:Connection refused|Connection timed out|No route to host)|unable to resolve host)\b/i.test(text);
+    var wgetFtpSummaryM = (hasFtpUri && !isMailCmd && !wgetFtpFailed) ? /\bDownloaded:\s+([1-9]\d*)\s+files?,\s+\S+\s+in\s+/i.exec(text) : null;
+    var wgetFtpSaved = hasFtpUri && !isMailCmd && !wgetFtpFailed && (/\bsaved\s+\[\d+(?:\/\d+)?\]/i.test(text) || /=>\s+[`'"][^`'"\r\n]+[`'"]/.test(text));
+    if (wgetFtpSummaryM || wgetFtpSaved) loginSuccess = true;
+    var hasDownloadComplete = !isMailCmd && !isSmtpOnlyTranscript && !isFtpUploadTurn && !/\b\d+\s+bytes\s+sent\s+in\b/i.test(text)
+      && (/(?:^|\n)\s*226[\s-]|\bTransfer complete\b|\b\d+\s+bytes\s+received\s+in\b/i.test(text) || !!(wgetFtpSummaryM || wgetFtpSaved));
+    var wgetMirrorCount = wgetFtpSummaryM ? parseInt(wgetFtpSummaryM[1], 10) : 0;
     if (hasDownloadComplete) {
       var addDlFile = function (rawName) {
-        var fn = C.stripChars(String(rawName || '').trim(), '"\'');
+        var fn = C.stripChars(String(rawName || '').trim(), '"\'`');
         if (!fn || fn === '.' || fn === '..' || /^-(?:a|l|la|al)$/i.test(fn)) return;
         var key = fn.toLowerCase();
         if (seenDl[key]) return;
@@ -235,6 +259,10 @@
       reAll(/^\s*1(?:25|50)[ -][^\r\n]*?\bfor\s+["']?(?<file>[^\s"'()\r\n]+)["']?(?:\s*\(\d+\s*bytes\))?/gim, text).forEach(function (m) {
         if (!/^(?:\/bin\/ls|directory|file\s+list)$/i.test(m.groups.file)) addDlFile(m.groups.file);
       });
+      if (hasFtpUri) {
+        reAll(/=>\s+[`'"]([^`'"\r\n]+)[`'"]/g, text).forEach(function (m) { addDlFile(m[1]); });
+        reAll(/[`'"]([^`'"\r\n]+)[`'"]\s+saved\s+\[\d+(?:\/\d+)?\]/gi, text).forEach(function (m) { addDlFile(m[1]); });
+      }
       if (!ftpDownloaded.length) {
         var cmdGetM = /\b(?:l?ftp|ncftpget)\b[^\r\n]*?\bget\s+["']?([^\s"';&|]+)["']?/i.exec(cmdStr);
         if (cmdGetM) addDlFile(cmdGetM[1]);
@@ -274,7 +302,8 @@
         }
       }
     });
-    if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length && !ftpDownloaded.length) return;
+    var hasEmptyFtpTransfer = isExplicitFtpCmd && hasFtpAnchorLine && /^\s*1(?:25|50)[ -]/im.test(text) && /^\s*226[ -]/im.test(text);
+    if (!banners.length && !loginSuccess && !writeOk && !ftpFiles.length && !ftpDownloaded.length && !wgetMirrorCount && !hasEmptyFtpTransfer) return;
     var ftpOsText = String(text || '')
       .replace(/^\s*Remote system type is [^\r\n]*$/gim, '')
       .replace(/^\s*215[ \t]+UNIX emulated by FileZilla\b[^\r\n]*$/gim, '');
@@ -284,14 +313,15 @@
     _add(facts, mkFact('ftp.reachable', h, ftpReachVal, S, source));
     if (banners.length) _add(facts, mkFact('ftp.banner', h, { banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
     var anonInText = /\bName\s*\([^)]*\):\s*(?:anonymous|ftp)\b|\bUSER\s+(?:anonymous|ftp)\b|331[\s-]+(?:Anonymous|Guest|Password required for anonymous)\b|230[\s-]+(?:Anonymous|Guest)\b|\bAnonymous FTP login allowed\b/i.test(text);
-    var isAnon = /\banonymous\b/i.test(command) || anonInText;
+    var isAnon = /\banonymous\b/i.test(command) || /^(?:anonymous|ftp)$/i.test(ftpUriUser) || anonInText;
     if (loginSuccess && isAnon) _add(facts, mkFact('ftp.anonymous_login', h, { tool: 'ftp-client' }, S, source));
-    if (loginSuccess && !isAnon) {
-      var ftpUserM = /^\s*Name\s*\([^)\r\n]*\):\s*([A-Za-z0-9._$@-]{1,64})\s*$/im.exec(text)
+    var canMintFtpAuth = loginSuccess && !isAnon && (!hasFtpUri || banners.length || !!ftpUriUser || /\blftp\b[^\r\n]*?\s-u\s/i.test(cmdStr));
+    if (canMintFtpAuth) {
+      var ftpUserM = (ftpUriUser ? [ftpUriUser, ftpUriUser] : null)
+        || /^\s*Name\s*\([^)\r\n]*\):\s*([A-Za-z0-9._$@-]{1,64})\s*$/im.exec(text)
         || /^\s*(?:--->?\s*)?USER\s+([A-Za-z0-9._$@-]{1,64})\s*$/im.exec(text)
         || /^\s*331[\s-]+(?:Password required for|User|Please specify the password for)\s+['"]?([A-Za-z0-9._$@-]{1,64})['"]?(?:[\s.,:]|$)/im.exec(text)
         || /^\s*230[\s-]+User\s+['"]?([A-Za-z0-9._$@-]{1,64})['"]?\s+logged\s+in\b/im.exec(text)
-        || /\bftps?:\/\/([^\/:\s@'"]+)(?::[^\/\s@'"]*)?@/i.exec(cmdStr)
         || /\blftp\b[^\r\n]*?\s-u\s+['"]?([^,\s'"]+)/i.exec(cmdStr);
       var ftpAuthUser = ftpUserM ? (C._clean_username ? C._clean_username(ftpUserM[1]) : ftpUserM[1].trim()) : '';
       if (/^(?:logged|login|ok|successful|connected|access|granted|welcome|anonymous|ftp)$/i.test(ftpAuthUser)) ftpAuthUser = '';
@@ -318,6 +348,8 @@
           _add(facts, mkFact('loot.material', h, { kind: 'archive_loot', file: base, path: e.path, via: 'ftp-download' }, S, source));
         }
       });
+    } else if (wgetMirrorCount > 0) {
+      _add(facts, mkFact('loot.files', h, { count: wgetMirrorCount, files: ['ftp://' + ws.target + '/'], via: 'ftp-mirror', tool: 'wget' }, S, source));
     }
     if (webrootMarkers.length) {
       _add(facts, mkFact('config.review', h, { kind: 'ftp_webroot_exposed', files: C.uniqueSortedCI(webrootMarkers), via: 'ftp' }, S, source));
@@ -355,8 +387,10 @@
   }
 
   function _parse_snmp_output(text, ws, command, source, facts) {
+    if (/\bopenssl\b[^\r\n]*\b(?:x509|req|pkcs12|crl|s_client|asn1parse)\b|\bcertutil\b/i.test(command || '')) return;
     var lowered = text.toLowerCase();
     var hasMibLines = /(?:snmpv2-mib|host-resources-mib|net-snmp-extend-mib|ucd-snmp-mib|if-mib|ip-mib|tcp-mib|udp-mib|hrswinstalledname|nsextend\w*|ext(?:names|command|output)|(?:iso|\.?1)\.3\.6\.1)[^\r\n]{0,160}=\s*(?:string|integer|oid|ipaddress|timeticks|counter\d*|gauge\d*|hex-string|bits):/i.test(text) || _ONESIXTYONE_RE.test(text);
+    if (!hasMibLines && /\bCertificate:\s*\r?\n\s*Data:|\bSubject Public Key Info:|\bX509v3 (?:Extended Key Usage|Subject Alternative Name|Key Usage|CRL Distribution Points|Authority Key Identifier|Subject Key Identifier):|-----BEGIN (?:[A-Z ]+ )?(?:CERTIFICATE|PRIVATE KEY)-----/i.test(text)) return;
     if (!hasMibLines && ['timeout', 'no response from', 'authorizationerror', 'authentication failure'].some(function (m) { return lowered.indexOf(m) >= 0; })) return;
     if (!hasMibLines && lowered.indexOf('snmpv2-mib::') < 0 && lowered.indexOf('= string:') < 0
         && lowered.indexOf('iso.3.6.1') < 0 && !/(?:^|\D)1\.3\.6\.1\./.test(text)
@@ -881,6 +915,27 @@
     if (banners.length) {
       C._add_os_from_text(banners.join('\n'), ws, source, facts, 'smtp', 'medium', true);
       _add(facts, mkFact('smtp.banner', h, { banner: banners[0], banners: C.uniqueSortedCI(banners).slice(0, 10) }, S, source));
+      var smtpFqdns = {}, smtpDoms = {};
+      banners.forEach(function (bn) {
+        var bm = /^([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+)\b/.exec(bn);
+        if (!bm) return;
+        var fh = bm[1].replace(/\.$/, '').toLowerCase();
+        if ((C._IPV4_RE && C._IPV4_RE.test(fh)) || /^\d+(?:\.\d+)+$/.test(fh)) return;
+        if (/^(?:localhost|ip6-localhost)(?:\.|$)|\.(?:localdomain|invalid|test)$|(?:^|\.)example\.(?:com|org|net)$/i.test(fh)) return;
+        if (!/\.[a-z][a-z0-9-]{1,}$/.test(fh)) return;
+        smtpFqdns[fh] = 1;
+      });
+      Object.keys(smtpFqdns).sort().forEach(function (fh) {
+        var fParts = fh.split('.').filter(Boolean);
+        var fVal = { fqdn: fh, hostname: fParts[0], via: 'smtp-banner' };
+        var fDom = fParts.length > 2 ? fParts.slice(1).join('.') : fh;
+        fVal.domain = fDom;
+        smtpDoms[fDom] = 1;
+        _add(facts, mkFact('host.fqdn', h, fVal, S, source));
+      });
+      Object.keys(smtpDoms).sort().forEach(function (fd) {
+        _add(facts, mkFact('host.domain', h, { domain: fd }, S, source));
+      });
     }
     if (hasAuthContext && has235Success) {
       var user = _extractSmtpAuthUser(t, command);
@@ -1241,6 +1296,15 @@
 
     var h = 'host:' + ((ws && ws.target) || 'unknown');
     var fqdns = {}, bareDoms = {};
+    var subjLineM = /^\s*Subject:\s*([^\r\n]+)/im.exec(t);
+    var issLineM = /^\s*Issuer:\s*([^\r\n]+)/im.exec(t);
+    if ((/\bopenssl\b[^\r\n]*\bx509\b/i.test(cmd) || /\bCertificate:\s*\r?\n\s*Data:/i.test(t)) && (subjLineM || issLineM)) {
+      _add(facts, mkFact('tls.info', h, {
+        subject: subjLineM ? subjLineM[1].trim() : '',
+        issuer: issLineM ? issLineM[1].trim() : '',
+        via: 'x509'
+      }, S, source));
+    }
     function addCertName(raw) {
       var cand = String(raw || '').trim().replace(/^\*\./, '').replace(/\.$/, '').toLowerCase();
       if (!cand || cand.indexOf('.') < 0) return;
@@ -1250,16 +1314,46 @@
       if (!/\.[a-z][a-z0-9-]{1,}$/.test(cand)) return;
       fqdns[cand] = true;
     }
+    function addAdCertDom(rawDom) {
+      var cand = String(rawDom || '').trim().replace(/\.$/, '').toLowerCase();
+      if (!cand || cand.indexOf('.') < 0) return;
+      if ((C._IPV4_RE && C._IPV4_RE.test(cand)) || /^\d+(?:\.\d+)+$/.test(cand)) return;
+      if (/^localhost(?:\.|$)/i.test(cand) || _X509_PUBLIC_CA_DENY_RE.test(cand)) return;
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(cand)) return;
+      if (!/\.[a-z][a-z0-9-]{1,}$/.test(cand)) return;
+      if (!bareDoms[cand]) bareDoms[cand] = { hostLabel: '', fromAdDn: true };
+      else bareDoms[cand].fromAdDn = true;
+    }
 
-    reAll(/^\s*subject[=:]\s*[^\r\n]*?\bCN\s*=\s*([A-Za-z0-9*.-]+\.[A-Za-z]{2,})\b/gim, t).forEach(function (m) {
+    reAll(/^\s*subject[=:]\s*[^\r\n]*?\b(?:CN|commonName)\s*=\s*([A-Za-z0-9*.-]+\.[A-Za-z]{2,})\b/gim, t).forEach(function (m) {
       addCertName(m[1]);
     });
     reAll(/\bDNS\s*:\s*([A-Za-z0-9*.-]+\.[A-Za-z]{2,})\b/gi, t).forEach(function (m) {
       addCertName(m[1]);
     });
+    reAll(/^\s*(?:Subject|Issuer)\s*[=:]\s*([^\r\n]+)/gim, t).forEach(function (m) {
+      var dnLine = m[1] || '';
+      var dcMatches = reAll(/\bDC\s*=\s*([A-Za-z0-9-]+)/gi, dnLine);
+      if (dcMatches.length >= 2) {
+        var dcs = dcMatches.map(function (dm) { return dm[1].toLowerCase(); });
+        var firstDcIdx = dnLine.search(/\bDC\s*=/i);
+        var firstCnIdx = dnLine.search(/\b(?:CN|OU)\s*=/i);
+        if (firstCnIdx >= 0 && firstDcIdx >= 0 && firstDcIdx < firstCnIdx) {
+          dcs = dcs.slice().reverse();
+        }
+        addAdCertDom(dcs.join('.'));
+      }
+    });
+    reAll(/ldap:\/\/\/[^\s"']*?((?:,?\s*DC=[A-Za-z0-9-]+){2,})/gi, t).forEach(function (m) {
+      var dcs = reAll(/\bDC=([A-Za-z0-9-]+)/gi, m[1]).map(function (dm) { return dm[1].toLowerCase(); });
+      if (dcs.length >= 2) addAdCertDom(dcs.join('.'));
+    });
+    reAll(/\bUPN\s*[:=]\s*[A-Za-z0-9_.$-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/gi, t).forEach(function (m) {
+      addAdCertDom(m[1]);
+    });
 
     var names = C.uniqueSortedCI(Object.keys(fqdns));
-    if (!names.length) return facts;
+    if (!names.length && !Object.keys(bareDoms).length) return facts;
 
     var allKnown = [].concat(facts || [], (ws && ws.facts) || [], (ws && ws.seedFacts) || []);
     var hasLinuxOs = allKnown.some(function (f) {
@@ -1304,6 +1398,78 @@
   C._parse_x509_cert = _parse_x509_cert;
   C._parse_openssl_x509 = _parse_x509_cert;
   C._parse_tls_cert = _parse_x509_cert;
+
+  // Post-load service extensions for parsers defined earlier in load order (creds.js / host.js):
+  // 1. Positive ike-scan Main/Aggressive Mode handshake -> UDP/500 service.isakmp
+  if (typeof C._parse_ike_psk === 'function' && !C._parse_ike_psk._obolWrapped) {
+    var _origParseIkePsk = C._parse_ike_psk;
+    var _wrappedIkePsk = function (text, a1, a2, a3, a4) {
+      var res = _origParseIkePsk.apply(this, arguments);
+      var u = _unpack_service_args(text, a1, a2, a3, a4, 'ike-scan');
+      var t = String(text || '');
+      if (u.ws && Array.isArray(u.facts) && /\b(?:Main|Aggressive)\s+Mode\s+Handshake\s+returned\b/i.test(t)) {
+        var h = 'host:' + u.ws.target;
+        _add(u.facts, mkFact('port:500', h, { port: 500, protocol: 'udp', service: 'isakmp', tool: 'ike-scan' }, S, u.source));
+        _add(u.facts, mkFact('service.isakmp', h, { port: 500, protocol: 'udp', service: 'isakmp', tool: 'ike-scan' }, S, u.source));
+      }
+      return res;
+    };
+    _wrappedIkePsk._obolWrapped = true;
+    C._parse_ike_psk = _wrappedIkePsk;
+  }
+
+  // 2. Listener file-receive redirection ("nc -lnvp 443 > archive.zip" with confirmed inbound connection)
+  if (typeof C._parse_listener_output === 'function' && !C._parse_listener_output._obolWrapped) {
+    var _origParseListener = C._parse_listener_output;
+    var _wrappedListener = function (text, a1, a2, a3, a4) {
+      var res = _origParseListener.apply(this, arguments);
+      var u = _unpack_service_args(text, a1, a2, a3, a4, 'nc');
+      var cmd = String(u.command || u.source || '');
+      var t = String(text || '');
+      if (u.ws && Array.isArray(u.facts) && /^\s*(?:sudo\s+)?(?:nc|ncat|netcat|socat)\b[^\r\n]*-[A-Za-z]*l[A-Za-z]*\b/i.test(cmd)) {
+        var redirM = />\s*['"]?([^\s'";&|]+\.(?:zip|tar|gz|tgz|bz2|xz|7z|rar|bak|jks|keystore|pfx|p12|kdbx|sql|db|sqlite3?))['"]?/i.exec(cmd);
+        if (redirM && /\b(?:Connection\s+(?:from|received\s+on)|connect\s+to\s+\[[^\]]+\]\s+from)\b/i.test(t)) {
+          var h = 'host:' + u.ws.target;
+          var fn = redirM[1];
+          var base = fn.split(/[\\/]/).pop() || fn;
+          _add(u.facts, mkFact('loot.files', h, { count: 1, files: [fn], via: 'listener-exfil', tool: 'nc' }, S, u.source));
+          _add(u.facts, mkFact('loot.material', h, { kind: 'archive_loot', file: base, path: fn, via: 'listener-exfil' }, S, u.source));
+        }
+      }
+      return res;
+    };
+    _wrappedListener._obolWrapped = true;
+    C._parse_listener_output = _wrappedListener;
+  }
+
+  // 3. Finger daemon tabular user roster ("Login  Name  TTY  Idle  When  Where")
+  if (typeof C._parse_host_auxiliary === 'function' && !C._parse_host_auxiliary._obolWrapped) {
+    var _origParseHostAux = C._parse_host_auxiliary;
+    var _wrappedHostAux = function (text, a1, a2, a3, a4) {
+      var res = _origParseHostAux.apply(this, arguments);
+      var u = _unpack_service_args(text, a1, a2, a3, a4, 'finger');
+      var cmd = String(u.command || u.source || '');
+      var t = String(text || '');
+      if (u.ws && Array.isArray(u.facts) && /^\s*(?:sudo\s+)?finger(?:-user-enum(?:\.pl)?)?\b/i.test(cmd) && /^\s*Login\s+Name\s+(?:TTY|Tty)\b/im.test(t)) {
+        var fUsers = [], inTable = false;
+        t.split(/\r?\n/).forEach(function (ln) {
+          if (/^\s*Login\s+Name\s+(?:TTY|Tty)\b/i.test(ln)) { inTable = true; return; }
+          if (!inTable || !ln.trim() || /No one logged on/i.test(ln)) return;
+          var um = /^\s*([a-z_][a-z0-9_.-]{0,31})\s+\S/i.exec(ln);
+          if (um && !_IDENT_STOCK_ACCOUNTS_RE.test(um[1]) && !/^(?:login|user|username|no|finger)$/i.test(um[1])) {
+            fUsers.push(um[1]);
+          }
+        });
+        if (fUsers.length) {
+          var uniqFinger = C.uniqueSortedCI(fUsers);
+          _add(u.facts, mkFact('host.users', 'host:' + u.ws.target, { users: uniqFinger, count: uniqFinger.length, via: 'finger' }, S, u.source));
+        }
+      }
+      return res;
+    };
+    _wrappedHostAux._obolWrapped = true;
+    C._parse_host_auxiliary = _wrappedHostAux;
+  }
 
   OBOL.parsers = OBOL.parsers || {};
   OBOL.parsers.services = Object.assign(OBOL.parsers.services || {}, {

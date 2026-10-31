@@ -188,7 +188,7 @@
     }
 
     if (lc.indexOf('ldapsearch') >= 0 || /^dn:\s*(?:CN|DC|OU|uid)=/im.test(text) || /^namingContexts:/im.test(text) || /^\s*distinguishedName\s*:\s*CN=/im.test(text)) {
-      guarded._parse_ldapsearch(text, ws, source, facts);
+      guarded._parse_ldapsearch(text, ws, source, facts, command);
       if (actionId === 'ad-anon-ldap-enum' || lc.indexOf('(objectclass=user)') >= 0 || /sAMAccountName:/i.test(text)) guarded._parse_user_list(text, ws, source, facts, { prove_anonymous_ldap: C._looks_anonymous_ldap_command(command, actObj), domain_hint: domainHint });
       if (/^\s*description\s*:/im.test(text) && has('_parse_ldap_descriptions')) guarded._parse_ldap_descriptions(text, ws, source, facts, { domain_hint: domainHint });
     }
@@ -357,6 +357,7 @@
     if (isNxc && ((' ' + lc + ' ').indexOf(' rdp ') >= 0 || /^RDP\s+\S+\s+\d+\s+\S+/im.test(text))) guarded._parse_nxc_rdp(text, ws, command, source, facts);
 
     var looksLikeCracked = C._is_cracking_command(command) || text.indexOf('$keepass$*') >= 0
+      || /\bfcrackzip\b/i.test(lc) || /PASSWORD FOUND!+:\s*pw\s*==/i.test(text)
       || (C._JOHN_LOADED_RE && C._JOHN_LOADED_RE.test(text))
       || (C._JOHN_CRACKED_FOOTER_RE && C._JOHN_CRACKED_FOOTER_RE.test(text))
       || /^\s*[1-9]\d*g\s+\d+:\d{2}:\d{2}:\d{2}\s+DONE\b|\bUse the "--show" option to display all of the cracked passwords\b/im.test(text)
@@ -380,7 +381,8 @@
         || /(?:^|\r?\n)[ \t]*(?:(?:\([^)\r\n]+\)[ \t]*)?(?:[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+[^$#\r\n]*[$#]|\u2514\u2500[$#]|[>$#])[ \t]+)(?:sudo[ \t]+)?(?:python[23]?[ \t]+\S*?)?\b(?:impacket-)?(?:wmiexec|psexec|smbexec|atexec|dcomexec)(?:\.py)?[ \t]+\S/i.test(execTextSample))
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(lc)
       || /fDenyTSConnections|Remote Desktop Users|Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|AllowAutoConfig|WinRMInit/i.test(execTextSample));
-    var hasSshAuthFail = isSsh && /\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Host key verification failed|No route to host|Could not resolve hostname)\b/i.test(execTextSample);
+    var sshFailCheckSample = C._strip_nonfatal_ssh_client_warnings ? C._strip_nonfatal_ssh_client_warnings(execTextSample) : execTextSample;
+    var hasSshAuthFail = isSsh && /\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Host key verification failed|No route to host|Could not resolve hostname)\b/i.test(sshFailCheckSample);
     var isSshWindowsExec = isSsh && !isDosEmu && !hasSshAuthFail && (
       /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/im.test(sshExecCtx)
       || /^\s*(?:[A-Za-z0-9_.-]+\\)?[A-Za-z0-9_.$-]+@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.test(sshExecCtx)
@@ -393,7 +395,7 @@
       if (sshWinUserM && sshWinUserM[1]) sshWinAuthVal.user = C._clean_username ? C._clean_username(sshWinUserM[1]) : sshWinUserM[1];
       C._add(facts, C.mkFact('ssh.authenticated', 'host:' + ws.target, sshWinAuthVal, C.ProofState.SUPPORTED, source));
     }
-    if (!isDosEmu && (((C._is_exec_command(command) || isWhoamiId || isWinInteractivePaste || (!command && (/^\s*nt authority\\system\s*$/im.test(execTextSample) || /^Directory of [A-Za-z]:\\/im.test(execTextSample)))) && !isSsh || isSshWindowsExec)) && has('_parse_command_execution')) guarded._parse_command_execution(text, ws, command, source, facts);
+    if (!isDosEmu && ((((C._is_exec_command(command) || /\bInvoke-Command\b/i.test(command || '')) || isWhoamiId || isWinInteractivePaste || (!command && (/^\s*nt authority\\system\s*$/im.test(execTextSample) || /^Directory of [A-Za-z]:\\/im.test(execTextSample)))) && !isSsh || isSshWindowsExec)) && has('_parse_command_execution')) guarded._parse_command_execution(text, ws, command, source, facts);
 
     // A confirmed file transfer / tool staged onto the host (certutil URLCache, wget "saved", scp "100%",
     // bitsadmin, copy): mint a terminal host.tool_staged receipt. The reader self-gates on a tool-specific
@@ -405,7 +407,7 @@
     if (has('_looks_like_meterpreter') && guarded._looks_like_meterpreter(execTextSample, command) && has('_parse_meterpreter')) guarded._parse_meterpreter(text, ws, command, source, facts);
     var whoamiEscSample = (command || '') + '\n' + execTextSample;
     if (has('_parse_posix_whoami_escalation') && (Boolean(ws && ws.context && ws.context.followPrompt) || /\b(?:whoami|doas|sudo|su|pkexec)\b/i.test(whoamiEscSample) || /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i.test(whoamiEscSample))) guarded._parse_posix_whoami_escalation(text, ws, command, source, facts);
-    if (has('_parse_windows_admin_staging') && /\b(?:net(?:\.exe)?\s+localgroup|reg(?:\.exe)?\s+save|reg(?:\.py|\.exe)?\s+[^\r\n]*\bbackup\b|Saved\s+HKLM\\(?:SAM|SYSTEM|SECURITY)\s+to\b|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
+    if (has('_parse_windows_admin_staging') && /\b(?:net1?(?:\.exe)?\s+(?:localgroup|use)|reg(?:\.exe)?\s+save|reg(?:\.py|\.exe)?\s+[^\r\n]*\bbackup\b|Saved\s+HKLM\\(?:SAM|SYSTEM|SECURITY)\s+to\b|robocopy)\b/i.test((command || '') + '\n' + text)) guarded._parse_windows_admin_staging(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && has('_parse_host_auxiliary')) guarded._parse_host_auxiliary(text, ws, command, source, facts);
 
     if (C._PRIVESC_ACTION_IDS && C._PRIVESC_ACTION_IDS.has(actionId)) {
@@ -416,10 +418,10 @@
       var isRemoteScanner = hasFtpOwnerListing || isHttpRespBody
         || /\b(?:snmpwalk|snmpbulkwalk|snmp-check|onesixtyone|nmap|masscan|rustscan|httpie|whatweb|nikto|ffuf|gobuster|feroxbuster|dirb|dirsearch|wfuzz|httpx|nuclei|wpscan)\b/i.test(lc)
         || (!looksLinEnumPaste && (/\b(?:curl|wget)\b/i.test(lc) || /\bhttps?:\/\/|(?:^|\s)(?:--?(?:target|rhost|url|master)|-t)\s+(?:https?:\/\/|\d{1,3}(?:\.\d{1,3}){3})\b/i.test(command || '')));
-      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-(?:perm|writable)\b|\bgetcap\b|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b|\b(?:magick|convert)\s+-version\b|\bsudo\s+(?:--version|-v)\b/i.test(lc) || /Version:\s+ImageMagick\s+\d/i.test(bigProbeSample) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
+      if (!isRemoteScanner && has('_looks_like_linux_enum') && (looksLinEnumPaste || /\bfind\b[^\r\n]*-(?:perm|writable)\b|\bgetcap\b|\bcapsh\b|\bscreen\s+-ls\b|^\s*(?:sudo\s+)?file\s+\S+|\bsystemctl\s+cat\b|\bps\s+(?:aux|-ef)\b|\bpspy(?:32|64)?s?\b|\bcrontab\b|\/etc\/cron|\/var\/log\/syslog\b|\/etc\/(?:passwd|shadow)\b|\/var\/run\/docker\.sock\b|\/proc\/1\/cgroup\b|\/\.dockerenv\b|\b(?:magick|convert)\s+-version\b|\bsudo\s+(?:--version|-v)\b/i.test(lc) || /Version:\s+ImageMagick\s+\d/i.test(bigProbeSample) || (/^\s*groups(?:\s+[A-Za-z0-9_.-]+)?\s*$/i.test(lc) && /\b(?:docker|lxd|lxc|adm|disk|shadow|video)\b/i.test(text)))) {
         guarded._parse_privesc_output('linux-enum', text, ws, command, source, facts);
       }
-      if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b/i.test(lc))) {
+      if (!isRemoteScanner && has('_looks_like_windows_enum') && (guarded._looks_like_windows_enum(text) || /\bsc(?:\.exe)?\s+qc\b|\bwmic\s+service\b|\bwin32_service\b|\bautorunsc?\b|\bConvertFrom-SddlString\b|\bDiscretionaryAcl\b/i.test(lc))) {
         guarded._parse_privesc_output('windows-enum', text, ws, command, source, facts);
       }
     }
@@ -459,7 +461,7 @@
       guarded._parse_binary_inspection(text, ws, command, source, facts);
     }
 
-    if (lc.indexOf('certipy') >= 0 || lc.indexOf('certify') >= 0 || lc.indexOf('pywhisker') >= 0 || /(?:CA Name|Template Name|msPKI-Certificate-Name-Flag|Certipy)[\s\S]{1,600}?(?:ESC\d+|ENROLLEE_SUPPLIES_SUBJECT|Vulnerabilities)/i.test(bigProbeSample)) {
+    if (lc.indexOf('certipy') >= 0 || lc.indexOf('certify') >= 0 || lc.indexOf('pywhisker') >= 0 || lc.indexOf('certreq') >= 0 || /Certificate retrieved\s*\(\s*Issued\s*\)\s*Issued/i.test(bigProbeSample) || /(?:CA Name|Template Name|msPKI-Certificate-Name-Flag|Certipy)[\s\S]{1,600}?(?:ESC\d+|ENROLLEE_SUPPLIES_SUBJECT|Vulnerabilities)/i.test(bigProbeSample)) {
       if (has('_parse_adcs')) guarded._parse_adcs(text, ws, command, source, facts);
     }
     if ((lc.indexOf('certipy auth') >= 0 || lc.indexOf('certipy shadow') >= 0 || lc.indexOf('shadow auto') >= 0 || actionId === 'cert-authenticate' || /Got hash for\s+['"]?[^\s'"]+['"]?\s*:\s*(?:[a-f0-9]{32}:)?[a-f0-9]{32}|Saved credential cache to/i.test(bigProbeSample)) && has('_parse_certipy_auth')) {
@@ -467,7 +469,7 @@
     }
     var isGmsaContent = /\bgmsadumper\b/i.test(lc) || /^[A-Za-z0-9._-]+\$:::[0-9a-fA-F]{32}\s*$|Users or groups who can read password for\s+[A-Za-z0-9._-]+\$:/im.test(bigProbeSample);
     var isTicketConvContent = /\b(?:ticketconverter|kirbi2ccache)\b/i.test(lc) || /\bconverting\s+kirbi\s+to\s+ccache\b|\bSaving\s+ccache\s+file\b/i.test(bigProbeSample);
-    var isAdControlContent = /\b(?:passthecert|aclpwn|dnstool)\b/i.test(lc) || /Delegation rights modified successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member to CN=|\[\+\]\s*Dacl modification successful|\[\+\]\s*LDAP operation completed successfully/i.test(bigProbeSample);
+    var isAdControlContent = /\b(?:passthecert|aclpwn|dnstool)\b/i.test(lc) || /\bbloodyad\b[^\r\n]*\bset\s+object\b/i.test(lc) || /\[\+\]\s+\S+'s\s+\S+\s+has been updated\b/i.test(bigProbeSample) || /Delegation rights modified successfully|Adding user:\s+\S+\s+to group\s+\S+\s+result:\s*OK|\[\+\]\s*Added CN=[^\r\n]+ as member to CN=|\[\+\]\s*Dacl modification successful|\[\+\]\s*LDAP operation completed successfully/i.test(bigProbeSample);
     if (isGmsaContent || isTicketConvContent || isAdControlContent || (has('_is_ad_abuse_command') && (C._is_ad_abuse_command(command) || (C._AD_ABUSE_ACTION_IDS && C._AD_ABUSE_ACTION_IDS.has(actionId)) || /DACL modified successfully|OwnerSid modified successfully|Password changed successfully!|\[\+\]\s+\S+\s+added to\s+\S+|\[\*\]\s+Action:\s*Ask\s+TGT|TGT request successful!|Service ticket successfully requested|Saving ticket in\s+\S+\.ccache|DeviceKey\s*:|KeyCredential\s+added|\bnet\s+rpc\s+password\b/i.test(bigProbeSample) || (/\bnet(?:\.exe)?\s+user\b[^\r\n]+\/domain\b/i.test(bigProbeSample) && /The command completed successfully\./i.test(bigProbeSample))))) {
       if (has('_parse_ad_abuse_output')) guarded._parse_ad_abuse_output(actionId, text, ws, command, source, facts);
       if (isGmsaContent && has('_parse_gmsa_material')) guarded._parse_gmsa_material(text, ws, command, source, facts);
@@ -519,13 +521,14 @@
     // KeePass database/dump in hand (.kdbx, $keepass$ hash, master-key dump).
     if (has('_parse_keepass_dump') && (/keepass|\.kdbx/i.test(lc) || /\$keepass\$|\.kdbx/i.test(bigProbeSample))) guarded._parse_keepass_dump(text, ws, command, source, facts);
     if (!isPayloadBuilderCmd && !isPublicRefHttp && !isOutboundSimpleHttp && !isFtpOnlyUriCmd && !isSqlClientSession && (['curl', 'whatweb', 'wget', 'gobuster', 'ffuf', 'feroxbuster', 'nikto', 'dirb', 'dirsearch', 'katana', 'hakrawler', 'httpie'].some(function (w) { return lc.indexOf(w) >= 0; }) || /^\s*(?:GET|POST|HEAD)\s+https?:\/\/\S+/i.test(command || '') || /^<(?:!DOCTYPE|html|head|body|form|input|script)\b/im.test(bigProbeSample) || /\[Input[^\]]*Pass(?:word|wd|code)?[^\]]*\]|^URL:\s*https?:\/\/\S+|Set-Cookie:\s*laravel_session=|actuator\/sessions|"sessions"\s*:\s*\[|"(?:[0-9a-fA-F]{24,64}|[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"\s*:\s*"[A-Za-z0-9_.@-]{2,64}"|"__(?:schema|type)"\s*:|Cannot query field\b|<bind-dn>\s*CN=/im.test(bigProbeSample))) guarded._parse_web_surface(text, ws, command, source, facts);
-    if (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(bigProbeSample)) guarded._parse_snmp_output(text, ws, command, source, facts);
+    var isX509CertPaste = /^\s*Certificate(?:\s+Request)?:\s*\r?\n\s*Data:|\bBEGIN CERTIFICATE\b|\bopenssl\s+(?:x509|req|pkcs12|s_client|asn1parse)\b/im.test((command || '') + '\n' + bigProbeSample);
+    if (!isX509CertPaste && (['snmpwalk', 'snmpbulkwalk', 'snmp-check', 'onesixtyone'].some(function (t) { return lc.indexOf(t) >= 0; }) || /(?:SNMPv2-MIB|iso\.3\.6\.1\.2\.1|HOST-RESOURCES-MIB|NET-SNMP-EXTEND-MIB)::/i.test(bigProbeSample))) guarded._parse_snmp_output(text, ws, command, source, facts);
     var isBinaryLocatorOrDirCmd = /^\s*(?:sudo\s+)?(?:where(?:\.exe)?|which|whereis|type\s+-a|command\s+-v|get-command|gcm|dir|ls|gci|get-childitem|find)\b/i.test(command || '');
     var dbSessionCheckText = [bigProbeSample, ws && ws.context && ws.context.promptLine, ws && ws.context && ws.context.followPrompt].filter(Boolean).join('\n');
     var looksLikeDbQueryOrHashRow = /\b(?:pg_database|pg_tables|pg_shadow|pg_authid)\b|^\s*\\(?:l|list|dt)\+?(?:\s|;|$)|^\s*List of (?:databases|relations)\s*$/im.test(dbSessionCheckText)
       || (bigProbeSample.indexOf('|') >= 0
         && !/\baad3b435b51404eeaad3b435b51404ee:[0-9a-fA-F]{32}\b/i.test(bigProbeSample)
-        && /(?:^[^\r\n]*\|[^\r\n]*(?:\$(?:2[abxy]|1|5|6|y|P|H|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)|(?:\$(?:2[abxy]|1|5|6|y|P|H|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)[^\r\n]*\|)/m.test(bigProbeSample));
+        && /(?:^[^\r\n]*\|[^\r\n]*(?:\$(?:2[abxy]|1|5|6|y|P|H|S|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)|(?:\$(?:2[abxy]|1|5|6|y|P|H|S|apr1)\$[^\s|]{8,}|\*[0-9A-Fa-f]{40}\b|\bmd5[0-9a-fA-F]{32}\b|\bSCRAM-SHA-256\$\d+:[^\s|]+)[^\r\n]*\|)/m.test(bigProbeSample));
     if (!isBinaryLocatorOrDirCmd && (['mysql', 'mssqlclient', 'sqlcmd', 'psql', 'mongosh', 'mongo ', 'pymongo', 'mongoclient', 'redis-cli', 'sqlplus', 'odat', 'sqlite3', 'sqlite'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\b(?:nxc|netexec|crackmapexec|cme)\s+mssql\b/.test(lc) || /^redis_version:|^SQL(?:\s*\([^)]*\))?>\s*|^mysql>\s*|^MariaDB\s*\[[^\]]*\]>\s*|^postgres[-=#]*>\s*|^postgres=#\s*/im.test(dbSessionCheckText) || looksLikeDbQueryOrHashRow)) guarded._parse_database_output(text, ws, command, source, facts);
     if ((lc.indexOf('sqlite3') >= 0 || ((bigProbeSample.indexOf('|') >= 0 || /CREATE TABLE\s+/i.test(bigProbeSample)) && /CREATE TABLE\s+|^\s*\d+\|[^|\r\n]+\|[^|\r\n]+/im.test(bigProbeSample))) && has('_parse_sqlite_dump')) guarded._parse_sqlite_dump(text, ws, source, facts);
     if (has('_has_notable_programs') && !/(?:^|\s)(?:--help|-h|--version|-V)(?:\s|$)/.test(lc) && !/\b(?:bloodyad|nxc|netexec|crackmapexec|cme|certipy|ldapsearch|impacket|getnpusers|getuserspns|secretsdump|nmap|dnstool|gmsadumper|getnthash|pywhisker|targetedkerberoast|git[-_]dumper|rusthound)\b/i.test(lc) && C._has_notable_programs(text)) guarded._parse_notable_programs(text, ws, source, facts);
@@ -583,7 +586,7 @@
 
     if (lc.indexOf('dig') >= 0 && lc.indexOf('axfr') >= 0 && has('_parse_dns_zone')) guarded._parse_dns_zone(text, ws, source, facts, command);
     if ((lc.indexOf('ike-scan') >= 0 || /IKE PSK parameters/i.test(bigProbeSample) || (/:[0-9a-fA-F]{4,}:[0-9a-fA-F]{4,}:[0-9a-fA-F]{4,}/.test(bigProbeSample) && /^[0-9a-fA-F]+(?::[0-9a-fA-F]+){8}$/m.test(bigProbeSample))) && has('_parse_ike_psk')) guarded._parse_ike_psk(text, ws, source, facts);
-    if ((lc.indexOf('ipmitool') >= 0 || lc.indexOf('ipmi') >= 0 || /\$rakp\$|RAKP-(?:HMAC-SHA1|Hash)/i.test(bigProbeSample) || (/:[0-9a-fA-F]{40}/.test(bigProbeSample) && /^[A-Za-z0-9_.-]+:[0-9a-fA-F]{40,}:[0-9a-fA-F]{40}$/m.test(bigProbeSample))) && has('_parse_ipmi_rakp')) guarded._parse_ipmi_rakp(text, ws, source, facts);
+    if ((lc.indexOf('ipmitool') >= 0 || lc.indexOf('ipmi') >= 0 || /IPMI\s+-\s+Hash found:|\$rakp\$|RAKP-(?:HMAC-SHA1|Hash)/i.test(bigProbeSample) || /\bipmi_dumphashes\b/i.test(callerPromptRaw) || (/:[0-9a-fA-F]{40}/.test(bigProbeSample) && /^[A-Za-z0-9_.-]+:[0-9a-fA-F]{40,}:[0-9a-fA-F]{40}$/m.test(bigProbeSample))) && has('_parse_ipmi_rakp')) guarded._parse_ipmi_rakp(text, ws, source, facts);
     if ((/\b(?:hashid|hash-identifier|nth|haiti|name-that-hash)\b/.test(lc) || actionId === 'crack-identify' || /\[Hashcat Mode:\s*\d+\]|Most Likely\s*:/i.test(bigProbeSample)) && has('_parse_hash_identify')) guarded._parse_hash_identify(text, ws, command, source, facts);
 
     // findings-check actions
@@ -625,7 +628,9 @@
     // Known-exploit fingerprint recognizer: when pasted service/version output names a product+version
     // (or a CVE / nmap vuln verdict) that a promoted known-exploit module targets, mint a vuln.<name>
     // lead so the coach lights that exact module. Anchored and additive; unrelated output mints nothing.
-    if (!isPayloadBuilderCmd && has('_parse_vulnmatch')) {
+    var isFileMagicOrUnversionedConfCmd = /^\s*(?:sudo\s+)?file\b/i.test(command || '')
+      || (/\b(?:cat|head|tail|more|less|grep|type|get-content|gc)\b[^\r\n]*\.(?:conf|cfg|ini)\b/i.test(command || '') && !/\bversion\s*[:=]\s*\d/i.test(text));
+    if (!isPayloadBuilderCmd && !isFileMagicOrUnversionedConfCmd && has('_parse_vulnmatch')) {
       var vulnMatchText = (text.indexOf('\u2563') >= 0 || text.indexOf('\u2524') >= 0)
         ? text.replace(/^[ \t]*(?:[\u2554\u2560\u250c\u251c]?[\u2550\u2500=]*[\u2563\u2524])[ \t]*(?:Analyzing|Searching|Checking)\b[^\r\n]*$/gim, '')
         : text;
@@ -693,6 +698,47 @@
           facts.splice(prj, 1);
         } else if (isOutboundSimpleHttp && (prf2.kind === 'http.reachable' || /^web\./.test(prf2.kind || '') || prf2.kind === 'exploit.versioned_banner' || prf2.kind === 'service.version' || /^port:\d+$/.test(prf2.kind || ''))) {
           facts.splice(prj, 1);
+        }
+      }
+    }
+
+    // Post-dispatch false-positive isolation guards (local hash generators, PKCS#12 bags, WSL1 guests,
+    // attacker-local inspection/locate turns, explicit non-root '#' prompts, FUZZ templates, local SDDL)
+    var isLocalPasswdHashGenCmd = /^\s*(?:sudo\s+)?(?:openssl\s+passwd|mkpasswd|htpasswd)\b/i.test(command || '');
+    var isPkcs12BagKeyDump = /\bBag Attributes\b[\s\S]{0,400}?\blocalKeyID:/i.test(bigProbeSample) && !/BEGIN[ \t]+OPENSSH[ \t]+PRIVATE[ \t]+KEY/i.test(bigProbeSample);
+    var isWslGuestNonAdmin = !!(C._is_wsl_guest_from_nonadmin_windows && C._is_wsl_guest_from_nonadmin_windows(ws, command));
+    var rawPromptFull = String((ws && ws.context && ws.context.promptLine) || '');
+    var rawFollowFull = String((ws && ws.context && ws.context.followPrompt) || '');
+    var isAttackerPromptTurn = !isSsh && !!(C._is_attacker_prompt_string && C._is_attacker_prompt_string(rawPromptFull) && C._is_attacker_local_turn && C._is_attacker_local_turn(ws, command, text));
+    var isAttackerLocateCmd = isAttackerPromptTurn && /^\s*(?:sudo\s+)?(?:locate|mlocate|plocate|which|whereis|searchsploit)\b/i.test(command || '');
+    var nonRootHashPromptM = /^[^\r\n]*?\b([a-z_][a-z0-9_-]{1,31})@[A-Za-z0-9_.-]+:[^\r\n#]*#/i.exec(callerPromptRaw);
+    var isNonRootHashPrompt = !!(nonRootHashPromptM && !/^(?:root|toor)$/i.test(nonRootHashPromptM[1])
+      && !/\buid=0\(root\)|^\s*root\s*$/im.test(text)
+      && !/^[^\r\n]*?\broot@[A-Za-z0-9_.-]+:/im.test(rawFollowFull));
+    var isFuzzerPayloadCmd = /\b(?:ffuf|wfuzz|gobuster|feroxbuster|dirsearch)\b/i.test(command || '') && /\bFUZZ\b/.test(command || '');
+    var isLocalWinSddlAcl = /\bConvertFrom-SddlString\b|\bDiscretionaryAcl\b/i.test(command || '')
+      || (/^(?:NT AUTHORITY|BUILTIN)\\[^:\r\n]+:\s*AccessAllowed\s*\(/im.test(bigProbeSample) && !/\b(?:ObjectDN|DistinguishedName)\s*:\s*CN=/i.test(bigProbeSample));
+    if (isFileMagicOrUnversionedConfCmd || isLocalPasswdHashGenCmd || isPkcs12BagKeyDump || isWslGuestNonAdmin || isAttackerPromptTurn || isNonRootHashPrompt || isFuzzerPayloadCmd || isLocalWinSddlAcl) {
+      for (var pgi = facts.length - 1; pgi >= 0; pgi--) {
+        var pgf = facts[pgi];
+        if (!pgf || !pgf.kind) continue;
+        var pgk = pgf.kind;
+        if (isFileMagicOrUnversionedConfCmd && /^vuln\.(?!sqli_confirmed$|cmdi_confirmed$|lfi_confirmed$|ssrf_confirmed$|ssti_confirmed$)/.test(pgk)) {
+          facts.splice(pgi, 1);
+        } else if (isLocalPasswdHashGenCmd && (pgk === 'hash.crackable' || pgk === 'hash.candidate' || pgk === 'credential.candidate')) {
+          facts.splice(pgi, 1);
+        } else if (isPkcs12BagKeyDump && (pgk === 'loot.ssh_key' || pgk === 'credential.ssh_key')) {
+          facts.splice(pgi, 1);
+        } else if (isWslGuestNonAdmin && (pgk === 'access.root' || pgk === 'access.admin' || pgk === 'foothold.linux' || ((pgk === 'host.os_family' || pgk === 'host.os_hint') && pgf.value && pgf.value.os === 'linux'))) {
+          facts.splice(pgi, 1);
+        } else if (isAttackerPromptTurn && (pgk === 'access.root' || pgk === 'access.admin' || pgk === 'foothold.linux' || ((pgk === 'host.os_family' || pgk === 'host.os_hint') && (isAttackerLocateCmd || !/\b(?:nmap|ping|curl|wget|smbclient|nxc|netexec|crackmapexec|ldapsearch|snmpwalk)\b/i.test(command || ''))) || (isAttackerLocateCmd && (pgk === 'host.notable_program' || /^privesc\./.test(pgk))))) {
+          facts.splice(pgi, 1);
+        } else if (isNonRootHashPrompt && (pgk === 'access.root' || pgk === 'access.admin')) {
+          facts.splice(pgi, 1);
+        } else if (isFuzzerPayloadCmd && (pgk === 'credential.candidate' || pgk === 'credential.plaintext' || pgk === 'credential.password' || pgk === 'credential.available')) {
+          facts.splice(pgi, 1);
+        } else if (isLocalWinSddlAcl && (pgk === 'ad.acl_lead' || pgk === 'ad.dc_candidate')) {
+          facts.splice(pgi, 1);
         }
       }
     }

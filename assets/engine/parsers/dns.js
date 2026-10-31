@@ -63,10 +63,11 @@
       }
     }
     // nothing to read: an error / empty answer alone mints no fact
-    if (/\b(NXDOMAIN|SERVFAIL|REFUSED|connection timed out|Transfer failed|communications error)\b/i.test(t) && !/\bIN\s+(?:A|SRV|SOA|NS)\b/i.test(t) && !/\b(?:CH|CHAOS|IN)\s+TXT\b/i.test(t) && !/service\s*=/.test(t)) return;
+    if (/\b(NXDOMAIN|SERVFAIL|REFUSED|connection timed out|Transfer failed|communications error)\b/i.test(t) && !/\bIN\s+(?:A|SRV|SOA|NS|PTR)\b/i.test(t) && !/\b(?:CH|CHAOS|IN)\s+TXT\b/i.test(t) && !/service\s*=/.test(t) && !/(?:in-addr|ip6)\.arpa\.?\s+name\s*=/i.test(t) && !/\bdomain name pointer\b/i.test(t)) return;
 
     var aRec = {};      // fqdn -> ip  (from A records across dig / nslookup / host / AXFR)
     var names = {};      // every fqdn seen (for the zone receipt)
+    var ptrFqdns = {};   // fqdn -> true (from reverse PTR answers across nslookup / host / dig -x)
     var domain = '', dcNames = {}, m;
 
     // A records - dig/AXFR row "name. TTL IN A 1.2.3.4", host "name has address 1.2.3.4",
@@ -109,10 +110,29 @@
         }
         if (qPtrIp && isRoutable(qPtrIp) && /^(?![0-9.]+$)[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)+\.?$/.test(ln)) {
           var ptrName = norm(ln);
-          aRec[ptrName] = qPtrIp; names[ptrName] = 1; break;
+          aRec[ptrName] = qPtrIp; names[ptrName] = 1; ptrFqdns[ptrName] = 1; break;
         }
       }
     }
+
+    // Reverse PTR records across nslookup ("in-addr.arpa name = fqdn."), host ("domain name pointer fqdn."),
+    // and dig -x ("IN PTR fqdn.").
+    var addPtrFqdn = function (rawPtr) {
+      var pf = norm(rawPtr);
+      if (!pf || pf.indexOf('.') < 0) return;
+      if (/^(?:localhost|ip6-localhost)(?:\.|$)/i.test(pf)) return;
+      if (/\.(?:localdomain|in-addr\.arpa|ip6\.arpa|invalid)$/i.test(pf)) return;
+      if (/^\d+(?:\.\d+)+$/.test(pf)) return;
+      if (!/^[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?)+$/.test(pf)) return;
+      if (!/\.[a-z][a-z0-9-]{1,}$/.test(pf)) return;
+      ptrFqdns[pf] = 1;
+    };
+    var reNslPtr = /(?:(?:\d{1,3}\.){4}in-addr\.arpa|[0-9a-f.]+\.ip6\.arpa)\.?\s+name\s*=\s*([A-Za-z0-9_.-]{1,253})/gi;
+    while ((m = reNslPtr.exec(t))) addPtrFqdn(m[1]);
+    var reHostPtr = /\bdomain name pointer\s+([A-Za-z0-9_.-]{1,253})/gi;
+    while ((m = reHostPtr.exec(t))) addPtrFqdn(m[1]);
+    var reDigPtr = /(?:(?:\d{1,3}\.){4}in-addr\.arpa|[0-9a-f.]+\.ip6\.arpa)\.?\s+(?:\d+\s+)?IN\s+PTR\s+([A-Za-z0-9_.-]{1,253})/gi;
+    while ((m = reDigPtr.exec(t))) addPtrFqdn(m[1]);
 
     // SOA / NS - the authoritative host is a DC, and the owner name is the domain
     var reSoa = /(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,253}?)\.?\s+(?:\d+\s+)?IN\s+SOA\s+([A-Za-z0-9_.-]+)/i;
@@ -165,6 +185,22 @@
         _add(facts, mkFact('dns.a_record', 'host:' + aRec[n], { name: n, ip: aRec[n], tool: 'dns' }, S, source));
       });
     }
+
+    var ptrDoms = {};
+    Object.keys(ptrFqdns).sort().forEach(function (pf) {
+      var parts = pf.split('.').filter(Boolean);
+      var fVal = { fqdn: pf, tool: 'dns' };
+      if (parts.length) fVal.hostname = parts[0];
+      var pDom = parts.length > 2 ? parts.slice(1).join('.') : (parts.length === 2 ? pf : '');
+      if (pDom) {
+        fVal.domain = pDom;
+        ptrDoms[pDom] = 1;
+      }
+      _add(facts, mkFact('host.fqdn', 'host:' + ws.target, fVal, S, source));
+    });
+    Object.keys(ptrDoms).sort().forEach(function (pd) {
+      _add(facts, mkFact('host.domain', 'host:' + ws.target, { domain: pd }, S, source));
+    });
   }
 
   C._parse_dns = _parse_dns;

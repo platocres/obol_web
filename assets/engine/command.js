@@ -135,17 +135,27 @@
       summary.ports.forEach(function (p) { var n = parseInt(p, 10); if (!isNaN(n)) ports.push(n); });
     }
     var hasLoopbackFoothold = false;
+    var hasPivot = false;
     for (var lfi = 0; lfi < list.length; lfi++) {
       var lff = list[lfi];
       if (!lff || (lff.state && OBOL.facts && lff.state !== OBOL.facts.ProofState.SUPPORTED && lff.state !== 'supported')) continue;
       if (strictScope && lff.scope && lff.scope.indexOf('host:') === 0 && lff.scope !== 'host:target' && lff.scope !== targetScope) continue;
       var lfk = lff.kind || lff.k || '';
-      if (lfk === 'foothold.linux' || lfk === 'foothold.windows' || lfk === 'pivot.ports') {
+      if (lfk === 'foothold.linux' || lfk === 'foothold.windows' || lfk === 'pivot.ports' || lfk === 'pivot.tunnel_active' || lfk === 'pivot.active') {
         hasLoopbackFoothold = true;
-        break;
+      }
+      if (lfk === 'pivot.ports' || lfk === 'pivot.tunnel_active' || lfk === 'pivot.active') {
+        hasPivot = true;
       }
     }
     if (hasLoopbackFoothold) {
+      var PIVOT_LISTENER_PORTS = { 22: 1, 80: 1, 443: 1, 445: 1, 1433: 1, 1521: 1, 3306: 1, 3389: 1, 5432: 1, 5900: 1, 5985: 1, 5986: 1, 6379: 1, 8000: 1, 8080: 1, 8443: 1, 27017: 1 };
+      function _allowLoopbackPort(n, kind) {
+        if (!(n >= 1 && n <= 65535)) return false;
+        if (kind === 'pivot.ports') return true;
+        if (n === 3306 || n === 5432) return true;
+        return !!(hasPivot && PIVOT_LISTENER_PORTS[n]);
+      }
       for (var lpi = 0; lpi < list.length; lpi++) {
         var lpf = list[lpi];
         if (!lpf || (lpf.state && OBOL.facts && lpf.state !== OBOL.facts.ProofState.SUPPORTED && lpf.state !== 'supported')) continue;
@@ -156,17 +166,17 @@
         var lpArr = Array.isArray(lpv.ports) ? lpv.ports : [];
         for (var lpj = 0; lpj < lpArr.length; lpj++) {
           var lpn = parseInt(lpArr[lpj] && typeof lpArr[lpj] === 'object' ? lpArr[lpj].port : lpArr[lpj], 10);
-          if (lpn === 3306 || lpn === 5432) ports.push(lpn);
+          if (_allowLoopbackPort(lpn, lpk)) ports.push(lpn);
         }
         if (Array.isArray(lpv.forwards)) {
           for (var lpfw = 0; lpfw < lpv.forwards.length; lpfw++) {
             var fw = lpv.forwards[lpfw] || {};
-            var fwp = parseInt(fw.rport || fw.remotePort || fw.port, 10);
-            if (fwp === 3306 || fwp === 5432) ports.push(fwp);
+            var fwp = parseInt(fw.rport || fw.remotePort || fw.port || fw.lport, 10);
+            if (_allowLoopbackPort(fwp, lpk)) ports.push(fwp);
           }
         }
         var lps = parseInt(lpv.port, 10);
-        if (lps === 3306 || lps === 5432) ports.push(lps);
+        if (_allowLoopbackPort(lps, lpk)) ports.push(lps);
       }
     }
     ports = ports.filter(function (v, i, a) { return a.indexOf(v) === i; });
@@ -326,10 +336,10 @@
       if (adDomName) { baseVhostDom = String(adDomName).trim(); break; }
     }
     if (!baseVhostDom) {
-      var hDomVals = vals('host.domain');
+      var hDomVals = vals('host.domain').concat(vals('dns.zone'));
       for (var hdv = 0; hdv < hDomVals.length; hdv++) {
-        var hdStr = hDomVals[hdv] && (hDomVals[hdv].domain || hDomVals[hdv].name);
-        if (hdStr) { baseVhostDom = String(hdStr).trim(); break; }
+        var hdStr = hDomVals[hdv] && (hDomVals[hdv].domain || hDomVals[hdv].name || hDomVals[hdv].zone);
+        if (hdStr) { baseVhostDom = String(hdStr).trim().replace(/\.+$/, ''); break; }
       }
     }
     if (!baseVhostDom) {
@@ -521,9 +531,9 @@
       ctx.dc = domStr;
     }
     if (!ctx.domain) {
-      var hdoms = fvals('host.domain');
+      var hdoms = fvals('host.domain').concat(fvals('dns.zone'));
       for (var hd = 0; hd < hdoms.length; hd++) {
-        var dname = hdoms[hd].domain || hdoms[hd].name || '';
+        var dname = String((hdoms[hd] && (hdoms[hd].domain || hdoms[hd].name || hdoms[hd].zone)) || '').trim().replace(/\.+$/, '');
         if (dname) { ctx.domain = dname; break; }
       }
     }
@@ -632,6 +642,25 @@
       (resolved.selectionSource === 'explicit' && !resolved.credentialId)
       || (resolved.engagement && resolved.engagement.context && resolved.engagement.context.anonymousByTarget && tgt && resolved.engagement.context.anonymousByTarget[tgt])
     ));
+    if (!ctx.password && !ctx.nthash && !isExplicitAnon) {
+      var ulSecrets = fvals('credential.password').concat(fvals('credential.available')).concat(fvals('credential.plaintext'));
+      if (resolved && Array.isArray(resolved.allScopedFacts)) {
+        resolved.allScopedFacts.forEach(function (sf) {
+          if (sf && sf.state === 'supported' && /^credential\.(?:password|available|plaintext)$/.test(sf.kind) && sf.value) {
+            ulSecrets.push(sf.value);
+          }
+        });
+      }
+      for (var uli = 0; uli < ulSecrets.length; uli++) {
+        var ulv = ulSecrets[uli];
+        if (!ulv || ulv.user || ulv.username) continue;
+        var ulPw = ulv.password != null ? String(ulv.password) : (ulv.secret != null ? String(ulv.secret) : '');
+        if (ulPw) {
+          ctx.password = ulPw;
+          break;
+        }
+      }
+    }
     if (!ctx.user) {
       if (!isExplicitAnon && !ctx.password && !ctx.nthash) {
         var valUsers = [];
@@ -687,6 +716,17 @@
             }
           }
           if (ctx.user) break;
+        }
+      }
+      if (!ctx.user) {
+        var candVals = fvals('credential.candidate');
+        for (var cdi = 0; cdi < candVals.length; cdi++) {
+          var cdv = candVals[cdi] || {};
+          var cdClean = String(cdv.user || cdv.username || '').replace(/^.*\\/, '').split('@')[0].trim();
+          if (cdClean && !/^(?:anonymous|guest|unknown|user|username|<user>)$/i.test(cdClean)) {
+            ctx.user = cdClean;
+            break;
+          }
         }
       }
     }

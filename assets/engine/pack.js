@@ -583,6 +583,11 @@
     this.report = d.report || null;
     this.refs = (d.refs || []).slice();
     this.commands = cmds.slice();
+    this.field_notes = Array.isArray(d.field_notes) ? d.field_notes.slice() : null;
+    if (this.field_notes && this.id) {
+      OBOL.FIELD_NOTES = OBOL.FIELD_NOTES || {};
+      OBOL.FIELD_NOTES[this.id] = this.field_notes.slice();
+    }
     this.sequence = !!d.sequence;
     // Explore-vs-Exploit: a DIAGNOSTIC move is a high-information opener that
     // collapses the search tree (a service scan, an AD orient, an SMB-anon or
@@ -1083,7 +1088,7 @@
     }
     if (this.id === 'ad-path-manual' && ((have['ad.attack_paths'] && have['ad.acl_lead']) || have['ad.control_paths'])) return true;
     if (this.id === 'bloodyad-acl' || this.id === 'ad-acl-abuse') {
-      return !!(have['ad.control_paths'] || have['ad.domain_control'] || have['loot.ntds'] || have['access.admin']);
+      return !!(have['ad.control_paths'] || have['ad.domain_control'] || have['hash.krbtgt'] || have['loot.ntds']);
     }
     if ((this.id === 'linux-enum' || this.id === 'windows-enum') && !have['access.admin'] && !have['access.root'] && !have['access.system']) {
       var enumFhKind = this.id === 'linux-enum' ? 'foothold.linux' : 'foothold.windows';
@@ -1162,7 +1167,9 @@
       if ((k === 'foothold.linux' || k === 'foothold.windows') && hasOsFoot && !reqHasFoot) continue;
       if (k === 'foothold.webshell' && hasOsFoot) continue;
       if (k === 'access.shell' && hasOsFoot && !reqHasFoot) continue;
-      if ((k === 'access.admin' || k === 'access.system' || k === 'access.root') && hasAdmin && !reqHasAdmin) continue;
+      var needsDistinctSystem = k === 'access.system' && !have['access.system'] && !have['access.root'] && reqHasFoot && pk.indexOf('access.admin') < 0
+        && !!(have['privesc.windows_privilege'] || have['privesc.seimpersonate'] || have['privesc.se_impersonate']);
+      if ((k === 'access.admin' || k === 'access.system' || k === 'access.root') && hasAdmin && !reqHasAdmin && !needsDistinctSystem) continue;
       if (this.id === 'file-upload' && k === 'foothold.webshell' && have['web.upload_confirmed']) continue;
       if ((this.id === 'manual-sqli-exploitation' || this.id === 'sqlmap-automation') && (k === 'foothold.webshell' || k === 'credential.candidate') && (have['db.creds'] || have['credential.available'])) continue;
       if (this.id === 'dump-secrets') {
@@ -2977,7 +2984,8 @@
       if (isAdTarget && (!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares']) && a.transition === 'gpp') {
         promote(4, 2);
       }
-      if ((((!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && (haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares'] || haveObj['smb.null_session'] || haveObj['smb.guest_session'])) || freshAuthReadableShare) && a.transition === 'loot_browse') {
+      var hasConcreteShareLead = !!(haveObj['smb.content_accessible'] || haveObj['smb.readable_share'] || haveObj['smb.shares']);
+      if ((((!haveObj['credential.available'] || onlySpeculativeCrossDomainCred) && hasConcreteShareLead) || freshAuthReadableShare) && a.transition === 'loot_browse') {
         promote(4, 2);
       }
 

@@ -656,6 +656,13 @@
       _add(facts, mkFact('http.reachable', h, { via: hasOcrLogin ? 'ocr-surface' : (isOcrUrlPage ? 'web-page' : ((hasHttpAuthParams || hasHttpAuthPost) ? 'http-auth-surface' : 'http-client')) }, S, source));
     }
 
+    // Manual boolean-blind / time-based SQL injection probes in curl/wget/httpie requests
+    if (!isHelpOrVerCmd && hasLiveCmdResponse && /\b(?:curl|wget|httpie)\b/i.test(cmd)
+        && /(?:[\s+'"(&?]|%[0-9A-Fa-f]{2})(?:and|or)(?:[\s+'")&]|%[0-9A-Fa-f]{2})[^\r\n]{0,96}?(?:(?:substring|substr|mid|ascii|ord|pg_sleep|sleep|benchmark)\s*(?:\(|%28)|@@version\b|waitfor(?:%20|\+|\s)+delay)/i.test(cmd)) {
+      _add(facts, mkFact('web.parameterized', h, { evidence: 'SQL expression probe in HTTP request' }, S, source));
+      _add(facts, mkFact('web.sqli_candidate', h, { via: 'manual-probe', evidence: 'boolean or time-based SQL probe in HTTP request' }, S, source));
+    }
+
     // Laravel session cookie
     if (/^\s*(?:<\s*)?Set-Cookie:\s*laravel_session=/im.test(t)) {
       _add(facts, mkFact('web.tech', h, { name: 'laravel', product: 'Laravel', via: 'cookie' }, S, source));
@@ -1484,7 +1491,9 @@
     var akid = reSearch(C._AWS_KEY_RE, text);
     var secret = reSearch(C._AWS_SECRET_RE, text);
     var lhost = (ws && ws.context && ws.context.params && ws.context.params.lhost) || '';
-    var internalMatches = reAll(_INTERNAL_TARGET_RE, text || '');
+    var isDisclosedServerSource = /(?:<\?php\b|<%@\s*(?:Page|Import|Language)\b|^\s*(?:from\s+(?:flask|django|fastapi)\s+import|import\s+express)\b)/im.test(text || '');
+    var hasExplicitSsrfParam = /[?&][A-Za-z0-9_.-]+=(?:https?|gopher|dict|file)(?::\/\/|%3A%2F%2F)/i.test(command || '');
+    var internalMatches = (isDisclosedServerSource && !hasExplicitSsrfParam) ? [] : reAll(_INTERNAL_TARGET_RE, text || '');
     var internal = null;
     for (var ii = 0; ii < internalMatches.length; ii++) {
       var candIp = internalMatches[ii][0];
@@ -1637,6 +1646,82 @@
     }
     if (reSearch(_FP_NVMS_RE, t)) {
       _add(facts, mkFact('web.fingerprint.nvms', h, { via: 'product-name', product: 'NVMS-1000' }, S, source));
+    }
+
+    // Raw HTTP response header fingerprinting (supports command-less HTTP pastes as well as curl -i/-v)
+    if (/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(t)) {
+      var httpStartIdx = t.search(/^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im);
+      var fromHttp = httpStartIdx >= 0 ? t.slice(httpStartIdx) : t;
+      var blankSepM = /\r?\n\s*(?:<\s*)?\r?\n/.exec(fromHttp);
+      var hdrBlock = blankSepM ? fromHttp.slice(0, blankSepM.index) : fromHttp;
+      var rawTechItems = [];
+      reAll(/^\s*(?:<\s*)?(X-Powered-By|X-Generator|X-AspNet(?:Mvc)?-Version)\s*:\s*([^\r\n]+)/gim, hdrBlock).forEach(function (hm) {
+        var hName = hm[1].toLowerCase();
+        var hVal = hm[2].trim();
+        if (hVal) rawTechItems.push({ name: hName, value: hVal });
+      });
+      if (rawTechItems.length && !facts.some(function (f) { return f && f.kind === 'web.tech' && f.scope === h; })) {
+        _add(facts, mkFact('web.tech', h, { items: rawTechItems, via: 'http-header' }, S, source));
+      }
+      var backendFqdns = {}, backendDoms = {};
+      reAll(/^\s*(?:<\s*)?X-(?:Backend-Server|Served-By|Upstream|Vhost|Host|Original-Host|Forwarded-Server)\s*:\s*([^\r\n]+)/gim, hdrBlock).forEach(function (bm) {
+        var cand = String(bm[1] || '').trim().split(/[,;\s]/)[0].replace(/:\d+$/, '').replace(/\.$/, '').toLowerCase();
+        if (!cand || cand.indexOf('.') < 0) return;
+        if ((C._IPV4_RE && C._IPV4_RE.test(cand)) || /^\d+(?:\.\d+)+$/.test(cand)) return;
+        if (/^(?:localhost|ip6-localhost)(?:\.|$)|^cache-[a-z0-9-]+$/i.test(cand)) return;
+        if (/\.(?:localdomain|invalid|test|fastly\.net|cloudfront\.net|amazonaws\.com|akamaiedge\.net|akamai\.net|cloudflare\.com)$/i.test(cand)) return;
+        if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(cand)) return;
+        if (!/\.[a-z][a-z0-9-]{1,}$/.test(cand)) return;
+        backendFqdns[cand] = 1;
+      });
+      Object.keys(backendFqdns).sort().forEach(function (bf) {
+        var bParts = bf.split('.').filter(Boolean);
+        var bDom = bParts.length > 2 ? bParts.slice(1).join('.') : bf;
+        backendDoms[bDom] = 1;
+        _add(facts, mkFact('host.fqdn', h, { fqdn: bf, hostname: bParts[0], domain: bDom, via: 'http-header' }, S, source));
+      });
+      Object.keys(backendDoms).sort().forEach(function (bd) {
+        _add(facts, mkFact('host.domain', h, { domain: bd }, S, source));
+      });
+    }
+
+    // Apache Tomcat Manager text API ("OK - Listed applications..." / "OK - Deployed application...")
+    var tomcatListM = /^\s*OK - Listed applications for virtual host \[([^\]]*)\]/im.exec(t);
+    var tomcatDepM = /^\s*OK - Deployed application at context path \[(\/[^\]]*)\]/im.exec(t);
+    if (tomcatListM || tomcatDepM) {
+      _add(facts, mkFact('http.reachable', h, { via: 'tomcat-manager' }, S, source));
+      _add(facts, mkFact('web.tech', h, { name: 'tomcat', product: 'Apache Tomcat', via: 'tomcat-manager' }, S, source));
+      _add(facts, mkFact('vuln.tomcat_manager', h, { product: 'Apache Tomcat', endpoint: '/manager/text', via: 'tomcat-manager' }, S, source));
+      if (tomcatDepM) {
+        _add(facts, mkFact('web.upload_confirmed', h, {
+          method: 'tomcat_manager_deploy',
+          context_path: tomcatDepM[1],
+          extensions: ['war'],
+          exec_confirmed: false
+        }, S, source));
+      }
+      var tcAuthM = /(?:^|\s)(?:-u|--user)\s+(?:'([^:'\r\n]+):([^'\r\n]*)'|"([^:"\r\n]+):([^"\r\n]*)"|([^:'"\s]+):([^\s'"]+))/i.exec(cmd)
+        || /https?:\/\/([^:/@\s'"]+):([^@\s'"]+)@/i.exec(cmd);
+      if (tcAuthM) {
+        var tcUser = tcAuthM[1] || tcAuthM[3] || tcAuthM[5] || '';
+        var tcPass = tcAuthM[2] || tcAuthM[4] || tcAuthM[6] || '';
+        if (tcUser && tcPass) {
+          _add(facts, mkFact('credential.validated', h, {
+            user: tcUser,
+            password: tcPass,
+            service: 'http',
+            protocol: 'tomcat-manager',
+            outcome: 'accepted'
+          }, S, source));
+          if (C._add_plaintext_credential) {
+            C._add_plaintext_credential(facts, ws, source, tcUser, tcPass, '', 'tomcat-manager', '');
+          }
+          var tcCv = { user: tcUser, password: tcPass, service: 'http', method: 'tomcat-manager' };
+          _add(facts, mkFact('credential.plaintext', h, tcCv, S, source));
+          _add(facts, mkFact('credential.password', h, tcCv, S, source));
+          _add(facts, mkFact('credential.available', h, tcCv, S, source));
+        }
+      }
     }
   }
   C._parse_web_fingerprint = _parse_web_fingerprint;

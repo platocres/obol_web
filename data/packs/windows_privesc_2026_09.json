@@ -322,7 +322,8 @@
         "access.system"
       ],
       "produces": [
-        "access.system"
+        "access.system",
+        "access.admin"
       ],
       "priority": 78,
       "proves": "obtains SYSTEM access",
@@ -1146,7 +1147,8 @@
         "privesc.weak_service_permission"
       ],
       "produces": [
-        "access.system"
+        "access.system",
+        "access.admin"
       ],
       "priority": 54,
       "autonomy": "approve",
@@ -1272,14 +1274,17 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "foothold.windows"
+      ],
       "requires_any": [
         "port:8443",
         "service.nsclient",
         "file.nsclient_ini"
       ],
       "produces": [
-        "access.system"
+        "access.system",
+        "access.admin"
       ],
       "priority": 82,
       "phase": "privesc",
@@ -1311,6 +1316,7 @@
     },
     {
       "id": "vhd-mount-sam-extract",
+      "locus": "R",
       "title": "Extract SAM/SYSTEM from Backup VHD Images",
       "hypothesis": "Anonymous or low-privilege SMB shares containing WindowsImageBackup or VHD/VHDX disk images allow mounting disk images with guestmount or 7z and extracting SAM and SYSTEM hives to dump local credentials offline.",
       "tool": "guestmount",
@@ -1320,12 +1326,15 @@
         "7z"
       ],
       "os": [
-        "windows"
+        "windows",
+        "linux"
       ],
       "requires_all": [],
       "requires_any": [
         "smb.readable_share",
-        "loot.files"
+        "loot.files",
+        "loot.material",
+        "privesc.backup_hives"
       ],
       "produces": [
         "credential.candidate",
@@ -1478,8 +1487,7 @@
         "credential.available"
       ],
       "requires_any": [
-        "vuln.prtg",
-        "web.server"
+        "vuln.prtg"
       ],
       "produces": [
         "foothold.windows",

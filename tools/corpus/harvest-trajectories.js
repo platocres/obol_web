@@ -1142,6 +1142,36 @@ function hasRequiredMoveSemantics(moveId, cleanCmd, facts, turn) {
     if (facts && typeof facts.has === 'function' && facts.has('web.ssti_confirmed')) return true;
     return SSTI_TEMPLATE_EXPR_RE.test(probe);
   }
+  if (moveId === 'jenkins-access') {
+    return /\bjenkins-cli\.jar\b|\/script(?:Text)?(?:\b|\/|\?|$)|println\s+|Jenkins\.instance/i.test(probe);
+  }
+  if (moveId === 'runas-savedcred-exec') {
+    return /(?:^|\s)\/savecred\b/i.test(probe);
+  }
+  if (moveId === 'screen-suid-privesc') {
+    if (/^screen\s+-(?:ls|list)\b/i.test(raw) && !/(?:^|\s)-L\b/i.test(raw)) return false;
+    if (/^screen\b/i.test(raw)) {
+      return /(?:^|\s)-L\b|ld\.so\.preload|libhax|rootshell|screen-4\.5\.0/i.test(probe);
+    }
+    return /\bscreen-4\.5\.0\b|ld\.so\.preload|libhax|rootshell/i.test(probe);
+  }
+  if (moveId === 'gnu-screen-root-attach') {
+    if (/^screen\s+-(?:ls|list)\b/i.test(raw) && !/(?:^|\s)-(?:x|r|S)\b/.test(raw)) return false;
+    if (/^tmux\s+(?:ls|list-sessions)\b/i.test(raw)) return false;
+    return true;
+  }
+  if (moveId === 'linux-path-hijack') {
+    if (/^(?:sudo\s+)?find\b/i.test(raw)) {
+      return /(?:^|\s)-perm\b|-4000|-u=s/i.test(probe);
+    }
+    return true;
+  }
+  if (moveId === 'systemd-timer-abuse') {
+    if (/^(?:sudo\s+)?find\b/i.test(raw)) {
+      return /systemd|\.(?:timer|service)\b/i.test(probe);
+    }
+    return true;
+  }
   return true;
 }
 
@@ -1248,7 +1278,7 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     !isAttackerTurn(turn, ctx) ||
     isUnambiguousWinLocalEnum ||
     isUnambiguousLinuxLocalEnum ||
-    !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab)\b/i.test(cleanCmd))
+    !!(facts && (facts.has('foothold.linux') || facts.has('foothold.windows')) && /^(?:sudo|find|getcap|whoami|systeminfo|cmdkey|cat|type|Get-ChildItem|gci|Get-Content|gc|dir|tree|uname|crontab|screen|tmux)\b/i.test(cleanCmd))
   );
   const hasAdminOrSystem = !!(facts && (facts.has('access.admin') || facts.has('access.system')));
   const hasNtdsLoot = !!(facts && facts.has('loot.ntds'));
@@ -1282,8 +1312,16 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     for (const a of actionableMoves) {
       if (a.locus === 'F') excludedIds.add(a.id);
     }
-    for (const tid of ['linux-enum', 'windows-enum']) {
+    for (const tid of [
+      'linux-enum', 'windows-enum', 'linux-path-hijack', 'systemd-timer-abuse',
+      'suid-gtfobins', 'screen-suid-privesc', 'gnu-screen-root-attach',
+      'linux-loot-hunt', 'windows-loot-hunt'
+    ]) {
       excludedIds.add(tid);
+    }
+    if (/^(?:find|ls|cat|tree|file)\s+\/(?:mnt|media)\b/i.test(cleanCmd) && facts && (facts.has('nfs.reachable') || facts.has('nfs.exports') || facts.has('port:2049'))) {
+      bump('nfs-to-foothold', 25);
+      bump('nfs-enum', 24);
     }
   }
   const hasPassAuth = isRemoteSessionTool
@@ -1555,8 +1593,14 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
+  if (/^(?:curl|wget|http|httpie)$/.test(cmdTool) && /\/manager\/(?:text|html)\/deploy\b/i.test(cleanCmd)) {
+    bump('tomcat-deploy', 27);
+  }
   if (cmdTool === 'curl' && (/(?:^|\s)(?:-F|--form(?:-string)?)\s+['"]?[^'"\s]*=@/i.test(cleanCmd) || /(?:^|\s)(?:-T|--upload-file)\s+\S+/i.test(cleanCmd))) {
-    if (/\bftps?:\/\//i.test(cleanCmd)) {
+    if (/\/manager\/(?:text|html)\/deploy\b/i.test(cleanCmd) || /(?:^|\s)(?:-T|--upload-file)\s+['"]?\S+\.war['"]?(?:\s|$)/i.test(cleanCmd)) {
+      bump('tomcat-deploy', 27);
+      bump('file-upload', 21);
+    } else if (/\bftps?:\/\//i.test(cleanCmd)) {
       bump('ftp-webroot-upload-webshell', 25);
       bump('ftp-upload-webshell', 24);
       bump('file-upload', 22);
@@ -1700,7 +1744,23 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   if (cmdTool === 'bloodhound' || (onTarget && /\b(?:sharphound(?:\.exe|\.ps1)?|Invoke-BloodHound)\b/i.test(cleanCmd))) {
     bump('bloodhound-collect', 25);
   }
-  if (cmdTool === 'secretsdump' && (hasKrbEnv || /(?:^|\s)(?:-k\b|--use-kcache\b|-just-dc(?:-ntlm|-user)?\b)/i.test(cleanCmd) || hasPassAuth || hasHashAuth || explicitAuth)) {
+  const isOfflineLocalSecretsdump = cmdTool === 'secretsdump'
+    && /(?:^|\s)-(?:sam|system|security|ntds)\s+\S+/i.test(cleanCmd)
+    && /\bLOCAL\b/i.test(cleanCmd)
+    && !/@\S+/.test(cleanCmd);
+  if (isOfflineLocalSecretsdump) {
+    excludedIds.add('dcsync');
+    excludedIds.add('dump-secrets');
+    excludedIds.add('zerologon-exploit');
+    excludedIds.add('certifried');
+    if (!(facts && facts.has('foothold.windows'))) {
+      excludedIds.add('windows-old-hives');
+    }
+    bump('vhd-mount-sam-extract', 26);
+    if (facts && facts.has('foothold.windows')) {
+      bump('windows-old-hives', 24);
+    }
+  } else if (cmdTool === 'secretsdump' && (hasKrbEnv || /(?:^|\s)(?:-k\b|--use-kcache\b|-just-dc(?:-ntlm|-user)?\b)/i.test(cleanCmd) || hasPassAuth || hasHashAuth || explicitAuth)) {
     excludedIds.add('zerologon-exploit');
     excludedIds.add('certifried');
     bump('dcsync', 26);
@@ -1744,6 +1804,12 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
   ) {
     excludedIds.add('jenkins-access');
     bump('jenkins-cli-fileread', 26);
+  } else if (
+    /\bjenkins-cli\.jar\b/i.test(cleanCmd) ||
+    (/^(?:curl|wget|http|httpie|iwr|invoke-webrequest|invoke-restmethod|irm)$/.test(cmdTool)
+      && (/\/script(?:Text)?(?:\b|\/|\?|$)/i.test(cleanCmd) || /\bJenkins\.instance\b/i.test(cleanCmd)))
+  ) {
+    bump('jenkins-access', 26);
   }
   if (/^(?:hydra|medusa|ncrack|crowbar|patator)$/.test(cmdTool)) {
     const uriProtoM = /\b(ssh|ftps?|rdp|smb|https?|telnet|mysql|mssql|postgres(?:ql)?|vnc|redis|ldaps?|smtps?|pop3s?|imaps?):\/\//i.exec(cleanCmd);
@@ -1972,9 +2038,20 @@ function matchTurnToCatalogMoves(OBOL, turn, ctx) {
     }
   }
 
+  if (onTarget && /^screen\s+-(?:ls|list)\b/i.test(cleanCmd) && !/(?:^|\s)-(?:x|r)\b/.test(cleanCmd)) {
+    excludedIds.add('gnu-screen-root-attach');
+    excludedIds.add('screen-suid-privesc');
+    bump('linux-enum', 24);
+  } else if (onTarget && /^screen\s+-(?:x|r)\b/i.test(cleanCmd)) {
+    excludedIds.add('screen-suid-privesc');
+    bump('gnu-screen-root-attach', 26);
+  }
+
   for (const semMoveId of [
     'laps-read', 'manual-sqli-exploitation', 'authz-abuse', 'xxe',
-    'powerview-enum', 'baron-samedit', 'lsass-dump-onbox', 'recon-mail', 'ssti-to-rce'
+    'powerview-enum', 'baron-samedit', 'lsass-dump-onbox', 'recon-mail', 'ssti-to-rce',
+    'jenkins-access', 'runas-savedcred-exec', 'screen-suid-privesc',
+    'gnu-screen-root-attach', 'linux-path-hijack', 'systemd-timer-abuse'
   ]) {
     if (!hasRequiredMoveSemantics(semMoveId, cleanCmd, facts, turn)) {
       excludedIds.add(semMoveId);

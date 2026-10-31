@@ -19,6 +19,7 @@
     var tools = ['evil-winrm', 'wmiexec', 'psexec', 'atexec', 'smbexec', 'dcomexec'];
     for (var i = 0; i < tools.length; i++) if (l.indexOf(tools[i]) >= 0) return tools[i];
     if (l.indexOf('enter-pssession') >= 0) return 'winrs';
+    if (/\binvoke-command\b/.test(l)) return 'winrm';
     if (C._is_ssh_command && C._is_ssh_command(cmdNoComment)) return 'ssh';
     if (/\b(?:nxc|netexec|crackmapexec|cme)\s+/.test(l)) return 'nxc';
     if (text && !_LOCAL_LIST_OR_READ_CMD_RE.test(cmdNoComment)) {
@@ -65,14 +66,25 @@
     var fullExecText = promptCtx ? (String(text || '') + '\n' + promptCtx) : String(text || '');
     var identities = reAll(C._WHOAMI_ID_RE, text).map(function (m) { return _normalize_identity(m.groups.id); }).filter(Boolean);
     if (_is_dos_emulator(command, fullExecText, promptCtx) && identities.length === 0) return;
-    var isSystem = identities.some(function (identity) { return identity.toLowerCase() === 'nt authority\\system'; });
-    var isAdminWhoami = identities.some(function (identity) { return /(?:^|[\\/])administrator$/i.test(identity); });
-    var interactive = !!reSearch(C._INTERACTIVE_RE, fullExecText)
+    var rid500Re = C._RID500_ADMIN_RE || /^(?:administrator|administrador|administrateur|amministratore)$/i;
+    var inSystem32Prompt = /(?:^|\n)\s*(?:PS\s+)?[A-Za-z]:\\Windows\\system32>/i.test(fullExecText);
+    var isSystem = identities.some(function (identity) {
+      return identity.toLowerCase() === 'nt authority\\system' || (inSystem32Prompt && /\$$/.test(identity));
+    });
+    var isAdminWhoami = identities.some(function (identity) {
+      var leaf = String(identity || '').split(/[\\/]/).pop() || '';
+      return rid500Re.test(leaf);
+    });
+    var isInvokeCmdRemote = /\bInvoke-Command\b/i.test(command || '') && /\s-(?:ComputerName|Computer|CN|Session)\s+\S+/i.test(command || '');
+    var invokeCmdFailed = /\b(?:Connecting to remote server\s+\S+\s+failed|WinRM cannot (?:complete|process)|Access is denied|PSSessionStateBroken|OpenError|AuthenticationMechanism)\b/i.test(text || '');
+    var execSurface = isInvokeCmdRemote ? String(text || '') : fullExecText;
+    var interactive = !!reSearch(C._INTERACTIVE_RE, execSurface)
       || (command || '').toLowerCase().indexOf('enter-pssession') >= 0
-      || /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/im.test(fullExecText)
-      || /^\s*(?:[A-Za-z0-9_.-]+\\)?[A-Za-z0-9_.$-]+@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.test(fullExecText)
-      || /^\s*(?:Volume in drive [A-Za-z]\b|Directory of [A-Za-z]:\\)/im.test(text || '');
-    var executed = identities.length > 0 || !!reSearch(C._EXEC_SUCCESS_RE, fullExecText) || interactive;
+      || /^\s*(?:PS\s+)?[A-Za-z]:\\[^>\r\n]*>/im.test(execSurface)
+      || /^\s*(?:[A-Za-z0-9_.-]+\\)?[A-Za-z0-9_.$-]+@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.test(execSurface)
+      || /^\s*(?:Volume in drive [A-Za-z]\b|Directory of [A-Za-z]:\\|Directory:\s+[A-Za-z]:\\)/im.test(text || '');
+    var executed = (identities.length > 0 || !!reSearch(C._EXEC_SUCCESS_RE, execSurface) || interactive)
+      && !(isInvokeCmdRemote && invokeCmdFailed);
     var cmdAndText = (command || '') + '\n' + (text || '');
     var rdpEnableAttempt = /fDenyTSConnections|Remote Desktop Users|TermService|group\s*=\s*["']?remote desktop/i.test(cmdAndText);
     var winrmEnableAttempt = /Remote Management Users|winrm\s+quickconfig|Enable-PSRemoting|WinRM-HTTP|AllowAutoConfig|WinRMInit/i.test(cmdAndText);
@@ -90,14 +102,16 @@
     var tool = _exec_tool(command, text);
     if (executed) {
       var footholdValue = { method: tool };
-      var nonSystem = identities.filter(function (i) { return i.toLowerCase() !== 'nt authority\\system'; });
+      var nonSystem = identities.filter(function (i) {
+        return i.toLowerCase() !== 'nt authority\\system' && !(inSystem32Prompt && /\$$/.test(i));
+      });
       if (!nonSystem.length && !isSystem) {
-        var pm = /^\s*(?:\*?Evil-WinRM\*?\s+)?(?:PS\s+)?[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(\\[^>"'\r\n]*)?>/im.exec(fullExecText);
-        var isDotSvcSubdir = !!(pm && pm[1] && /^administrator$/i.test(pm[1]) && pm[2] && /^\\\.[A-Za-z0-9_.-]+(?:\\|$)/.test(pm[2]));
+        var pm = /^\s*(?:\*?Evil-WinRM\*?\s+)?(?:PS\s+)?[A-Za-z]:\\Users\\([A-Za-z0-9._-]+)(\\[^>"'\r\n]*)?>/im.exec(execSurface);
+        var isDotSvcSubdir = !!(pm && pm[1] && rid500Re.test(pm[1]) && pm[2] && /^\\\.[A-Za-z0-9_.-]+(?:\\|$)/.test(pm[2]));
         if (pm && pm[1] && !/^(Public|Default|All Users)$/i.test(pm[1]) && !isDotSvcSubdir) nonSystem.push(pm[1]);
       }
       if (!nonSystem.length && !isSystem) {
-        var sshWinPm = /^\s*(?:[A-Za-z0-9_.-]+\\)?([A-Za-z0-9_.$-]+)@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.exec(fullExecText);
+        var sshWinPm = /^\s*(?:[A-Za-z0-9_.-]+\\)?([A-Za-z0-9_.$-]+)@[A-Za-z0-9_.-]+\s+[A-Za-z]:\\[^>\r\n]*>/im.exec(execSurface);
         if (sshWinPm && sshWinPm[1]) nonSystem.push(sshWinPm[1]);
       }
       if (!nonSystem.length && !isSystem && command) {
@@ -111,7 +125,7 @@
           if (cleanedCmdUser) nonSystem.push(cleanedCmdUser);
         }
       }
-      if (nonSystem.length && /(?:^|[\\/])administrator$/i.test(nonSystem[0])) isAdminWhoami = true;
+      if (nonSystem.length && rid500Re.test(String(nonSystem[0] || '').split(/[\\/]/).pop() || '')) isAdminWhoami = true;
       if (nonSystem.length) {
         footholdValue.identity = nonSystem[0];
         for (var i = facts.length - 1; i >= 0; i--) {
@@ -121,6 +135,16 @@
       }
       _add(facts, mkFact('foothold.windows', h, footholdValue, S, source));
       C._add_os_observation(facts, ws, source, 'windows', 'Windows command execution output', 'high', tool, true);
+      if (isInvokeCmdRemote && !invokeCmdFailed) {
+        var icVal = { service: 'winrm', tool: 'invoke-command' };
+        if (nonSystem.length) icVal.user = nonSystem[0];
+        _add(facts, mkFact('winrm.authenticated', h, icVal, S, source));
+        if (/\s-Credential\s+\S+/i.test(command || '') || nonSystem.length) {
+          var cvVal = { service: 'winrm', outcome: 'accepted', tool: 'invoke-command' };
+          if (nonSystem.length) cvVal.user = nonSystem[0];
+          _add(facts, mkFact('credential.validated', h, cvVal, S, source));
+        }
+      }
       if (isSystem) {
         _add(facts, mkFact('access.system', h, { identity: 'nt authority\\system', method: tool }, S, source));
         _add(facts, mkFact('access.admin', h, { identity: 'nt authority\\system', method: tool }, S, source));
@@ -134,7 +158,7 @@
         var deskVal = { session: C._INTERACTIVE_WIN_TOOLS.has(tool) ? tool : 'cmd' };
         if (nonSystem.length) {
           deskVal.user = nonSystem[0];
-          if (/(?:^|[\\/])administrator$/i.test(nonSystem[0])) deskVal.admin = true;
+          if (rid500Re.test(String(nonSystem[0] || '').split(/[\\/]/).pop() || '')) deskVal.admin = true;
         }
         if (isSystem || isAdminWhoami || (!isXpCmdshell && ['wmiexec', 'psexec', 'smbexec', 'atexec', 'dcomexec'].indexOf(tool) >= 0)) {
           deskVal.admin = true;
@@ -167,10 +191,28 @@
 
   var _SSH_EXEC_FAIL_RE = /\b(?:Permission denied|Authentication failed|Connection refused|Connection timed out|Connection closed by|Connection reset by|Host key verification failed|No route to host|Could not resolve hostname|no matching (?:host key|key exchange|cipher)|no mutual signature|Too many authentication failures)\b/i;
   var _SSH_USAGE_NOISE_RE = /^\s*usage:\s*ssh\b/im;
-  var _SSH_POSTAUTH_WELCOME_RE = /^\s*Welcome to (?:Ubuntu|Debian|Alpine|CentOS|Red Hat|Fedora|Kali|Rocky|AlmaLinux|SUSE|openSUSE|Arch Linux|Gentoo|FreeBSD)\b[^\r\n]*/im;
+  var _SSH_POSTAUTH_WELCOME_RE = /^\s*(?:Welcome to (?:Ubuntu|Debian|Alpine|CentOS|Red Hat|Fedora|Kali|Rocky|AlmaLinux|SUSE|openSUSE|Arch Linux|Gentoo|FreeBSD|NetBSD|OpenBSD|DragonFly|SunOS|Solaris|illumos|Darwin)\b|(?:Linux|NetBSD|OpenBSD|FreeBSD|DragonFly|SunOS)\s+\S+\s+\d+\.\d+\b)[^\r\n]*/im;
   var _SSH_POSTAUTH_LASTLOGIN_RE = /^\s*Last login:\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+[A-Z][a-z]{2}\s+\d{1,2}\s+\d{2}:\d{2}/im;
   var _SSH_RESTRICTED_BANNER_RE = /\b(?:You are in a )?(?:limited shell|restricted shell|lshell|rbash)\b|Type '\?' or 'help' to get the list of allowed commands|\*\*\*\s*forbidden\s*(?:command|character|path)/i;
   var _ATTACKER_PROMPT_ENTITY_RE = /^(?:kali|parrot|attacker|hacky|pwnbox|exegol|localhost|ubuntu-vm|commando|slingshot|pentest|offsec|htb|tryhackme|vagrant|archlinux|blackarch)$/i;
+
+  function _strip_nonfatal_ssh_client_warnings(s) {
+    return String(s || '').replace(/Could not create directory '[^'\r\n]*\/\.ssh'\s*\(Permission denied\)\.?/gi, '');
+  }
+  C._strip_nonfatal_ssh_client_warnings = _strip_nonfatal_ssh_client_warnings;
+
+  function _is_wsl_guest_from_nonadmin_windows(ws, command) {
+    var promptLine = (ws && ws.context && ws.context.promptLine) || '';
+    if (!promptLine) return false;
+    var first = String(promptLine).replace(C._ANSI_RE || /\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').split(/\r?\n/)[0].trim();
+    var winUserM = /^(?:PS\s+)?[A-Za-z]:\\Users\\([^\\>\r\n]+)(?:[\\>]|$)/i.exec(first);
+    if (!winUserM) return false;
+    var rid500Re = C._RID500_ADMIN_RE || /^(?:administrator|administrador|administrateur|amministratore)$/i;
+    if (rid500Re.test(winUserM[1].trim())) return false;
+    var combined = first + '\n' + String(command || '');
+    return /(?:\\|-)(?:lxss|wsl)\b|(?:^|[\s\\/"'])wsl(?:\.exe)?\b|CanonicalGroupLimited[^\r\n]*\\bash\.exe\b/i.test(combined);
+  }
+  C._is_wsl_guest_from_nonadmin_windows = _is_wsl_guest_from_nonadmin_windows;
   var _ATTACKER_REMOTE_OR_LISTENER_CMD_RE = /\b(?:ssh|sshpass|scp|sftp|curl|wget|httpie|nc|ncat|netcat|socat|rlwrap|pwncat(?:-cs)?|penelope|chisel|ligolo[a-z0-9_-]*|nxc|netexec|crackmapexec|cme|evil-winrm|winrs|xfreerdp|rdesktop|impacket-[a-z0-9_-]+|(?:wmi|ps|smb|at|dcom)exec(?:\.py)?|msfconsole|telnet|rlogin|rsh|rexec|psql|sqlplus|odat|mysql|mariadb|mssqlclient(?:\.py)?|sqsh|redis-cli|mongosh|mongo|ftp|lftp|smbclient|rpcclient|ldapsearch|bloodyad|certipy(?:-ad)?|kerbrute|snmpwalk|snmp-check|onesixtyone|enum4linux(?:-ng)?|nikto|sqlmap|wfuzz|ffuf|gobuster|feroxbuster|dirsearch|wpscan|nuclei|httpx|git-dumper|ansible(?:-playbook)?|kubectl|docker\s+-H)\b|\bhttps?:\/\/|(?:^|\s)(?:--?(?:rhost|target|host|url)|-H)\s+\S|\b(?:python[23]?|ruby|perl|php|bash|sh)\s+[^\r\n]*(?:exploit|rce|pwn|shell|cve[-_])/i;
 
   function _parse_unix_prompt_line(rawLine, opts) {
@@ -214,6 +256,7 @@
     if (boxM && (_ATTACKER_PROMPT_ENTITY_RE.test(boxM[1]) || _ATTACKER_PROMPT_ENTITY_RE.test(boxM[2]))) return true;
     var p = _parse_unix_prompt_line(first, { isPromptCtx: true });
     if (p && ((p.user && _ATTACKER_PROMPT_ENTITY_RE.test(p.user)) || (p.host && _ATTACKER_PROMPT_ENTITY_RE.test(p.host)))) return true;
+    if (p && p.cwd && /(?:^|\/|~\/)(?:hackthebox|tryhackme|vulnhub|pg-practice|oscp)(?:\/|$)/i.test(p.cwd)) return true;
     return false;
   }
   C._is_attacker_prompt_string = _is_attacker_prompt_string;
@@ -222,6 +265,7 @@
     var promptLine = (ws && ws.context && ws.context.promptLine) || '';
     if (!_is_attacker_prompt_string(promptLine)) return false;
     var cmd = String(command || '').trim();
+    if (/^\s*(?:sudo\s+)?(?:locate|mlocate|plocate|which|whereis|updatedb|searchsploit|dpkg|apt(?:-cache)?)\b/i.test(cmd)) return true;
     if (_ATTACKER_REMOTE_OR_LISTENER_CMD_RE.test(cmd)) return false;
     var tgt = String((ws && ws.target) || '').trim().toLowerCase();
     if (tgt && tgt !== 'unknown' && cmd.toLowerCase().indexOf(tgt) >= 0) return false;
@@ -304,7 +348,9 @@
         if (allowSameHost && callerHostLow && p.host.toLowerCase() === callerHostLow
             && callerUserLow === p.user.toLowerCase() && callerSigil === p.sigil) continue;
       }
-      var isRoot = p.sigil === '#' || (p.user && p.user.toLowerCase() === 'root');
+      var isRoot = (!p.isBareSh && p.user)
+        ? /^(?:root|toor)$/i.test(p.user)
+        : (p.sigil === '#' || (p.user && /^(?:root|toor)$/i.test(p.user)));
       return { matched: true, user: p.user || '', host: p.host || '', sigil: p.sigil, isRoot: !!isRoot, raw: p.raw };
     }
     return { matched: false };
@@ -344,7 +390,27 @@
     return count;
   }
 
+  function _emit_ssh_credential_validated(command, text, sshUser, h, source, facts) {
+    var cmd = String(command || '');
+    var raw = String(text || '');
+    var spM = /\bsshpass\s+-p\s*(?:'([^']+)'|"([^"]+)"|([^\s'"]+))/i.exec(cmd);
+    var hasPwPrompt = /(?:^|\r?\n)\s*(?:[^\s:'"@]+@[A-Za-z0-9_.-]+'s\s+)?password:\s*[^\r\n]*$/im.test(raw);
+    if (!spM && !/\bsshpass\b/i.test(cmd) && !hasPwPrompt) return;
+    var val = { service: 'ssh', outcome: 'accepted', tool: 'ssh' };
+    if (sshUser) val.user = sshUser;
+    _add(facts, mkFact('credential.validated', h, val, S, source));
+    var spPw = spM ? (spM[1] || spM[2] || spM[3] || '').trim() : '';
+    if (spPw && sshUser && (!C._valid_password || C._valid_password(spPw)) && !/^\$[A-Za-z_]/.test(spPw)) {
+      var cVal = { user: sshUser, password: spPw, service: 'ssh', secret_type: 'plaintext', via: 'sshpass' };
+      _add(facts, mkFact('credential.candidate', h, cVal, S, source));
+      _add(facts, mkFact('credential.plaintext', h, cVal, S, source));
+      _add(facts, mkFact('credential.password', h, cVal, S, source));
+      _add(facts, mkFact('credential.available', h, cVal, S, source));
+    }
+  }
+
   function _parse_ssh_exec(text, ws, command, source, facts) {
+    if (_is_wsl_guest_from_nonadmin_windows(ws, command)) return;
     if (_is_local_enum_report(text, command)) return;
     var isMultiUidDump = _count_distinct_linux_uids(text) >= 2
       || /All users\s*&\s*groups/i.test(text || '')
@@ -356,7 +422,8 @@
     if (isMultiUidDump && !isSshCmd) return;
     var m = isMultiUidDump ? null : reSearch(C._LINUX_ID_RE, text || '');
     if (!m) {
-      if (!isSshCmd || _SSH_EXEC_FAIL_RE.test(text || '') || _SSH_USAGE_NOISE_RE.test(text || '')) return;
+      var textNoClientWarn = _strip_nonfatal_ssh_client_warnings(text || '');
+      if (!isSshCmd || _SSH_EXEC_FAIL_RE.test(textNoClientWarn) || _SSH_USAGE_NOISE_RE.test(text || '')) return;
       var welcomeM = _SSH_POSTAUTH_WELCOME_RE.exec(text || '');
       var lastLoginM = _SSH_POSTAUTH_LASTLOGIN_RE.exec(text || '');
       var restrictedM = _SSH_RESTRICTED_BANNER_RE.exec(text || '');
@@ -374,14 +441,24 @@
         }
         var bareSigM = /^([#$])(?:\s+(?:id|whoami|pwd|ls|uname|cat|sh|bash|su|sudo|cd|find)\b.*)?$/.exec(fpClean)
           || /^([#$])$/.exec(lastBodyLine);
+        var bsdHostSigM = !bareSigM && (/^([A-Za-z][A-Za-z0-9_.-]{1,31})([#$])(?:\s+(?:id|whoami|pwd|ls|uname|cat|sh|bash|su|sudo|cd|find)\b.*)?$/.exec(fpClean)
+          || /^([A-Za-z][A-Za-z0-9_.-]{1,31})([#$])$/.exec(lastBodyLine));
+        var isPyReplLanding = fpClean === '>>>' || lastBodyLine === '>>>'
+          || /Type "help", "copyright", "credits" or "license" for more information\./i.test(text || '');
         if (bareSigM) {
           landedPrompt = { matched: true, user: bareSigM[1] === '#' ? 'root' : '', host: '', sigil: bareSigM[1], isRoot: bareSigM[1] === '#', raw: bareSigM[0] };
+        } else if (bsdHostSigM && !_ATTACKER_PROMPT_ENTITY_RE.test(bsdHostSigM[1])) {
+          landedPrompt = { matched: true, user: '', host: bsdHostSigM[1], sigil: bsdHostSigM[2], isRoot: bsdHostSigM[2] === '#', raw: bsdHostSigM[0] };
+        } else if (isPyReplLanding) {
+          landedPrompt = { matched: true, user: '', host: '', sigil: '>>>', isRoot: false, raw: '>>>' };
         }
       }
-      var hasVerifiedLanding = landedPrompt.matched;
-      if (!restrictedM && !((welcomeM || lastLoginM) && hasVerifiedLanding) && !hasVerifiedLanding) return;
+      var hasPostAuthMotdProof = Boolean(welcomeM && (lastLoginM || /\b(?:GNU\/Linux|Ubuntu|Debian|FreeBSD|NetBSD|OpenBSD|Alpine|CentOS|Red Hat|Fedora)\b/i.test(text || '')));
+      var hasVerifiedLanding = landedPrompt.matched || hasPostAuthMotdProof;
+      if (!restrictedM && !((welcomeM || lastLoginM) && hasVerifiedLanding) && !landedPrompt.matched) return;
       var sshUser = _extract_ssh_cmd_user(command) || (landedPrompt.matched ? landedPrompt.user : '');
       _emit_echoed_ssh_password(text, sshUser, h, source, facts);
+      _emit_ssh_credential_validated(command, text, sshUser, h, source, facts);
       var authVal = { service: 'ssh', tool: 'ssh' };
       if (sshUser) authVal.user = sshUser;
       _add(facts, mkFact('ssh.authenticated', h, authVal, S, source));
@@ -413,6 +490,7 @@
     else if (cs.indexOf('vnc') >= 0) svc = 'vnc';
     if (svc === 'ssh') {
       _emit_echoed_ssh_password(text, user, h, source, facts);
+      _emit_ssh_credential_validated(command, text, user, h, source, facts);
       _add(facts, mkFact('ssh.authenticated', h, { service: 'ssh', user: user, tool: 'ssh' }, S, source));
     }
     _add(facts, mkFact('access.shell', h, { service: svc }, S, source));
@@ -811,6 +889,7 @@
   }
 
   function _parse_linux_privesc_output(text, ws, command, source, facts, leadKinds) {
+    if (_is_wsl_guest_from_nonadmin_windows(ws, command)) return;
     if (_is_attacker_local_turn(ws, command, text)) return;
     var lowered = text.toLowerCase(), lc = (command || '').toLowerCase(), h = 'host:' + ws.target;
     var textNoPem = String(text || '').replace(/-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g, '');
@@ -1011,14 +1090,20 @@
     }
 
     var _FHS_SUID_PATH_RE = /^\/(?:usr|bin|sbin|opt|var|etc|home|root|srv|tmp|snap|lib|lib64|libexec|nix|mnt|media|run|dev\/shm)\/[A-Za-z0-9._\/-]+$/i;
-    var _ANCHORED_LS_SUID_RE = /^-[rwx-]{2}[sS][rwxstST-]{6}[.+@]?\s+\d+\s+\S+|^-[rwx-]{5}[sS][rwxstST-]{3}[.+@]?\s+\d+\s+\S+/;
+    var _ANCHORED_LS_SUID_RE = /^(?:\d+\s+){0,2}(?:-[rwx-]{2}[sS][rwxstST-]{6}|-[rwx-]{5}[sS][rwxstST-]{3})[.+@]?\s+\d+\s+\S+/;
+    var _NON_SUID_LIST_PATH_RE = /\.(?:exe|dll|py|pyc|pyo|whl|egg|so(?:\.\d+)*|a|o|ko|sh|txt|md|rst|conf|cfg|ini|json|xml|ya?ml|html?|css|js|php|rb|pl|java|jar|zip|tar|gz|xz|bz2|7z|bak|old|log|sql|db|sqlite3?|pem|crt|key|pub)$/i;
+    var _NON_SUID_DIR_LIST_RE = /^\/(?:usr\/(?:local\/)?lib\/python\d[^/]*|usr\/lib\/python\d[^/]*|usr\/share\/(?:seclists|wordlists|windows-binaries|windows-resources|nmap|metasploit-framework|exploitdb|doc|man|locale|zoneinfo))(?:\/|$)/i;
     var suidPaths = {};
     var suidFind = ['-perm -4000', '-perm -u=s', '-perm /4000', '-perm /u=s', '-perm -2000', '-perm -g=s', '-perm /6000', '-perm -6000'].some(function (t) { return lc.indexOf(t) >= 0; }) || /\bfind\s+\/.*-perm\b/i.test(textNoPem);
     var findCmdConstraintOk = !/\bfind\b/i.test(command || '') || (/(?:-perm\b|-[246]000\b|[+-][ug]?s\b)/i.test(command || '') && !/\s-type\s+d\b/i.test(command || ''));
+    var nonSuidListCmd = /\b(?:python[23]?|locate|mlocate|plocate|which|whereis|dpkg|apt(?:-cache)?|rpm)\b/i.test(command || '');
     var isStructuredEnumReport = /══╣|^\s*╣\s+[A-Z]|Linux Privilege Escalation Awesome Script|\bUseful software\b|\bLinEnum\b/im.test(textNoPem);
-    var bareSuidList = findCmdConstraintOk && !isStructuredEnumReport && !/\bfind\s+[^\r\n]*\s-type\s+d\b/i.test(textNoPem) && (textNoPem.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).length >= 2;
+    var bareSuidCandLines = (textNoPem.match(/^\s*\/(?:usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+\s*$/gm) || []).map(function (s) { return s.trim(); }).filter(function (p) {
+      return !_NON_SUID_LIST_PATH_RE.test(p) && !_NON_SUID_DIR_LIST_RE.test(p);
+    });
+    var bareSuidList = !nonSuidListCmd && findCmdConstraintOk && !isStructuredEnumReport && !/\bfind\s+[^\r\n]*\s-type\s+d\b/i.test(textNoPem) && bareSuidCandLines.length >= 2;
     var isSuidEnum = /-~>\s*https?:\/\/gtfobins\.github\.io\/gtfobins\/|\[(?:~|#)\]\s*(?:Custom\s+SUID\s+Binaries|SUID\s+Binaries\s+in\s+GTFO)/i.test(textNoPem);
-    if (suidFind || isSuidEnum || loweredNoPem.indexOf('suid') >= 0 || loweredNoPem.indexOf('sgid') >= 0 || loweredNoPem.indexOf('rws') >= 0 || /^[ \t]*-[rwx-]{5}[sS][rwxstST-]{3}[.+@]?\s+\d+\s+\S+/m.test(textNoPem) || bareSuidList) {
+    if (suidFind || isSuidEnum || loweredNoPem.indexOf('suid') >= 0 || loweredNoPem.indexOf('sgid') >= 0 || loweredNoPem.indexOf('rws') >= 0 || /^[ \t]*(?:\d+\s+){0,2}-[rwx-]{5}[sS][rwxstST-]{3}[.+@]?\s+\d+\s+\S+/m.test(textNoPem) || bareSuidList) {
       var inSuidEnumActiveSection = false;
       textNoPem.split(/\r?\n/).forEach(function (raw) {
         var line = raw.trim();
@@ -1046,14 +1131,30 @@
           var mm = reSearch(C._SUID_PATH_RE, line);
           if (mm && mm.groups && mm.groups.path && (suidFind || _FHS_SUID_PATH_RE.test(mm.groups.path)) && !_is_stock_suid(mm.groups.path) && !_is_stock_sgid_ls_line(line, mm.groups.path)) {
             suidPaths[mm.groups.path] = true;
+          } else {
+            var relSuidM = /^(?:\d+\s+){0,2}-[rwx-]{2}[sS][rwxstST-]{6}[.+@]?\s+\d+\s+root\s+\S+\s+\d+\s+(?:[A-Z][a-z]{2}\s+\d+\s+[\d:]+\s+|\d{4}-\d{2}-\d{2}\s+[\d:]+\s+)([A-Za-z0-9_.-]+)\s*$/i.exec(line);
+            if (relSuidM && relSuidM[1] && relSuidM[1] !== '.' && relSuidM[1] !== '..') {
+              var relFull = (callerPromptObj && callerPromptObj.cwd && callerPromptObj.cwd.charAt(0) === '/')
+                ? (callerPromptObj.cwd.replace(/\/+$/, '') + '/' + relSuidM[1])
+                : ('./' + relSuidM[1]);
+              if (!_is_stock_suid(relFull)) suidPaths[relFull] = true;
+            }
           }
           return;
         }
-        if ((suidFind || bareSuidList) && line[0] === '/' && line.indexOf(' ') < 0 && (suidFind || _FHS_SUID_PATH_RE.test(line)) && !_is_stock_suid(line)) {
+        if ((suidFind || bareSuidList) && line[0] === '/' && line.indexOf(' ') < 0 && (suidFind || (_FHS_SUID_PATH_RE.test(line) && !_NON_SUID_LIST_PATH_RE.test(line) && !_NON_SUID_DIR_LIST_RE.test(line))) && !_is_stock_suid(line)) {
           suidPaths[line] = true;
         }
       });
     }
+    reAll(/^\s*([^\r\n:]+?):\s*setuid(?:,\s*setgid)?\s+ELF\b/gim, textNoPem).forEach(function (fm) {
+      var fp = fm[1].trim();
+      if (!fp || /\s/.test(fp)) return;
+      if (fp.charAt(0) !== '/' && fp.indexOf('./') !== 0 && callerPromptObj && callerPromptObj.cwd && callerPromptObj.cwd.charAt(0) === '/') {
+        fp = callerPromptObj.cwd.replace(/\/+$/, '') + '/' + fp;
+      }
+      if (!_is_stock_suid(fp)) suidPaths[fp] = true;
+    });
     var suidKeys = Object.keys(suidPaths);
     if (suidKeys.length) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.suid_candidate', { paths: suidKeys.sort().slice(0, 500), count: suidKeys.length }, leadKinds);
@@ -1068,6 +1169,10 @@
       if (C._DANGEROUS_CAPS && !C._DANGEROUS_CAPS.test(c.capabilities)) return false;
       return true;
     });
+    var capshM = /\bCurrent:\s*=\s*(cap_[a-z0-9_,+=-]+|\S*=[+]?(?:ep|eip|pe|pie|iep|ipe))\b/i.exec(textNoPem);
+    if (capshM && (!C._DANGEROUS_CAPS || C._DANGEROUS_CAPS.test(capshM[1]))) {
+      caps.push({ path: 'capsh', capabilities: capshM[1].trim() });
+    }
     if (caps.length) {
       _add_host_privesc_fact(facts, ws, source, 'privesc.capability', { entries: caps.slice(0, 500), count: caps.length }, leadKinds);
       _add_host_privesc_fact(facts, ws, source, 'privesc.capabilities', { entries: caps.slice(0, 500), binaries: caps.slice(0, 500).map(function (c) { return c.path; }), count: caps.length }, leadKinds);
@@ -1331,6 +1436,18 @@
       if (pspyItems.length) procLeadVal.items = pspyItems.slice(0, 30);
       _add_host_privesc_fact(facts, ws, source, 'privesc.process_lead', procLeadVal, leadKinds);
     }
+    var screenRootM = /There (?:is a (?:suitable )?screen|are screens) on:\s*\r?\n([\s\S]{0,320}?)(?:\d+\s+Sockets?\s+in\s+(\/(?:var\/)?run\/screen\/S-root)\b|\b(\d+\.root\S*)\s+[^\r\n]*\(Multi,)/i.exec(textNoPem);
+    var psRootScreenLines = textNoPem.split(/\r?\n/).filter(function (l) {
+      return /^\s*root\s+\d+\b[^\r\n]*\b(?:SCREEN|screen)\b[^\r\n]*-(?:[A-Za-z]*S|[A-Za-z]*x)\b/i.test(l);
+    }).map(function (l) { return l.trim(); });
+    if (screenRootM || psRootScreenLines.length) {
+      var scrCmds = psRootScreenLines.length ? psRootScreenLines : [screenRootM[0].split(/\r?\n/)[0].trim()];
+      _add_host_privesc_fact(facts, ws, source, 'privesc.process_lead', {
+        commands: scrCmds.slice(0, 10),
+        kind: 'root_screen_session',
+        socket_dir: (screenRootM && screenRootM[2]) || '/run/screen/S-root'
+      }, leadKinds);
+    }
 
     // Step 1: OS-Baseline Subtraction + Location Anomaly -> privesc.custom_binary (Linux)
     var linCustom = [], seenLinCustom = {};
@@ -1520,6 +1637,8 @@
       if (/\b(?:HKLM|HKEY_LOCAL_MACHINE)\b/i.test(command || '') && !/\b(?:HKCU|HKEY_CURRENT_USER)\b/i.test(command || '')) currentHive = 'hklm';
       else if (/\b(?:HKCU|HKEY_CURRENT_USER)\b/i.test(command || '') && !/\b(?:HKLM|HKEY_LOCAL_MACHINE)\b/i.test(command || '')) currentHive = 'hkcu';
       text.split(/\r?\n/).forEach(function (raw) {
+        if (/AlwaysInstallElevated\s+set\s+to\s+1\s+in\s+HKLM\b/i.test(raw)) { aieHklm = true; return; }
+        if (/AlwaysInstallElevated\s+set\s+to\s+1\s+in\s+HKCU\b/i.test(raw)) { aieHkcu = true; return; }
         if (reSearch(C._HKLM_HEADER_RE, raw)) currentHive = 'hklm';
         else if (reSearch(C._HKCU_HEADER_RE, raw)) currentHive = 'hkcu';
         var vm = reSearch(C._AIE_VALUE_RE, raw);
@@ -1565,6 +1684,14 @@
     text.split(/\r?\n/).forEach(function (raw) {
       var line = raw.trim();
       if (!line) { lastRwHighPriv = false; return; }
+      var sddlAceM = /^(?<prin>(?:NT AUTHORITY|BUILTIN|NT SERVICE|APPLICATION PACKAGE AUTHORITY|[A-Za-z0-9_.-]+)\\[A-Za-z0-9_. $-]+|Everyone|Authenticated Users|Users):\s*AccessAllowed\s*\((?<rights>[^)\r\n]+)\)/i.exec(line);
+      if (sddlAceM) {
+        if (!_WIN_HIGHPRIV_ACL_PRINCIPAL_RE.test(sddlAceM.groups.prin.trim())
+            && /\b(?:FullControl|GenericAll|GenericWrite|WriteKey|WriteData|WriteDacl|ChangePermissions|WriteOwner|TakeOwnership|ServiceChangeConfig)\b/i.test(sddlAceM.groups.rights)) {
+          weakService.push(line.slice(0, 220));
+        }
+        return;
+      }
       var rwM = /^\s*(?:RW|R|W)\s+(.+?)\s*$/i.exec(raw);
       if (rwM) {
         lastRwHighPriv = _WIN_HIGHPRIV_ACL_PRINCIPAL_RE.test(rwM[1].trim());
@@ -1728,9 +1855,12 @@
       /\bpermit\s+nopass\b/i.test(t) ||
       /\bfind\s+\/.*-perm\b/i.test(t) ||
       /\bgetcap\b/i.test(t) ||
-      /(?:^|\r?\n)[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+[ \t]*\r?\n[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+(?=[ \t]*(?:\r?\n|$))/.test(t) ||
-      /^\s*-[rwxstST-]{9}\s+\d+\s+root\s+/m.test(t) ||
-      /^[ \t]*-(?:[rwx-]{2}[sS][rwxstST-]{6}|[rwx-]{5}[sS][rwxstST-]{3})[.+@]?\s+\d+\s+\S+/m.test(t) ||
+      /\bCurrent:\s*=\s*(?:cap_[a-z0-9_,+=-]+|\S*=[+]?(?:ep|eip|pe|pie|iep|ipe))\b/i.test(t) ||
+      /^\s*[^\r\n:]+:\s*setuid(?:,\s*setgid)?\s+ELF\b/im.test(t) ||
+      /There (?:is a (?:suitable )?screen|are screens) on:[\s\S]{0,320}?(?:\/(?:var\/)?run\/screen\/S-root\b|\b\d+\.root\S*\s+[^\r\n]*\(Multi,)|^\s*root\s+\d+\b[^\r\n]*\b(?:SCREEN|screen)\b[^\r\n]*-[A-Za-z]*[Sx]/im.test(t) ||
+      (/(?:^|\r?\n)[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+[ \t]*\r?\n[ \t]*\/(?:usr\/local\/|usr\/|bin\/|sbin\/|opt\/|srv\/|var\/backups\/|home\/)[A-Za-z0-9._\/-]+(?=[ \t]*(?:\r?\n|$))/.test(t) && !/\/usr\/(?:local\/)?lib\/python\d|\b(?:dist|site)-packages\b/i.test(t)) ||
+      /^\s*(?:\d+\s+){0,2}-[rwxstST-]{9}\s+\d+\s+root\s+/m.test(t) ||
+      /^[ \t]*(?:\d+\s+){0,2}-(?:[rwx-]{2}[sS][rwxstST-]{6}|[rwx-]{5}[sS][rwxstST-]{3})[.+@]?\s+\d+\s+\S+/m.test(t) ||
       /CVE-\d{4}-\d{4,7}.*?\b(?:dirty|pwnkit|polkit|samedit|overlayfs)/i.test(t) ||
       /Sudo(?:\s+version|\s+policy\s+plugin\s+version)\s+\d/i.test(t) ||
       /pkexec\s+version\s+\d/i.test(t) ||
@@ -1760,6 +1890,8 @@
       /\bHijackablePath\s*:|Checking for AlwaysInstallElevated|\bCheck\s*:\s*(?:ModifiableServiceFile|DLL Hijacking)/i.test(t) ||
       /Found vulnerabilities|\bMS\d{2}-\d{3}\b.*CVE-\d{4}-\d+|\[\*\]\s*initiating winsploit|\[\s*[EM]\s*\]\s*MS\d{2}-\d{3}\s*:|\[\*\]\s*Appears vulnerable to\s+CVE-\d{4}-\d{4,7}|\[!\]\s*(?:CVE-\d{4}-\d{4,7}|MS\d{2}-\d{3})\s*:/i.test(t) ||
       /\.dll\b.*(?:NAME NOT FOUND|PATH NOT FOUND)/i.test(t) ||
+      /AlwaysInstallElevated\s+set\s+to\s+1\s+in\s+HK(?:LM|CU)\b/i.test(t) ||
+      /^(?:NT AUTHORITY|BUILTIN|[A-Za-z0-9_.-]+)\\[A-Za-z0-9_. $-]+:\s*AccessAllowed\s*\([^)\r\n]*(?:FullControl|GenericAll|GenericWrite|WriteKey|WriteData|WriteDacl|ChangePermissions|WriteOwner|TakeOwnership|ServiceChangeConfig)/im.test(t) ||
       reSearch(C._WIN_PRIV_RE, t) ||
       (C._WEAK_SERVICE_PERM_RE && reSearch(C._WEAK_SERVICE_PERM_RE, t)) ||
       reSearch(C._AIE_VALUE_RE, t)
@@ -1947,6 +2079,15 @@
       var adminGroups = userGroups.filter(function (g) {
         return /^(?:Administrators|Domain Admins|Enterprise Admins)$/i.test(g);
       });
+      var rid500NetRe = C._RID500_ADMIN_RE || /^(?:administrator|administrador|administrateur|amministratore)$/i;
+      var localAdminOnly = !domainMembership && userGroups.some(function (g) { return /^Administrators$/i.test(g); });
+      if (localAdminOnly && C._valid_username(user, false) && !rid500NetRe.test(user)) {
+        _add(facts, mkFact('privesc.uac_bypass', h, { user: user, group: 'Administrators', via: 'net-user' }, S, source));
+        if (!hostPrivGroups.length) {
+          _add(facts, mkFact('privesc.privileged_group', h, { user: user, group: 'Administrators', groups: ['Administrators'], via: 'net-user' }, S, source));
+        }
+        _add(facts, mkFact('privesc.leads', h, { kinds: ['privesc.privileged_group', 'privesc.uac_bypass'], count: 2 }, S, source));
+      }
       if (adminGroups.length && C._valid_username(user, false) && _is_owned_principal(user, ws, facts)) {
         _add(facts, mkFact('access.admin', h, { user: user, identity: user, group: adminGroups[0], groups: adminGroups, via: 'net-user' }, S, source));
       }
@@ -2587,6 +2728,8 @@
   var _REG_PUTTY_SESSION_RE = /SimonTatham\\PuTTY\\Sessions/i;
   var _REG_SNMP_COMMUNITIES_RE = /SNMP\\Parameters\\ValidCommunities/i;
   var _REG_VALUE_NAME_RE = /^\s*(?<name>\S+)\s+REG_(?:SZ|DWORD|BINARY|EXPAND_SZ|MULTI_SZ|QWORD)\s+/i;
+  var _REG_SERVICE_IMAGEPATH_RE = /CurrentControlSet\\Services\\([A-Za-z0-9_.-]+)[\s\S]{0,600}?\bImagePath\s+REG_(?:EXPAND_)?SZ\s+([^\r\n]+)/i;
+  var _WIN_STOCK_SYSTEM32_SVC_EXE_RE = /^(?:svchost|services|lsass|spoolsv|msiexec|searchindexer|searchprotocolhost|searchfilterhost|msdtc|vds|vssvc|wbengine|snmptrap|snmp|alg|wmiapsrv|sppsvc|dllhost|rundll32|wininit|lsm|taskhostw?|taskhostex|conhost|smss|csrss|winlogon|securityhealthservice|msmpeng|nissrv|windefend|sihost|fontdrvhost|dwm|audiodg|dashost|tieringengineservice|locator|fxssvc|ui0detect|trustedinstaller|tiworker|omadmclient|systemsettingsbroker|sgrmbroker|uhssvc|wlms|vmcompute|vmms|vmic[a-z0-9_]*|vgauthservice|vmtoolsd|vboxservice|dns|dfssvc|dfsr|ismserv|ntfrs|kdc|netlogon|certsvc|inetinfo|w3wp|mqsvc|tcpsvcs|lpdsvc|simptcp|clipsrv|mnmsrvc|sessmgr|termsrv|winrs[a-z0-9_]*|wsmprovhost|powershell|pwsh|cmd|cscript|wscript|sc|schtasks|reg|net1?)\.exe$/i;
 
   function _looks_like_reg_query(text) {
     var t = text || '';
@@ -2594,6 +2737,7 @@
     if (/vnc/i.test(t) && reSearch(_REG_VNC_PW_RE, t)) return true;
     if (reSearch(_REG_PUTTY_SESSION_RE, t) || reSearch(_REG_PROXY_PW_RE, t)) return true;
     if (reSearch(_REG_SNMP_COMMUNITIES_RE, t)) return true;
+    if (_REG_SERVICE_IMAGEPATH_RE.test(t)) return true;
     return false;
   }
   C._looks_like_reg_query = _looks_like_reg_query;
@@ -2664,6 +2808,46 @@
     }
     var kindList = C.uniqueSortedCI(Object.keys(kinds));
     if (kindList.length) _add(facts, mkFact('privesc.stored_credentials', h, { kinds: kindList, count: kindList.length }, S, source));
+
+    // 5) CurrentControlSet\Services\<svc> ImagePath OS-baseline subtraction -> privesc.custom_binary
+    if (/CurrentControlSet\\Services\\/i.test(text) && /\bImagePath\s+REG_(?:EXPAND_)?SZ\b/i.test(text)) {
+      var curSvc = '', regCustomBins = [], seenRegBin = Object.create(null), regLeads = {};
+      text.split(/\r?\n/).forEach(function (raw) {
+        var svcHdrM = /CurrentControlSet\\Services\\([A-Za-z0-9_.-]+)\s*$/i.exec(raw.trim());
+        if (svcHdrM) { curSvc = svcHdrM[1]; return; }
+        if (/^\s*HKEY_/i.test(raw)) { curSvc = ''; return; }
+        var imgM = /^\s*ImagePath\s+REG_(?:EXPAND_)?SZ\s+(.+?)\s*$/i.exec(raw);
+        if (!imgM || !curSvc) return;
+        var rawImg = imgM[1].trim();
+        if (/\.sys(?:\b|["']|$)|\\drivers\\/i.test(rawImg)) return;
+        var hit = _check_windows_custom_binary(rawImg);
+        if (!hit) {
+          var sys32M = /^(?:["']?)(?<full>(?:[A-Za-z]:\\|%SystemRoot%\\|\\SystemRoot\\)?(?:Windows\\)?(?:System32|SysWOW64)\\(?<bin>[A-Za-z0-9_.-]+\.exe))(?=["'\s]|$)/i.exec(rawImg);
+          if (sys32M && sys32M.groups && sys32M.groups.bin
+              && !_WIN_STOCK_SYSTEM32_SVC_EXE_RE.test(sys32M.groups.bin)
+              && !_WIN_TOOL_IGNORE_RE.test(sys32M.groups.full)) {
+            hit = { path: sys32M.groups.full, binary: sys32M.groups.bin };
+          }
+        }
+        if (hit && !seenRegBin[hit.path.toLowerCase()]) {
+          seenRegBin[hit.path.toLowerCase()] = 1;
+          regCustomBins.push({ custom_bin: hit.path, path: hit.path, binary: hit.binary, service: curSvc, context: 'reg-service', os: 'windows' });
+        }
+      });
+      if (regCustomBins.length) {
+        var topReg = regCustomBins[0];
+        _add_host_privesc_fact(facts, ws, source, 'privesc.custom_binary', {
+          custom_bin: topReg.path,
+          path: topReg.path,
+          binary: topReg.binary,
+          service: topReg.service,
+          context: 'reg-service',
+          os: 'windows',
+          candidates: regCustomBins.slice(0, 20)
+        }, regLeads);
+        _add_privesc_leads(facts, ws, source, regLeads);
+      }
+    }
   }
   C._parse_reg_query = _parse_reg_query;
 
@@ -2915,6 +3099,7 @@
   var _UBUNTU_POSTLOGIN_HINT_RE = /To run a command as administrator \(user "root"\),\s*use "sudo <command>"\./i;
 
   function _parse_listener_output(text, ws, command, source, facts) {
+    if (_is_wsl_guest_from_nonadmin_windows(ws, command)) return;
     var rawText = String(text || '');
     var followPrompt = (ws && ws.context && ws.context.followPrompt) || '';
     var callerPrompt = (ws && ws.context && ws.context.promptLine) || '';
@@ -3378,6 +3563,7 @@
   var _POSIX_WHOAMI_NOISE_RE = /^(?:whoami|hostname|id|uname|pwd|ls|dir|groups|env|set|ver|date|ipconfig|ifconfig|netstat|ss|systeminfo|tasklist|ps|w|last|cat|type|echo|clear|exit|error|denied|failed|failure|unknown|none|null|invalid|unauthorized|not|command|usage|help)$/i;
   var _POSIX_SUID_SUBSHELL_RE = /(?:\/(?:usr\/)?s?bin\/(?:ba|da|z|k|a)?sh|(?:^|\s|['"(])(?:\.\.?|\/tmp|\/var\/tmp|\/dev\/shm)\/[A-Za-z0-9_.-]+)\b[^\r\n]*?\s-[A-Za-z']*p\b|\b(?:pcntl_exec|posix_sete?uid|os\.sete?uid|setresuid|setreuid|setuid|execve)\s*\(/i;
   function _parse_posix_whoami_escalation(text, ws, command, source, facts) {
+    if (_is_wsl_guest_from_nonadmin_windows(ws, command)) return;
     if (_is_attacker_local_turn(ws, command, text)) return;
     var followPrompt = (ws && ws.context && ws.context.followPrompt) || '';
     var callerPrompt = (ws && ws.context && ws.context.promptLine) || '';
@@ -3558,6 +3744,7 @@
       || /\bgot system via technique\s+\d+/i.test(t)
       || /\[\*\]\s*(?:Meterpreter|Command shell) session \d+ opened\b/i.test(t)
       || /\[\*\]\s*Migration completed successfully/i.test(t)
+      || /\[\*\]\s*(?:uploaded|Downloaded\b[^\r\n]*|download)\s*:\s*\S+?\s*->\s*\S+/i.test(t)
       || /\[\+\]\s*\S+\s*-\s*exploit\/(?:windows|linux|multi|osx|freebsd)\/local\/[A-Za-z0-9_/-]+:\s*The target appears to be vulnerable/i.test(t)
       || /^\s*meterpreter\s*>/im.test(t)
       || /\b(?:getuid|getsystem|local_exploit_suggester)\b/i.test(c);
@@ -3634,6 +3821,17 @@
       _add(facts, mkFact('exploit.candidate', h, { tool: 'local_exploit_suggester', modules: lesMods, module: lesMods[0], count: lesMods.length }, S, source));
       _add(facts, mkFact('privesc.leads', h, { kinds: ['exploit.candidate'], modules: lesMods, count: lesMods.length }, S, source));
     }
+
+    var upMatches = reAll(/\[\*\]\s*uploaded\s*:\s*([^\r\n]+?)\s*->\s*([^\r\n]+)/gim, clean);
+    if (upMatches.length) {
+      var upDests = C.uniqueSortedCI(upMatches.map(function (m) { return m[2].trim(); }).filter(Boolean));
+      _add(facts, mkFact('host.tool_staged', h, { files: upDests, dest: upDests[0], count: upDests.length, tool: 'meterpreter', via: 'meterpreter-upload' }, S, source));
+    }
+    var dlMatches = reAll(/\[\*\]\s*(?:Downloaded\b[^\r\n]*:\s*|download\s*:\s*)([^\r\n]+?)\s*->\s*([^\r\n]+)/gim, clean);
+    if (dlMatches.length) {
+      var dlFiles = C.uniqueSortedCI(dlMatches.map(function (m) { return m[1].trim(); }).filter(Boolean));
+      _add(facts, mkFact('loot.files', h, { files: dlFiles, path: dlFiles[0], count: dlFiles.length, tool: 'meterpreter', via: 'meterpreter-download' }, S, source));
+    }
   }
   C._parse_meterpreter = _parse_meterpreter;
 
@@ -3696,6 +3894,18 @@
         _add(facts, mkFact('loot.files', h, { files: ['ntds.dit'], count: 1, tool: 'robocopy', via: 'backup-mode-copy', sensitive: ['ntds.dit'] }, S, source));
       }
     }
+
+    // 4. net use \\<host>\<share> + The command completed successfully.
+    var netUseM = /\bnet1?(?:\.exe)?\s+use\b[^\r\n]*?(?:['"]?\\\\([^\\/\s'"]+)\\([^\s\\/'"]+)['"]?)/i.exec(combined);
+    if (netUseM && !/\s\/(?:delete|del|d)\b/i.test(netUseM[0])
+        && /The command completed successfully\./i.test(clean)
+        && !/\b(?:System error\s+\d+|Access is denied|network path was not found|multiple connections)\b/i.test(clean)) {
+      var nuShare = netUseM[2].trim();
+      _add(facts, mkFact('smb.authenticated', h, { share: nuShare, host: netUseM[1], tool: 'net-use' }, S, source));
+      if (/^(?:admin\$|[a-z]\$)$/i.test(nuShare)) {
+        _add(facts, mkFact('access.admin_share', h, { share: nuShare, host: netUseM[1], tool: 'net-use' }, S, source));
+      }
+    }
   }
   C._parse_windows_admin_staging = _parse_windows_admin_staging;
 
@@ -3715,15 +3925,19 @@
     }
 
     // 2. Error-free authorized_keys plant (remote curl PUT/upload, rsync/scp/sftp upload, or on-host tee/cp/mv/redirect)
-    var isCurlPutAuthKeys = /\bcurl\b[^\r\n]*(?:-X\s*PUT\b|-T\s+\S|--upload-file\b)[^\r\n]*\/\.?ssh\/authorized_keys\b/i.test(cmd);
+    var isCurlPutAuthKeys = /\bcurl\b[^\r\n]*(?:-X\s*PUT\b|-T\s+\S|--upload-file\b)[^\r\n]*\/\.?ssh\/authorized_keys2?\b/i.test(cmd);
     var isScpRsyncAuthKeys = /\b(?:rsync|scp)\b[^\r\n]*?(?:\S+@\S+:|\d{1,3}(?:\.\d{1,3}){3}:|\[[0-9a-fA-F:]+\]:)[^\s'"]*?(?:\/|^|\.)ssh(?:\/authorized_keys2?\b|\/?(?:\s|$|['"]))/i.test(cmd)
       && (/\bauthorized_keys2?\b|\.pub\b|\bid_(?:rsa|ed25519|ecdsa|dsa)\b/i.test(cmd));
     var isSftpPutAuthKeys = (/\bsftp\b/i.test(cmd) || /^sftp>\s*put\b/im.test(clean))
       && (/\bUploading\s+\S+\s+to\s+\S*\/\.?ssh\/authorized_keys2?\b/i.test(clean)
         || (/^sftp>\s*put\s+\S*(?:authorized_keys2?|\.pub)\b[^\r\n]*?(?:\.?ssh\/|authorized_keys2?\b)/im.test(clean)));
-    var isLocalWriteAuthKeys = !isAttackerLocal && /(?:\b(?:tee|cp|mv)\b[^\r\n]*|>>?\s*['"]?)[^\r\n]*?(?:\/|^|['"\s~])\.?ssh\/authorized_keys\b/i.test(cmd);
+    var hasInlineSshPubkey = /\b(?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp\d+)\s+[A-Za-z0-9+/=]{24,}/.test(cmd + '\n' + clean);
+    var isLocalWriteAuthKeys = !isAttackerLocal && (
+      /(?:\b(?:tee|cp|mv)\b[^\r\n]*|>>?\s*['"]?)[^\r\n]*?(?:\/|^|['"\s~])\.?ssh\/authorized_keys2?\b/i.test(cmd)
+      || (hasInlineSshPubkey && /(?:\btee(?:\s+-a)?\s+|>>?\s*)['"]?(?:[^\s'"]*\/)?authorized_keys2?['"]?(?:\s|$|[;|&])/i.test(cmd))
+    );
     if ((isCurlPutAuthKeys || isScpRsyncAuthKeys || isSftpPutAuthKeys || isLocalWriteAuthKeys)
-        && (isScpRsyncAuthKeys || isSftpPutAuthKeys || /\b(?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp\d+)\b|\.pub\b|\bid_(?:rsa|ed25519|ecdsa|dsa)\b/i.test(cmd + '\n' + clean))
+        && (isScpRsyncAuthKeys || isSftpPutAuthKeys || hasInlineSshPubkey || /\b(?:ssh-(?:rsa|ed25519|dss)|ecdsa-sha2-nistp\d+)\b|\.pub\b|\bid_(?:rsa|ed25519|ecdsa|dsa)\b/i.test(cmd + '\n' + clean))
         && !/\b(?:Permission denied|No such file or directory|Read-only file system|Operation not permitted|cannot open|cannot create|curl:\s*\(\d+\)|Access denied|Connection refused|lost connection|rsync error:)\b/i.test(clean)
         && !/HTTP\/[12](?:\.\d)?\s+[45]\d\d\b/i.test(clean)) {
       _add(facts, mkFact('credential.ssh_key', h, { via: 'authorized-keys-plant' }, S, source));
@@ -3752,6 +3966,11 @@
     }
 
     if (isAttackerLocal) return;
+
+    var clrDeniedM = /Access to the path '([^'\r\n]+)' is denied\./i.exec(clean);
+    if (clrDeniedM) {
+      _add(facts, mkFact('blocker.access_denied', h, { path: clrDeniedM[1], stage: 'authorization', via: 'clr-unauthorized-access' }, S, source));
+    }
 
     // 3. ls /home (or ls inside /home CWD) -> host.users
     var isLsHome = /^\s*(?:sudo\s+)?ls(?:\s+-[A-Za-z0-9-]+)*\s+\/home\/?\s*$/i.test(cmd)

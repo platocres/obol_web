@@ -1052,7 +1052,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "http.reachable",
+        "vuln.tomcat_manager"
       ],
       "produces": [
         "foothold.webshell"
@@ -2661,9 +2662,11 @@
       "os": [
         "linux"
       ],
-      "requires_all": [],
-      "requires_any": [
+      "requires_all": [
         "http.reachable"
+      ],
+      "requires_any": [
+        "vuln.nibbleblog"
       ],
       "produces": [
         "foothold.webshell"
@@ -2710,7 +2713,8 @@
       ],
       "requires_all": [],
       "requires_any": [
-        "http.reachable"
+        "vuln.solr",
+        "port:8983"
       ],
       "produces": [
         "foothold.linux"
@@ -2759,7 +2763,9 @@
         "http.reachable",
         "credential.available"
       ],
-      "requires_any": [],
+      "requires_any": [
+        "vuln.gitlab"
+      ],
       "produces": [
         "foothold.webshell"
       ],
@@ -2804,10 +2810,11 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "port:80",
+      "requires_all": [
         "http.reachable"
+      ],
+      "requires_any": [
+        "vuln.iis6_webdav"
       ],
       "produces": [
         "foothold.windows"
@@ -2940,10 +2947,11 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
-      "requires_any": [
-        "vuln.rejetto_hfs",
+      "requires_all": [
         "http.reachable"
+      ],
+      "requires_any": [
+        "vuln.rejetto_hfs"
       ],
       "produces": [
         "foothold.windows"
@@ -2986,10 +2994,12 @@
       "os": [
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "http.reachable"
+      ],
       "requires_any": [
         "vuln.coldfusion",
-        "http.reachable"
+        "port:8500"
       ],
       "produces": [
         "foothold.webshell",
@@ -3093,11 +3103,12 @@
         "linux",
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "http.reachable"
+      ],
       "requires_any": [
         "vuln.gitea",
-        "web.authz_bypass",
-        "web.server"
+        "web.authz_bypass"
       ],
       "produces": [
         "credential.available",
@@ -3191,11 +3202,11 @@
         "windows",
         "linux"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "http.reachable"
+      ],
       "requires_any": [
-        "port:8080",
         "vuln.myfaces_jsf",
-        "http.reachable",
         "web.deserial_confirmed"
       ],
       "produces": [
@@ -3243,12 +3254,11 @@
         "linux",
         "windows"
       ],
-      "requires_all": [],
+      "requires_all": [
+        "http.reachable"
+      ],
       "requires_any": [
-        "port:3000",
-        "port:80",
         "vuln.node_serialize",
-        "http.reachable",
         "web.deserial_confirmed"
       ],
       "produces": [

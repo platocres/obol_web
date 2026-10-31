@@ -312,14 +312,27 @@
     var h = 'host:' + ws.target, ports = {};
     String(text).split(/\r?\n/).forEach(function (line) {
       if (!/\bLISTEN(?:ING)?\b/i.test(line)) return;
-      // the local address is the one before the state; take the last :port on the local side
+      // the local address is the one before the state; take the first :port on the local side
       var m = line.match(/(?:^|\s|\[)(?:\d{1,3}(?:\.\d{1,3}){3}(?:%[A-Za-z0-9_.-]+)?|\*|::|[0-9a-f:]*\]?):(\d{1,5})\b/gi);
-      if (!m) return;
-      var first = m[0], port = +((first.match(/:(\d{1,5})\b/) || [])[1]);
+      var port = 0;
+      if (m) {
+        var first = m[0];
+        port = +((first.match(/:(\d{1,5})\b/) || [])[1]);
+      } else {
+        // BSD netstat uses dot-separated addr.port ("tcp4 0 0 127.0.0.1.25 *.* LISTEN", "*.80 *.* LISTEN")
+        var bsdM = /^\s*(?:tcp[46]?|udp[46]?)\s+\d+\s+\d+\s+(?:\d{1,3}(?:\.\d{1,3}){3}|\*|[0-9a-fA-F:]+)\.(\d{1,5})\s+(?:\d{1,3}(?:\.\d{1,3}){3}|\*|[0-9a-fA-F:]+)\.(?:\d{1,5}|\*)\s+LISTEN\b/i.exec(line);
+        if (bsdM) port = +bsdM[1];
+      }
       if (port >= 1 && port <= 65535) ports[port] = 1;
     });
     var list = Object.keys(ports).map(Number).sort(function (a, b) { return a - b; });
-    if (list.length) _add(facts, mkFact('scan.local.listeners', h, { ports: list.slice(0, 48) }, S, source));
+    if (list.length) {
+      _add(facts, mkFact('scan.local.listeners', h, { ports: list.slice(0, 48) }, S, source));
+      var ldapLocalPorts = [389, 636, 3268, 3269].filter(function (p) { return !!ports[p]; });
+      if (ldapLocalPorts.length) {
+        _add(facts, mkFact('ldap.reachable', h, { port: ldapLocalPorts[0], ports: ldapLocalPorts, loopback: true, via: 'local-listener' }, S, source));
+      }
+    }
   }
 
   // The foothold's own resolvers - the internal DNS servers (often a DC) that name the rest of the

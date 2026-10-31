@@ -112,6 +112,10 @@
       var hosts = {};
       recs.forEach(function (m) { if (['A', 'AAAA', 'CNAME'].indexOf(m[2]) >= 0) hosts[m[1].toLowerCase()] = 1; });
       _add(facts, mkFact('dns.zone', C._scope_for_domain(ws), { records: recs.length, hosts: Object.keys(hosts).slice(0, 40) }, S, source));
+      var soaM = /^([A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9])?)+)\.?\s+\d+\s+IN\s+SOA\b/im.exec(text);
+      if (soaM && soaM[1] && !/^(?:localhost|ip6-localhost)(?:\.|$)|\.(?:in-addr|ip6)\.arpa$/i.test(soaM[1])) {
+        _add(facts, mkFact('host.domain', h(ws), { domain: soaM[1].replace(/\.$/, '').toLowerCase() }, S, source));
+      }
     }
   }
   C._parse_dns_zone = _parse_dns_zone;
@@ -165,7 +169,26 @@
     reAll(/^\s*(\S+?)\s+\[Status:\s*(?:200|301|302|307|401|403)/gim, text).forEach(function (m) {
       hosts[m[1].toLowerCase().replace(/:\d+$/, '')] = 1;
     });
-    reAll(C._WEB_WFUZZ_RE, text).forEach(function (m) {
+    var wfuzzFullRows = reAll(/^\d+:\s+(?:C=)?(?<code>\d{3})\s+(?<lines>\d+)\s*L\s+(?<words>\d+)\s*W\s+(?<chars>\d+)\s*C[a-z]*\s+"(?<payload>[^"\r\n]*)"/gim, text);
+    if (wfuzzFullRows.length) {
+      var wfBuckets = {};
+      wfuzzFullRows.forEach(function (m) {
+        var bKey = m.groups.code + ':' + m.groups.lines + ':' + m.groups.words;
+        wfBuckets[bKey] = (wfBuckets[bKey] || 0) + 1;
+      });
+      var wfSrc = String(source || '');
+      var hasWfFilter = /(?:^|\s)--(?:h[clwhs]|s[clwhs])\b|\bFiltered Requests\s*:\s*[1-9]/i.test(wfSrc + '\n' + text);
+      var wfAborted = /(?:^|\r?\n)\s*\^C\b|Finishing pending requests/i.test(text);
+      wfuzzFullRows.forEach(function (m) {
+        var code = parseInt(m.groups.code, 10);
+        var bKey = m.groups.code + ':' + m.groups.lines + ':' + m.groups.words;
+        if ((!hasWfFilter || wfAborted) && wfBuckets[bKey] >= 5) return;
+        if ([200, 301, 302, 307, 401, 403].indexOf(code) >= 0 && m.groups.payload) {
+          hosts[m.groups.payload.trim().toLowerCase()] = 1;
+        }
+      });
+    }
+    if (!wfuzzFullRows.length) reAll(C._WEB_WFUZZ_RE, text).forEach(function (m) {
       var code = parseInt(m.groups.code, 10);
       if ([200, 301, 302, 307, 401, 403].indexOf(code) >= 0 && m.groups.payload) {
         hosts[m.groups.payload.trim().toLowerCase()] = 1;

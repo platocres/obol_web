@@ -99,6 +99,29 @@
       return false;
     }
   }
+  function _isGnuWgetSuccess(body) {
+    if (!body || /\bwget:\s*(?:server returned error|can't connect|bad address|download timed out|unable to resolve)/i.test(body)) return false;
+    if (/\bFINISHED\s+--\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}--[\s\S]{0,320}?\bDownloaded:\s*[1-9]\d*\s+files?,/i.test(body)) return true;
+    if (/\bHTTP request sent,\s*awaiting response\.\.\.\s*20\d\b/i.test(body)
+        && /\b\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+\([^)\r\n]+\)\s+-\s+[\x27\x60\u2018][^\x27\x60\u2019\r\n]+[\x27\u2019]\s+saved\s+\[\d+/i.test(body)) return true;
+    return false;
+  }
+  function _isNpmInstallSuccess(rawCmd, body) {
+    if (!/\bnpm\s+(?:install|i|ci)\b/i.test(rawCmd || '') || !body || /^\s*npm\s+ERR!/im.test(body)) return false;
+    return /(?:^|\n)\s*(?:[\x60\u2514\u251c][\u2500-][\u252c\u2500-]|\+--|`--)\s+\S+@\d+\.\d+/m.test(body)
+      || /\badded\s+\d+\s+packages?\b/i.test(body)
+      || /\bup to date in\s+\d/i.test(body);
+  }
+  function _isDavtestComplete(rawCmd, body) {
+    if (!body) return false;
+    var isDav = /\bdavtest\b/i.test(rawCmd || '') || (/\bTesting DAV connection\b/i.test(body) && /\bSending test files\b/i.test(body));
+    return isDav && (/^\s*PUT\s+\S+\s+(?:FAIL|SUCCEED)\b/im.test(body) || /\bSummary:/i.test(body));
+  }
+  function _isDavtestAllFail(rawCmd, body) {
+    return _isDavtestComplete(rawCmd, body)
+      && /^\s*PUT\s+\S+\s+FAIL\b/im.test(body)
+      && !/^\s*(?:PUT|EXEC|MOVE|COPY)\s+\S+\s+SUCCEED\b/im.test(body);
+  }
   function completion(text, command, opts) {
     var rawCmd = String(command || ''), cmd = rawCmd.toLowerCase(), body = String(text || '');
     var isStdoutRedirect = /(?:^|[\s;|&])(?:1?|&)>>?\s*(?!&)\S+/.test(rawCmd)
@@ -130,8 +153,35 @@
     if (/100%\s*\|[*=]+\|/.test(body) && !/\bwget:\s*(?:server returned error|can't connect|bad address|download timed out)/i.test(body)) {
       return { complete: true, negative: false };
     }
+    if (_isGnuWgetSuccess(body)) {
+      return { complete: true, negative: false };
+    }
+    if (_isNpmInstallSuccess(rawCmd, body)) {
+      return { complete: true, negative: false };
+    }
     if (_isValidCurlJsonSuccess(rawCmd, body)) {
       return { complete: true, negative: false };
+    }
+    if (_isDavtestComplete(rawCmd, body)) {
+      return { complete: true, negative: _isDavtestAllFail(rawCmd, body) };
+    }
+    if (/\bwfuzz\b/.test(cmd) || (/Total time:/i.test(body) && /Processed Requests:/i.test(body) && /Filtered Requests:/i.test(body))) {
+      if (/\bFatal exception:/i.test(body)) return { complete: false, negative: false };
+      var wfProcM = /Processed Requests:\s*(\d+)/i.exec(body);
+      var wfFiltM = /Filtered Requests:\s*(\d+)/i.exec(body);
+      if (wfProcM && wfFiltM) {
+        var wfProc = parseInt(wfProcM[1], 10), wfFilt = parseInt(wfFiltM[1], 10);
+        var hasWfHitRow = /^\s*\d{5,10}:\s+(?:C=)?\d{3}\b/m.test(body);
+        var wfZero = ((wfProc === 0 || wfFilt >= wfProc) && !hasWfHitRow) || (/ID\s+Response\s+Lines/i.test(body) && !hasWfHitRow);
+        return { complete: true, negative: wfZero };
+      }
+    }
+    if (/\bEnding ike-scan\b[^\r\n]*:\s*\d+\s+hosts?\s+scanned\b/i.test(body)) {
+      return { complete: true, negative: /\b0\s+returned\s+handshake;\s*0\s+returned\s+notify\b/i.test(body) };
+    }
+    if ((/\b(?:l?ftp(?:-ssl)?|ncftp)\b/i.test(rawCmd) || /^\s*ftp>\s*(?:ls|dir)\b/im.test(body) || (/^\s*(?:ls|dir)\b/i.test(rawCmd) && /^\s*(?:150|125)\s+/m.test(body)))
+        && /^\s*(?:150|125)\s+[^\r\n]*\r?\n(?:\s*\r?\n)*\s*226[\s-]/m.test(body)) {
+      return { complete: true, negative: true };
     }
     if (/\[CRITICAL\]\s*all tested parameters do not appear to be injectable/i.test(body)) {
       return { complete: true, negative: true };
@@ -244,14 +294,21 @@
         }).join('\n');
       }
     }
+    var isStringsFileView = /^\s*(?:(?:sudo(?:\s+-u\s+\S+)?)\s+)?strings\b/i.test(command);
+    var passiveNonEmptyLines = isPassiveLocalFileView
+      ? textForDenial.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l && !_PROMPT_ONLY_LINE_RE.test(l); })
+      : [];
     var done = completion(text, command, opts), obs = observations(text);
     var denial = isPassiveLocalFileView
-      ? /^\s*(?:(?:\/usr\/bin\/|\/bin\/)?(?:cat|head|tail|less|more|bat|batcat|nl|strings|type|get-content|gc)|-?(?:\/(?:usr\/)?bin\/)?(?:ba|da|a|z|k)?sh|sudo):\s+[^\r\n]*:\s*Permission denied\b/im.test(textForDenial)
-      : (/STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable|\[!\]\s*Not running as SYSTEM\b|\bOperation failed:\s*Access is denied\b|Sorry,\s+user\s+\S+\s+is not allowed to execute\b|sudo:\s*PERM_ROOT:\s*setresuid|cannot be loaded because running scripts is disabled on this system|\bPSSecurityException\b|\bMsg 15247\b|User does not have permission to perform this action|You do not have permission to run the RECONFIGURE statement|Cannot open Service Control Manager|This operation might require other privileges|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|(?:^|\n)\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b|(?:^|\n)\s*(?!530\s)(?:[A-Za-z0-9_./-]+:\s+){1,3}Permission denied\s*(?:$|\r?\n)/i.test(textForDenial)
+      ? (/^\s*(?:(?:\/usr\/bin\/|\/bin\/)?(?:cat|head|tail|less|more|bat|batcat|nl|strings|type|get-content|gc)|-?(?:\/(?:usr\/)?bin\/)?(?:ba|da|a|z|k)?sh|sudo):\s+[^\r\n]*:\s*Permission denied\b/im.test(textForDenial)
+        || (!isStringsFileView && (/\bCategoryInfo\s*:\s*PermissionDenied\b|\bUnauthorizedAccessException\b|\bAccess to the path\s+['"][^'"\r\n]+['"]\s+is denied\.?/i.test(textForDenial)
+          || (passiveNonEmptyLines.length >= 1 && passiveNonEmptyLines.length <= 6 && /^\s*Access is denied\.?\s*$/im.test(textForDenial)))))
+      : (/STATUS_ACCESS_DENIED|NT_STATUS_ACCESS_DENIED|\baccess (?:is )?denied\b|\bAccess to the path\s+['"][^'"\r\n]+['"]\s+is denied\.?|\bError from server \(Forbidden\):|\bThis program is blocked by group policy\.?|insufficientAccessRights|insufficient access rights|successful bind must be completed|anonymous bind disallowed|share\s+['"]?[A-Za-z0-9_$-]+\$['"]?\s+is\s+not\s+writable|\[!\]\s*Not running as SYSTEM\b|\bOperation failed:\s*Access is denied\b|Sorry,\s+user\s+\S+\s+is not allowed to execute\b|sudo:\s*PERM_ROOT:\s*setresuid|cannot be loaded because running scripts is disabled on this system|\bPSSecurityException\b|\bMsg 15247\b|User does not have permission to perform this action|You do not have permission to run the RECONFIGURE statement|Cannot open Service Control Manager|This operation might require other privileges|MongoServerError:\s*(?:command\s+\S+\s+)?requires\s+authentication|\bnot\s+authorized\s+on\s+\S+\s+to\s+execute\s+command\b|\bcodeName:\s*['"]Unauthorized['"]|(?:^|\n)\s*\(error\)\s+(?:NOPERM|ERR\s+[^\r\n]*(?:permission|not\s+permitted|protected\s+mode|disabled|denied))\b|(?:^|\n)\s*(?!530\s)(?:[A-Za-z0-9_./-]+:\s+){1,3}Permission denied\s*(?:$|\r?\n)/i.test(textForDenial)
         || facts.some(function (f) { return supported(f) && /^(?:credential\.authorization|blocker\.(?:access_denied|account_not_delegated|dcsync_denied|ldap_anonymous_disabled))$/.test(f.kind || ''); }));
     var guestDisabled = /\\guest:\S*\s+STATUS_ACCOUNT_DISABLED/i.test(text) || (/\s-u\s+['"]?guest['"]?\b/i.test(command) && /STATUS_ACCOUNT_DISABLED/i.test(text));
     var sudoBadPass = /\bsudo:\s*\d+\s+incorrect\s+password\s+attempts?\b/i.test(text)
-      || (/\[sudo\]\s*password\s+for\b/i.test(text) && /(?:^|\n)\s*Sorry,\s*try again\.\s*(?:$|\r?\n)/i.test(text));
+      || (/\[sudo\]\s*password\s+for\b/i.test(text) && /(?:^|\n)\s*Sorry,\s*try again\.\s*(?:$|\r?\n)/i.test(text))
+      || /^\s*\[sudo\]\s*password\s+for\s+[^:\r\n]+:\s*$/i.test(text.trim());
     var isFtpContext = /\b(?:l?ftp(?:-ssl)?|ncftp)\b/i.test(command)
       || (/\bftp:\/\//i.test(command) && !/\bhttps?:\/\//i.test(command))
       || /^\s*(?:220|331|530|534)[\s-]/m.test(text);
@@ -264,7 +321,7 @@
       || /\[!\]\s*Authentication error\b|\bKDC_ERR_CLIENT_REVOKED\b/i.test(text)
       || (/GSSAPI::GssApiError/i.test(text) && /Invalid token was supplied/i.test(text));
     var hasHardTransportReject = guestDisabled || sudoBadPass || hasTerminalAuthFailure
-      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|(?:^|\n)\s*\(error\)\s+(?:WRONGPASS|ERR\s+invalid\s+(?:username-password|password))\b|Permission denied \((?:publickey|password)|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login(?:\s+or\s+password)?\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|(?:^|\n)\s*534[\s-]+(?:Policy\s+requires\s+SSL|Local\s+policy\s+on\s+server\s+does\s+not\s+allow\s+TLS|Could\s+not\s+connect\s+to\s+SNI)\b|\bftp:\s*Login\s+failed\b/i.test(text)
+      || /STATUS_LOGON_FAILURE|NT_STATUS_LOGON_FAILURE|\bLogin failed for user\b|WinRMAuthorizationError|NOAUTH Authentication required|(?:^|\n)\s*\(error\)\s+(?:WRONGPASS|ERR\s+invalid\s+(?:username-password|password))\b|Permission denied(?:,\s*please try again\.?|\s*\((?:publickey|password|keyboard-interactive|gssapi-keyex|gssapi-with-mic|hostbased))|ERRCONNECT_(?:AUTHENTICATION_FAILED|LOGON_FAILURE)|(?:^|\n)\s*530[\s-]+(?:Login(?:\s+or\s+password)?\s+incorrect|Permission\s+denied|Authentication\s+failed|Not\s+logged\s+in|User\s+cannot\s+log\s+in)\b|(?:^|\n)\s*534[\s-]+(?:Policy\s+requires\s+SSL|Local\s+policy\s+on\s+server\s+does\s+not\s+allow\s+TLS|Could\s+not\s+connect\s+to\s+SNI)\b|\bftp:\s*Login\s+failed\b/i.test(text)
       || (isFtpContext && /(?:^|\n)\s*(?:ftp:\s*)?Login\s+failed\.?\s*(?:$|\r?\n)/i.test(text))
       || facts.some(function (f) { return f && f.kind === 'credential.validation' && (f.state === 'refuted' || (f.value || {}).status === 'rejected'); });
     var isHttpResp = /^\s*(?:<\s*)?HTTP\/[12](?:\.\d)?\s+\d{3}\b/im.test(text);
@@ -277,8 +334,10 @@
       || /<(?:html|form|body|div|input)\b/i.test(text)
       || /\[Input\s+(?:Username|Password|Email)\]/i.test(text)
     );
-    var httpAppLoginFailure = isHttpAppContext && /\b(?:authentication (?:failed|failure)|invalid (?:password|credentials?|username)|login (?:incorrect|failed))\b/i.test(text);
-    var rejected = !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\b(?:invalid|incorrect|wrong)\s+(?:username(?:\s+(?:or|and|\/)\s+password)?|user\s*(?:or|\/)\s*password|password|credentials?)\b|\bLogin (?:incorrect|failed)\b/i.test(text));
+    var textForReject = text.replace(/^\s*\[DATA\]\s+attacking\s+[^\r\n]*$/gim, '');
+    var bruteFoundValid = /\b[1-9]\d*\s+valid\s+passwords?\s+found\b/i.test(text);
+    var httpAppLoginFailure = isHttpAppContext && /\b(?:authentication (?:failed|failure)|invalid (?:password|credentials?|username)|login (?:incorrect|failed))\b/i.test(textForReject);
+    var rejected = !bruteFoundValid && !httpAppLoginFailure && (hasHardTransportReject || /\bauthentication (?:failed|failure)\b|\b(?:invalid|incorrect|wrong)\s+(?:username(?:\s+(?:or|and|\/)\s+password)?|user\s*(?:or|\/)\s*password|password|credentials?)\b|\bLogin (?:incorrect|failed)\b/i.test(textForReject));
     var hardTruncated = /\[truncated(?:,\s*[^\]]*|\s+output)\]|\[output truncated\]|output (?:was )?truncated|unexpected (?:end of (?:file|input)|EOF)|incomplete (?:output|capture)/i.test(text);
     var bareTruncated = !hardTruncated && /\[truncated\]/i.test(text);
     var truncated = hardTruncated || bareTruncated;
@@ -330,10 +389,11 @@
       ? text.replace(/^\s*(?:cat|ls|find|grep|egrep|fgrep|rg|stat|head|tail|file):\s+[^\r\n]*No such file or directory\s*$/gim, '')
       : text;
     envText = envText.replace(/^[^\r\n]*\.{1,2}\/sysdeps\/[^\r\n]*:\s*No such file or directory\.?\s*$/gim, '');
+    envText = envText.replace(/^\s*npm\s+WARN\b[^\r\n]*$/gim, '');
     if (hasGcoreSaved) {
       envText = envText.replace(/^[^\r\n]*\.(?:c|cc|cpp|h|S):\s*No such file or directory\.?\s*$/gim, '');
     }
-    var hardEnvironment = (!guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?(?:command not found|is not recognized as an internal or external command|No such file or directory|unrecognized (?:option|arguments?)|invalid option|missing (?:required )?(?:option|argument)|SyntaxError:|ModuleNotFoundError:|ImportError:|externally-managed-environment|version ['`"]?GLIBC_2\.\d+|cannot execute binary file:\s*Exec format error|Traceback \(most recent call last\):|Connection (?:refused|reset)|could not connect|Name or service not known|Temporary failure in name resolution|Network is unreachable|\b(?:connection|request|operation|scan|socket|read)\s+timed?\s*out\b|(?<!nmblookup[^\n]{0,40})\btimed\s+out\b|KRB_AP_ERR_SKEW|clock skew too great|STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|BIO_do_handshake failed|freerdp_tls_handshake|ERRCONNECT_TLS_CONNECT_FAILED|Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management|unsupported hash type MD4|End-of-central-directory signature not found|This script contains malicious content and has been blocked|\bAMSI_RESULT_DETECTED\b)/i.test(envText))
+    var hardEnvironment = (!guestDisabled && /(?:^|\n)(?:[^\n]{0,150})?(?:command not found|is not recognized as an internal or external command|No such file or directory|unrecognized (?:option|arguments?)|invalid option|missing (?:required )?(?:option|argument)|SyntaxError:|ModuleNotFoundError:|ImportError:|externally-managed-environment|version ['`"]?GLIBC_2\.\d+|cannot execute binary file:\s*Exec format error|Traceback \(most recent call last\):|Connection (?:refused|reset)|could not connect|Name or service not known|Temporary failure in name resolution|Network is unreachable|\b(?:connection|request|operation|scan|socket|read)\s+timed?\s*out\b|(?<!nmblookup[^\n]{0,40})\btimed\s+out\b|KRB_AP_ERR_SKEW|clock skew too great|STATUS_PASSWORD_(?:MUST_CHANGE|EXPIRED)|STATUS_ACCOUNT_(?:LOCKED_OUT|DISABLED|RESTRICTION|EXPIRED)|\bThis account is currently not available\.?|\bprotocol negotiation failed:\s*NT_STATUS_[A-Z0-9_]+\b|\[-\]\s*Failed to load extension:|\bMeterpreter session \d+ closed\.\s*Reason:\s*Died\b|BIO_do_handshake failed|freerdp_tls_handshake|ERRCONNECT_TLS_CONNECT_FAILED|Set-WSManQuickConfig\s*:\s*Access is denied|WsManError,Microsoft\.WSMan\.Management|unsupported hash type MD4|End-of-central-directory signature not found|This script contains malicious content and has been blocked|\bAMSI_RESULT_DETECTED\b)/i.test(envText))
       || (!guestDisabled && !denial && !hasHardTransportReject && /(?:^|\n)\s*\(error\)\s+ERR\b/i.test(text))
       || (!guestDisabled && /(?:^|\n)\s*-?(?:\/(?:usr\/(?:local\/)?)?bin\/)?(?:ba|da|a|z|k|c|tc)?sh:\s*(?:line\s+\d+:\s*|\d+:\s*)?[A-Za-z0-9_./-]+:\s*not found\b/i.test(text))
       || (!guestDisabled && /(?:^|\n)\s*Error:\s*invalid line \d+ in \/\S+:/i.test(text))
@@ -345,7 +405,7 @@
       || /\bConnection to \S+ \d+ port \[[^\]]+\] succeeded!/i.test(text)
       || /\bconnect to \[\d{1,3}(?:\.\d{1,3}){3}\]\s+from\b|\bConnection received on\s+\S+\s+\d+\b/i.test(text)
       || /\b(?:Command shell|Meterpreter)\s+session\s+\d+\s+opened\b/i.test(text);
-    var explicitHelpCmd = /(?:^|\s)(?:-h|--help|-help|\/\?)\s*$/i.test(command.trim());
+    var explicitHelpCmd = /(?:^|\s)(?:--help|-help|\/\?)(?:\s|$)|(?:^|\s)-h\s*$/i.test(command.trim());
     var helpUsagePrinted = explicitHelpCmd && !hardEnvironment && !denial && !rejected && /(?:^|\n)(?:[^\n]{0,150})?\b(?:usage|options|synopsis):/i.test(text);
     if (helpUsagePrinted && !done.complete) {
       done = { complete: true, negative: false };
@@ -362,12 +422,14 @@
       && (!suidChmodLines.length
         || suidChmodLines.every(function (l) { return _PROMPT_ONLY_LINE_RE.test(l); })
         || (/\bProxyCommand=/i.test(command) && /kex_exchange_identification|ssh_exchange_identification|Connection closed by UNKNOWN/i.test(text)));
-    var busyboxWgetSuccess = /100%\s*\|[*=]+\|/.test(text)
-      && !/\bwget:\s*(?:server returned error|can't connect|bad address|download timed out)/i.test(text)
+    var busyboxWgetSuccess = (/100%\s*\|[*=]+\|/.test(text) || _isGnuWgetSuccess(text))
+      && !/\bwget:\s*(?:server returned error|can't connect|bad address|download timed out|unable to resolve)/i.test(text)
+      && !denial && !rejected && !environment && !truncated;
+    var npmInstallSuccess = _isNpmInstallSuccess(command, text)
       && !denial && !rejected && !environment && !truncated;
     var curlJsonSuccess = _isValidCurlJsonSuccess(command, text)
       && !denial && !rejected && !environment && !truncated;
-    var winAdminMutationCmd = /\b(?:net1?(?:\.exe)?\s+(?:user|localgroup|group)\b|reg(?:\.exe)?\s+(?:save|add|delete)\b|sc(?:\.exe)?\s+config\b|schtasks(?:\.exe)?\s+\/create\b)/i.test(command || text);
+    var winAdminMutationCmd = /\b(?:net1?(?:\.exe)?\s+(?:user|localgroup|group|use)\b|reg(?:\.exe)?\s+(?:save|add|delete)\b|sc(?:\.exe)?\s+config\b|schtasks(?:\.exe)?\s+\/create\b)/i.test(command || text);
     var winAdminMutationSuccess = winAdminMutationCmd
       && /\bThe\s+(?:command|operation)\s+completed\s+successfully\.?/i.test(text)
       && !denial && !rejected && !environment && !truncated
@@ -407,9 +469,12 @@
     else if (winAdminMutationSuccess) set('success', 'Administrative state change confirmed',
       'The Windows administrative command reported successful completion.',
       'Only the requested administrative state change is confirmed by this output; verify downstream capability where applicable.', 'complete', 'continue', true);
-    else if ((busyboxWgetSuccess || curlJsonSuccess) && !proof.length) set('success', 'HTTP transfer or JSON response completed',
-      'The transfer or structured JSON HTTP response completed without error.',
-      'Review any downloaded artifact or JSON payload fields for follow-on parameters or credentials.', 'complete', 'continue', true);
+    else if ((busyboxWgetSuccess || curlJsonSuccess || npmInstallSuccess) && !nonAmbientProof.length) set('success', npmInstallSuccess ? 'Package installation completed' : 'HTTP transfer or JSON response completed',
+      npmInstallSuccess ? 'The package installation completed and printed its dependency tree without fatal errors.' : 'The transfer or structured JSON HTTP response completed without error.',
+      npmInstallSuccess ? 'Review installed packages or scripts for follow-on execution paths.' : 'Review any downloaded artifact or JSON payload fields for follow-on parameters or credentials.', 'complete', 'continue', true);
+    else if (_isDavtestAllFail(command, text) && !nonAmbientProof.some(function (f) { return f && f.kind === 'web.upload_confirmed'; })) set('completed-negative', 'Operation completed; WebDAV write tests failed',
+      'DAVTest completed and all tested file upload types failed.',
+      'WebDAV connection succeeded, but arbitrary file upload was rejected for all tested extensions in this directory.', 'complete', 'continue', true);
     else if (/\bbloodyad\b.*\bget\s+writable\b/i.test(command) && done.complete && !bloodyWritableProof) set('completed-negative', 'Operation completed; no abusable writable objects',
       'bloodyAD get writable completed without finding abusable writable objects for this principal.',
       'The negative result is limited to this identity and domain. Other enumeration or escalation paths remain available.', 'complete', 'continue', true);

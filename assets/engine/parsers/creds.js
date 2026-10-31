@@ -196,6 +196,18 @@
       if (_HASHCAT_STATUS_NOISE_RE.test(line)) return;
       if (/^\d+\s+password\s+hash(?:es)?\s+cracked\b/i.test(line)) return;
 
+      var fczM = /PASSWORD FOUND!+:\s*pw\s*==\s*([^\r\n]+)/i.exec(line);
+      if (fczM && C._valid_password(fczM[1].trim())) {
+        var fczPw = fczM[1].trim();
+        var fczFileM = /(?:^|\s)['"]?([^\s'"]+\.zip)['"]?(?=\s|$)/i.exec(command || '');
+        var fczFile = fczFileM ? fczFileM[1].replace(/^.*[\\/]/, '') : 'archive.zip';
+        _add(facts, mkFact('credential.candidate', 'host:' + ws.target, { kind: 'cracked_file', file: fczFile, password: fczPw, via: 'fcrackzip' }, S, source));
+        _add(facts, mkFact('credential.password', 'host:' + ws.target, { password: fczPw, file: fczFile, via: 'fcrackzip' }, S, source));
+        _add(facts, mkFact('credential.plaintext', 'host:' + ws.target, { password: fczPw, file: fczFile, via: 'fcrackzip' }, S, source));
+        _add(facts, mkFact('credential.available', 'host:' + ws.target, { password: fczPw, file: fczFile, method: 'fcrackzip', hash_type: 'zip' }, S, source));
+        return;
+      }
+
       if (ll.indexOf('$krb5asrep$') >= 0 || ll.indexOf('$krb5tgs$') >= 0) {
         // Hashcat's Hash.Target status line is often abbreviated. It is not a
         // recovered hash:password record, even when the session says Cracked.
@@ -893,8 +905,14 @@
   }
 
   var _FILE_READ_CMD_RE = /\b(?:cat|type|get-content|gc|more|head|tail|less|bat|batcat|strings)\b/i;
-  var _NOTE_SCHEME_DENY_RE = /^(?:https?|ftp|sftp|smb|cifs|ldap|ldaps|ssh|ws|wss|file|mailto|git|svn|redis|mongodb|mysql|postgres|postgresql|mssql|path|dir|directory|location|endpoint|route|uri|url|proxy|server|content-type|accept|mime|type|protocol|port|subnet|network|cidr|netmask|gateway|interface)$/i;
-  var _NOTE_USER_DENY_RE = /^(?:text|application|image|audio|video|multipart|font|model|inode|etc|var|usr|opt|tmp|bin|sbin|lib|lib64|proc|sys|dev|run|srv|mnt|media|boot|home|windows|programdata|users|system32|inetpub|null|none|true|false)$/i;
+  function _is_file_read_not_write_cmd(cmd) {
+    var s = String(cmd || '');
+    if (!_FILE_READ_CMD_RE.test(s)) return false;
+    if (/^\s*(?:sudo\s+)?cat\s*(?:>>?|<<)|<<-?\s*['"]?[A-Za-z_][A-Za-z0-9_]*['"]?/i.test(s)) return false;
+    return true;
+  }
+  var _NOTE_SCHEME_DENY_RE = /^(?:https?|ftp|sftp|smb|cifs|ldap|ldaps|ssh|ws|wss|file|mailto|git|svn|redis|mongodb|mysql|postgres|postgresql|mssql|path|dir|directory|location|endpoint|route|uri|url|proxy|server|content-type|accept|mime|type|protocol|port|subnet|network|cidr|netmask|gateway|interface|origin|maintainer|category|categories|homepage|license|arch|abi|prefix)$/i;
+  var _NOTE_USER_DENY_RE = /^(?:text|application|image|audio|video|multipart|font|model|inode|etc|var|usr|opt|tmp|bin|sbin|lib|lib64|proc|sys|dev|run|srv|mnt|media|boot|home|windows|programdata|users|system32|inetpub|null|none|true|false|sysutils|devel|archivers|textproc|net-mgmt|shells)$/i;
   var _NOTE_SECRET_EXT_DENY_RE = /^(?:tcp|udp|icmp|sctp)$|\.(?:html?|php|asp|aspx|jsp|js|css|json|xml|ya?ml|txt|log|conf|cfg|ini|sh|py|rb|pl|exe|dll|so|bak|zip|tar|gz|idx|class|jar|war|ear|mf|properties|pom|xsd|dtd|lst|sql|db|sqlite|mdb|ldf|mdf|pfx|p12|pem|crt|cer|key|kdbx)$/i;
   var _NETNTLM_BLOB_RE = /\b(?<user>[A-Za-z0-9_.$-]{1,48})::(?<dom>[A-Za-z0-9_.-]{1,64}):(?<chal>[0-9a-fA-F]{16}):(?<resp>[0-9a-fA-F]{32}|[0-9a-fA-F]{48}):(?<blob>[0-9a-fA-F]{32,})\b/g;
 
@@ -992,7 +1010,8 @@
     if (!text) return false;
     if (C._is_public_reference_http_cmd && C._is_public_reference_http_cmd(command, ws)) return false;
     var normText = _unescape_serialized_newlines(text);
-    var isReadCtx = _FILE_READ_CMD_RE.test(command || '') || _expects_cred_kind(ws, 'credential.plaintext');
+    var unescJsonText = normText.indexOf('\\"') >= 0 ? normText.replace(/\\"/g, '"') : normText;
+    var isReadCtx = _is_file_read_not_write_cmd(command) || _expects_cred_kind(ws, 'credential.plaintext');
     return !!(
       /(?:^[ \t]*Domain[ \t]*:[ \t]*[^\s\r\n][^\r\n]*[ \t]*\r?\n[ \t]*)?^[ \t]*User(?:name)?[ \t]*:[ \t]*[^\s\r\n][^\r\n]*[ \t]*\r?\n[ \t]*(?:Domain[ \t]*:[ \t]*[^\s\r\n][^\r\n]*[ \t]*\r?\n[ \t]*)?Password[ \t]*:[ \t]*[^\s\r\n][^\r\n]*/im.test(normText) ||
       /^[ \t]*(?:Nthash|Password)[ \t]*:[ \t]*\S+[\s\S]{1,240}?^[ \t]*Login[ \t]*:[ \t]*\S+/im.test(normText) ||
@@ -1002,9 +1021,14 @@
       (/ntlm/i.test(normText) && /\b[A-Za-z0-9_.$-]{2,32}\b[^\r\n]{0,40}?\bNTLM\s*:\s*[0-9a-fA-F]{32}\b/i.test(normText)) ||
       (normText.indexOf('::') >= 0 && /\b[A-Za-z0-9_.$-]{1,48}::[A-Za-z0-9_.-]{1,64}:[0-9a-fA-F]{16}:(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{48}):[0-9a-fA-F]{32,}\b/.test(normText)) ||
       (isReadCtx && normText.indexOf('/') >= 0 && /^\s*[A-Za-z0-9_.-]{2,32}(?:[ \t]+[A-Za-z0-9_.-]{1,24}){0,2}\s*:\s*[A-Za-z0-9_.$-]{2,32}\/[^\s\/]{4,64}\s*$/m.test(normText)) ||
+      (isReadCtx && /\bsmbclient\b[^\r\n]*?\s-U\s*['"]?[A-Za-z0-9_.\\$-]+%[^\s'"]+/i.test(normText)) ||
+      (isReadCtx && (/(?:^|[\\/\s'"])creds?[A-Za-z0-9_.-]*\.txt\b/i.test(command || '') || /^\s*creds?\s+for\s+[^\r\n:]{1,48}:\s*$/im.test(normText)) && /^\s*[A-Za-z0-9_.-]{2,32}:[^\s:]{4,80}\s*$/m.test(normText)) ||
       (/[-/][uU]/.test(normText) && /(?:^|\s|\/)(?:-u|--user|-username|--username|\/u|\/user)[:=\s]+['"]?[a-zA-Z0-9._-]+['"]?\s+(?:-p|--password|-pass|--pass|\/p|\/pass|\/password)[:=\s]+['"]?(?!-)[^\s'"]+['"]?/i.test(_unwrap_format_list_lines(normText))) ||
-      (normText.indexOf('"') >= 0 && (/"(?:username|user)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"[^"]+"/i.test(normText) ||
-        /"(?:password|pass)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:username|user)"\s*:\s*"[^"]+"/i.test(normText))) ||
+      (unescJsonText.indexOf('"') >= 0 && (/"(?:username|user)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:password|pass)"\s*:\s*"[^"]+"/i.test(unescJsonText) ||
+        /"(?:password|pass)"\s*:\s*"[^"]+"[^{}]{1,160}?"(?:username|user)"\s*:\s*"[^"]+"/i.test(unescJsonText))) ||
+      (unescJsonText.indexOf('@tcp(') >= 0 && /\b[A-Za-z0-9_.-]{2,48}:[^@\s"'\\]{3,128}@tcp\([^)\s]+\)\//.test(unescJsonText)) ||
+      (normText.indexOf('"hashAlgorithm"') >= 0 && /(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64}|(?:[A-Za-z0-9+/]{20,64}={1,2}){1,2})\{\s*"hashAlgorithm"\s*:\s*"(?:SHA1|HMACSHA256|SHA256|MD5)"\s*\}/i.test(normText)) ||
+      /^\s*[A-Za-z0-9_]*(?:PasswordAES|PasswordEnc\w*|EncryptedPassword|MultiPwdMgmtPWDs)\s*:\s*\{[^}\r\n]{4,}\}/im.test(normText) ||
       (normText.indexOf('://') >= 0 && /https?:\/\/[a-zA-Z0-9._-]+:[^@\s'"]+@/i.test(normText)) ||
       /(?:Possible master password|Master password candidate|Extracted password|KeePass master password|KeePass password)\s*[:=]\s*[^\r\n]+/i.test(normText) ||
       (normText.indexOf('|') >= 0 && /^\s*[a-zA-Z0-9._$-]{1,64}@[a-zA-Z0-9._-]{1,64}(?::\d+)?\s*\|\s*password\s+is:/im.test(normText)) ||
@@ -1021,7 +1045,8 @@
       /(?:(?:extracted|recovered|found)\s*(?:nosql|user|admin|db)?\s*(?:password|passwd)|\[\+\]\s*password)\s*[:=->]/i.test(normText) ||
       /^(?:["']?[a-zA-Z0-9_ ]+["']?[,\t])*(?:["']?(?:username|user|login)["']?[,\t])+(?:["']?[a-zA-Z0-9_ ]+["']?[,\t])*(?:["']?(?:password|pass|passwd|pwd)["']?)/mi.test(normText) ||
       (/^\s*(?:#+\s*)?(?:[\w\s]{0,24}\b)?(?:passwords?|credentials?|logins?|accounts?)\s*:\s*$/im.test(normText) && /^\s*[-*+]\s*[A-Za-z0-9_.\\@-]{2,64}\s*:\s*\S+/m.test(normText)) ||
-      (/(?:\$|\b)(?:[A-Za-z0-9_.-]*?(?:User(?:name)?|Login|Uid|Account))\s*[:=]/i.test(normText) && /(?:\$|\b)(?:[A-Za-z0-9_.-]*?(?:Pass(?:word|wd)?|Pwd|Secret)|[A-Za-z0-9_]*[a-z0-9_]Pw|pw)\s*[:=]/i.test(normText)) ||
+      (/(?:\$|->|\b)(?:[A-Za-z0-9_.-]*?(?:User(?:name)?|Login|Uid|Account))\s*[:=]/i.test(normText) && /(?:\$|->|\b)(?:[A-Za-z0-9_.-]*?(?:Pass(?:word|wd)?|Pwd|Secret)|[A-Za-z0-9_]*[a-z0-9_]Pw|pw)\s*[:=]/i.test(normText)) ||
+      /^\s*[A-Za-z_][A-Za-z0-9_]*\[\s*['"][A-Za-z0-9_.-]*(?:smtp|ldap|db|database|sql|mysql|postgres|redis|bind|mail|api|admin)[_-]?(?:password|passwd|pass|pwd)['"]\s*\]\s*=\s*['"][^'"\r\n]{4,128}['"]/im.test(normText) ||
       /^\s*[A-Za-z0-9_.-]{2,32}:\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53}\s*$/m.test(normText) ||
       (/\[CREDENTIAL\]/i.test(normText) && /\bUserName\s*:/i.test(normText)) ||
       (/^\s*Uname:\s*\S/im.test(normText) && /^\s*Pass:\s*\S/im.test(normText)) ||
@@ -1246,7 +1271,7 @@
 
     // Structured operator/harvested credential notes: "<label>: <user>/<secret>" and "<user> ... NTLM: <32hex>"
     var isArchiveListCmd = /\b(?:jar\s+t[vf]*|unzip\s+-[lv]|tar\s+-[ztj]*t|7z\s+l)\b/i.test(command || '');
-    var isFileRead = !isArchiveListCmd && (_FILE_READ_CMD_RE.test(command || '') || _expects_cred_kind(ws, 'credential.plaintext'));
+    var isFileRead = !isArchiveListCmd && (_is_file_read_not_write_cmd(command) || _expects_cred_kind(ws, 'credential.plaintext'));
     if (isFileRead) {
       var noteLines = text.split(/\r?\n/);
       for (var nli = 0; nli < noteLines.length; nli++) {
@@ -1261,6 +1286,33 @@
         if (!C._valid_username(nCleanU, false) || !C._valid_password(nSecret)) continue;
         _add(facts, mkFact('credential.candidate', hScope, { kind: 'credential_note', label: nLabel, user: nCleanU, password: nSecret, via: 'cred-note' }, S, source));
         _add_plaintext_credential(facts, ws, source, nCleanU, nSecret, C._domain_from_facts(ws), 'cred-note', '');
+      }
+      var smbHistRe = /\bsmbclient\b[^\r\n]*?\s-U\s*(?:(['"])([^'"%\r\n]{2,64})%([^'"\r\n]{3,128})\1|([^\s'"%]{2,64})%([^\s'"]{3,128}))/gi, shm;
+      while ((shm = smbHistRe.exec(text)) !== null) {
+        var shRawU = (shm[2] || shm[4] || '').trim(), shPw = (shm[3] || shm[5] || '').trim(), shDom = '';
+        if (/\bFUZZ\b/.test(shRawU + ' ' + shPw)) continue;
+        if (shRawU.indexOf('\\') >= 0) {
+          shDom = shRawU.split('\\')[0].trim();
+          shRawU = shRawU.split('\\').slice(1).join('\\');
+        }
+        var shCleanU = C._clean_username(shRawU);
+        if (!C._valid_username(shCleanU, false) || !C._valid_password(shPw)) continue;
+        var shEffDom = (shDom && shDom.indexOf('.') >= 0 ? shDom : '') || C._domain_from_facts(ws);
+        var shScope = C._scope_for_domain(ws, shEffDom);
+        _add(facts, mkFact('credential.candidate', shScope, { kind: 'history_credential', user: shCleanU, password: shPw, domain: shEffDom || undefined, via: 'shell-history' }, S, source));
+        _add_plaintext_credential(facts, ws, source, shCleanU, shPw, shEffDom, 'shell-history', '');
+      }
+      if (/(?:^|[\\/\s'"])creds?[A-Za-z0-9_.-]*\.txt\b/i.test(command || '') || /^\s*creds?\s+for\s+[^\r\n:]{1,48}:\s*$/im.test(text)) {
+        for (var cli = 0; cli < noteLines.length; cli++) {
+          var ctm = /^\s*([A-Za-z0-9_.-]{2,32}):([^\s:]{4,80})\s*$/.exec(noteLines[cli]);
+          if (!ctm) continue;
+          var ctRawU = ctm[1], ctPw = ctm[2].trim();
+          if (_NOTE_SCHEME_DENY_RE.test(ctRawU) || _NOTE_USER_DENY_RE.test(ctRawU) || _looks_like_password_hash(ctPw)) continue;
+          var ctCleanU = C._clean_username(ctRawU);
+          if (!C._valid_username(ctCleanU, false) || !C._valid_password(ctPw)) continue;
+          _add(facts, mkFact('credential.candidate', hScope, { kind: 'creds_file', user: ctCleanU, password: ctPw, via: 'creds-txt' }, S, source));
+          _add_plaintext_credential(facts, ws, source, ctCleanU, ctPw, C._domain_from_facts(ws), 'creds-txt', '');
+        }
       }
     }
 
@@ -1324,9 +1376,10 @@
       });
     }
 
+    var jsonScanText = text.indexOf('\\"') >= 0 ? text.replace(/\\"/g, '"') : text;
     _JSON_CRED_RE.lastIndex = 0;
     var jm;
-    while ((jm = _JSON_CRED_RE.exec(text)) !== null) {
+    while ((jm = _JSON_CRED_RE.exec(jsonScanText)) !== null) {
       var jUser = C._clean_username(jm.groups.user);
       var jPw = (jm.groups.pw || '').trim();
       if (!C._valid_username(jUser, false)) continue;
@@ -1337,10 +1390,12 @@
         continue;
       }
       if (!C._valid_password(jPw)) continue;
-      _add_plaintext_credential(facts, ws, source, jUser, jPw, C._domain_from_facts(ws), 'api-leak', '');
+      var jDom = C._domain_from_facts(ws);
+      _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws, jDom), { kind: 'api_credential', user: jUser, password: jPw, domain: jDom || undefined, via: 'api-leak' }, S, source));
+      _add_plaintext_credential(facts, ws, source, jUser, jPw, jDom, 'api-leak', '');
     }
     _JSON_CRED_REV_RE.lastIndex = 0;
-    while ((jm = _JSON_CRED_REV_RE.exec(text)) !== null) {
+    while ((jm = _JSON_CRED_REV_RE.exec(jsonScanText)) !== null) {
       var jrUser = C._clean_username(jm.groups.user);
       var jrPw = (jm.groups.pw || '').trim();
       if (!C._valid_username(jrUser, false)) continue;
@@ -1351,7 +1406,40 @@
         continue;
       }
       if (!C._valid_password(jrPw)) continue;
-      _add_plaintext_credential(facts, ws, source, jrUser, jrPw, C._domain_from_facts(ws), 'api-leak', '');
+      var jrDom = C._domain_from_facts(ws);
+      _add(facts, mkFact('credential.candidate', C._scope_for_domain(ws, jrDom), { kind: 'api_credential', user: jrUser, password: jrPw, domain: jrDom || undefined, via: 'api-leak' }, S, source));
+      _add_plaintext_credential(facts, ws, source, jrUser, jrPw, jrDom, 'api-leak', '');
+    }
+
+    if (jsonScanText.indexOf('@tcp(') >= 0) {
+      var goDsnRe = /\b([A-Za-z0-9_.-]{2,48}):([^@\s"'\\]{3,128})@tcp\(([^)\s]+)\)\/([A-Za-z0-9_.-]*)/g, gdm;
+      while ((gdm = goDsnRe.exec(jsonScanText)) !== null) {
+        var gdU = C._clean_username(gdm[1]), gdP = (gdm[2] || '').trim(), gdHost = gdm[3], gdDb = gdm[4] || '';
+        if (!C._valid_username(gdU, false) || !C._valid_password(gdP)) continue;
+        _add(facts, mkFact('db.creds', hScope, { user: gdU, password: gdP, host: gdHost, database: gdDb || undefined, via: 'sql-dsn' }, S, source));
+        _add(facts, mkFact('credential.candidate', hScope, { kind: 'sql_dsn', user: gdU, password: gdP, host: gdHost, database: gdDb || undefined, via: 'sql-dsn' }, S, source));
+        _add_plaintext_credential(facts, ws, source, gdU, gdP, C._domain_from_facts(ws), 'sql-dsn', '');
+      }
+    }
+
+    if (text.indexOf('"hashAlgorithm"') >= 0) {
+      var sdfHashRe = /([0-9a-fA-F]{40}|[0-9a-fA-F]{64}|(?:[A-Za-z0-9+/]{20,64}={1,2}){1,2})\{\s*"hashAlgorithm"\s*:\s*"(SHA1|HMACSHA256|SHA256|MD5)"\s*\}/gi, sdm, seenSdf = {};
+      while ((sdm = sdfHashRe.exec(text)) !== null) {
+        var sdfDigest = sdm[1], sdfAlg = sdm[2].toUpperCase();
+        var sdfKey = sdfAlg + ':' + sdfDigest;
+        if (seenSdf[sdfKey]) continue;
+        seenSdf[sdfKey] = true;
+        var sdfFmt = sdfAlg === 'SHA1' ? 'raw-sha1' : (sdfAlg === 'HMACSHA256' ? 'hmac-sha256' : sdfAlg.toLowerCase());
+        _add(facts, mkFact('hash.crackable', hScope, { hash: sdfDigest, format: sdfFmt, algorithm: sdfAlg, via: 'sdf-strings' }, S, source));
+        _add(facts, mkFact('hash.candidate', hScope, { hash: sdfDigest, format: sdfFmt, algorithm: sdfAlg, via: 'sdf-strings' }, S, source));
+        _add(facts, mkFact('credential.candidate', hScope, { kind: 'sdf_hash', hash: sdfDigest, format: sdfFmt, algorithm: sdfAlg, via: 'sdf-strings' }, S, source));
+      }
+    }
+
+    var encRegRe = /^\s*([A-Za-z0-9_]*(?:PasswordAES|PasswordEnc\w*|EncryptedPassword|MultiPwdMgmtPWDs))\s*:\s*\{([^}\r\n]{4,})\}\s*$/gim, erm;
+    while ((erm = encRegRe.exec(text)) !== null) {
+      var erProp = erm[1].trim(), erVal = erm[2].trim();
+      _add(facts, mkFact('credential.candidate', hScope, { kind: 'encrypted_registry_credential', property: erProp, ciphertext: erVal, via: 'registry-encrypted' }, S, source));
     }
 
     _URL_CRED_RE.lastIndex = 0;
@@ -1538,23 +1626,29 @@
       var kvLines = text.split(/\r?\n/);
       var userVars = [], passVars = [];
       var isCodeLike = /\b(?:function|def|class|import|require|return)\b/.test(text);
+      var hasDbConnCtx = /\$(?:servername|dbhost|dbname|dbtype|db_\w+)\b|\$[A-Za-z_]\w*->(?:dbhost|dbname|dbtype)\b|\b(?:new\s+mysqli|mysqli_connect|mysql_connect|pg_connect|new\s+PDO|DBName\s*=)\b/i.test(text);
       for (var kvi = 0; kvi < kvLines.length; kvi++) {
         var kvLn = kvLines[kvi];
-        if (!kvLn || kvLn.length > 240 || _ATTACKER_CMD_LINE_RE.test(kvLn) || /^\s*(?:\/\/|\/\*|\*|--|;)/.test(kvLn)) continue;
-        var kvM = /^\s*(?:(?:var|let|const|my|local|export|set|private|public|string|String)\s+)?(\$?[A-Za-z][A-Za-z0-9_.-]{1,48})\s*[:=]\s*(?:(['"])([^'"\r\n]{2,96})\2|([^\s'"#;,()[\]{}]{2,96}))\s*[;,]?\s*$/.exec(kvLn);
+        if (!kvLn || kvLn.length > 240 || _ATTACKER_CMD_LINE_RE.test(kvLn) || /^\s*(?:\/\/|\/\*|\*|--|;|#)/.test(kvLn)) continue;
+        var kvM = /^\s*(?:(?:var|let|const|my|local|export|set|private|public|string|String)\s+)?(?:\$[A-Za-z_][A-Za-z0-9_]*->([A-Za-z][A-Za-z0-9_.-]{1,48})|[A-Za-z_][A-Za-z0-9_]*\[\s*['"]([A-Za-z][A-Za-z0-9_.-]{1,48})['"]\s*\]|(\$?[A-Za-z][A-Za-z0-9_.-]{1,48}))\s*[:=]\s*(?:(['"])([^'"\r\n]{2,96})\4|([^\s'"#;,()[\]{}]{2,96}))\s*[;,]?\s*$/.exec(kvLn);
         if (!kvM) continue;
-        var rawKey = kvM[1].replace(/^\$/, '');
-        var isQuoted = !!kvM[2];
-        var rawVal = (isQuoted ? kvM[3] : kvM[4] || '').trim();
-        if (!rawVal || (!isQuoted && (isCodeLike || /^\$/.test(kvM[1]) || /^(?:args|opts|options|self|this|req|request|params|form|data|env|os|sys|config|cfg|row|item|obj)\./i.test(rawVal)))) continue;
+        var isBracketedKey = !!kvM[2];
+        var rawKey = (kvM[1] || kvM[2] || kvM[3] || '').replace(/^\$/, '');
+        var isQuoted = !!kvM[4];
+        var rawVal = (isQuoted ? kvM[5] : kvM[6] || '').trim();
+        if (!rawVal || (!isQuoted && (isCodeLike || /^\$/.test(kvM[3] || '') || /^(?:args|opts|options|self|this|req|request|params|form|data|env|os|sys|config|cfg|row|item|obj)\./i.test(rawVal)))) continue;
         if (/^(?:\$[A-Za-z_]|{{|<[A-Za-z_]|%[A-Za-z_]|env\(|os\.|process\.env)/i.test(rawVal) || /\$\(|\$\{|`/.test(rawVal) || (!isQuoted && /^[A-Za-z0-9_.-]+:$/.test(rawVal))) continue;
-        var isUserKey = /(?:[a-z0-9](?:User(?:name)?|Login|Uid|Account))$/.test(rawKey) || /(?:^|[._-])(?:user(?:name)?|login|uid|account)$/i.test(rawKey);
-        var isPassKey = /(?:[a-z0-9](?:Pass(?:word|wd)?|Pwd|Pw|Secret))$/.test(rawKey) || /(?:^|[._-])(?:pass(?:word|wd)?|pwd|pw|secret)$/i.test(rawKey);
-        if (isUserKey && !isPassKey) userVars.push({ line: kvi, key: rawKey, val: rawVal });
-        else if (isPassKey && !isUserKey) passVars.push({ line: kvi, key: rawKey, val: rawVal });
+        var isUserKey = /(?:[A-Za-z0-9](?:User(?:name)?|Login|Uid|Account))$/.test(rawKey)
+          || /(?:^|[._-])(?:user(?:name)?|login|uid|account)$/i.test(rawKey)
+          || /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|mssql|mongo|redis|ora|oracle|ldap|smtp|imap|pop3?|ftp|ssh|mail|admin|app|api|auth|bind|proxy|svn|git)[_-]?(?:user(?:name)?|login|uid|account)$/i.test(rawKey);
+        var isPassKey = /(?:[A-Za-z0-9](?:Pass(?:word|wd)?|Pwd|Pw|Secret))$/.test(rawKey)
+          || /(?:^|[._-])(?:pass(?:word|wd)?|pwd|pw|secret)$/i.test(rawKey)
+          || /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|mssql|mongo|redis|ora|oracle|ldap|smtp|imap|pop3?|ftp|ssh|mail|admin|app|api|auth|bind|proxy|svn|git)[_-]?(?:pass(?:word|wd)?|pwd|pw|secret)$/i.test(rawKey);
+        if (isUserKey && !isPassKey) userVars.push({ line: kvi, key: rawKey, val: rawVal, isQuoted: isQuoted });
+        else if (isPassKey && !isUserKey) passVars.push({ line: kvi, key: rawKey, val: rawVal, isQuoted: isQuoted, isBracketed: isBracketedKey });
       }
+      var usedPass = {};
       if (userVars.length && passVars.length) {
-        var usedPass = {};
         for (var uvi = 0; uvi < userVars.length; uvi++) {
           var uv = userVars[uvi], bestPv = null, bestDist = 99;
           for (var pvi = 0; pvi < passVars.length; pvi++) {
@@ -1582,13 +1676,26 @@
             var kvScope = (uvDom && uvDom.indexOf('.') >= 0) ? C._scope_for_domain(ws, uvDom) : hScope;
             _add(facts, mkFact('credential.candidate', kvScope, { kind: 'config_pair', user: uvClean, password: pvVal, domain: uvDom, via: 'config-pair' }, S, source));
             _add_plaintext_credential(facts, ws, source, uvClean, pvVal, uvDom || C._domain_from_facts(ws), 'config-pair', '');
-            var isDbPrefixedPair = /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|postgresql|mssql|mongo|mongodb|redis|ora|oracle)(?:[_.-]|[A-Z])/i.test(uv.key)
-              || /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|postgresql|mssql|mongo|mongodb|redis|ora|oracle)(?:[_.-]|[A-Z])/i.test(passVars[bestPv].key);
+            var isDbPrefixedPair = hasDbConnCtx
+              || /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|postgresql|mssql|mongo|mongodb|redis|ora|oracle)(?:[_.-]|[A-Za-z])/i.test(uv.key)
+              || /^(?:db|database|sql|mysql|mariadb|pg|pgsql|postgres|postgresql|mssql|mongo|mongodb|redis|ora|oracle)(?:[_.-]|[A-Za-z])/i.test(passVars[bestPv].key);
             if (isDbPrefixedPair) {
               _add(facts, mkFact('db.creds', hScope, { user: uvClean, password: pvVal, key: uv.key, via: 'config-pair' }, S, source));
             }
           }
         }
+      }
+      for (var spvi = 0; spvi < passVars.length; spvi++) {
+        if (usedPass[spvi]) continue;
+        var spv = passVars[spvi];
+        if (!spv.isQuoted && isCodeLike) continue;
+        if (!spv.isBracketed && !/^(?:smtp|ldap|db|database|sql|mysql|postgres|redis|bind|mail|admin)[_-](?:password|passwd|pass|pwd)$/i.test(spv.key)) continue;
+        if (/^(?:itspassword|your_?pass(?:word)?|changeme|placeholder|secret|password)$/i.test(spv.val)) continue;
+        if (_looks_like_password_hash(spv.val) || !C._valid_password(spv.val)) continue;
+        _add(facts, mkFact('credential.candidate', hScope, { kind: 'config_secret', key: spv.key, password: spv.val, via: 'config-secret' }, S, source));
+        _add(facts, mkFact('credential.password', hScope, { key: spv.key, password: spv.val, via: 'config-secret' }, S, source));
+        _add(facts, mkFact('credential.plaintext', hScope, { key: spv.key, password: spv.val, via: 'config-secret' }, S, source));
+        _add(facts, mkFact('credential.available', hScope, { key: spv.key, password: spv.val, method: 'config-secret' }, S, source));
       }
     }
 
@@ -1821,7 +1928,8 @@
       }
       if (!b64MatchedPair && b64Lines.length === 1) {
         var b64Out = b64Lines[0];
-        if (/^[!-~]{4,80}$/.test(b64Out) && !/^(?:\/|https?:|\{|[0-9a-fA-F]{32}$|[0-9a-fA-F]{64}$)/i.test(b64Out) && C._valid_password(b64Out)) {
+        var isRelFilePath = /^[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)+\.[A-Za-z0-9]{2,5}$/.test(b64Out);
+        if (!isRelFilePath && /^[!-~]{4,80}$/.test(b64Out) && !/^(?:\/|https?:|\{|[0-9a-fA-F]{32}$|[0-9a-fA-F]{64}$)/i.test(b64Out) && C._valid_password(b64Out)) {
           _add(facts, mkFact('credential.candidate', hScope, { kind: 'base64_decoded', password: b64Out, via: 'base64-decode' }, S, source));
           _add(facts, mkFact('credential.password', hScope, { password: b64Out, via: 'base64-decode' }, S, source));
           _add(facts, mkFact('credential.plaintext', hScope, { password: b64Out, via: 'base64-decode' }, S, source));
@@ -1880,7 +1988,40 @@
         var secTok = secLines[0];
         var secKind = isErlangCookieCmd ? 'erlang_cookie' : 'secret_token';
         _add(facts, mkFact('credential.candidate', hScope, { kind: secKind, secret: secTok, password: secTok, file: secFileMatch[1], via: 'secret-file' }, S, source));
+        if (!isErlangCookieCmd && !/cookie/i.test(secFileMatch[1]) && /(?:^|[\\/._-])pass(?:wd|word|phrase)?(?:\.txt)?$/i.test(secFileMatch[1])) {
+          _add(facts, mkFact('credential.password', hScope, { password: secTok, file: secFileMatch[1], via: 'secret-file' }, S, source));
+          _add(facts, mkFact('credential.plaintext', hScope, { password: secTok, file: secFileMatch[1], via: 'secret-file' }, S, source));
+          _add(facts, mkFact('credential.available', hScope, { password: secTok, file: secFileMatch[1], method: 'secret-file' }, S, source));
+        }
       }
+    }
+
+    // 1b2) splunksecrets decrypt, silent redirected *2john, and openssl rsa/ec/dsa/pkey -out key unlock
+    if (/\bsplunksecrets\b/i.test(cmdStr) && rawText && rawText.length <= 512) {
+      var spLines = rawText.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) {
+        return l && !/^(?:usage:|error:|traceback)/i.test(l);
+      });
+      if (spLines.length === 1 && /^[!-~]{4,128}$/.test(spLines[0]) && C._valid_password(spLines[0])) {
+        var spPw = spLines[0];
+        _add(facts, mkFact('credential.candidate', hScope, { kind: 'splunk_secret', password: spPw, via: 'splunksecrets' }, S, source));
+        _add(facts, mkFact('credential.password', hScope, { password: spPw, via: 'splunksecrets' }, S, source));
+        _add(facts, mkFact('credential.plaintext', hScope, { password: spPw, via: 'splunksecrets' }, S, source));
+        _add(facts, mkFact('credential.available', hScope, { password: spPw, method: 'splunksecrets' }, S, source));
+      }
+    }
+    var toJohnRedirM = /\b([A-Za-z0-9_+-]*2john)(?:\.py|\.pl|\.exe)?\b[^\r\n]*>\s*['"]?([^\s'"|;&]+)['"]?/i.exec(cmdStr);
+    if (toJohnRedirM && !rawText.trim()) {
+      var tjTool = toJohnRedirM[1].toLowerCase();
+      var tjFmt = tjTool.replace(/2john$/, '') || 'john';
+      var tjOut = toJohnRedirM[2].replace(/^.*[\\/]/, '');
+      _add(facts, mkFact('hash.crackable', hScope, { format: tjFmt, file: tjOut, via: tjTool }, S, source));
+      _add(facts, mkFact('hash.candidate', hScope, { format: tjFmt, file: tjOut, via: tjTool }, S, source));
+    }
+    var opensslOutM = /\bopenssl\s+(?:rsa|ec|dsa|pkey|pkcs8)\b[^\r\n]*\s-out\s+['"]?([^\s'"]+)['"]?/i.exec(cmdStr);
+    if (opensslOutM && /\bwriting\s+(?:RSA|EC|DSA|PRIVATE)\s+key\b/i.test(rawText)) {
+      var decKeyFile = opensslOutM[1].replace(/^.*[\\/]/, '');
+      _add(facts, mkFact('loot.ssh_key', hScope, { file: decKeyFile, path: opensslOutM[1], encrypted: false, via: 'openssl-decrypt' }, S, source));
+      _add(facts, mkFact('credential.ssh_key', hScope, { file: decKeyFile, path: opensslOutM[1], encrypted: false, unlocked: true, via: 'openssl-decrypt' }, S, source));
     }
 
     // 1c) Interactive service username echo + structured password-hygiene message disclosure
@@ -1983,14 +2124,45 @@
     }
 
     // 4) Fast O(1) bridges to Slice B1 parsers not directly dispatched by index.js
-    if (C._parse_x509_cert && ((rawText && (rawText.indexOf('X509v3 Subject Alternative Name') >= 0 || ((rawText.indexOf('Subject:') >= 0 || rawText.indexOf('subject=') >= 0) && /Certificate:|Issuer:|issuer=|BEGIN CERTIFICATE|CONNECTED\(0000/i.test(rawText)))) || /\bopenssl\s+(?:x509|s_client)\b/i.test(cmdStr))) {
-      C._parse_x509_cert(rawText, ws, cmdStr, source, facts);
+    var isX509Block = !!((rawText && (rawText.indexOf('X509v3 Subject Alternative Name') >= 0 || /^\s*Certificate(?:\s+Request)?:\s*\r?\n\s*Data:/im.test(rawText) || ((rawText.indexOf('Subject:') >= 0 || rawText.indexOf('subject=') >= 0) && /Certificate:|Issuer:|issuer=|BEGIN CERTIFICATE|CONNECTED\(0000/i.test(rawText)))) || /\bopenssl\s+(?:x509|req|pkcs12|s_client|asn1parse)\b/i.test(cmdStr));
+    if (isX509Block) {
+      if (C._parse_x509_cert) {
+        C._parse_x509_cert(rawText, ws, cmdStr, source, facts);
+      }
+      if (rawText && (/\bIssuer\s*:/i.test(rawText) || /\bSubject\s*:/i.test(rawText))) {
+        _add(facts, mkFact('tls.info', hScope, { source: 'x509-cert' }, S, source));
+        var x509Lines = rawText.split(/\r?\n/);
+        for (var xli = 0; xli < x509Lines.length; xli++) {
+          var xLn = x509Lines[xli];
+          if (!/^\s*(?:Issuer|Subject)\s*[:=]/i.test(xLn) || !/\bDC\s*=/i.test(xLn)) continue;
+          var dcTokens = [], dcM, dcRe = /\bDC\s*=\s*([A-Za-z0-9-]+)\b/gi;
+          var firstDcPos = -1;
+          while ((dcM = dcRe.exec(xLn)) !== null) {
+            if (firstDcPos < 0) firstDcPos = dcM.index;
+            dcTokens.push(dcM[1].toLowerCase());
+          }
+          if (dcTokens.length >= 2) {
+            var cnM = /\b(?:CN|OU)\s*=/i.exec(xLn);
+            if (cnM && firstDcPos >= 0 && firstDcPos < cnM.index) {
+              dcTokens.reverse();
+            }
+            var xDom = dcTokens.join('.');
+            var xBaseDn = dcTokens.map(function (lbl) { return 'DC=' + lbl; }).join(',');
+            var xDomScope = C._scope_for_domain ? C._scope_for_domain(ws, xDom) : ('domain:' + xDom);
+            _add(facts, mkFact('ad.domain_known', xDomScope, { domain: xDom, source: 'x509-dn' }, S, source));
+            _add(facts, mkFact('ad.base_dn', xDomScope, { base_dn: xBaseDn, domain: xDom, source: 'x509-dn' }, S, source));
+          }
+        }
+      }
     }
     if (C._parse_redis_requirepass && rawText && rawText.indexOf('requirepass') >= 0) {
       C._parse_redis_requirepass(rawText, ws, source, facts);
     }
-    if (C._parse_snmp_output && rawText && !/\bsnmp(?:walk|bulkwalk)\b/i.test(cmdStr) && (rawText.indexOf('TCP-MIB::') >= 0 || rawText.indexOf('hrSWRunParameters') >= 0 || /(?:^|\n)\s*(?:iso|\.?1)\.3\.6\.1\.(?:2\.1|4\.1)\./.test(rawText))) {
+    if (!isX509Block && C._parse_snmp_output && rawText && !/\bsnmp(?:walk|bulkwalk)\b/i.test(cmdStr) && (rawText.indexOf('TCP-MIB::') >= 0 || rawText.indexOf('hrSWRunParameters') >= 0 || /(?:^|\n)\s*(?:iso|\.?1)\.3\.6\.1\.(?:2\.1|4\.1)\./.test(rawText))) {
       C._parse_snmp_output(rawText, ws, cmdStr, source, facts);
+    }
+    if (rawText && /IPMI\s+-\s+Hash found:/i.test(rawText)) {
+      _parse_ipmi_rakp(rawText, ws, source, facts);
     }
     if (C._parse_database_output && rawText && (/\bsqlite>\s*(?:SELECT|\.dump|\.tables)/i.test(rawText) || /^\s*(?:mysql>|MariaDB\s*\[[^\]]*\]>|[A-Za-z0-9_-]+=#)\s*SELECT\b/im.test(rawText))) {
       C._parse_database_output(rawText, ws, cmdStr, source, facts);
@@ -2506,14 +2678,15 @@
   function _parse_ipmi_rakp(text, ws, source, facts) {
     if (!text) return;
     var h = 'host:' + ws.target;
-    var m = reSearch(/(?:\$rakp\$[^\s]+|(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,64}):([0-9a-fA-F]{40,}:[0-9a-fA-F]{40}))/i, text) ||
+    var m = reSearch(/IPMI\s+-\s+Hash found:\s*([A-Za-z0-9_.-]{1,64}):((?:[0-9a-fA-F]{2,}:)+[0-9a-fA-F]{32,40})/i, text) ||
+      reSearch(/(?:\$rakp\$[^\s]+|(?<![A-Za-z0-9_.-])([A-Za-z0-9_.-]{1,64}):([0-9a-fA-F]{40,}:[0-9a-fA-F]{40}))/i, text) ||
       reSearch(/RAKP-(?:HMAC-SHA1|Hash)[^:\r\n]*:\s*([^\r\n]+)/i, text);
     if (!m) return;
     var raw = (m[2] ? (m[1] + ':' + m[2]) : (m[1] || m[0])).trim();
     var user = m[1] && m[2] ? m[1] : 'admin';
     _add(facts, mkFact('hash.candidate', h, { user: user, hash: raw, format: 'rakp', hashcat_mode: 7300, via: 'ipmi' }, S, source));
     _add(facts, mkFact('hash.crackable', h, { user: user, hash: raw, format: 'rakp', hashcat_mode: 7300, via: 'ipmi' }, S, source));
-    _add(facts, mkFact('credential.candidate', h, { username: user, hash: raw, kind: 'ipmi_rakp', via: 'ipmi' }, C.ProofState.PARTIAL, source));
+    _add(facts, mkFact('credential.candidate', h, { username: user, user: user, hash: raw, kind: 'ipmi_rakp', via: 'ipmi' }, S, source));
   }
   C._parse_ipmi_rakp = _parse_ipmi_rakp;
 

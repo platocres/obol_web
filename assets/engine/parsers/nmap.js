@@ -378,6 +378,31 @@
       if (!/\.[a-z][a-z0-9-]*$/i.test(candHost)) return;
       fqdns[candHost] = true;
     });
+    if (/ssl-cert/i.test(text)) {
+      var addSslCertHost = function (rawHost) {
+        var candHost = String(rawHost || '').trim().replace(/^\*\./, '').replace(/\.$/, '').toLowerCase();
+        if (!candHost || candHost.indexOf('.') < 0) return;
+        if (C._IPV4_RE.test(candHost) || /^\d+(?:\.\d+)+$/.test(candHost)) return;
+        if (/^(?:localhost|ip6-localhost)(?:\.|$)/i.test(candHost)) return;
+        if (/\.(?:localdomain|in-addr\.arpa|ip6\.arpa|invalid|test)$/i.test(candHost)) return;
+        if (/(?:^|\.)example\.(?:com|org|net|edu)$/i.test(candHost)) return;
+        if (/^(?:ubuntu|debian|kali|centos|fedora|redhat|rhel|suse|archlinux|plesk|parallels|cpanel|whm|traefik\.default|kubernetes\.default(?:\.svc(?:\.cluster\.local)?)?)$/i.test(candHost)) return;
+        if (/(?:^|\.)(?:letsencrypt\.org|digicert\.com|sectigo\.com|comodoca\.com|godaddy\.com|globalsign\.com|cloudflare\.com|amazonaws\.com|cloudfront\.net|aka(?:mai|maiedge)\.net|windows\.net|office\.com|microsoft\.com|entrust\.net|verisign\.com|identrust\.com|google(?:trustservices)?\.com|apple\.com|ubuntu\.com|debian\.org|kali\.org)$/i.test(candHost)) return;
+        if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(candHost)) return;
+        if (!/\.[a-z][a-z0-9-]{1,}$/.test(candHost)) return;
+        fqdns[candHost] = true;
+      };
+      reAll(/(?:ssl-cert:\s*Subject:[^\r\n]*?(?:commonName|CN)\s*=\s*|<script\b[^>]*\bid=["']ssl-cert["'][^>]*\boutput=["'][^"']*?Subject:[^"'\r\n]*?(?:commonName|CN)\s*=\s*|<elem\b[^>]*\bkey=["']commonName["'][^>]*>\s*)(\*\.[A-Za-z0-9.-]+|[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gi, text).forEach(function (m) {
+        addSslCertHost(m[1]);
+      });
+      reAll(/Subject Alternative Name:[^\r\n"']*/gi, text).forEach(function (m) {
+        reAll(/\bDNS\s*:\s*(\*\.[A-Za-z0-9.-]+|[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,})/gi, m[0]).forEach(function (dm) {
+          addSslCertHost(dm[1]);
+        });
+      });
+    }
+    var emittedHostDoms = {};
+    if (domain) emittedHostDoms[domain.toLowerCase()] = true;
     C.uniqueSortedCI(Object.keys(fqdns)).forEach(function (fqdn) {
       var parts = fqdn.split('.').filter(Boolean);
       var value = { fqdn: fqdn };
@@ -385,6 +410,10 @@
       if (parts.length === 2) value.domain = fqdn;
       else if (parts.length > 2) value.domain = parts.slice(1).join('.');
       _add(facts, mkFact('host.fqdn', h, value, S, source));
+      if (value.domain && !emittedHostDoms[value.domain.toLowerCase()]) {
+        emittedHostDoms[value.domain.toLowerCase()] = true;
+        _add(facts, mkFact('host.domain', h, { domain: value.domain }, S, source));
+      }
     });
     if (/auth-owners/i.test(text)) {
       var identUsers = [];

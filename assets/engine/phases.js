@@ -142,6 +142,14 @@
         });
         return producesInitialAccess ? 'access' : 'enum';
       }
+      if (derived === 'loot' && !isAdEscalationProd) {
+        var hasFootholdOrPrivescReq = reqs.some(function (k) { return /^(?:foothold\.|privesc\.)/.test(k); });
+        var hasAdminReq = reqs.some(function (k) { return /^access\.(?:admin|system|root)$/.test(k); });
+        var hasObjectiveOrNtdsProd = prod.some(function (k) { return /^(?:objective\.|proof\.|loot\.(?:ntds|sam|lsa|lsass|dpapi|dcsync)$)/.test(k); });
+        if (hasFootholdOrPrivescReq && !hasAdminReq && !hasObjectiveOrNtdsProd) {
+          return 'escalate';
+        }
+      }
     }
     return derived;
   }

@@ -597,6 +597,109 @@
           "tool": "john",
           "run": "john --format=raw-md5 --wordlist={{wordlist}} {{hashfile}} && john --show --format=raw-md5 {{hashfile}}",
           "note": "CPU-friendly John raw-MD5 fallback (John requires explicit --format=raw-md5 on bare 32-hex digests)."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 500 {{hashfile}} {{wordlist}} --force",
+          "note": "Hashcat mode 500 (md5crypt $1$) for Linux shadow, Cisco Type 5, and modular MD5 crypt hashes."
+        },
+        {
+          "tool": "hashcat",
+          "run": "hashcat -m 1600 {{hashfile}} {{wordlist}} --force",
+          "note": "Hashcat mode 1600 (Apache $apr1$ MD5) for .htpasswd and Apache basic-auth modular hashes."
+        }
+      ],
+      "field_notes": [
+        {
+          "when": "You extracted a PBKDF2-SHA256, Gitea PBKDF2, or Django/Werkzeug modular hash ($pbkdf2-sha256$, sha256:iterations:salt:hash).",
+          "land": [
+            "Run hashcat with -m 10900 (PBKDF2-HMAC-SHA256) or let hashcat auto-detect the modular format against rockyou.txt."
+          ],
+          "look": [
+            "Hashcat status Cracked and the hash:plaintext line."
+          ],
+          "win": "Modular web or application password hash cracked to plaintext.",
+          "mistakes": [
+            "Leaving incompatible prefix wrappers unformatted when hashcat expects raw $pbkdf2-sha256$ or sha256:iter:salt:hash."
+          ]
+        },
+        {
+          "when": "You have an Argon2 ($argon2id$, $argon2i$), Flask/Werkzeug (pbkdf2:sha256:...), or phpass ($P$B, $H$) hash, or you are on a CPU-only VM.",
+          "land": [
+            "Run John the Ripper with rockyou.txt; John auto-detects Argon2, PBKDF2, and phpass modular hashes cleanly on CPU."
+          ],
+          "look": [
+            "Plaintext password printed next to the hash or shown via john --show hashes.txt."
+          ],
+          "win": "Argon2, Flask, or phpass hash cracked to a reusable plaintext password.",
+          "mistakes": [
+            "Forgetting john --show when the hash was already cracked in the potfile."
+          ]
+        },
+        {
+          "when": "You dumped a WordPress, phpBB3, or Joomla phpass hash ($P$... or $H$...) from a CMS database.",
+          "land": [
+            "Run hashcat -m 400 (phpass) against rockyou.txt."
+          ],
+          "look": [
+            "$P$...:<plaintext> printed in hashcat output."
+          ],
+          "win": "CMS user or administrator password recovered in plaintext.",
+          "mistakes": [
+            "Using -m 0 (raw MD5) instead of -m 400 for salted phpass hashes."
+          ]
+        },
+        {
+          "when": "You extracted a bare 32-character hex digest from a web app database or legacy config file that looks like unsalted MD5.",
+          "land": [
+            "Run hashcat -m 0 against rockyou.txt to test raw MD5 at full speed."
+          ],
+          "look": [
+            "<32-hex-digest>:<plaintext> in hashcat's cracked output."
+          ],
+          "win": "Unsalted MD5 application password hash cracked in seconds.",
+          "mistakes": [
+            "Confusing a Windows NTLM 32-hex hash (-m 1000) with a web database raw-MD5 32-hex hash (-m 0); test both if origin is ambiguous."
+          ]
+        },
+        {
+          "when": "You have a bare 32-hex raw-MD5 hash on a CPU-only VM where John is preferred over OpenCL hashcat.",
+          "land": [
+            "Pass --format=raw-md5 explicitly to both john and john --show."
+          ],
+          "look": [
+            "Cracked plaintext printed by john --show --format=raw-md5."
+          ],
+          "win": "Raw-MD5 digest cracked cleanly on CPU via John the Ripper.",
+          "mistakes": [
+            "Omitting --format=raw-md5, causing John to misidentify a bare 32-hex string as LM or NT."
+          ]
+        },
+        {
+          "when": "You extracted an md5crypt ($1$salt$digest) hash from an older /etc/shadow file, embedded Linux firmware, or Cisco Type 5 configuration.",
+          "land": [
+            "Run hashcat -m 500 against rockyou.txt to crack salted md5crypt ($1$) hashes directly."
+          ],
+          "look": [
+            "$1$<salt>$<digest>:<plaintext> printed in hashcat's cracked output."
+          ],
+          "win": "Salted md5crypt ($1$) password hash recovered in plaintext.",
+          "mistakes": [
+            "Confusing $1$ (md5crypt, mode 500) with $apr1$ (Apache MD5, mode 1600) or raw unsalted MD5 (mode 0)."
+          ]
+        },
+        {
+          "when": "You recovered an Apache .htpasswd or HTTP Basic authentication file containing $apr1$salt$digest password hashes.",
+          "land": [
+            "Strip any leading username: prefix if needed (or pass --username) and run hashcat -m 1600 against rockyou.txt."
+          ],
+          "look": [
+            "$apr1$<salt>$<digest>:<plaintext> in hashcat output."
+          ],
+          "win": "Apache .htpasswd $apr1$ basic-auth credential cracked to reusable plaintext.",
+          "mistakes": [
+            "Running -m 500 on an $apr1$ hash; Apache's modified md5crypt magic requires mode 1600."
+          ]
         }
       ]
     },
@@ -720,7 +823,8 @@
       "requires_any": [
         "loot.material",
         "config.review",
-        "loot.files"
+        "loot.files",
+        "hash.crackable"
       ],
       "speculative": true,
       "produces": [

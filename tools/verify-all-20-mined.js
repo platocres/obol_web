@@ -114,7 +114,8 @@ const checks = [
   { pack: 'web_2026_09', action: 'nginx-log-poisoning-lfi', mustHave: ['access.log', 'system($_GET'], produces: 'foothold.linux' },
   { pack: 'web_exploit_checks_2026_09', action: 'zabbix-agent-system-run', mustHave: ['zabbix_get', 'system.run'], produces: 'foothold.linux' },
   { pack: 'web_2026_09', action: 'myfaces-viewstate-deserialization-rce', mustHave: ['javax.faces.ViewState', 'CommonsCollections5'], produces: 'foothold.windows' },
-  { pack: 'web_2026_09', action: 'node-serialize-rce', mustHave: ['_$$ND_FUNC$$_', 'node-serialize'], produces: 'foothold.linux' }
+  { pack: 'web_2026_09', action: 'node-serialize-rce', mustHave: ['_$$ND_FUNC$$_', 'node-serialize'], produces: 'foothold.linux' },
+  { pack: 'cracking_2026_09', action: 'crack-modular-hash', mustHave: ['hashcat -m 500', 'hashcat -m 1600'], produces: 'credential.available' }
 ];
 
 let failed = false;
@@ -148,7 +149,7 @@ checks.forEach(chk => {
   }
 
   // Check field notes coverage
-  const notes = fieldNotes[chk.action];
+  const notes = Array.isArray(a.field_notes) ? a.field_notes : fieldNotes[chk.action];
   if (!notes) {
     console.warn(`WARN: Action ${chk.action} has no authored field notes (using fallback)`);
   } else {
@@ -211,6 +212,78 @@ if (!blockersCode.includes('blocker.protected_users') || !blockersCode.includes(
   failed = true;
 } else {
   console.log('PASS: blockers.js defines blocker.protected_users and blocker.account_not_delegated');
+}
+
+// Cue-to-gate alignment checks:
+// 1. Canonical access.admin parity alongside access.system on privileged escalation/RCE actions.
+const adminParityChecks = [
+  ['windows_privesc_2026_09', 'nsclient-web-privesc'],
+  ['database_2026_09', 'oracle-tns-odat-rce'],
+  ['windows_privesc_2026_09', 'windows-service-dacl-abuse'],
+  ['ad_2026_09', 'wsus-abuse'],
+  ['windows_privesc_2026_09', 'alwaysinstallelevated']
+];
+adminParityChecks.forEach(([pkName, actId]) => {
+  const act = ((packData[pkName] && packData[pkName].actions) || []).find(x => x.id === actId);
+  if (!act || !Array.isArray(act.produces) || !act.produces.includes('access.system') || !act.produces.includes('access.admin')) {
+    console.error(`FAIL: Action ${actId} in ${pkName} must produce both access.system and access.admin`);
+    failed = true;
+  } else {
+    console.log(`PASS: ${actId} produces canonical access.admin alongside access.system`);
+  }
+});
+
+// 2. VULN_SIGS-gated actions must not short-circuit requires_any on generic http.reachable / web.server / web.tech.
+const vulnGateChecks = [
+  ['web_2026_09', 'rejetto-hfs-rce'],
+  ['web_2026_09', 'coldfusion-scheduled-task-rce'],
+  ['web_2026_09', 'myfaces-viewstate-deserialization-rce'],
+  ['web_2026_09', 'node-serialize-rce'],
+  ['web_2026_09', 'http-request-smuggling-auth'],
+  ['web_2026_09', 'nibbleblog-myimage-upload-rce'],
+  ['web_2026_09', 'solr-velocity-template-rce'],
+  ['web_2026_09', 'iis6-webdav-scstorage'],
+  ['web_2026_09', 'gitlab-ci-webshell'],
+  ['windows_privesc_2026_09', 'prtg-notification-rce'],
+  ['web_exploit_checks_2026_09', 'splunk-app-rce'],
+  ['web_exploit_checks_2026_09', 'zabbix-script-rce']
+];
+const genericHttpAtoms = ['http.reachable', 'web.server', 'web.tech'];
+vulnGateChecks.forEach(([pkName, actId]) => {
+  const act = ((packData[pkName] && packData[pkName].actions) || []).find(x => x.id === actId);
+  const reqAny = (act && act.requires_any) || [];
+  const leaked = genericHttpAtoms.filter(g => reqAny.includes(g));
+  if (!act || !reqAny.length || leaked.length > 0) {
+    console.error(`FAIL: Action ${actId} in ${pkName} has unguarded generic HTTP atoms in requires_any: ${leaked.join(', ') || 'empty requires_any'}`);
+    failed = true;
+  } else {
+    console.log(`PASS: ${actId} requires_any is strictly cue-gated (${reqAny.join(', ')})`);
+  }
+});
+
+// 3. Domain and local foothold scoping checks (adcs-esc, gmsa-read, nsclient-web-privesc, lxd-container-privesc).
+const adcsAct = ((packData['ad_2026_09'] && packData['ad_2026_09'].actions) || []).find(x => x.id === 'adcs-esc');
+if (!adcsAct || !Array.isArray(adcsAct.requires_any) || adcsAct.requires_any.length === 0) {
+  console.error('FAIL: adcs-esc must have non-empty AD-scoped requires_any');
+  failed = true;
+} else {
+  console.log(`PASS: adcs-esc requires_any is AD-scoped (${adcsAct.requires_any.join(', ')})`);
+}
+
+const nsclientAct = ((packData['windows_privesc_2026_09'] && packData['windows_privesc_2026_09'].actions) || []).find(x => x.id === 'nsclient-web-privesc');
+if (!nsclientAct || !Array.isArray(nsclientAct.requires_all) || !nsclientAct.requires_all.includes('foothold.windows')) {
+  console.error('FAIL: nsclient-web-privesc must require foothold.windows in requires_all');
+  failed = true;
+} else {
+  console.log('PASS: nsclient-web-privesc requires foothold.windows in requires_all');
+}
+
+const lxdAct = ((packData['linux_privesc_2026_09'] && packData['linux_privesc_2026_09'].actions) || []).find(x => x.id === 'lxd-container-privesc');
+if (!lxdAct || !Array.isArray(lxdAct.requires_any) || !lxdAct.requires_any.includes('privesc.lxd_group')) {
+  console.error('FAIL: lxd-container-privesc must include privesc.lxd_group in requires_any');
+  failed = true;
+} else {
+  console.log('PASS: lxd-container-privesc includes privesc.lxd_group in requires_any');
 }
 
 if (!failed) {

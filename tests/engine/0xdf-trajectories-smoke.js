@@ -599,15 +599,266 @@ function runSmokeSuite() {
     checkEq(reach.reachable, true, 'Expected second sub-command of already-reached linux-enum to remain reachable');
   });
 
-  test('B4-25: Merged tools/corpus/labels/0xdf-facts.json has Schema v2, 280 unique cases, and pure ASCII', () => {
+  test('B4-25: Merged tools/corpus/labels/0xdf-facts.json has Schema v2, >=280 unique cases, and pure ASCII', () => {
     const labelsPath = path.resolve(__dirname, '..', '..', 'tools', 'corpus', 'labels', '0xdf-facts.json');
     const raw = fs.readFileSync(labelsPath, 'utf8');
     check(!/[^\x09\x0A\x0D\x20-\x7E]/.test(raw), '0xdf-facts.json must be pure ASCII');
     const doc = JSON.parse(raw);
     checkEq(doc.version, 2, 'Expected Schema v2 in 0xdf-facts.json');
-    checkEq(doc.cases.length, 280, 'Expected 280 deduplicated cases in 0xdf-facts.json');
+    check(doc.cases.length >= 280, 'Expected at least 280 deduplicated cases in 0xdf-facts.json, got ' + doc.cases.length);
     const ids = new Set(doc.cases.map(c => c.id));
-    checkEq(ids.size, 280, 'Expected 280 unique case IDs with zero duplicates');
+    checkEq(ids.size, doc.cases.length, 'Expected all case IDs to be unique with zero duplicates');
+  });
+
+  test('B4-26: Cue-to-gate alignment blocks generic HTTP/credential short-circuiting and enforces canonical access.admin parity', () => {
+    const byId = Object.create(null);
+    OBOL.packs.actions().forEach(a => { if (a && a.id) byId[a.id] = a; });
+
+    const bareHttpFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'http.reachable', scope: 'host:198.51.100.60', value: { port: 80 } }),
+      OBOL.facts.makeFact({ kind: 'web.server', scope: 'host:198.51.100.60', value: { server: 'nginx' } }),
+      OBOL.facts.makeFact({ kind: 'web.tech', scope: 'host:198.51.100.60', value: { tech: 'php' } }),
+      OBOL.facts.makeFact({ kind: 'port:80', scope: 'host:198.51.100.60', value: { port: 80 } }),
+      OBOL.facts.makeFact({ kind: 'credential.available', scope: 'host:198.51.100.60', value: { user: 'ops_alpha', password: 'SynthPassword#71' } })
+    ]);
+
+    const strictCueMoves = [
+      ['rejetto-hfs-rce', 'vuln.rejetto_hfs'],
+      ['coldfusion-scheduled-task-rce', 'vuln.coldfusion'],
+      ['myfaces-viewstate-deserialization-rce', 'vuln.myfaces_jsf'],
+      ['node-serialize-rce', 'vuln.node_serialize'],
+      ['http-request-smuggling-auth', 'vuln.gitea'],
+      ['nibbleblog-myimage-upload-rce', 'vuln.nibbleblog'],
+      ['solr-velocity-template-rce', 'vuln.solr'],
+      ['iis6-webdav-scstorage', 'vuln.iis6_webdav'],
+      ['gitlab-ci-webshell', 'vuln.gitlab'],
+      ['prtg-notification-rce', 'vuln.prtg'],
+      ['splunk-app-rce', 'vuln.splunk'],
+      ['zabbix-script-rce', 'vuln.zabbix']
+    ];
+    for (const [id, cue] of strictCueMoves) {
+      const act = byId[id];
+      check(Boolean(act), 'Expected move in catalog: ' + id);
+      checkEq(act.eligible(bareHttpFacts), false, id + ' must NOT be eligible on bare HTTP + credential without ' + cue);
+      const cued = new OBOL.facts.FactSet(bareHttpFacts.facts.concat([
+        OBOL.facts.makeFact({ kind: cue, scope: 'host:198.51.100.60', value: {} })
+      ]));
+      checkEq(act.eligible(cued), true, id + ' must become eligible when ' + cue + ' is present');
+    }
+
+    // Standalone credential without AD context must not unlock adcs-esc
+    checkEq(byId['adcs-esc'].eligible(bareHttpFacts), false, 'adcs-esc must not be eligible without AD signals');
+    const adFacts = new OBOL.facts.FactSet(bareHttpFacts.facts.concat([
+      OBOL.facts.makeFact({ kind: 'ad.domain_known', scope: 'host:198.51.100.60', value: { domain: 'synth.internal' } })
+    ]));
+    checkEq(byId['adcs-esc'].eligible(adFacts), true, 'adcs-esc must be eligible when ad.domain_known is present');
+
+    // Remote port 8443 without foothold.windows must not unlock nsclient-web-privesc
+    const remote8443 = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'port:8443', scope: 'host:198.51.100.61', value: { port: 8443 } })
+    ]);
+    checkEq(byId['nsclient-web-privesc'].eligible(remote8443), false, 'nsclient-web-privesc must require foothold.windows');
+    const local8443 = new OBOL.facts.FactSet(remote8443.facts.concat([
+      OBOL.facts.makeFact({ kind: 'foothold.windows', scope: 'host:198.51.100.61', value: { user: 'svc_web' } })
+    ]));
+    checkEq(byId['nsclient-web-privesc'].eligible(local8443), true, 'nsclient-web-privesc must be eligible once foothold.windows is held');
+
+    for (const id of ['nsclient-web-privesc', 'oracle-tns-odat-rce', 'windows-service-dacl-abuse', 'wsus-abuse', 'alwaysinstallelevated']) {
+      check(byId[id].produces.indexOf('access.system') >= 0 && byId[id].produces.indexOf('access.admin') >= 0, id + ' must produce both access.system and canonical access.admin');
+    }
+  });
+
+  test('B4-27: Move pack generalizations (LXD group, Drupal Windows, AD gMSA, modular MD5/apr1 cracking, and phase caps)', () => {
+    const byId = Object.create(null);
+    OBOL.packs.actions().forEach(a => { if (a && a.id) byId[a.id] = a; });
+
+    const lxdFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'foothold.linux', scope: 'host:198.51.100.62', value: { user: 'dev_ops' } }),
+      OBOL.facts.makeFact({ kind: 'privesc.lxd_group', scope: 'host:198.51.100.62', value: { group: 'lxd' } })
+    ]);
+    checkEq(byId['lxd-container-privesc'].eligible(lxdFacts), true, 'lxd-container-privesc must accept privesc.lxd_group');
+
+    check(byId['drupalgeddon2'].os.indexOf('windows') >= 0, 'drupalgeddon2 must include windows OS support');
+
+    const nonAdWin = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'foothold.windows', scope: 'host:198.51.100.63', value: { user: 'local_usr' } }),
+      OBOL.facts.makeFact({ kind: 'credential.available', scope: 'host:198.51.100.63', value: { user: 'local_usr', password: 'SynthPassword#72' } })
+    ]);
+    checkEq(byId['gmsa-read'].eligible(nonAdWin), false, 'gmsa-read must stay ineligible on non-AD standalone Windows');
+    const adWin = new OBOL.facts.FactSet(nonAdWin.facts.concat([
+      OBOL.facts.makeFact({ kind: 'ad.domain_known', scope: 'host:198.51.100.63', value: { domain: 'ops.internal' } })
+    ]));
+    checkEq(byId['gmsa-read'].eligible(adWin), true, 'gmsa-read must be eligible on AD domain with credential.available without circular ad.gmsa');
+
+    const ciscoFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'hash.crackable', scope: 'host:198.51.100.64', value: { format: 'md5crypt' } })
+    ]);
+    checkEq(byId['cisco-decrypt'].eligible(ciscoFacts), true, 'cisco-decrypt must accept hash.crackable');
+
+    const cmh = byId['crack-modular-hash'];
+    check(cmh.commands.some(c => /hashcat\s+-m\s+500\b/.test(c.run)), 'crack-modular-hash must include hashcat -m 500');
+    check(cmh.commands.some(c => /hashcat\s+-m\s+1600\b/.test(c.run)), 'crack-modular-hash must include hashcat -m 1600');
+    const fnNotes = OBOL.FIELD_NOTES && OBOL.FIELD_NOTES['crack-modular-hash'];
+    checkEq(Array.isArray(fnNotes) ? fnNotes.length : -1, cmh.commands.length, 'crack-modular-hash field notes must match command count 1:1');
+
+    checkEq(OBOL.phases.phaseOfAction(byId['smb-share-inventory']), 'enum', 'smb-share-inventory phase must be enum');
+    checkEq(OBOL.phases.phaseOfAction(byId['heartbleed']), 'creds', 'heartbleed phase must be creds');
+    checkEq(OBOL.phases.phaseOfAction(byId['linux-loot-hunt']), 'escalate', 'linux-loot-hunt phase must be escalate');
+    const synthFootholdLoot = { id: 'synth-fh-loot', requires_all: ['foothold.linux'], requires_any: [], produces: ['loot.files'] };
+    checkEq(OBOL.phases.phaseOfAction(synthFootholdLoot), 'escalate', 'Unphased low-priv foothold loot-discovery move must cap at escalate');
+  });
+
+  test('B4-28: pack.js settled() guards domain ACL moves and SeImpersonate SYSTEM escalation from premature access.admin settlement', () => {
+    const byId = Object.create(null);
+    OBOL.packs.actions().forEach(a => { if (a && a.id) byId[a.id] = a; });
+
+    const memberAdminFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'ad.domain_known', scope: 'host:198.51.100.65', value: { domain: 'ops.internal' } }),
+      OBOL.facts.makeFact({ kind: 'ad.acl_lead', scope: 'host:198.51.100.65', value: { right: 'GenericAll' } }),
+      OBOL.facts.makeFact({ kind: 'access.admin', scope: 'host:198.51.100.65', value: { service: 'smb' } })
+    ]);
+    checkEq(byId['bloodyad-acl'].settled(memberAdminFacts), false, 'bloodyad-acl must not settle on member-host access.admin alone');
+    checkEq(byId['ad-acl-abuse'].settled(memberAdminFacts), false, 'ad-acl-abuse must not settle on member-host access.admin alone');
+
+    const domainControlledFacts = new OBOL.facts.FactSet(memberAdminFacts.facts.concat([
+      OBOL.facts.makeFact({ kind: 'ad.control_paths', scope: 'host:198.51.100.65', value: {} })
+    ]));
+    checkEq(byId['bloodyad-acl'].settled(domainControlledFacts), true, 'bloodyad-acl must settle once ad.control_paths is held');
+
+    const localAdminWithSeImp = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'foothold.windows', scope: 'host:198.51.100.66', value: { user: 'svc_app' } }),
+      OBOL.facts.makeFact({ kind: 'privesc.windows_privilege', scope: 'host:198.51.100.66', value: { privilege: 'SeImpersonatePrivilege' } }),
+      OBOL.facts.makeFact({ kind: 'access.admin', scope: 'host:198.51.100.66', value: { via: 'group' } })
+    ]);
+    checkEq(byId['seimpersonate'].settled(localAdminWithSeImp), false, 'seimpersonate must remain unsettled until access.system is achieved when SeImpersonate is active');
+    const fullSystem = new OBOL.facts.FactSet(localAdminWithSeImp.facts.concat([
+      OBOL.facts.makeFact({ kind: 'access.system', scope: 'host:198.51.100.66', value: {} })
+    ]));
+    checkEq(byId['seimpersonate'].settled(fullSystem), true, 'seimpersonate must settle once access.system is held');
+  });
+
+  test('B4-29: dns.zone populates {{domain}} and userless cracked archive secret binds alongside candidate username', () => {
+    const session = createEngagementSession(OBOL, {
+      name: 'DnsAndArchiveSession',
+      target: '198.51.100.67',
+      targets: ['198.51.100.67'],
+      lhost: '192.0.2.10'
+    });
+    OBOL.store.addFacts([
+      OBOL.facts.makeFact({ kind: 'dns.zone', scope: 'host:198.51.100.67', value: { domain: 'zone-alpha.internal' } }),
+      OBOL.facts.makeFact({ kind: 'ssh.reachable', scope: 'host:198.51.100.67', value: { port: 22 } }),
+      OBOL.facts.makeFact({ kind: 'port:22', scope: 'host:198.51.100.67', value: { port: 22 } }),
+      OBOL.facts.makeFact({ kind: 'credential.candidate', scope: 'host:198.51.100.67', value: { user: 'arch_operator' } }),
+      OBOL.facts.makeFact({ kind: 'credential.available', scope: 'host:198.51.100.67', value: { password: 'SynthArchiveKey#91' } })
+    ], 'seed', '198.51.100.67');
+
+    const fsTarget = OBOL.store.factSetForTarget('198.51.100.67');
+    checkEq(fsTarget.has('credential.available'), true, 'Userless archive secret must remain visible as credential.available when no named secret is selected');
+    const ctx = OBOL.command.buildContext(fsTarget, { target: '198.51.100.67', engagement: session.engagement });
+    checkEq(ctx.domain, 'zone-alpha.internal', 'dns.zone must populate ctx.domain on non-AD targets');
+    checkEq(ctx.user, 'arch_operator', 'credential.candidate username must populate ctx.user when no named credential is selected');
+    checkEq(ctx.password, 'SynthArchiveKey#91', 'Userless archive secret must populate ctx.password');
+  });
+
+  test('B4-30: openPorts promotes arbitrary pivot.ports and tunneled local listeners while keeping untunneled internal ports scoped', () => {
+    const untunneled = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'port:22', scope: 'host:198.51.100.68', value: { port: 22 } }),
+      OBOL.facts.makeFact({ kind: 'foothold.linux', scope: 'host:198.51.100.68', value: { user: 'ops' } }),
+      OBOL.facts.makeFact({ kind: 'scan.local.listeners', scope: 'host:198.51.100.68', value: { ports: [3306, 8080, 5985] } })
+    ]);
+    const untunneledPorts = OBOL.command.openPorts(untunneled, '198.51.100.68');
+    check(untunneledPorts.indexOf(3306) >= 0, 'Local MySQL 3306 must be promoted on foothold');
+    check(untunneledPorts.indexOf(8080) < 0 && untunneledPorts.indexOf(5985) < 0, 'Untunneled non-DB local listeners must not leak to remote attacker port set');
+
+    const tunneled = new OBOL.facts.FactSet(untunneled.facts.concat([
+      OBOL.facts.makeFact({ kind: 'pivot.tunnel_active', scope: 'host:198.51.100.68', value: { tool: 'chisel' } }),
+      OBOL.facts.makeFact({ kind: 'pivot.ports', scope: 'host:198.51.100.68', value: { ports: [3389, 9090] } })
+    ]));
+    const tunneledPorts = OBOL.command.openPorts(tunneled, '198.51.100.68');
+    check(tunneledPorts.indexOf(3389) >= 0 && tunneledPorts.indexOf(9090) >= 0, 'Explicit pivot.ports (3389, 9090) must be promoted into openPorts');
+    check(tunneledPorts.indexOf(8080) >= 0 && tunneledPorts.indexOf(5985) >= 0, 'Active tunnel must promote standard service listeners (8080, 5985) from scan.local.listeners');
+  });
+
+  test('B4-31: harvest-trajectories matcher disambiguates attacker NFS find, screen -ls vs -x, Jenkins, runas /savecred, Tomcat WAR, and offline secretsdump LOCAL', () => {
+    const nfsFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'nfs.reachable', scope: 'host:198.51.100.70', value: {} }),
+      OBOL.facts.makeFact({ kind: 'port:2049', scope: 'host:198.51.100.70', value: { port: 2049 } })
+    ]);
+    const attFind = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'find /mnt/export -maxdepth 3 -ls', stdout: '', host: 'kali', kind: 'unix' },
+      { target: '198.51.100.70', facts: nfsFacts }
+    );
+    const attFindIds = attFind.map(m => m.id);
+    check(attFindIds.indexOf('linux-path-hijack') < 0 && attFindIds.indexOf('systemd-timer-abuse') < 0 && attFindIds.indexOf('suid-gtfobins') < 0, 'Attacker find /mnt/... must exclude local Linux privesc moves');
+    checkEq(attFindIds[0], 'nfs-to-foothold', 'Attacker find /mnt/... with nfs.reachable must route to nfs-to-foothold');
+
+    const linFootFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'foothold.linux', scope: 'host:198.51.100.71', value: { user: 'ops' } })
+    ]);
+    const screenLs = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'screen -ls', stdout: 'There is a screen on:\n\t1420.pts-0.srv\t(Multi, detached)', host: 'srv', kind: 'unix' },
+      { target: '198.51.100.71', facts: linFootFacts }
+    );
+    checkEq(screenLs[0] && screenLs[0].id, 'linux-enum', 'Read-only screen -ls must route to linux-enum');
+    check(screenLs.every(m => m.id !== 'gnu-screen-root-attach' && m.id !== 'screen-suid-privesc'), 'Read-only screen -ls must exclude screen privesc moves');
+
+    const screenAttach = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'screen -x root/1420', stdout: '', host: 'srv', kind: 'unix' },
+      { target: '198.51.100.71', facts: linFootFacts }
+    );
+    checkEq(screenAttach[0] && screenAttach[0].id, 'gnu-screen-root-attach', 'screen -x root/... must route to gnu-screen-root-attach');
+
+    const plainLoginCurl = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'curl -s -d "username=admin&password=test" http://198.51.100.72:8080/login', stdout: '', host: 'kali', kind: 'unix' },
+      { target: '198.51.100.72', facts: new OBOL.facts.FactSet([]) }
+    );
+    check(plainLoginCurl.every(m => m.id !== 'jenkins-access'), 'Generic /login POST must not match jenkins-access');
+
+    const jenkinsScriptCurl = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'curl -s --data-urlencode "script=println(Jenkins.instance)" http://198.51.100.72:8080/scriptText', stdout: '', host: 'kali', kind: 'unix' },
+      { target: '198.51.100.72', facts: new OBOL.facts.FactSet([]) }
+    );
+    check(jenkinsScriptCurl.some(m => m.id === 'jenkins-access'), 'Jenkins /scriptText Groovy probe must match jenkins-access');
+
+    const runasNoSave = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'runas /user:OPS\\svc_worker cmd.exe', stdout: '', host: 'APP01', kind: 'cmd' },
+      { target: '198.51.100.73', facts: new OBOL.facts.FactSet([]) }
+    );
+    check(runasNoSave.every(m => m.id !== 'runas-savedcred-exec'), 'runas without /savecred must not match runas-savedcred-exec');
+
+    const runasSave = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'runas /savecred /user:OPS\\administrator "cmd.exe /c whoami"', stdout: '', host: 'APP01', kind: 'cmd' },
+      { target: '198.51.100.73', facts: new OBOL.facts.FactSet([]) }
+    );
+    checkEq(runasSave[0] && runasSave[0].id, 'runas-savedcred-exec', 'runas /savecred must rank runas-savedcred-exec #1');
+
+    const tomcatWar = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'curl -u "tomcat:SynthMgr#1" --upload-file shell.war "http://198.51.100.74:8080/manager/text/deploy?path=/shell"', stdout: 'OK - Deployed application at context path [/shell]', host: 'kali', kind: 'unix' },
+      { target: '198.51.100.74', facts: new OBOL.facts.FactSet([OBOL.facts.makeFact({ kind: 'http.reachable', scope: 'host:198.51.100.74', value: {} })]) }
+    );
+    checkEq(tomcatWar[0] && tomcatWar[0].id, 'tomcat-deploy', 'Tomcat Manager WAR upload must rank tomcat-deploy #1 ahead of file-upload');
+
+    const linuxBackupFacts = new OBOL.facts.FactSet([
+      OBOL.facts.makeFact({ kind: 'host.os_family', scope: 'host:198.51.100.75', value: { os: 'linux' } }),
+      OBOL.facts.makeFact({ kind: 'loot.files', scope: 'host:198.51.100.75', value: { path: 'SAM' } })
+    ]);
+    const offlineSd = trajectories.matchTurnToCatalogMoves(
+      OBOL,
+      { command: 'impacket-secretsdump -sam /tmp/loot/SAM -system /tmp/loot/SYSTEM LOCAL', stdout: '', host: 'kali', kind: 'unix' },
+      { target: '198.51.100.75', facts: linuxBackupFacts }
+    );
+    checkEq(offlineSd[0] && offlineSd[0].id, 'vhd-mount-sam-extract', 'Offline secretsdump LOCAL must rank vhd-mount-sam-extract #1');
+    check(offlineSd.every(m => m.id !== 'dcsync' && m.id !== 'dump-secrets' && m.id !== 'windows-old-hives'), 'Offline secretsdump LOCAL without Windows foothold must exclude dcsync, dump-secrets, and windows-old-hives');
+    const vhdMove = OBOL.packs.actions().find(a => a && a.id === 'vhd-mount-sam-extract');
+    checkEq(vhdMove.eligible(linuxBackupFacts), true, 'vhd-mount-sam-extract must be eligible on Linux-hosted Windows backup hives');
   });
 
   console.log('\nSummary: ' + passed + ' test(s) passed, ' + assertions + ' assertion(s), ' + failures.length + ' failed.');

@@ -239,7 +239,7 @@
     var host = list(facts).filter(function (f) { return f.state === 'supported' && f.scope === 'host:' + target; });
     for (var i = 0; i < host.length; i++) {
       var f = host[i], v = f.value || {};
-      if (/^(host\.domain|ad\.domain_known)$/.test(f.kind) && (v.domain || v.name)) return clean(v.domain || v.name);
+      if (/^(host\.domain|ad\.domain_known|dns\.zone)$/.test(f.kind) && (v.domain || v.name || v.zone)) return clean(v.domain || v.name || v.zone).replace(/\.+$/, '');
       if (f.kind === 'host.fqdn' && String(v.fqdn || v.name || '').indexOf('.') > 0) return String(v.fqdn || v.name).split('.').slice(1).join('.');
     }
     if (!eng && params.domain) return clean(params.domain);
@@ -650,7 +650,13 @@
         }
         if (svc && v.service && lower(v.service) !== svc && !((svc === 'smb' && lower(v.service) === 'wmi') || (svc === 'wmi' && lower(v.service) === 'smb'))) return false;
       }
-      if (/^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)) return !!c && factMaterial(f).id === c.id;
+      if (/^credential\.(available|plaintext|ntlm_hash)$/.test(f.kind)) {
+        if (c && factMaterial(f).id === c.id) return true;
+        var fm = factMaterial(f);
+        var isAnonPin = (source === 'explicit' && !selected) || !!(eng && shape(eng).anonymousByTarget && shape(eng).anonymousByTarget[target]);
+        if (!isAnonPin && !fm.user && (fm.password || fm.nthash) && (!c || (!c.password && !c.nthash))) return true;
+        return false;
+      }
       if (/^credential\.(validated|validation|authorization|admin)$/.test(f.kind) || /^(smb|ldap|winrm|ssh|rdp|mssql)\.authenticated$/.test(f.kind) || (/^blocker\./.test(f.kind) && (v.credentialId || v.user || v.principal))) {
         if (!c) return false;
         if (v.credentialId) { if (v.credentialId !== c.id) return false; }

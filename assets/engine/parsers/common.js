@@ -241,9 +241,10 @@
   C._UNAME_RE = /\bLinux\s+(?<host>\S+)\s+(?<kernel>[0-9][^\s]+)[^\r\n]{0,200}?\b(?<arch>x86_64|i[3-6]86|aarch64|armv\w+)\b/i;
   C._SUID_PATH_RE = /(?<path>\/[A-Za-z0-9_./+-]+)/;
   C._SUID_INTERESTING = /^(?:bash|sh|dash|zsh|ksh|csh|tcsh|ash|python[0-9.]*|perl[0-9.]*|ruby[0-9.]*|php[0-9.]*|node|nodejs|lua[0-9.]*|find|vim|vi|nvim|nano|emacs|ed|less|more|man|awk|gawk|mawk|nawk|sed|tar|zip|unzip|gzip|bzip2|xz|7z|cp|mv|dd|cat|head|tail|tee|cut|sort|uniq|base64|xxd|od|strings|readelf|file|grep|egrep|fgrep|rsync|scp|sftp|ftp|curl|wget|nc|netcat|ncat|socat|openssl|ssh-keygen|git|gdb|strace|ltrace|tcpdump|nmap|docker|lxc|lxd|kubectl|systemctl|journalctl|service|env|time|timeout|watch|xargs|stdbuf|setarch|ionice|nice|taskset|flock|chroot|unshare|nsenter|capsh|pkexec|doas|screen(?:-[0-9.]+)?|tmux|exim4?|sendmail|aria2c|restic|borg|kopia|rclone)$/i;
-  C._DANGEROUS_CAPS = /\bcap_(?:setuid|setgid|dac_override|dac_read_search|chown|fowner|sys_admin|sys_ptrace|sys_module|sys_rawio|sys_chroot|net_admin|bpf|perfmon)\b/i;
+  C._DANGEROUS_CAPS = /\bcap_(?:setuid|setgid|dac_override|dac_read_search|chown|fowner|sys_admin|sys_ptrace|sys_module|sys_rawio|sys_chroot|net_admin|bpf|perfmon)\b|^\s*=[+]?(?:ep|eip|pe|pie|iep|ipe)\s*$/i;
   C._LOCAL_FILE_SECRET_RE = /(?:^|[\s"'`$_])(?:password|passwd|pwd|api[_-]?key|secret|token|connectionstring)\s*[=:]\s*['"]?\S{3,}|-----BEGIN (?:OPENSSH|RSA|DSA|EC|PGP) PRIVATE KEY-----/i;
-  C._CAPABILITY_RE = /^\s*(?<path>\/\S+)\s*(?:=\s*|\s+)(?<caps>cap_[a-z0-9_,]+?[+=][eip]+[^\r\n#]*)$/im;
+  C._CAPABILITY_RE = /^\s*(?<path>\/\S+|[A-Za-z0-9_.][A-Za-z0-9_./+-]*)(?:\s*=\s*(?=[+]?cap_)|\s+)(?<caps>cap_[a-z0-9_,]+?[+=][eip]+[^\r\n#]*|=[+]?(?:ep|eip|pe|pie|iep|ipe))\s*$/im;
+  C._RID500_ADMIN_RE = /^(?:administrator|administrador|administrateur|amministratore)$/i;
   C._PASSWD_MODE_RE = /^\s*(?<mode>-[rwxstST-]{9}[.+]?)\s+[^\r\n]{1,120}?\s+(?<path>\/etc\/(?:passwd|shadow))\b/m;
   C._WIN_PRIV_RE = /^\s*(?<name>Se[A-Za-z0-9]+Privilege)\b[^\r\n]{1,120}?\b(?<state>Enabled|Disabled|Habilitada?|Deshabilitada?)\s*$/im;
   C._SYSTEMINFO_FIELD_RE = /^\s*(?<key>OS Name|OS Version|System Type):\s*(?<value>.+)$/im;

@@ -131,6 +131,7 @@
     var s = String(hsh || '');
     if (/^\$2[abxy]\$/i.test(s)) return 'bcrypt';
     if (/^\$(?:P|H)\$/i.test(s)) return 'phpass';
+    if (/^\$S\$/i.test(s)) return 'drupal7';
     if (/^\$1\$|^\$apr1\$/i.test(s)) return 'md5crypt';
     if (/^\$5\$/i.test(s)) return 'sha256crypt';
     if (/^\$6\$/i.test(s)) return 'sha512crypt';
@@ -297,7 +298,7 @@
     // Table-agnostic self-evidencing cryptographic hash rows (MCF, MySQL *SHA1, Postgres md5/SCRAM-SHA-256)
     text.split(/\r?\n/).forEach(function (rowLn) {
       if (!rowLn || (rowLn.indexOf('$') < 0 && rowLn.indexOf('*') < 0 && !/\bmd5[0-9a-fA-F]{32}\b/.test(rowLn))) return;
-      if (!/SCRAM-SHA-256\$/i.test(rowLn) && (rowLn.match(/:/g) || []).length >= 5 && rowLn.indexOf('|') < 0) return;
+      if (!/SCRAM-SHA-256\$/i.test(rowLn) && rowLn.indexOf('|') < 0 && /^\s*[A-Za-z0-9_.$-]+:[^:\s]+:[^:\s]*:[^:\s]*:[^:\s]*:/.test(rowLn)) return;
       _SELF_EVIDENCING_DB_HASH_RE.lastIndex = 0;
       var shm = _SELF_EVIDENCING_DB_HASH_RE.exec(rowLn);
       if (!shm) return;
@@ -372,6 +373,9 @@
           hdrPassIdx = pH;
           return;
         }
+        var _ROW_HASH_CELL_RE = /^(?:(?:0x)?(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{56}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128})|\*[0-9a-fA-F]{40}|\$(?:1|2[abxy]|5|6|y|P|H|S|apr1)\$[^\s]+|md5[0-9a-fA-F]{32}|SCRAM-SHA-256\$\d+:[^\s]+|pbkdf2_sha(?:1|256|512)\$\d+\$[^\s]+|sha(?:256|512)\$[A-Za-z0-9./$+=]{20,})$/i;
+        var _STATIC_ASSET_CELL_RE = /\.(?:gif|png|jpe?g|svg|ico|webp|bmp|tiff?|avif|mp[34]|avi|mov|mkv|wav|ogg|pdf|docx?|xlsx?|pptx?|csv|txt|md|html?|php|asp|aspx|jsp|js|css|json|xml|ya?ml|sql|db|sqlite3?|zip|tar|gz|tgz|rar|7z|bak|log|ini|cfg|conf)$/i;
+        if (hdrPassIdx < 0 && rawParts.some(function (c) { return _ROW_HASH_CELL_RE.test(c); })) return;
         var uCand = '', pCand = '';
         if (hdrUserIdx >= 0 && hdrPassIdx >= 0 && hdrUserIdx < rawParts.length && hdrPassIdx < rawParts.length) {
           uCand = rawParts[hdrUserIdx];
@@ -396,7 +400,7 @@
               if (/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(cellP)) continue;
               if (/^\d{4}-\d{2}-\d{2}/.test(cellP)) continue;
               if (/^(?:true|false|null|none|yes|no|admin|administrator|user|member|guest|staff|moderator|editor|author|subscriber|enabled|disabled|active|inactive)$/i.test(cellP)) continue;
-              if (/^(?:https?:\/\/|\/[A-Za-z0-9_.-]+\/)/.test(cellP)) continue;
+              if (/^(?:https?:\/\/|\/[A-Za-z0-9_.-]+\/)/.test(cellP) || _STATIC_ASSET_CELL_RE.test(cellP)) continue;
               pCand = cellP;
               break;
             }
@@ -405,8 +409,9 @@
         var finalU = C._clean_username ? C._clean_username(uCand) : uCand;
         var finalP = (pCand || '').trim();
         if (!finalU || !finalP || finalP.length < 4 || finalP.length > 64) return;
+        if (_STATIC_ASSET_CELL_RE.test(finalP)) return;
         if (!C._valid_username(finalU, false) || !C._valid_password(finalP)) return;
-        if (/^(?:[0-9a-fA-F]{32}|[0-9a-fA-F]{40}|[0-9a-fA-F]{56}|[0-9a-fA-F]{64}|[0-9a-fA-F]{128}|\*[0-9a-fA-F]{40}|\$(?:1|2[abxy]|5|6|y|P|H|S|apr1)\$[^\s]+|md5[0-9a-fA-F]{32}|SCRAM-SHA-256\$\d+:[^\s]+|pbkdf2_)/i.test(finalP)) return;
+        if (_ROW_HASH_CELL_RE.test(finalP)) return;
         var pairKey = finalU.toLowerCase() + '|' + finalP;
         if (seenClearPair[pairKey]) return;
         seenClearPair[pairKey] = true;
@@ -420,6 +425,31 @@
       });
     }
 
+    // Free-text note/record credential pairs returned from SQL queries (e.g. Sticky Notes `\id=<uuid> user: secret`)
+    if (!isSqlmapCtx && (/\bSELECT\b[\s\S]{1,180}?\bFROM\b/i.test(sqlCtxHay) || /(?:^|\n)\s*sqlite3?>\s*/i.test(promptLine + '\n' + text)) && /\\id=[0-9a-fA-F-]{16,}/i.test(text)) {
+      var seenNoteCred = {};
+      var noteRowRe = /(?:^|\r?\n)\s*(?:\\id=[0-9a-fA-F-]{16,}\s+)+([A-Za-z0-9_.-]{2,32})\s*:\s*([^\r\n]+?)\s*(?=\r?\n|$)/g, nrm;
+      while ((nrm = noteRowRe.exec(text)) !== null) {
+        var noteU = C._clean_username ? C._clean_username(nrm[1]) : nrm[1].trim();
+        var noteP = (nrm[2] || '').trim();
+        if (!noteU || !noteP || noteP.length < 4 || noteP.length > 80 || /\s/.test(noteP)) continue;
+        if (/^\[[A-Za-z0-9_ -]+\]$|^<[^>]+>$|^(?:null|none|todo|tbd|n\/a|redacted|moved|deleted|empty)$/i.test(noteP)) continue;
+        if (/^(?:https?|ftp|mailto|id|uuid|note|text|title|subject|date|time)$/i.test(noteU)) continue;
+        if (!C._valid_username(noteU, false) || !C._valid_password(noteP)) continue;
+        var noteKey = noteU.toLowerCase() + '|' + noteP;
+        if (seenNoteCred[noteKey]) continue;
+        seenNoteCred[noteKey] = true;
+        _add(facts, mkFact('credential.candidate', h, { kind: 'database_note_credential', user: noteU, password: noteP, via: 'database-note' }, S, source));
+        if (C._add_plaintext_credential) {
+          C._add_plaintext_credential(facts, ws, source, noteU, noteP, '', 'database-note', '');
+        } else {
+          _add(facts, mkFact('credential.plaintext', h, { user: noteU, password: noteP, via: 'database-note' }, S, source));
+          _add(facts, mkFact('credential.password', h, { user: noteU, password: noteP, via: 'database-note' }, S, source));
+          _add(facts, mkFact('credential.available', h, { user: noteU, password: noteP, method: 'database-note' }, S, source));
+        }
+      }
+    }
+
     reAll(/\b(?:0x)?010([45])00000000000515000000([0-9a-fA-F]{8})([0-9a-fA-F]{8})([0-9a-fA-F]{8})(?:([0-9a-fA-F]{8}))?\b/gi, text).forEach(function (sm) {
       var sa1 = _le32HexToUint(sm[2]), sa2 = _le32HexToUint(sm[3]), sa3 = _le32HexToUint(sm[4]);
       if (sa1 === 0 && sa2 === 0 && sa3 === 0) return;
@@ -428,6 +458,9 @@
     });
 
     _parse_redis_requirepass(text, ws, source, facts);
+    if (!/\b(?:NOAUTH|ERR\b|DENIED)\b/i.test(text) && /\bconfig\s+set\s+dbfilename\s+['"]?authorized_keys2?['"]?/i.test(sqlCtxHay) && /^\s*\+?OK\s*$/im.test(text)) {
+      _add(facts, mkFact('credential.ssh_key', h, { via: 'redis-config-authorized-keys' }, S, source));
+    }
 
     var isRedisCmd = /\bredis-cli\b/i.test(command || '')
       || /^\s*(?:\d{1,3}(?:\.\d{1,3}){3}|[A-Za-z0-9._-]+):\d{1,5}>\s*/m.test(text + '\n' + promptLine + '\n' + followPrompt);
@@ -623,18 +656,22 @@
         + (_DB_INTERACTIVE_PROMPT_LINE_RE.test(promptLine) ? '\n' + promptLine : '');
       var sessionTextNoPaths = sessionText.replace(/[A-Za-z]:\\[^\r\n]*\.(?:exe|dll)\b/gi, '');
       var tlow = sessionText.toLowerCase(), svc = null;
+      var isOracleCatalogOrTool = /\b(?:sqlplus|odat)\b/i.test(command || '')
+        || /\b(?:USER_ROLE_PRIVS|DBA_ROLE_PRIVS|ROLE_SYS_PRIVS|USER_SYS_PRIVS|USER_TAB_PRIVS|ALL_USERS|DBA_USERS|V\$VERSION|V\$INSTANCE|V\$DATABASE|ORA-\d{5}|Connected to:\s*Oracle|SQL\*Plus:\s*Release)\b/i.test(sessionText + '\n' + (command || ''));
+      var odatPutFileM = /\[\+\]\s*The\s+[^\r\n]+\s+file\s+was\s+put\s+in\s+the\s+remote\s+([^\r\n]+?)\s+path(?:\s+\(named\s+([^\r\n)]+)\))?/i.exec(text);
       if ((low.indexOf('mysql') >= 0 || /\bmariadb\b|\bversion\(\)/i.test(sessionText) || /^\s*mysql\s*>|Welcome to the (?:MySQL|MariaDB) monitor/im.test(sessionText)) &&
           (/\bmysql\s*>/.test(sessionText) || /mariadb\s*\[/i.test(sessionText) || /Welcome to the (?:MySQL|MariaDB) monitor/i.test(sessionText) || tlow.indexOf('information_schema') >= 0 ||
            /\bversion\(\)/i.test(sessionText) || /server version:\s*\S/i.test(sessionText) ||
+           (/\bmysql\b[^\r\n]*\s-e\s/i.test(command || '') && text.trim().length > 0 && !/\bERROR\s+\d{4}\b/i.test(text)) ||
            /^\s*\d+\.\d+\.\d+(?!\.\d)(?:-[A-Za-z0-9._-]+)?\s*$/im.test(text))) svc = 'mysql';
+      else if (isOracleCatalogOrTool &&
+               (/connected to:/i.test(sessionText) || /^\s*SQL\s*>/m.test(sessionText) || /\bGRANTED_ROLE\b/i.test(text) || /\[\+\]\s*Valid credential:/i.test(text) || !!odatPutFileM)) svc = 'oracle';
       else if ((low.indexOf('mssqlclient') >= 0 || low.indexOf('sqlcmd') >= 0 || /\bSQL\s*\([^)]+\)\s*>|\bENVCHANGE\(DATABASE\)|\bImpacket\b[\s\S]{0,240}\bSQL\s*>/i.test(sessionText)) &&
                (/\bSQL\s*(?:\([^)]*\)\s*)?>/.test(sessionText) || /microsoft sql server|\bENVCHANGE\(DATABASE\)/i.test(sessionTextNoPaths) || /^\s*1>\s/m.test(sessionText))) svc = 'mssql';
       // NetExec MSSQL auth success: the protocol banner line "MSSQL <ip> <port> <host> [+] dom\user:pw (Pwn3d!)".
       else if (nxcMssql && (/MSSQL\b[^\n]*\[\+\]/i.test(text) || /\(Pwn3d!\)/i.test(text))) svc = 'mssql';
       else if ((low.indexOf('psql') >= 0 || /\bPostgreSQL\s+\d+\.\d+\s+on\b|\bpsql\s*\(\d+\.\d+/i.test(sessionText) || /^\s*[A-Za-z][A-Za-z0-9_.-]{0,62}=[#>](?:\s|$)/m.test(sessionText) || /\b(?:pg_shadow|pg_database|pg_authid|pg_tables)\b/i.test(low + '\n' + sessionText)) &&
                (/list of (?:databases|relations)/i.test(sessionText) || /^\s*[A-Za-z0-9_.-]+=[#>]/m.test(sessionText) || /^\s*\(\d+\s+rows?\)\s*$/im.test(sessionText) || tlow.indexOf('template0') >= 0 || /\bPostgreSQL\s+\d+\.\d+|\bpsql\s*\(\d+\.\d+/i.test(sessionText))) svc = 'postgresql';
-      else if ((low.indexOf('sqlplus') >= 0 || low.indexOf('odat') >= 0 || /Connected to:\s*Oracle Database|SQL\*Plus:\s*Release/i.test(sessionText)) &&
-               (/connected to:/i.test(sessionText) || /^\s*SQL\s*>/m.test(sessionText) || /\[\+\]\s*Valid credential:/i.test(text))) svc = 'oracle';
       else if (!isMongoAuthDenied && !_MONGO_CONN_FAIL_RE.test(text) &&
                (low.indexOf('mongo') >= 0 || /\badmin\s+\d+(?:\.\d+)?\s*[KMGT]?i?B\b[\s\S]{0,120}\bconfig\s+\d+/i.test(text)) &&
                (hasMongoPositiveData || ((/\bUsing MongoDB:\s*\d|\bCurrent Mongosh Log ID:\s*[0-9a-f]{16,}|\bMongoDB server version:\s*\d|\bImplicit session:\s*session\s*\{/i.test(sessionText) || /^\s*(?:rs\d+:(?:PRIMARY|SECONDARY)|test|admin|config|local|[A-Za-z0-9_-]{2,32})>\s*(?:show\s+(?:dbs|databases|collections|users)|use\s+\S+|db\.|$)/im.test(sessionText)) && !/Mongo(?:Server|Network)?Error:/i.test(sessionText)))) {
@@ -645,9 +682,22 @@
       else if (isRedisHit && !_REDIS_DENIED_RE.test(sessionText)) svc = 'redis';
       if (svc) {
         var dbTool = _db_tool(low);
+        if (svc === 'oracle' && /\bodat\b/i.test(command || '')) dbTool = 'odat';
+        else if (svc === 'oracle' && dbTool === 'mssqlclient') dbTool = 'sqlplus';
         _add(facts, mkFact('db.session', h, { service: svc, tool: dbTool, detail: 'authenticated database session established' }, S, source));
         if (svc !== 'sqlite') {
           _add(facts, mkFact('db.reachable', h, { service: svc, tool: dbTool }, S, source));
+        }
+        if (odatPutFileM) {
+          var rDir = (odatPutFileM[1] || '').trim();
+          var rName = (odatPutFileM[2] || '').trim();
+          if (!rName) {
+            var pfArgsM = /--putFile\s+(?:"[^"]+"|'[^']+'|\S+)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/i.exec(command || '');
+            if (pfArgsM) rName = (pfArgsM[1] || pfArgsM[2] || pfArgsM[3] || '').trim();
+          }
+          if (/\b(?:wwwroot|htdocs|public_html|var\/www|inetpub|webapps)\b/i.test(rDir) || /\.(?:aspx?|php\d?|phtml|jspx?|cfm|war|ashx)$/i.test(rName)) {
+            _add(facts, mkFact('web.upload_confirmed', h, { path: rDir, file: rName, tool: 'odat', via: 'odat-putfile' }, S, source));
+          }
         }
         if (svc === 'mssql' || svc === 'postgresql' || svc === 'mysql' || svc === 'oracle') {
           var loginCred = _extract_db_login_cred(text, command, sessionText, svc);
